@@ -50,11 +50,17 @@ test('Postgres enforces invite, immutability, queue, leases, unique registration
       ['f'.repeat(64), { authorization: 'test', validation: 'test' }]), /af_fighters_runtime_admission/);
     await db.query("update public.af_fighters set runtime_approved=true,review_state='approved',runtime_scope='arena-player-v1',runtime_manifest_sha=manifest_sha,review_evidence=$1",
       [{ authorization: 'test operator', validation: 'test arena consumer' }]);
+    await assert.rejects(db.query('update public.af_fighters set duel_approved=true'), /af_fighters_duel_admission/);
+    await assert.rejects(db.query('update public.af_fighters set duel_approved=true,duel_manifest_sha=manifest_sha'), /af_fighters_duel_admission/);
+    await db.query("update public.af_fighters set duel_approved=true,duel_manifest_sha=manifest_sha,review_evidence=review_evidence || $1::jsonb",
+      [{ duelValidation: 'symmetric engine and package validation' }]);
+    await assert.rejects(db.query('update public.af_fighters set duel_manifest_sha=$1', ['f'.repeat(64)]), /af_fighters_duel_admission/);
     // Real roles and RLS: a normal caller cannot perform privileged transitions or read another owner.
     await db.exec(`set role authenticated; set request.jwt.claim.sub='${other}';`);
     assert.equal((await db.query('select id from public.af_submissions')).rows.length, 0);
     await assert.rejects(db.query('select public.af_claim(null)'), /permission denied/);
     await assert.rejects(db.query('update public.af_fighters set runtime_approved=true'), /permission denied/);
+    await assert.rejects(db.query('update public.af_fighters set duel_approved=true'), /permission denied/);
     await db.exec('reset role');
     const retry = await create(other, crypto.randomUUID());
     await db.query("update public.af_submissions set status='validating',lease_token=gen_random_uuid(),lease_until=now()-interval '1 second',attempts=1 where id=$1", [retry.id]);

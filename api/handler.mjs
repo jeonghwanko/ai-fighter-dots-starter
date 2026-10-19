@@ -77,12 +77,13 @@ export function createHandler({ db }) {
         const reply = (body, status = 200) => { const response = json(body, status); response.headers.set('access-control-allow-origin', '*');
           response.headers.set('access-control-allow-methods', 'GET, OPTIONS'); return response; };
         if (method === 'OPTIONS') return reply({ ok: true });
-        let query = db.from('af_fighters').select('id,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha')
+        let query = db.from('af_fighters').select('id,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha')
           .eq('runtime_approved', true).eq('runtime_scope', 'arena-player-v1').eq('review_state', 'approved');
         if (parts.length === 1) {
           const { data, error } = await query.order('created_at').limit(20); check(error);
           return reply({ ok: true, fighters: data.filter(f => f.runtime_manifest_sha === f.manifest_sha)
-            .map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, runtimeScope: f.runtime_scope })) });
+            .map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, runtimeScope: f.runtime_scope,
+              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha })) });
         }
         if (parts.length !== 2 || !UUID.test(parts[1])) return reply({ ok: false, code: 'not-found' }, 404);
         const { data: fighter, error } = await query.eq('id', parts[1]).maybeSingle(); check(error);
@@ -97,7 +98,8 @@ export function createHandler({ db }) {
           files.push({ id: asset.id, downloadUrl: data.signedUrl });
         }
         return reply({ ok: true, fighterId: fighter.id, manifestSha256: fighter.manifest_sha, runtimeApproved: true,
-          runtimeScope: fighter.runtime_scope, manifestText: row.manifest_text, files });
+          runtimeScope: fighter.runtime_scope, duelApproved: fighter.duel_approved === true && fighter.duel_manifest_sha === fighter.manifest_sha,
+          manifestText: row.manifest_text, files });
       }
       const isWorker = parts[0] === 'worker';
       const owner = await authenticate(request, isWorker);
@@ -138,7 +140,7 @@ export function createHandler({ db }) {
         }
       }
       if (method === 'GET' && parts[0] === 'fighters' && parts.length === 2) {
-        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,created_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
+        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
         check(error); if (!data) throw new Problem(404, 'not-found'); return json({ ok: true, stage: 'registered', fighter: data });
       }
       if (isWorker && method === 'POST') {

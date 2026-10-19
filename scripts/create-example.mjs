@@ -6,12 +6,14 @@ import { pathToFileURL } from 'node:url';
 import sharp from 'sharp';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
-export async function createExample(destination) {
+export async function createExample(destination, variant = 'sparring') {
+  if (!['sparring', 'challenger'].includes(variant)) throw new Error('Unknown fixture variant');
+  const challenger = variant === 'challenger';
   await mkdir(destination, { recursive: false }); // Never overwrite somebody's fighter.
   await mkdir(path.join(destination, 'assets'));
   const fighter = {
-    schemaVersion: 1, specVersion: spec.specVersion, localId: 'sparring-bot',
-    profile: { name: 'Sparring Bot', description: 'Original geometric format fixture. Not approved game art.',
+    schemaVersion: 1, specVersion: spec.specVersion, localId: challenger ? 'challenger-bot' : 'sparring-bot',
+    profile: { name: challenger ? 'Challenger Bot' : 'Sparring Bot', description: 'Original geometric format fixture. Not approved game art.',
       portrait: { assetId: 'idle', crop: { x: 32, y: 0, width: 192, height: 256 } },
       preview: { assetId: 'idle', crop: { x: 0, y: 0, width: 256, height: 512 } } },
     combat: { kitId: 'standard-duel' },
@@ -26,7 +28,7 @@ export async function createExample(destination) {
     for (let frame = 0; frame < count; frame++) {
       const swing = Math.round(Math.sin(frame / count * Math.PI * 2) * 14);
       const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="512" viewBox="0 0 256 512">
-        <g fill="#32b8ac" stroke="#102c44" stroke-width="8" stroke-linejoin="round">
+        <g fill="${challenger ? '#e49b48' : '#32b8ac'}" stroke="#102c44" stroke-width="8" stroke-linejoin="round">
           <path d="M106 300 L${98 + swing} 436 L${122 + swing} 436 L132 300Z"/>
           <path d="M136 300 L${148 - swing} 436 L${172 - swing} 436 L156 300Z"/>
           <rect x="84" y="156" width="84" height="164" rx="24"/>
@@ -66,6 +68,6 @@ export async function createExample(destination) {
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   await mkdir('output', { recursive: true });
   const destination = path.resolve(process.argv[2] ?? 'output/sparring-bot');
-  try { await createExample(destination); console.log(`Created test fixture: ${destination}`); }
+  try { await createExample(destination, process.argv[3] ?? 'sparring'); console.log(`Created test fixture: ${destination}`); }
   catch (error) { console.error(error.code === 'EEXIST' ? 'Target exists. Choose a NEW output directory.' : error.message); process.exitCode = 1; }
 }

@@ -29,4 +29,12 @@ test('only scoped, reviewed immutable packages are delivered to the browser; no 
   const pkg = await (await get(approved.id)).json();
   assert.equal(pkg.manifestText, text); assert.equal(pkg.runtimeApproved, true); assert.equal(pkg.files.length, example.assets.length);
   assert.equal('owner_id' in pkg, false); assert.equal('lease_token' in pkg, false);
+  assert.equal(pkg.duelApproved, false);
+  approved.duel_approved = true; approved.duel_manifest_sha = 'f'.repeat(64);
+  assert.equal((await (await get(approved.id)).json()).duelApproved, false);
+  approved.duel_manifest_sha = sha;
+  assert.equal((await (await get(approved.id)).json()).duelApproved, true);
+  assert.equal((await (await get()).json()).fighters[0].duelApproved, true);
+  approved.duel_approved = false;
+  assert.equal((await (await get(approved.id)).json()).duelApproved, false);
 });
