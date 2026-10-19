@@ -58,10 +58,13 @@ try {
     assert.equal(worker.stage, 'registered', JSON.stringify(worker));
   }
   const registered = await call('get_fighter_submission', { submissionId: state.submissionId });
-  assert.equal(registered.stage, 'registered'); assert.ok(registered.fighterId); assert.equal(registered.runtimeApproved, false);
+  assert.equal(registered.stage, 'registered'); assert.ok(registered.fighterId);
   const fighter = await call('get_registered_fighter', { fighterId: registered.fighterId });
   assert.equal(fighter.fighter.profile.name, manifest.profile.name);
   assert.equal(fighter.fighter.manifest_sha, createHash('sha256').update(manifestText).digest('hex'));
+  assert.equal(registered.runtimeApproved, fighter.fighter.runtime_approved);
+  assert.equal(registered.runtimeScope, fighter.fighter.runtime_scope);
+  if (registered.runtimeApproved) assert.equal(registered.runtimeScope, 'arena-player-v1');
   pass('trusted worker downloaded and fully decoded the stored package; fighter persisted');
   const repeated = await call('submit_fighter_package', { manifestPath: 'examples/sparring-bot/fighter.json', idempotencyKey: state.validKey });
   assert.equal(repeated.fighterId, registered.fighterId);
@@ -93,7 +96,7 @@ try {
   pass('correctly hashed but truncated WebP is rejected by authoritative decoder');
   const report = { testedAt: new Date().toISOString(), endpoint: `${config.url}/functions/v1/ai-fighter`,
     submissionId: state.submissionId, fighterId: registered.fighterId, profileName: fighter.fighter.profile.name,
-    manifestSha256: registered.manifestSha256, status: registered.stage, runtimeApproved: false,
+    manifestSha256: registered.manifestSha256, status: registered.stage, runtimeApproved: registered.runtimeApproved, runtimeScope: registered.runtimeScope,
     rejectedSubmissionId: rejectedDraft.submissionId, checks };
   await mkdir(path.join(root, 'output/live-registration'), { recursive: true });
   await writeFile(path.join(root, 'output/live-registration/report.json'), JSON.stringify(report, null, 2) + '\n');

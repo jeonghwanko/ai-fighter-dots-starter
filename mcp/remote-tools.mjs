@@ -6,7 +6,7 @@ import { resolveManifest, makePackageValidator } from './package-access.mjs';
 
 export function registerRemoteTools(server, { remote, root, respond }) {
   const outputSchema = { ok: z.boolean(), stage: z.string(), submissionId: z.string().optional(), manifestSha256: z.string().optional(),
-    fighterId: z.string().nullable().optional(), runtimeApproved: z.boolean().optional(), pending: z.array(z.string()).optional(),
+    fighterId: z.string().nullable().optional(), runtimeApproved: z.boolean().optional(), runtimeScope: z.string().nullable().optional(), pending: z.array(z.string()).optional(),
     validation: z.unknown().optional(), code: z.string().optional(), fighter: z.unknown().optional() };
   const read = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
   const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: /^[a-z0-9-]+$/.test(error.message) ? error.message : 'remote-operation-failed' }); } };

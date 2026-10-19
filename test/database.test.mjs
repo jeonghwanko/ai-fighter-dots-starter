@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile } from 'node:fs/promises';
+import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { sha256, VALIDATOR_VERSION } from '../api/handler.mjs';
@@ -16,7 +16,8 @@ test('Postgres enforces invite, immutability, queue, leases, unique registration
       create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
       create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
       grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
-    await db.exec(await readFile(new URL('../supabase/migrations/20261019090136_ai_fighter_beta_registration.sql', import.meta.url), 'utf8'));
+    const migrationDir = new URL('../supabase/migrations/', import.meta.url);
+    for (const name of (await readdir(migrationDir)).filter(name => name.endsWith('.sql')).sort()) await db.exec(await readFile(new URL(name, migrationDir), 'utf8'));
     const owner = crypto.randomUUID(), other = crypto.randomUUID(), key = crypto.randomUUID();
     await db.query('insert into auth.users values($1),($2)', [owner, other]);
     await db.query('insert into public.af_creators(owner_id) values($1),($2)', [owner, other]);
@@ -43,10 +44,17 @@ test('Postgres enforces invite, immutability, queue, leases, unique registration
     assert.equal((await db.query('select count(*)::int as n from public.af_fighters')).rows[0].n, 1);
     assert.equal((await create(owner, key)).fighter_id, registered.fighter_id);
     await assert.rejects(create(owner, crypto.randomUUID()), /fighter-quota/);
+    // An operator must bind the runtime admission to the exact manifest and record its authority and validation.
+    await assert.rejects(db.query('update public.af_fighters set runtime_approved=true'), /af_fighters_runtime_admission/);
+    await assert.rejects(db.query("update public.af_fighters set runtime_approved=true,review_state='approved',runtime_scope='arena-player-v1',runtime_manifest_sha=$1,review_evidence=$2",
+      ['f'.repeat(64), { authorization: 'test', validation: 'test' }]), /af_fighters_runtime_admission/);
+    await db.query("update public.af_fighters set runtime_approved=true,review_state='approved',runtime_scope='arena-player-v1',runtime_manifest_sha=manifest_sha,review_evidence=$1",
+      [{ authorization: 'test operator', validation: 'test arena consumer' }]);
     // Real roles and RLS: a normal caller cannot perform privileged transitions or read another owner.
     await db.exec(`set role authenticated; set request.jwt.claim.sub='${other}';`);
     assert.equal((await db.query('select id from public.af_submissions')).rows.length, 0);
     await assert.rejects(db.query('select public.af_claim(null)'), /permission denied/);
+    await assert.rejects(db.query('update public.af_fighters set runtime_approved=true'), /permission denied/);
     await db.exec('reset role');
     const retry = await create(other, crypto.randomUUID());
     await db.query("update public.af_submissions set status='validating',lease_token=gen_random_uuid(),lease_until=now()-interval '1 second',attempts=1 where id=$1", [retry.id]);

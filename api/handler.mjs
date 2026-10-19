@@ -26,9 +26,10 @@ export async function readBody(request, maximum) {
   for (const part of parts) { result.set(part, offset); offset += part.length; }
   return result;
 }
-const view = row => ({ ok: true, stage: row.status, submissionId: row.id, manifestSha256: row.manifest_sha,
+const view = (row, admission) => ({ ok: true, stage: row.status, submissionId: row.id, manifestSha256: row.manifest_sha,
   fighterId: row.fighter_id ?? null, validation: row.validation ?? null,
-  runtimeApproved: false, pending: row.status === 'registered' ? ['runtime-preview', 'visual-review', 'game-integration'] : ['server-validation', 'registration'] });
+  runtimeApproved: admission?.runtime_approved === true, runtimeScope: admission?.runtime_scope ?? null,
+  pending: row.status === 'registered' ? admission?.runtime_approved ? [] : ['runtime-preview', 'visual-review', 'game-integration'] : ['server-validation', 'registration'] });
 const conflictCodes = ['idempotency-conflict','fighter-quota','open-submission-exists','submission-quota','storage-budget-full','assets-incomplete','upload-expired','stale-validation','submissions-paused','beta-capacity'];
 function check(error) {
   if (!error) return;
@@ -41,6 +42,11 @@ function check(error) {
 }
 export function createHandler({ db }) {
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
+  async function present(row) {
+    if (row.status !== 'registered') return view(row);
+    const { data, error } = await db.from('af_fighters').select('runtime_approved,runtime_scope').eq('submission_id', row.id).maybeSingle();
+    check(error); return view(row, data);
+  }
   async function authenticate(request, worker) {
     const token = request.headers.get('authorization')?.match(/^Bearer ([^\s]{16,4096})$/)?.[1];
     if (!token) throw new Problem(401, 'authentication-required');
@@ -66,6 +72,33 @@ export function createHandler({ db }) {
       const parts = prefix >= 0 ? segments.slice(prefix + 1) : segments, method = request.method;
       if (method === 'GET' && parts.join('/') === 'spec') return json({ ok: true, stage: 'public-contract', data: { ...spec,
         registration: { available: true, mode: 'invite-only-beta', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary', runtimeApproved: false } } });
+      // Only explicitly reviewed arena packages are publicly readable. Uploads and pending drafts stay private.
+      if (parts[0] === 'roster' && (method === 'GET' || method === 'OPTIONS')) {
+        const reply = (body, status = 200) => { const response = json(body, status); response.headers.set('access-control-allow-origin', '*');
+          response.headers.set('access-control-allow-methods', 'GET, OPTIONS'); return response; };
+        if (method === 'OPTIONS') return reply({ ok: true });
+        let query = db.from('af_fighters').select('id,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha')
+          .eq('runtime_approved', true).eq('runtime_scope', 'arena-player-v1').eq('review_state', 'approved');
+        if (parts.length === 1) {
+          const { data, error } = await query.order('created_at').limit(20); check(error);
+          return reply({ ok: true, fighters: data.filter(f => f.runtime_manifest_sha === f.manifest_sha)
+            .map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, runtimeScope: f.runtime_scope })) });
+        }
+        if (parts.length !== 2 || !UUID.test(parts[1])) return reply({ ok: false, code: 'not-found' }, 404);
+        const { data: fighter, error } = await query.eq('id', parts[1]).maybeSingle(); check(error);
+        if (!fighter || fighter.runtime_manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
+        const { data: row, error: readError } = await db.from('af_submissions').select('*').eq('id', fighter.submission_id).eq('status', 'registered').maybeSingle();
+        check(readError);
+        if (!row || row.manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
+        const files = [];
+        for (const asset of row.manifest.assets) {
+          const { data, error: signError } = await db.storage.from(BUCKET).createSignedUrl(objectKey(row, asset), 600);
+          if (signError || !data) throw new Problem(503, 'storage-unavailable');
+          files.push({ id: asset.id, downloadUrl: data.signedUrl });
+        }
+        return reply({ ok: true, fighterId: fighter.id, manifestSha256: fighter.manifest_sha, runtimeApproved: true,
+          runtimeScope: fighter.runtime_scope, manifestText: row.manifest_text, files });
+      }
       const isWorker = parts[0] === 'worker';
       const owner = await authenticate(request, isWorker);
       if (method === 'POST' && parts.join('/') === 'submissions') {
@@ -79,13 +112,13 @@ export function createHandler({ db }) {
         if (!result.ok) throw new Problem(422, 'invalid-manifest', result.errors.slice(0, 20));
         const sha = await sha256(new TextEncoder().encode(text));
         const row = await rpc('af_create_submission', { p_owner: owner, p_key: key, p_text: text, p_sha: sha, p_bytes: result.assetBytes });
-        return json(view(row), 200);
+        return json(await present(row), 200);
       }
       if (parts[0] === 'submissions' && parts.length >= 2) {
         const row = await ownSubmission(owner, parts[1]);
-        if (method === 'GET' && parts.length === 2) return json(view(row));
+        if (method === 'GET' && parts.length === 2) return json(await present(row));
         if (method === 'POST' && parts.length === 3 && parts[2] === 'submit')
-          return json(view(await rpc('af_submit', { p_owner: owner, p_id: row.id })));
+          return json(await present(await rpc('af_submit', { p_owner: owner, p_id: row.id })));
         if (method === 'PUT' && parts.length === 4 && parts[2] === 'assets') {
           if (row.status !== 'uploading' || new Date(row.expires_at).getTime() <= Date.now()) throw new Problem(409, 'upload-closed');
           const asset = row.manifest.assets.find(a => a.id === parts[3]);
@@ -105,7 +138,7 @@ export function createHandler({ db }) {
         }
       }
       if (method === 'GET' && parts[0] === 'fighters' && parts.length === 2) {
-        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,created_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
+        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,created_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
         check(error); if (!data) throw new Problem(404, 'not-found'); return json({ ok: true, stage: 'registered', fighter: data });
       }
       if (isWorker && method === 'POST') {
@@ -128,7 +161,7 @@ export function createHandler({ db }) {
         if (parts.join('/') === 'worker/finish') {
           requireId(body.submissionId); requireId(body.leaseToken);
           if (!/^[a-f0-9]{64}$/.test(body.manifestSha256 ?? '') || typeof body.passed !== 'boolean' || !body.result || Array.isArray(body.result)) throw new Problem(400, 'invalid-result');
-          return json(view(await rpc('af_finish', { p_id: body.submissionId, p_lease: body.leaseToken,
+          return json(await present(await rpc('af_finish', { p_id: body.submissionId, p_lease: body.leaseToken,
             p_sha: body.manifestSha256, p_passed: body.passed, p_result: body.result })));
         }
       }

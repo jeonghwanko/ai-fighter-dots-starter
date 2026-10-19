@@ -2,8 +2,9 @@
 
 v0.2는 초대된 사용자의 업로드 → 서버 파일 검사 → 선수 레지스트리 등록을 구현한다.
 2026-10-19 기존 Free 프로젝트에서 실제 MCP로 예제 선수 1명을 등록했다.
-등록은 데이터와 파일의 기술 검사 결과다. 시각 검수·게임 동적 로딩·경기 출전 승인은 별도이며,
-응답과 DB 모두 runtimeApproved=false를 유지한다.
+등록은 데이터와 파일의 기술 검사 결과다. 새 등록은 runtimeApproved=false다.
+운영자가 동일 manifest 해시의 플레이어 경기 범위를 승인하면 runtimeApproved=true와
+runtimeScope=arena-player-v1을 반환한다. 승인된 Sparring Bot의 로컬 게임 출전을 확인했다.
 
 ## 구성과 상태
 
@@ -58,6 +59,38 @@ Edge의 내장 `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY`만 DB·Storage의 �
 서비스 키를 Dot·브라우저·클라이언트 세션 파일에 전달하지 않는다.
 API 기본 경로는 `https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fighter`다.
 
+## 승인과 게임 로딩
+
+[두 번째 마이그레이션](../supabase/migrations/20261019093527_ai_fighter_arena_runtime.sql)은 승인 상태를
+`runtime_scope`, `runtime_manifest_sha`, `review_evidence`에 결합한다. 승인에는 동일 manifest 해시,
+`arena-player-v1` 범위, 승인 사유와 검증 근거가 필요하다. 클라이언트의 직접 수정 권한은 없다.
+일반 제출·작업자 검증만으로 출전 승인 상태가 되지 않는다. `/spec`의 runtimeApproved=false는 새 등록의 기본값이다.
+
+운영자는 기술 검사를 통과한 패키지의 실제 경기 재생을 확인하고 해당 해시에만 승인 상태를 기록한다.
+현재 범위는 사람이 조종하는 캐릭터의 외형이다. 체력·피해량·판정은 게임의 공통 플레이어 규칙이 소유한다.
+자동 전투 상대·랭킹 밸런스·새 그림의 상용 품질을 승인하는 범위가 아니다.
+
+게임 연결 흐름:
+
+1. GET /roster로 승인된 선수 ID·이름·해시를 받는다. 소유자·제출·임대 정보는 목록에 포함하지 않는다.
+2. GET /roster/:id로 같은 해시의 JSON 원문과 일시 파일 URL을 받는다.
+3. JSON 원문의 SHA-256과 규격을 검사하고, 파일을 내려받아 바이트 수와 SHA-256을 확인한다.
+4. 목록에는 정지 동작만 먼저 받고, 입장 때 승인 상태를 다시 조회한 뒤 나머지 동작을 준비한다.
+5. 서버 ID로 목록·경기·전적을 연결한다. 같은 ID는 목록에 한 번만 표시한다.
+
+위 두 GET 경로만 브라우저의 공개 읽기를 허용한다. 브라우저에는 서비스 키나 사용자 세션을 넣지 않는다.
+승인 패키지의 그림은 공개 전달 대상이다. 버킷 자체는 비공개이며 URL은 10분 뒤 만료된다.
+승인 취소는 신규 전달·입장을 막지만 이미 내려받은 그림과 진행 중인 경기를 회수하지는 않는다.
+
+현재 게임 개발 환경의 설정은 다음과 같다. 프로젝트 주소는 운영자가 자신의 주소로 바꾼다.
+
+```dotenv
+VITE_AI_FIGHTER_API_BASE=https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fighter
+```
+
+이 값은 공개 API 주소다. 비밀 키가 아니다. 미설정 또는 통신 실패 시 기존 게임 선수는 계속 사용할 수 있다.
+게임 구현은 원본 게임 저장소에 있으며, 이 공개 샘플은 전달 API·DB·MCP·검증 작업자를 제공한다.
+
 ## 베타 계정과 Dot 연결
 
 이번 베타는 Supabase Auth의 사용자 세션을 사용한다. 기존 게임 계정 연결은 후속 구현이다.
@@ -106,6 +139,8 @@ Dot에서 첫 실제 등록:
 | 메서드·경로 | 인증 | 역할 |
 | --- | --- | --- |
 | GET /spec | 없음 | 서버 규격·베타 등록 가능 여부 |
+| GET /roster | 없음 | 출전 승인된 선수의 ID·이름·해시·범위. 최대 20명 |
+| GET /roster/:id | 없음 | 승인된 JSON 원문과 10분 만료 다운로드 URL |
 | POST /submissions | 사용자 JWT + 초대 | JSON 원문 접수, UUID Idempotency-Key 헤더 필수 |
 | PUT /submissions/:id/assets/:assetId | 소유자 | image/webp 바이너리, 선언 크기·해시 일치, 덮어쓰기 금지 |
 | POST /submissions/:id/submit | 소유자 | 모든 파일 존재·크기 확인 후 검증 큐에 넣기 |
@@ -193,3 +228,16 @@ npm run test:live
 성공 선수의 파일 합계는 173,040바이트다. 이는 자체 제작 형식 시험용 로봇이며 생성 모델의 동작 품질 증거가 아니다.
 이 실행은 DB 등록까지 검증했다. 새 생성 애셋의 전투 시연, 게임 계정 연결, 최대 크기 부하,
 OS 격리, 자동 정리·복구 운영은 후속 검증이다.
+
+이후 같은 패키지를 `arena-player-v1`로 승인하여 로컬 게임에서 목록·선택·입장·조작·피해·KO 승리까지 시험했다.
+결과는 서버 선수 ID로 한 번만 저장됐고 새로고침 후 유지됐다. 공개 샘플 시험은 승인·전달 경계를 포함해 33개 통과했다.
+배포 후 읽기 전용 검증은 아래처럼 실행한다. 소유자의 `AI_FIGHTER_CLIENT_CONFIG`도 지정하면
+실제 stdio MCP의 선수 조회·제출 조회가 같은 승인 상태를 반환하는지 함께 확인한다.
+
+```powershell
+$env:AI_FIGHTER_API_BASE = 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fighter'
+$env:AI_FIGHTER_TEST_ID = 'APPROVED_FIGHTER_UUID'
+node scripts/live-roster-test.mjs
+```
+
+이 시험은 공개 목록, 동일 해시의 JSON, 필수 파일 11개의 실제 바이트·해시와 MCP 승인 조회를 통과했다.
