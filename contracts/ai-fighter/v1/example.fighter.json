@@ -1,0 +1,1825 @@
+{
+  "schemaVersion": 1,
+  "specVersion": "ai-fighter-side-v1",
+  "localId": "sparring-bot",
+  "profile": {
+    "name": "Sparring Bot",
+    "description": "Original geometric format fixture. Not approved game art.",
+    "portrait": {
+      "assetId": "idle",
+      "crop": {
+        "x": 32,
+        "y": 0,
+        "width": 192,
+        "height": 256
+      }
+    },
+    "preview": {
+      "assetId": "idle",
+      "crop": {
+        "x": 0,
+        "y": 0,
+        "width": 256,
+        "height": 512
+      }
+    }
+  },
+  "combat": {
+    "kitId": "standard-duel"
+  },
+  "appearance": {
+    "projection": "orthographic",
+    "elevationDegrees": 16,
+    "sourceFacing": "right",
+    "leftFacing": "mirror",
+    "bodyHeight": 400,
+    "bodyScale": 1
+  },
+  "assets": [
+    {
+      "id": "idle",
+      "path": "assets/idle.webp",
+      "mediaType": "image/webp",
+      "sha256": "d38ac37226bd11eb322705ee8b1e7440a859b4a3017d35d1d01c3a974ce5c66b",
+      "bytes": 5258,
+      "width": 256,
+      "height": 512
+    },
+    {
+      "id": "walk",
+      "path": "assets/walk.webp",
+      "mediaType": "image/webp",
+      "sha256": "79d488872538bd5458541d5e25ef2c5dfe67f31aaf4bcf6e9ef8b357b60118c9",
+      "bytes": 32646,
+      "width": 1024,
+      "height": 2048
+    },
+    {
+      "id": "run",
+      "path": "assets/run.webp",
+      "mediaType": "image/webp",
+      "sha256": "2285956c4cc6d2d28d94b3ea5b451290571ba7fd542fa085faf58f28d3e95a4e",
+      "bytes": 23668,
+      "width": 1024,
+      "height": 1536
+    },
+    {
+      "id": "fight-idle",
+      "path": "assets/fight-idle.webp",
+      "mediaType": "image/webp",
+      "sha256": "3d0e30eec637bd2bd310c22fc118e7eb768234a77c4a394ab830389e9e779da1",
+      "bytes": 11118,
+      "width": 1024,
+      "height": 512
+    },
+    {
+      "id": "combo",
+      "path": "assets/combo.webp",
+      "mediaType": "image/webp",
+      "sha256": "818b4220e8848f7072b9dd6e2dbebf7bfc9176faf96bc647e37633330cc45ea7",
+      "bytes": 26670,
+      "width": 1024,
+      "height": 1536
+    },
+    {
+      "id": "slam",
+      "path": "assets/slam.webp",
+      "mediaType": "image/webp",
+      "sha256": "3d0e30eec637bd2bd310c22fc118e7eb768234a77c4a394ab830389e9e779da1",
+      "bytes": 11118,
+      "width": 1024,
+      "height": 512
+    },
+    {
+      "id": "dash",
+      "path": "assets/dash.webp",
+      "mediaType": "image/webp",
+      "sha256": "3d0e30eec637bd2bd310c22fc118e7eb768234a77c4a394ab830389e9e779da1",
+      "bytes": 11118,
+      "width": 1024,
+      "height": 512
+    },
+    {
+      "id": "block",
+      "path": "assets/block.webp",
+      "mediaType": "image/webp",
+      "sha256": "3d0e30eec637bd2bd310c22fc118e7eb768234a77c4a394ab830389e9e779da1",
+      "bytes": 11118,
+      "width": 1024,
+      "height": 512
+    },
+    {
+      "id": "hit",
+      "path": "assets/hit.webp",
+      "mediaType": "image/webp",
+      "sha256": "d0a8dad641002a1c05dcda69857bd78aa1dfaf309d341724b19abc69376c1d1a",
+      "bytes": 12626,
+      "width": 1024,
+      "height": 1024
+    },
+    {
+      "id": "groggy",
+      "path": "assets/groggy.webp",
+      "mediaType": "image/webp",
+      "sha256": "3d0e30eec637bd2bd310c22fc118e7eb768234a77c4a394ab830389e9e779da1",
+      "bytes": 11118,
+      "width": 1024,
+      "height": 512
+    },
+    {
+      "id": "fall",
+      "path": "assets/fall.webp",
+      "mediaType": "image/webp",
+      "sha256": "1fd22ce5536ab0d945f83ec89d466004d8a85653e11e29a23adeddbb6801e09b",
+      "bytes": 16582,
+      "width": 1024,
+      "height": 1024
+    }
+  ],
+  "clips": {
+    "idle": {
+      "assetId": "idle",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 1,
+      "rows": 1,
+      "frames": [
+        0
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": false,
+      "durationMs": 90
+    },
+    "walk": {
+      "assetId": "walk",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 4,
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11,
+        12,
+        13,
+        14,
+        15
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": true,
+      "durationMs": 90,
+      "stridePixels": 90
+    },
+    "run": {
+      "assetId": "run",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 3,
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        11
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": true,
+      "durationMs": 90
+    },
+    "fightIdle": {
+      "assetId": "fight-idle",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 1,
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": true,
+      "sequence": [
+        {
+          "frame": 0,
+          "durationMs": 90
+        },
+        {
+          "frame": 1,
+          "durationMs": 90
+        },
+        {
+          "frame": 2,
+          "durationMs": 90
+        },
+        {
+          "frame": 3,
+          "durationMs": 90
+        }
+      ],
+      "hitSequenceIndices": []
+    },
+    "combo": {
+      "assetId": "combo",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 3,
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5,
+        6,
+        7,
+        8
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": false,
+      "sequence": [
+        {
+          "frame": 0,
+          "durationMs": 90
+        },
+        {
+          "frame": 1,
+          "durationMs": 90
+        },
+        {
+          "frame": 2,
+          "durationMs": 90
+        },
+        {
+          "frame": 3,
+          "durationMs": 90
+        },
+        {
+          "frame": 4,
+          "durationMs": 90
+        },
+        {
+          "frame": 5,
+          "durationMs": 90
+        },
+        {
+          "frame": 6,
+          "durationMs": 90
+        },
+        {
+          "frame": 7,
+          "durationMs": 90
+        },
+        {
+          "frame": 8,
+          "durationMs": 90
+        }
+      ],
+      "hitSequenceIndices": [
+        1,
+        4,
+        8
+      ],
+      "landmarks": {
+        "spinStart": 3
+      }
+    },
+    "slam": {
+      "assetId": "slam",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 1,
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": false,
+      "sequence": [
+        {
+          "frame": 0,
+          "durationMs": 90
+        },
+        {
+          "frame": 1,
+          "durationMs": 90
+        },
+        {
+          "frame": 2,
+          "durationMs": 90
+        },
+        {
+          "frame": 3,
+          "durationMs": 90
+        }
+      ],
+      "hitSequenceIndices": [
+        2
+      ]
+    },
+    "dash": {
+      "assetId": "dash",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 1,
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": false,
+      "sequence": [
+        {
+          "frame": 0,
+          "durationMs": 90
+        },
+        {
+          "frame": 1,
+          "durationMs": 90
+        },
+        {
+          "frame": 2,
+          "durationMs": 90
+        },
+        {
+          "frame": 3,
+          "durationMs": 90
+        }
+      ],
+      "hitSequenceIndices": [
+        2
+      ],
+      "landmarks": {
+        "windup": {
+          "clip": "fightIdle",
+          "frame": 0
+        },
+        "recover": {
+          "clip": "fightIdle",
+          "frame": 1
+        }
+      }
+    },
+    "block": {
+      "assetId": "block",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 1,
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": false,
+      "sequence": [
+        {
+          "frame": 0,
+          "durationMs": 90
+        },
+        {
+          "frame": 1,
+          "durationMs": 90
+        },
+        {
+          "frame": 2,
+          "durationMs": 90
+        },
+        {
+          "frame": 3,
+          "durationMs": 90
+        }
+      ],
+      "hitSequenceIndices": [
+        1
+      ]
+    },
+    "hit": {
+      "assetId": "hit",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 2,
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4,
+        5
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": false,
+      "sequence": [
+        {
+          "frame": 0,
+          "durationMs": 90
+        },
+        {
+          "frame": 1,
+          "durationMs": 90
+        },
+        {
+          "frame": 2,
+          "durationMs": 90
+        },
+        {
+          "frame": 3,
+          "durationMs": 90
+        },
+        {
+          "frame": 4,
+          "durationMs": 90
+        },
+        {
+          "frame": 5,
+          "durationMs": 90
+        }
+      ],
+      "hitSequenceIndices": [
+        1
+      ],
+      "landmarks": {
+        "recoil": 1,
+        "stagger": [
+          2,
+          3
+        ],
+        "recover": [
+          4,
+          5
+        ]
+      }
+    },
+    "groggy": {
+      "assetId": "groggy",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 1,
+      "frames": [
+        0,
+        1,
+        2,
+        3
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": true,
+      "sequence": [
+        {
+          "frame": 0,
+          "durationMs": 90
+        },
+        {
+          "frame": 1,
+          "durationMs": 90
+        },
+        {
+          "frame": 2,
+          "durationMs": 90
+        },
+        {
+          "frame": 3,
+          "durationMs": 90
+        }
+      ],
+      "hitSequenceIndices": []
+    },
+    "fall": {
+      "assetId": "fall",
+      "frameWidth": 256,
+      "frameHeight": 512,
+      "columns": 4,
+      "rows": 2,
+      "frames": [
+        0,
+        1,
+        2,
+        3,
+        4
+      ],
+      "origins": [
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        },
+        {
+          "originX": 128,
+          "originY": 440,
+          "groundContacts": [
+            {
+              "x": 110,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            },
+            {
+              "x": 160,
+              "y": 440,
+              "rx": 12,
+              "ry": 5
+            }
+          ]
+        }
+      ],
+      "loop": false,
+      "sequence": [
+        {
+          "frame": 0,
+          "durationMs": 90
+        },
+        {
+          "frame": 1,
+          "durationMs": 90
+        },
+        {
+          "frame": 2,
+          "durationMs": 90
+        },
+        {
+          "frame": 3,
+          "durationMs": 90
+        },
+        {
+          "frame": 3,
+          "durationMs": 90
+        }
+      ],
+      "hitSequenceIndices": [
+        2
+      ],
+      "landmarks": {
+        "lieSequenceIndex": 3,
+        "getUp": [
+          {
+            "clip": "hit",
+            "frame": 4,
+            "durationMs": 90
+          },
+          {
+            "clip": "fightIdle",
+            "frame": 0,
+            "durationMs": 90
+          }
+        ]
+      }
+    }
+  }
+}

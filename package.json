@@ -1,0 +1,30 @@
+{
+  "name": "ai-fighter-dots-starter",
+  "version": "0.1.0",
+  "description": "Local Dot/Codex MCP starter for AI Fighter authoring and package validation",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/jeonghwanko/ai-fighter-dots-starter.git"
+  },
+  "scripts": {
+    "start": "node mcp/stdio.mjs",
+    "example": "node scripts/create-example.mjs",
+    "validate": "node tools/ai-fighter/validate-package.mjs",
+    "test": "node --test test/*.test.mjs",
+    "spec:check": "node tools/ai-fighter/build-contract.mjs --check",
+    "spec:build": "node tools/ai-fighter/build-contract.mjs",
+    "mcp:smoke": "node scripts/mcp-smoke.mjs"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "ajv": "6.15.0",
+    "sharp": "0.35.5",
+    "zod": "4.6.7"
+  }
+}
