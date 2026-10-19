@@ -1,5 +1,6 @@
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
+import { createDuelHandler } from './duels.mjs';
 
 export const BUCKET = 'ai-fighter-beta';
 export const VALIDATOR_VERSION = 'ai-fighter-validator-0.2.0';
@@ -40,7 +41,8 @@ function check(error) {
   if (['validator-version','validation-incomplete','validation-result-limit'].includes(error.message)) throw new Problem(400, error.message);
   throw new Problem(503, 'database-unavailable');
 }
-export function createHandler({ db }) {
+export function createHandler({ db, simulateDuel = null, engineVersion = null }) {
+  const duelHandler = createDuelHandler({db,simulateDuel,engineVersion});
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
   async function present(row) {
     if (row.status !== 'registered') return view(row);
@@ -70,6 +72,7 @@ export function createHandler({ db }) {
     try {
       const segments = new URL(request.url).pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter');
       const parts = prefix >= 0 ? segments.slice(prefix + 1) : segments, method = request.method;
+      if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (method === 'GET' && parts.join('/') === 'spec') return json({ ok: true, stage: 'public-contract', data: { ...spec,
         registration: { available: true, mode: 'invite-only-beta', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary', runtimeApproved: false } } });
       // Only explicitly reviewed arena packages are publicly readable. Uploads and pending drafts stay private.
