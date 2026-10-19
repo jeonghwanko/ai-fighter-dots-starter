@@ -89,10 +89,10 @@ export const spec = {
     mirror: 'right-source-left-runtime-flip', bodyHeight: 400, cameraElevationDegrees: 16 },
   limits, motions,
   combatKits: [{ id: 'standard-duel', description: '서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다.',
-    integration: 'pending-dynamic-registration',
+    integration: 'pending-game-integration',
     currentConsumers: { player: 'FighterFightSkin / Lupin rules', opponent: 'NativeCityKumaArt / CityFighters rules' },
     warning: '현재 플레이어와 AI 상대 규칙은 다르다. 이 ID는 서버 연결 계약이며 통합 경쟁 규칙 구현을 뜻하지 않는다.' }],
   validationStages: ['schema', 'references-and-geometry', 'bytes-hashes-and-full-decode', 'runtime-preview', 'visual-review', 'server-registration'],
   notClientFields: ['ownerId', 'fighterId', 'approved', 'runtimeApproved', 'status', 'hp', 'damage', 'script'],
-  registration: { available: false, reason: '규격·사전 검사 단계. 원격 제출 API와 동적 게임 로더는 후속 구현.' },
+  registration: { available: false, reason: '오프라인 제작 계약. 연결된 서버의 /spec에서 베타 등록 가능 여부를 확인한다. 게임 동적 로딩은 별도다.' },
 };

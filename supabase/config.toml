@@ -1,0 +1,6 @@
+project_id = "ai-fighter-dots-starter"
+
+[functions.ai-fighter]
+# The handler verifies Supabase Auth users and separately scoped worker credentials on every request.
+verify_jwt = false
+entrypoint = "./functions/ai-fighter/index.ts"

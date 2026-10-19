@@ -5,3 +5,5 @@ output/
 !.env.example
 *.log
 .DS_Store
+supabase/.temp/
+supabase/.branches/

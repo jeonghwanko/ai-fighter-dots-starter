@@ -7,4 +7,4 @@ Start with the [authoring guide](../../../docs/AUTHORING.md).
 - [Complete synthetic fixture manifest](example.fighter.json)
 - [Rejected inputs](invalid-examples.json)
 
-This is an authoring contract. Registration is unavailable in this starter.
+This is the offline authoring contract. A configured beta server reports registration availability through its `/spec` endpoint.
