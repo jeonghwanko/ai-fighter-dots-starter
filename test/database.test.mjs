@@ -5,19 +5,24 @@ import { PGlite } from '@electric-sql/pglite';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { sha256, VALIDATOR_VERSION } from '../api/handler.mjs';
 
-test('Postgres enforces invite, immutability, queue, leases, unique registration and RLS', async () => {
+async function migratedDatabase() {
   const db = new PGlite();
+  await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+    create schema auth; create table auth.users(id uuid primary key);
+    create function auth.uid() returns uuid language sql as 'select nullif(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';
+    grant usage on schema auth to authenticated,service_role;
+    create schema storage;
+    create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
+    create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
+    grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
+  const migrationDir = new URL('../supabase/migrations/', import.meta.url);
+  for (const name of (await readdir(migrationDir)).filter(name => name.endsWith('.sql')).sort()) await db.exec(await readFile(new URL(name, migrationDir), 'utf8'));
+  return db;
+}
+
+test('Postgres enforces invite, immutability, queue, leases, unique registration and RLS', async () => {
+  const db = await migratedDatabase();
   try {
-    await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
-      create schema auth; create table auth.users(id uuid primary key);
-      create function auth.uid() returns uuid language sql as 'select nullif(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';
-      grant usage on schema auth to authenticated,service_role;
-      create schema storage;
-      create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
-      create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
-      grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
-    const migrationDir = new URL('../supabase/migrations/', import.meta.url);
-    for (const name of (await readdir(migrationDir)).filter(name => name.endsWith('.sql')).sort()) await db.exec(await readFile(new URL(name, migrationDir), 'utf8'));
     const owner = crypto.randomUUID(), other = crypto.randomUUID(), key = crypto.randomUUID();
     await db.query('insert into auth.users values($1),($2)', [owner, other]);
     await db.query('insert into public.af_creators(owner_id) values($1),($2)', [owner, other]);
@@ -71,5 +76,29 @@ test('Postgres enforces invite, immutability, queue, leases, unique registration
     assert.equal((await db.query('select status from public.af_submissions where id=$1', [retry.id])).rows[0].status, 'rejected');
     await db.exec('update public.af_settings set max_reserved_bytes=1');
     await assert.rejects(create(other, crypto.randomUUID()), /storage-budget-full/);
+  } finally { await db.close(); }
+});
+
+test('an expired upload closes instead of blocking the creator; integers written as 5258.0 are accepted', async () => {
+  const db = await migratedDatabase();
+  try {
+    const owner = crypto.randomUUID();
+    await db.query('insert into auth.users values($1)', [owner]);
+    await db.query('insert into public.af_creators(owner_id) values($1)', [owner]);
+    const bytes = example.assets.reduce((sum, a) => sum + a.bytes, 0);
+    const create = async text => db.query('select to_jsonb(public.af_create_submission($1,$2,$3,$4,$5)) as value',
+      [owner, crypto.randomUUID(), text, await sha256(new TextEncoder().encode(text)), bytes]).then(r => r.rows[0].value);
+    const abandoned = await create(JSON.stringify(example));
+    await assert.rejects(create(JSON.stringify(example)), /open-submission-exists/);
+    await db.query("update public.af_submissions set expires_at=now()-interval '1 second' where id=$1", [abandoned.id]);
+    // The validator accepts 5258.0 as an integer; the byte sums must accept it too.
+    const first = example.assets[0], floatText = JSON.stringify(example).replace(`"bytes":${first.bytes},`, `"bytes":${first.bytes}.0,`);
+    assert.notEqual(floatText, JSON.stringify(example));
+    const fresh = await create(floatText);
+    assert.equal(fresh.status, 'uploading');
+    const closed = (await db.query('select status,validation from public.af_submissions where id=$1', [abandoned.id])).rows[0];
+    assert.deepEqual(closed, { status: 'rejected', validation: { code: 'upload-expired' } });
+    for (const a of example.assets) await db.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta', `${owner}/${fresh.id}/${a.id}.webp`, { size: a.bytes }]);
+    assert.equal((await db.query('select (public.af_submit($1,$2)).status', [owner, fresh.id])).rows[0].status, 'queued');
   } finally { await db.close(); }
 });

@@ -30,3 +30,32 @@ test('server validates JSON before writing a submission', async () => {
   assert.deepEqual(calls, ['af_authorize', 'af_authorize', 'af_create_submission']);
   assert.equal((await sha256(new TextEncoder().encode('abc'))).length, 64);
 });
+test('text that Postgres jsonb cannot store is rejected with 422 before any write', async () => {
+  const owner = crypto.randomUUID(), calls = [];
+  const handle = createHandler({ db: { auth: { getUser: async () => ({ data: { user: { id: owner } } }) },
+    rpc: async name => { calls.push(name); return { data: true }; } } });
+  for (const escape of ['\\u0000', '\\ud800']) {
+    const text = JSON.stringify(example).replace(`"${example.profile.name}"`, `"Sparring${escape}Bot"`);
+    const response = await handle(new Request('https://test/ai-fighter/submissions', { method: 'POST',
+      headers: { authorization: 'Bearer signed-user-token-for-test', 'idempotency-key': crypto.randomUUID() }, body: text }));
+    assert.equal(response.status, 422);
+    assert.deepEqual((await response.json()).errors.map(e => [e.code, e.path]), [['UNSUPPORTED_TEXT', '/profile/name']]);
+  }
+  assert.ok(!calls.includes('af_create_submission'));
+});
+test('rejected and expired submissions are final: nothing is pending', async () => {
+  const owner = crypto.randomUUID(), id = crypto.randomUUID();
+  let row;
+  const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: row }) };
+  const handle = createHandler({ db: { auth: { getUser: async () => ({ data: { user: { id: owner } } }) },
+    rpc: async () => ({ data: true }), from: () => query } });
+  const read = async () => (await handle(new Request(`https://test/ai-fighter/submissions/${id}`, { headers: { authorization: 'Bearer signed-user-token-for-test' } }))).json();
+  row = { id, owner_id: owner, status: 'rejected', manifest_sha: 'a'.repeat(64), validation: { code: 'worker-attempt-limit' } };
+  assert.deepEqual((await read()).pending, []);
+  row = { id, owner_id: owner, status: 'uploading', manifest_sha: 'a'.repeat(64), expires_at: new Date(Date.now() - 1000).toISOString() };
+  const expired = await read();
+  assert.deepEqual([expired.stage, expired.code, expired.pending], ['uploading', 'upload-expired', []]);
+  row.expires_at = new Date(Date.now() + 60000).toISOString();
+  const open = await read();
+  assert.equal(open.code, undefined); assert.deepEqual(open.pending, ['server-validation', 'registration']);
+});

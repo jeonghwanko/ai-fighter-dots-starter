@@ -28,10 +28,20 @@ export async function readBody(request, maximum) {
   for (const part of parts) { result.set(part, offset); offset += part.length; }
   return result;
 }
+// rejected and expired uploads are final: nothing remains to wait for, so pending is empty.
+const uploadExpired = row => row.status === 'uploading' && Date.parse(row.expires_at) <= Date.now();
 const view = (row, admission) => ({ ok: true, stage: row.status, submissionId: row.id, manifestSha256: row.manifest_sha,
-  fighterId: row.fighter_id ?? null, validation: row.validation ?? null,
+  fighterId: row.fighter_id ?? null, validation: row.validation ?? null, ...(uploadExpired(row) ? { code: 'upload-expired' } : {}),
   runtimeApproved: admission?.runtime_approved === true, runtimeScope: admission?.runtime_scope ?? null,
-  pending: row.status === 'registered' ? admission?.runtime_approved ? [] : ['runtime-preview', 'visual-review', 'game-integration'] : ['server-validation', 'registration'] });
+  pending: row.status === 'registered' ? admission?.runtime_approved ? [] : ['runtime-preview', 'visual-review', 'game-integration']
+    : row.status === 'rejected' || uploadExpired(row) ? [] : ['server-validation', 'registration'] });
+/** Postgres jsonb cannot store U+0000 or an unpaired surrogate. JSON.parse and the v1 schema accept both. */
+function unstorableTextPath(value, at = '') {
+  if (typeof value === 'string') return value.includes('\0') || !value.isWellFormed() ? at : null;
+  if (!value || typeof value !== 'object') return null;
+  for (const [key, item] of Object.entries(value)) { const found = unstorableTextPath(item, `${at}/${key}`); if (found !== null) return found; }
+  return null;
+}
 const conflictCodes = ['idempotency-conflict','fighter-quota','open-submission-exists','submission-quota','storage-budget-full','assets-incomplete','upload-expired','stale-validation','submissions-paused','beta-capacity'];
 function check(error) {
   if (!error) return;
@@ -40,6 +50,7 @@ function check(error) {
   if (error.message === 'rate-limit') throw new Problem(429, 'rate-limit');
   if (error.message === 'invite-required') throw new Problem(403, 'invite-required');
   if (['validator-version','validation-incomplete','validation-result-limit'].includes(error.message)) throw new Problem(400, error.message);
+  if (error.message === 'byte-budget-mismatch') throw new Problem(422, error.message);
   throw new Problem(503, 'database-unavailable');
 }
 export function createHandler({ db, simulateDuel = null, engineVersion = null }) {
@@ -118,6 +129,10 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
         if (!parsed.ok) throw new Problem(422, 'invalid-manifest', parsed.errors.slice(0, 20));
         const result = validateFighter(parsed.data);
         if (!result.ok) throw new Problem(422, 'invalid-manifest', result.errors.slice(0, 20));
+        // Reject here with 422. Otherwise the jsonb cast in af_create_submission fails and the API returns 503.
+        const unstorable = unstorableTextPath(parsed.data);
+        if (unstorable !== null) throw new Problem(422, 'invalid-manifest', [{ code: 'UNSUPPORTED_TEXT', path: unstorable,
+          expected: 'text without U+0000 or unpaired surrogates', actual: 'unsupported character' }]);
         const sha = await sha256(new TextEncoder().encode(text));
         const row = await rpc('af_create_submission', { p_owner: owner, p_key: key, p_text: text, p_sha: sha, p_bytes: result.assetBytes });
         return json(await present(row), 200);
