@@ -14,6 +14,9 @@
   },
   "scripts": {
     "start": "node mcp/stdio.mjs",
+    "sprite:setup": "node scripts/sprite-gen.mjs setup",
+    "sprite:status": "node scripts/sprite-gen.mjs status",
+    "sprite": "node scripts/sprite-gen.mjs",
     "example": "node scripts/create-example.mjs",
     "validate": "node tools/ai-fighter/validate-package.mjs",
     "test": "node --test test/*.test.mjs",

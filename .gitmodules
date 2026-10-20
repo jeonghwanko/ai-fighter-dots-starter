@@ -1,0 +1,3 @@
+[submodule "vendor/sprite-gen"]
+	path = vendor/sprite-gen
+	url = https://github.com/aldegad/sprite-gen.git

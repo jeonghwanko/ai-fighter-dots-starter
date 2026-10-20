@@ -1,7 +1,11 @@
 # AI Fighter × Dot starter
 
-Dot 사용자가 AI Fighter의 제작 규격을 읽고, 선수의 애셋과 JSON을 만든 뒤 **Supabase 베타에 제출·등록**하는 로컬 MCP 샘플입니다.
+Dot 사용자가 AI Fighter의 제작 규격을 읽고, **함께 포함된 sprite-gen으로 자기 캐릭터의 원화·애니메이션과 JSON을 만든 뒤 Supabase 베타에 제출·등록**하는 로컬 MCP 제작 키트입니다.
 MIT 오픈소스입니다. Node 22.12 이상이 필요합니다.
+
+sprite-gen 소스는 `vendor/sprite-gen` Git 서브모듈에 포함됩니다. 각 사용자의 Dot이 이를 로컬에서 실행하고,
+각자의 생성 계정과 구독을 사용합니다. 운영자의 생성 계정이나 API 키를 공유하지 않습니다.
+[Dot 제작 흐름](docs/DOT-CREATION.md)에 설치부터 생성·검수·등록까지 설명합니다.
 
 **현재 가능:** 규격 조회, JSON·WebP 검사, 인증된 업로드, 서버 재검증, 중복 없는 선수 등록과 조회, 출전 승인된 패키지의 게임 전달, 서버 경기 결과·전적·랭킹 API.
 **후속 구현:** 공개 OAuth 설치 흐름, 기존 게임 계정 연결, 신규 그림의 품질 검수와 공개 운영 부하 검증.
@@ -18,7 +22,7 @@ MIT 오픈소스입니다. Node 22.12 이상이 필요합니다.
 ## 3분 실행
 
 ```sh
-git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone --recurse-submodules https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run validate -- examples/sparring-bot/fighter.json
@@ -29,6 +33,18 @@ npm run mcp:smoke
 성공 결과에도 `pending: ["runtime-preview", "visual-review", "server-registration"]`이 남습니다.
 새 테스트 패키지는 `npm run example`로 `output/sparring-bot/`에 생성할 수 있습니다. 기존 폴더는 덮어쓰지 않습니다.
 게임 원본 그림은 포함하지 않았습니다. 로봇 그림과 생성 코드는 이 샘플의 독자적인 형식 시험 자료입니다.
+
+실제 새 선수 제작에는 Git과 Python 3.11+도 필요합니다.
+
+```sh
+npm run sprite:setup
+npm run sprite:status
+npm run sprite -- workflow --kind sprite
+```
+
+설치는 포함된 소스의 전용 venv에만 수행합니다. `sprite:status`는 로그인이나 구독 확인을 대신하지 않습니다.
+이후 Dot이 `vendor/sprite-gen/SKILL.md`를 읽고 사용자에게 필요한 선택만 확인한 뒤 생성합니다.
+GitHub ZIP에는 서브모듈 내용이 없으므로 Git clone을 사용합니다.
 
 ## 현재 데스크톱 Dot/Codex에서 사용
 
@@ -48,7 +64,7 @@ node scripts/print-install.mjs
 
 Dot에 다음처럼 요청합니다.
 
-> ai-fighter의 get_fighter_spec으로 overview와 guide를 먼저 읽어줘.
+> ai-fighter의 get_fighter_spec으로 overview와 creation, guide를 먼저 읽어줘.
 > examples/sparring-bot/fighter.json을 validate_fighter_package로 검사하고,
 > 통과한 단계와 아직 남은 단계를 구분해서 알려줘.
 
@@ -63,17 +79,18 @@ node scripts/print-install.mjs
 연결 확인 후 실제 제작·제출 요청 예시:
 
 > AI Fighter에 쓸 파란 갑옷의 고양이 복서를 만들어줘.
-> ai-fighter 규격·스키마·예제를 읽고 새 원화와 필수 11개 동작을 제작해.
+> ai-fighter 규격·creation 안내·스키마를 읽고, 포함된 sprite-gen으로 새 원화와 필수 11개 동작을 제작해.
+> 내 생성 계정의 사용 가능 여부를 확인하고, 형식 시험용 로봇을 새 선수로 대신 사용하지 마.
 > output/blue-cat/에 정적 WebP와 fighter.json을 저장하고 실제 파일에서 해시와 크기를 계산해.
 > JSON과 패키지를 검사하고 오류를 수정해. 연결된 베타에 제출하고 등록 결과를 조회해.
 > 하나의 패키지에는 같은 idempotencyKey를 사용해. 실제 경기 출전 승인 여부도 구분해줘.
 
-애셋 생성은 Dot 호스트의 이미지·애니메이션 도구가 담당합니다. 이 MCP 자체에는 생성 모델이나 생성 API 요금이 없습니다.
+애셋 생성은 Dot이 이 저장소의 sprite-gen을 실행해 수행합니다. 이 MCP 자체에는 생성 모델이나 생성 API 요금이 없습니다.
 호스트의 이미지 생성 도구 지원 여부와 이용 한도는 별도입니다.
 
 | 도구 | 입력 | 결과 |
 | --- | --- | --- |
-| `get_fighter_spec` | `section`: overview/guide/schema/example | 버전·한도·안내·스키마·예제 |
+| `get_fighter_spec` | `section`: overview/creation/guide/schema/example | 버전·한도·sprite-gen 제작 흐름·스키마·예제 |
 | `validate_fighter_manifest` | `manifestJson`: 원문 문자열 | 구조·참조·예산 검사 |
 | `validate_fighter_package` | `manifestPath`: 작업 폴더 기준 상대 경로 | 파일·해시·전체 디코딩 검사 |
 | `submit_fighter_package` | 상대 경로, `idempotencyKey`: UUID | 인증된 업로드 후 서버 검증 대기 |
@@ -108,6 +125,7 @@ MCP 파일 검사는 한 번에 한 개의 자식 프로세스로 실행하며 2
 자동 GitHub Actions는 포함하지 않았습니다.
 
 - [제작 안내](docs/AUTHORING.md)
+- [Dot과 포함된 sprite-gen으로 내 선수 만들기](docs/DOT-CREATION.md)
 - [적대적 리뷰와 남은 출시 조건](docs/ADVERSARIAL-REVIEW.md)
 - [Supabase 무료 베타 배포·인증·작업자 운영](docs/SUPABASE-BETA.md)
 - [보안 경계](SECURITY.md)

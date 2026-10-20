@@ -23,10 +23,18 @@ test('real stdio initialize, tools/list and tools/call cover authoring end to en
     const catalog = await client.listTools();
     assert.deepEqual(catalog.tools.map(t => t.name).sort(), ['get_fighter_spec', 'validate_fighter_manifest', 'validate_fighter_package']);
     assert.ok(catalog.tools.every(t => t.annotations.readOnlyHint && t.outputSchema));
-    for (const section of ['overview', 'schema', 'example', 'guide']) {
+    for (const section of ['overview', 'creation', 'schema', 'example', 'guide']) {
       const result = await client.callTool({ name: 'get_fighter_spec', arguments: { section } });
       assert.equal(result.structuredContent.ok, true);
       if (section === 'overview') assert.equal(result.structuredContent.data.registration.available, false);
+      if (section === 'creation') {
+        assert.equal(result.structuredContent.stage, 'creation-kit');
+        assert.equal(result.structuredContent.data.tool.repositoryRoot, root);
+        assert.equal(result.structuredContent.data.tool.sourceRoot, path.join(root, 'vendor', 'sprite-gen'));
+        assert.equal(result.structuredContent.data.tool.setupCommand, 'npm run sprite:setup');
+        assert.match(result.structuredContent.data.guide, /초대 베타/);
+        assert.match(result.structuredContent.data.guide, /형식 테스트 전용/);
+      }
     }
     const valid = await client.callTool({ name: 'validate_fighter_manifest', arguments: { manifestJson: JSON.stringify(example) } });
     assert.equal(valid.structuredContent.ok, true);
