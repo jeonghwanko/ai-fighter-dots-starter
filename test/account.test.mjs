@@ -8,7 +8,7 @@ import { createCreatorLink } from '../api/creator-link.mjs';
 async function database() {
   const sql = new PGlite();
   await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
-    create schema auth; create table auth.users(id uuid primary key);
+    create schema auth; create table auth.users(id uuid primary key,email text);
     create function auth.uid() returns uuid language sql as 'select null::uuid';
     grant usage on schema auth to authenticated,service_role;
     create schema storage;

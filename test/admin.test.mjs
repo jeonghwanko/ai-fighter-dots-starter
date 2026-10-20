@@ -8,9 +8,9 @@ test('admin authentication, private listing, atomic decisions, replay, stale rev
   const sql = new PGlite();
   try {
     await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
-      create schema auth; create table auth.users(id uuid primary key,email text);
+      create schema auth; create table auth.users(id uuid primary key,email text,encrypted_password text);
       create function auth.uid() returns uuid language sql as 'select null::uuid';
-      grant usage on schema auth to authenticated,service_role; grant select on auth.users to service_role;
+      grant usage on schema auth to authenticated,service_role; 
       create schema storage;
       create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
       create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
@@ -19,7 +19,7 @@ test('admin authentication, private listing, atomic decisions, replay, stale rev
     // pg_net/Vault dispatch runs only on hosted Supabase; account/admin contracts do not depend on it.
     for (const name of (await readdir(dir)).filter(file => file.endsWith('.sql') && !file.includes('dispatch')).sort()) await sql.exec(await readFile(new URL(name, dir), 'utf8'));
     const admin = crypto.randomUUID(), first = crypto.randomUUID(), second = crypto.randomUUID(), third = crypto.randomUUID();
-    for (const [index,id] of [admin,first,second,third].entries()) await sql.query('insert into auth.users values($1,$2)', [id,`person${index}@example.com`]);
+    for (const [index,id] of [admin,first,second,third].entries()) await sql.query('insert into auth.users(id,email) values($1,$2)', [id,`person${index}@example.com`]);
     await sql.query('insert into af_admins(owner_id) values($1)', [admin]);
     for (const id of [first,second,third]) await sql.query('insert into af_access_requests(owner_id,note) values($1,$2)', [id,'[Founding League]\nOriginal fighter']);
     // Neither a browser role nor a forged p_actor can use the service-only tables and functions.
@@ -28,6 +28,7 @@ test('admin authentication, private listing, atomic decisions, replay, stale rev
     await assert.rejects(sql.query('select * from af_access_reviews'), /permission denied/);
     await assert.rejects(sql.query('select af_admin_requests($1)', [admin]), /permission denied/);
     await sql.exec('reset role; set role service_role');
+    await assert.rejects(sql.query('select encrypted_password from auth.users'), /permission denied/);
     const calls = [];
     const methods = {
       af_admin_account: ['p_actor'], af_admin_requests: ['p_actor','p_status','p_search','p_page'],

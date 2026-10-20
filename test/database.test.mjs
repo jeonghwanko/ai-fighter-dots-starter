@@ -8,7 +8,7 @@ import { sha256, VALIDATOR_VERSION } from '../api/handler.mjs';
 async function migratedDatabase() {
   const db = new PGlite();
   await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
-    create schema auth; create table auth.users(id uuid primary key);
+    create schema auth; create table auth.users(id uuid primary key,email text);
     create function auth.uid() returns uuid language sql as 'select nullif(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';
     grant usage on schema auth to authenticated,service_role;
     create schema storage;
@@ -16,7 +16,7 @@ async function migratedDatabase() {
     create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
     grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
   const migrationDir = new URL('../supabase/migrations/', import.meta.url);
-  for (const name of (await readdir(migrationDir)).filter(name => name.endsWith('.sql')).sort()) await db.exec(await readFile(new URL(name, migrationDir), 'utf8'));
+  for (const name of (await readdir(migrationDir)).filter(name => name.endsWith('.sql') && !name.includes('dispatch')).sort()) await db.exec(await readFile(new URL(name, migrationDir), 'utf8'));
   return db;
 }
 

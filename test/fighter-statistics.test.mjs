@@ -8,7 +8,7 @@ test('owned statistics use all completed matches beyond top 20, preserve public 
   const sql = new PGlite();
   try {
     await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
-      create schema auth; create table auth.users(id uuid primary key);
+      create schema auth; create table auth.users(id uuid primary key,email text);
       create function auth.uid() returns uuid language sql as 'select null::uuid';
       grant usage on schema auth to authenticated,service_role;
       create schema storage;
@@ -16,7 +16,7 @@ test('owned statistics use all completed matches beyond top 20, preserve public 
       create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
       grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
     const dir = new URL('../supabase/migrations/', import.meta.url);
-    const migrations = (await readdir(dir)).filter(name => name.endsWith('.sql')).sort();
+    const migrations = (await readdir(dir)).filter(name => name.endsWith('.sql') && !name.includes('dispatch')).sort();
     // Compare rankings before and after this migration; later migrations apply after the comparison.
     const target = migrations.indexOf('20261020090000_ai_fighter_owned_statistics.sql');
     assert.ok(target > 0);

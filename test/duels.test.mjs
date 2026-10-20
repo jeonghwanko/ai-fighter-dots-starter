@@ -9,14 +9,14 @@ import example from '../contracts/ai-fighter/v1/example.fighter.json' with {type
 async function duelFixture() {
   const sql=new PGlite();
   await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
-    create schema auth; create table auth.users(id uuid primary key);
+    create schema auth; create table auth.users(id uuid primary key,email text);
     create function auth.uid() returns uuid language sql as 'select null::uuid';
     grant usage on schema auth to authenticated,service_role; create schema storage;
     create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
     create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
     grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
   const dir=new URL('../supabase/migrations/',import.meta.url);
-  for(const file of (await readdir(dir)).filter(x=>x.endsWith('.sql')).sort()) await sql.exec(await readFile(new URL(file,dir),'utf8'));
+  for(const file of (await readdir(dir)).filter(x=>x.endsWith('.sql') && !x.includes('dispatch')).sort()) await sql.exec(await readFile(new URL(file,dir),'utf8'));
   const ids=[]; const manifestText=JSON.stringify(example),hash=await sha256(new TextEncoder().encode(manifestText));
   for(const name of ['A','B']) {
     const owner=crypto.randomUUID(),sub=crypto.randomUUID(),id=crypto.randomUUID();ids.push(id);
