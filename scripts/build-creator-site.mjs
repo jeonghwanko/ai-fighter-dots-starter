@@ -1,15 +1,22 @@
 import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
-import { resolve, join } from 'node:path';
+import { resolve, join, relative, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { fingerprint, git } from './hosting-lib.mjs';
+import { fingerprint, buildRevision, assertSameRevision, siteEntries } from './hosting-lib.mjs';
 
 // Build the AI Fighter entries with explicit public settings, without loading source .env files.
 const [sourceArg, outputArg] = process.argv.slice(2);
 if (!sourceArg || !outputArg) throw new Error('Usage: node scripts/build-creator-site.mjs <kaito_web> <empty-output-directory>');
 const source = resolve(sourceArg), output = resolve(outputArg);
+const relativeOutput = relative(source, output);
+if (!relativeOutput || (!isAbsolute(relativeOutput) && relativeOutput !== '..' && !relativeOutput.startsWith('..\\') && !relativeOutput.startsWith('../'))) {
+  throw new Error('Output directory must be outside the source tree');
+}
+const hostingRoot = fileURLToPath(new URL('../', import.meta.url));
+const revision = buildRevision(source, hostingRoot);
+const builtAt = new Date().toISOString();
 const config = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
 if (config.siteUrl !== PUBLIC_CREATOR_PAGE) throw new Error('Hosting URL must match the MCP homepage');
 if (!config.publishableKey.startsWith('sb_publishable_')) throw new Error('A public publishable key is required');
@@ -35,7 +42,7 @@ await build({
   },
   build: {
     target: 'es2022', manifest: true, outDir: output, emptyOutDir: false, copyPublicDir: false,
-    rolldownOptions: { input: { creator: join(source, 'creator.html'), fighter: join(source, 'fighter.html'), league: join(source, 'league.html'), admin: join(source, 'admin.html') } },
+    rolldownOptions: { input: Object.fromEntries(siteEntries.map(page => [page.replace('.html', ''), join(source, page)])) },
   },
 });
 // Keep original asset names, manifests and license notices, including lazily loaded character packs.
@@ -56,23 +63,14 @@ const css = (await Promise.all(assets.filter(f => f.endsWith('.css')).map(f => r
 for (const value of [config.apiBase, config.publishableKey, config.gameUrl]) {
   if (!js.includes(value)) throw new Error('Public configuration missing from build');
 }
-if (/sb_secret_[A-Za-z0-9_-]{20,}/.test(js)) throw new Error('Private key found in build');
 if (js.includes('rupin.pryzm.gg') || js.includes('findthem')) throw new Error('Old host dependency found in build');
-for (const token of js.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g) ?? []) {
-  let claims;
-  try { claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')); } catch { continue; }
-  if (claims.role === 'service_role') throw new Error('Private JWT found in build');
-}
 for (const font of ['Pretendard-Regular.woff2', 'Pretendard-Bold.woff2']) {
   if (!css.includes(`${config.base}fonts/${font}`)) throw new Error(`Incorrect deployed font URL: ${font}`);
 }
-const hostingRoot = fileURLToPath(new URL('../', import.meta.url));
+assertSameRevision(revision, buildRevision(source, hostingRoot));
 const release = {
-  buildId: randomUUID(), siteUrl: config.siteUrl, builtAt: new Date().toISOString(),
-  sourceCommit: git(source, 'rev-parse', 'HEAD'), hostingCommit: git(hostingRoot, 'rev-parse', 'HEAD'),
-  // Unrelated source-repository edits do not change this site's inputs.
-  dirty: Boolean(git(source, 'status', '--porcelain', '--', 'creator.html', 'fighter.html', 'league.html', 'admin.html', 'src', 'public', 'package.json', 'package-lock.json') ||
-    git(hostingRoot, 'status', '--porcelain', '--untracked-files=no')),
+  buildId: randomUUID(), siteUrl: config.siteUrl, builtAt,
+  ...revision, dirty: false,
   ...await fingerprint(output),
 };
 await writeFile(join(output, 'deployment.json'), JSON.stringify(release, null, 2) + '\n');

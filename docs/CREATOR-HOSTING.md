@@ -112,13 +112,27 @@ and the existing `office-stable` runners. Choose `site`, `worker`, or `all`;
 `hosting_ref` selects this repository's reviewed branch or full commit SHA.
 There are no push/PR triggers or paid runner fallbacks.
 
-The workflow builds `creator.html`, `fighter.html`, and `league.html` from
+The workflow builds `creator.html`, `fighter.html`, `league.html`, and `admin.html` from
 private source, then publishes only the public artifact to `codex/creator-pages`.
 The artifact includes `deployment.json` with source commits and a measured
 SHA-256 digest. Publication rejects dirty source, changed bytes, source maps,
 private source files, environment files and symlinks. A normal push rejects
 concurrent updates; it never force-pushes. Success requires the live deployment
-marker to match and all three pages to respond.
+marker to match and all four pages to respond.
+
+The publisher rechecks the copied checkout before committing, then compares
+the live entry HTML and Vite manifest assets (including shared and lazy chunks)
+with the local build bytes. HTML, JS, CSS and WASM must have their expected
+content types; a 200 response containing an error page cannot pass.
+Credential checks cover copied files and the deployment marker as well as JS:
+Supabase secret/service-role keys, worker keys, private key blocks and Render
+hook URLs are rejected without printing their values. Git control files and
+workflow directories cannot be published as site artifacts.
+
+The builder requires clean inputs, records source revisions before building,
+and refuses changes to either revision during the build. Its output directory
+must be outside the source tree. Saved MCP configurations containing the legacy
+creator address are upgraded to GitHub Pages before a sign-in link is minted.
 
 From this checkout, with dependencies installed in the private source:
 

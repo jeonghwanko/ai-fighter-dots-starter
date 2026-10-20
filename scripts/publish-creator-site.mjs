@@ -1,7 +1,8 @@
 import { cp, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join, dirname } from 'node:path';
-import { hosting, git, verifyArtifact, waitForJson } from './hosting-lib.mjs';
+import assert from 'node:assert/strict';
+import { hosting, git, verifyArtifact, verifyLiveSite, waitForJson } from './hosting-lib.mjs';
 
 const [output, option, ...extra] = process.argv.slice(2);
 if (!output || extra.length || (option && option !== '--dry-run')) {
@@ -35,6 +36,10 @@ if (option === '--dry-run') {
     git(parent, 'clone', '--depth=1', '--single-branch', '--no-checkout', '--branch', hosting.branch,
       'git@github.com:jeonghwanko/ai-fighter-dots-starter.git', checkout);
     for (const entry of await readdir(source)) await cp(join(source, entry), join(checkout, entry), { recursive: true, errorOnExist: true, force: false });
+    // The caller's build directory may change while cloning or copying.
+    // Recheck the exact bytes that will be committed, before staging or pushing.
+    assert.deepEqual(await verifyArtifact(checkout, { gitCheckout: true }), release,
+      'Artifact metadata changed while preparing the publication');
     git(checkout, 'config', 'user.name', 'AI Fighter deploy');
     git(checkout, 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com');
     git(checkout, 'config', 'core.autocrlf', 'false');
@@ -46,10 +51,7 @@ if (option === '--dry-run') {
     const marker = new URL('deployment.json', hosting.siteUrl);
     marker.searchParams.set('build', release.buildId);
     await waitForJson(marker, body => body.buildId === release.buildId && body.digest === release.digest);
-    for (const page of ['creator.html', 'fighter.html', 'league.html', 'admin.html']) {
-      const response = await fetch(new URL(page, hosting.siteUrl), { signal: AbortSignal.timeout(30_000) });
-      if (!response.ok) throw new Error(`Published entry unavailable: ${page} (${response.status})`);
-    }
+    await verifyLiveSite(checkout);
     console.log(JSON.stringify({ status: 'live', siteUrl: hosting.siteUrl, buildId: release.buildId }));
   } finally {
     if (previousSsh === undefined) delete process.env.GIT_SSH_COMMAND;
