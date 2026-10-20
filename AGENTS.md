@@ -11,8 +11,10 @@ This repository lets each user create their own fighter through Dot. Read
   for a generated character. Do not rename or restyle that fixture and call it sprite-gen output.
 - The v1 contract requires all 11 motions, including 16 walk frames and 12 run frames. Validate actual
   motion, identity, foot alternation, and ground contact; schema/decoder success alone is not visual approval.
-- Use curated sprite-gen exports and measured metadata to author AI Fighter JSON. Never invent hashes,
-  origins, contact timing, successful generation, or registration results.
+- Build the package with `npm run sprite -- game-pack` and then `npm run fighter:pack -- <plan.json>`
+  (see `docs/DOT-CREATION.md`). It measures scale, frames, origins, contacts and hashes from the pixels.
+  Do not hand-assemble sheets or type those values. The plan holds only contact steps and landmarks.
+- Never invent hashes, origins, contact timing, successful generation, or registration results.
 - Creation is local. Current server registration is invitation-only and needs the user's beta session.
   Submit only within the user's request, reuse the same idempotency key for retries, and distinguish
   server registration from gameplay approval. Never overwrite a registered immutable package.

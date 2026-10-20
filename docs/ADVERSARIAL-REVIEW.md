@@ -75,9 +75,23 @@
 벤더링한 계약(`contracts/ai-fighter/validate.mjs`, 스키마, spec)과 `server/ai-fighter-package.mjs`는 게임 원천과 같은 바이트로 유지했다.
 게임 원천에 제안할 항목: 프로필 문자열 스키마에서 제어 문자를 거절하면 로컬 검사에서도 `UNSUPPORTED_TEXT`를 미리 알 수 있다.
 
+## 2026-10-20 sprite-gen 포함(6367f8f) 적대적 리뷰
+
+| 우선순위 | 발견 | 개선과 근거 |
+| --- | --- | --- |
+| P1 | sprite-gen 결과(한 장 아틀라스·재생 위치)에서 AI Fighter 패키지(동작별 시트·origin·접지·해시)로 가는 도구가 없었다. Dot이 손으로 재고 적어야 했다 | `npm run fighter:pack`이 `sprite-gen game-pack` 출력을 읽어 패키지를 만들고 전체 검사한다. 실제 game-pack 출력으로 전체 파일 검사 통과 |
+| P1 | 게임은 `actor 높이 / bodyHeight`로 그리는데 시트의 실제 몸높이를 아무도 확인하지 않았다. 생성 칸 크기 그대로면 선수 크기가 틀린다 | `fighter:pack`이 idle 몸높이를 재서 400px로 맞춘다. 절반 크기 입력 시험 |
+| P2 | 3분 검사 실행이 `--recurse-submodules`로 sprite-gen 약 120 MB를 받게 됐다 | 검사는 일반 clone. `sprite:setup`이 고정 커밋만 얕게(약 100 MB) 받는다 |
+| P2 | `npm run sprite`가 서브모듈 안에서 실행되어 상대 경로가 서브모듈 기준이 됐다 | npm을 실행한 폴더에서 실행한다. `SPRITE_GEN_ROOT`를 넘긴다. 다른 폴더의 상대 경로로 같은 바이트 확인 |
+| P2 | 샘플 로봇의 걷기 16칸은 실제로 9칸만 서로 다르다(사인 대칭) | 형식 시험 자료로 유지한다. `fighter:pack`은 반복 칸이 있는 걷기·달리기를 채워 넣지 않고 거절한다 |
+| P3 | 겹친 프레임을 합치면 `dash`·`fall`의 빌린 프레임 번호가 바뀐다 | 계획에서 `{ clip, step }`(재생 위치)로 적으면 변환한다 |
+| P3 | `workflow`의 종료 코드 2(질문 남음)를 실패로 오해할 수 있었다. ZIP 폴더의 설치 실패 원인이 보이지 않았다 | 안내에 적고, Git checkout이 아니면 이유를 알린다 |
+
+`sprite:setup`·`sprite:status`·`workflow --kind sprite`는 이 PC(Python 3.12)에서 실행해 확인했다. 실제 생성 계정으로 그림을 만드는 단계는 실행하지 않았다.
+
 ## 확인 결과
 
-- 2026-10-20 리뷰 뒤 Node 22에서 샘플 테스트 45개 통과. 리뷰 전에는 36개였다. 실제 stdio MCP 연결, WebP 전체 디코딩, PostgreSQL RLS·상태 전이·승인 범위를 포함한다.
+- 2026-10-20 두 번째 리뷰 뒤 Node 22에서 샘플 테스트 51개 통과(첫 리뷰 뒤 45개, 리뷰 전 36개). 실제 stdio MCP 연결, WebP 전체 디코딩, PostgreSQL RLS·상태 전이·승인 범위를 포함한다.
 - 규격 생성물 동기화 검사와 로컬 문서 링크 검사 통과.
 - 보안 버전 갱신 후 의존성 감사에서 알려진 취약점 0건.
 - 실제 Supabase Free 프로젝트에서 원격 통합 시험 10개 통과. [시험 항목](SUPABASE-BETA.md#검증-기록)과 한계를 함께 기록했다.

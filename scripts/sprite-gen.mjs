@@ -1,4 +1,4 @@
-import { access, readFile, realpath } from 'node:fs/promises';
+import { access, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -10,12 +10,12 @@ const exists = async file => { try { await access(file); return true; } catch { 
 
 export async function spriteStatus() {
   const sourcePresent = await exists(path.join(spriteRoot, 'SKILL.md'));
-  const metadata = sourcePresent ? await readFile(path.join(spriteRoot, 'pyproject.toml'), 'utf8') : '';
+  const metadata = sourcePresent ? await readFile(path.join(spriteRoot, 'pyproject.toml'), 'utf8').catch(() => '') : '';
   return {
     sourcePresent, version: metadata.match(/^version = "([^"]+)"/m)?.[1] ?? null,
     environmentPresent: await exists(spritePython), repositoryRoot: kitRoot, sourceRoot: spriteRoot,
     skillPath: path.join(spriteRoot, 'SKILL.md'), pythonPath: spritePython,
-    setupCommand: 'npm run sprite:setup', runCommand: 'npm run sprite --',
+    setupCommand: 'npm run sprite:setup', runCommand: 'npm run sprite --', packCommand: 'npm run fighter:pack -- <plan.json>',
     authentication: 'Each creator uses their own generation account. Presence of a venv does not verify login, quota, or generation quality.',
   };
 }
@@ -23,7 +23,7 @@ export async function spriteStatus() {
 function run(command, args, { cwd = kitRoot, timeout = 0 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, stdio: 'inherit', shell: false, windowsHide: true, timeout,
-      env: { ...process.env, PYTHONUTF8: '1' } });
+      env: { ...process.env, PYTHONUTF8: '1', SPRITE_GEN_ROOT: spriteRoot } });
     child.once('error', reject);
     child.once('exit', (code, signal) => resolve(signal ? 1 : code ?? 1));
   });
@@ -34,7 +34,9 @@ export async function main(args) {
   if (args[0] === 'setup') {
     if (args.length !== 1) throw new Error('Usage: npm run sprite:setup');
     if (!(await exists(path.join(spriteRoot, 'SKILL.md')))) {
-      const result = await run('git', ['submodule', 'update', '--init', '--', 'vendor/sprite-gen']);
+      // History is not needed to run the pinned commit; depth 1 skips the upstream history download.
+      if (!(await exists(path.join(kitRoot, '.git')))) throw new Error('sprite-gen source missing and this folder is not a Git checkout. Clone AI Fighter with git; GitHub ZIP archives do not include submodules.');
+      const result = await run('git', ['submodule', 'update', '--init', '--depth', '1', '--', 'vendor/sprite-gen']);
       if (result) return result;
     }
     if (!(await exists(path.join(spriteRoot, 'SKILL.md')))) throw new Error('sprite-gen source missing. Clone AI Fighter with --recurse-submodules. GitHub ZIP archives do not include submodules.');
@@ -60,9 +62,9 @@ export async function main(args) {
   }
   if (!args.length) throw new Error('Pass a sprite-gen command, for example: npm run sprite -- workflow --kind sprite');
   if (!(await exists(spritePython))) throw new Error('Run npm run sprite:setup first. No fallback to a global sprite-gen installation.');
-  // Use only the bundled source and its venv. Preserve upstream arguments and exit codes (including 75).
-  const source = await realpath(spriteRoot);
-  return run(spritePython, ['-m', 'sprite_gen.cli', ...args], { cwd: source });
+  // Use only the bundled source and its venv. Preserve upstream arguments and exit codes (2: questions, 75: choice needed).
+  // Relative paths resolve from where the user ran npm, not from inside the submodule.
+  return run(spritePython, ['-m', 'sprite_gen.cli', ...args], { cwd: process.env.INIT_CWD || process.cwd() });
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

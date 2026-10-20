@@ -1,7 +1,7 @@
 # AI Fighter × Dot starter
 
 Dot 사용자가 AI Fighter의 제작 규격을 읽고, **함께 포함된 sprite-gen으로 자기 캐릭터의 원화·애니메이션과 JSON을 만든 뒤 Supabase 베타에 제출·등록**하는 로컬 MCP 제작 키트입니다.
-MIT 오픈소스입니다. Node 22.12 이상이 필요합니다.
+MIT 오픈소스입니다. 포함된 sprite-gen 서브모듈은 별도의 Apache-2.0입니다. Node 22.12 이상이 필요합니다.
 
 sprite-gen 소스는 `vendor/sprite-gen` Git 서브모듈에 포함됩니다. 각 사용자의 Dot이 이를 로컬에서 실행하고,
 각자의 생성 계정과 구독을 사용합니다. 운영자의 생성 계정이나 API 키를 공유하지 않습니다.
@@ -22,7 +22,7 @@ sprite-gen 소스는 `vendor/sprite-gen` Git 서브모듈에 포함됩니다. �
 ## 3분 실행
 
 ```sh
-git clone --recurse-submodules https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run validate -- examples/sparring-bot/fighter.json
@@ -42,8 +42,11 @@ npm run sprite:status
 npm run sprite -- workflow --kind sprite
 ```
 
-설치는 포함된 소스의 전용 venv에만 수행합니다. `sprite:status`는 로그인이나 구독 확인을 대신하지 않습니다.
+`sprite:setup`은 sprite-gen 고정 커밋을 얕게(약 100 MB) 받고 전용 venv에만 설치합니다. 검사만 할 때는 필요 없습니다.
+`sprite:status`는 로그인이나 구독 확인을 대신하지 않습니다.
 이후 Dot이 `vendor/sprite-gen/SKILL.md`를 읽고 사용자에게 필요한 선택만 확인한 뒤 생성합니다.
+생성 결과는 `sprite-gen game-pack`으로 모은 뒤 `npm run fighter:pack -- plan.json`으로 AI Fighter 패키지를 만듭니다.
+시트·해시·기준점·접지를 실제 픽셀에서 재고 계약 검사까지 실행합니다. [Dot 제작 흐름](docs/DOT-CREATION.md#패키지-만들기-game-pack--fighterpack)을 따릅니다.
 GitHub ZIP에는 서브모듈 내용이 없으므로 Git clone을 사용합니다.
 
 ## 현재 데스크톱 Dot/Codex에서 사용
@@ -116,6 +119,7 @@ GitHub 공개는 플러그인 디렉터리 등록이나 서버 배포를 뜻하�
 npm run spec:check
 npm test
 npm run validate -- output/my-fighter/fighter.json --metadata-only
+npm run fighter:pack -- output/my-fighter-work/plan.json
 ```
 
 검증 코드는 허용 목록, 중복 JSON 키, 경로 탈출, 용량·픽셀 예산, 실제 인코딩, 빈 프레임과 crop을 확인합니다.

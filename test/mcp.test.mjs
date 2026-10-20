@@ -32,6 +32,7 @@ test('real stdio initialize, tools/list and tools/call cover authoring end to en
         assert.equal(result.structuredContent.data.tool.repositoryRoot, root);
         assert.equal(result.structuredContent.data.tool.sourceRoot, path.join(root, 'vendor', 'sprite-gen'));
         assert.equal(result.structuredContent.data.tool.setupCommand, 'npm run sprite:setup');
+        assert.equal(result.structuredContent.data.tool.packCommand, 'npm run fighter:pack -- <plan.json>');
         assert.match(result.structuredContent.data.guide, /초대 베타/);
         assert.match(result.structuredContent.data.guide, /형식 테스트 전용/);
       }
