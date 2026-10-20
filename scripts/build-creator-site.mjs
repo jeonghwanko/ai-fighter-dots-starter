@@ -2,6 +2,9 @@ import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
+import { randomUUID } from 'node:crypto';
+import { fileURLToPath } from 'node:url';
+import { fingerprint, git } from './hosting-lib.mjs';
 
 // Build the AI Fighter entries with explicit public settings, without loading source .env files.
 const [sourceArg, outputArg] = process.argv.slice(2);
@@ -63,4 +66,14 @@ for (const token of js.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/
 for (const font of ['Pretendard-Regular.woff2', 'Pretendard-Bold.woff2']) {
   if (!css.includes(`${config.base}fonts/${font}`)) throw new Error(`Incorrect deployed font URL: ${font}`);
 }
-console.log(JSON.stringify({ output, siteUrl: config.siteUrl, assets: assets.length, checks: 'public-config-and-font-paths-passed' }));
+const hostingRoot = fileURLToPath(new URL('../', import.meta.url));
+const release = {
+  buildId: randomUUID(), siteUrl: config.siteUrl, builtAt: new Date().toISOString(),
+  sourceCommit: git(source, 'rev-parse', 'HEAD'), hostingCommit: git(hostingRoot, 'rev-parse', 'HEAD'),
+  // Unrelated source-repository edits do not change this site's inputs.
+  dirty: Boolean(git(source, 'status', '--porcelain', '--', 'creator.html', 'fighter.html', 'league.html', 'src', 'public', 'package.json', 'package-lock.json') ||
+    git(hostingRoot, 'status', '--porcelain', '--untracked-files=no')),
+  ...await fingerprint(output),
+};
+await writeFile(join(output, 'deployment.json'), JSON.stringify(release, null, 2) + '\n');
+console.log(JSON.stringify({ output, ...release, checks: 'public-config-and-font-paths-passed' }));

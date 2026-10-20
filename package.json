@@ -13,6 +13,9 @@
     "url": "https://github.com/jeonghwanko/ai-fighter-dots-starter.git"
   },
   "scripts": {
+    "site:build": "node scripts/build-creator-site.mjs",
+    "site:publish": "node scripts/publish-creator-site.mjs",
+    "worker:deploy": "node scripts/deploy-render.mjs",
     "start": "node mcp/stdio.mjs",
     "login": "node scripts/login.mjs",
     "logout": "node scripts/login.mjs logout",

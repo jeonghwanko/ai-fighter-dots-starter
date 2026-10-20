@@ -103,3 +103,55 @@ requests can be updated; existing invitations are not automatically league entri
 The page uses existing arena character art as labelled examples. Cohort dates and
 the proposed match format are plans, not a live tournament or remaining-seat counter.
 The Pages builder includes the league entry alongside the creator page and game.
+
+## Repeatable deployment
+
+The private `jeonghwanko/crashbang-heroes` repository owns
+`.github/workflows/ai-fighter-deploy.yml`. It uses manual `workflow_dispatch`
+and the existing `office-stable` runners. Choose `site`, `worker`, or `all`;
+`hosting_ref` selects this repository's reviewed branch or full commit SHA.
+There are no push/PR triggers or paid runner fallbacks.
+
+The workflow builds `creator.html`, `fighter.html`, and `league.html` from
+private source, then publishes only the public artifact to `codex/creator-pages`.
+The artifact includes `deployment.json` with source commits and a measured
+SHA-256 digest. Publication rejects dirty source, changed bytes, source maps,
+private source files, environment files and symlinks. A normal push rejects
+concurrent updates; it never force-pushes. Success requires the live deployment
+marker to match and all three pages to respond.
+
+From this checkout, with dependencies installed in the private source:
+
+```bash
+npm run site:build -- ../crashbang-heroes/kaito_web output/new-site
+npm run site:publish -- output/new-site --dry-run
+npm run site:publish -- output/new-site
+npm run worker:deploy -- <full-reviewed-hosting-commit-sha> --dry-run
+npm run worker:deploy -- <full-reviewed-hosting-commit-sha>
+```
+
+The private source also exposes `npm run publish:fighter -- --dry-run` and
+`npm run publish:fighter` from `kaito_web`. It builds into a fresh temporary
+directory and uses these same scripts. `AI_FIGHTER_HOSTING_DIR` can override
+the default sibling checkout.
+
+Required Actions secrets in the **private source repository**:
+
+- `AI_FIGHTER_PAGES_DEPLOY_KEY`: SSH write deploy key scoped to this public
+  repository. For local publishing, use the same environment variable or an
+  authorized SSH identity. The script pins SSH host keys retrieved from
+  GitHub's HTTPS metadata API and removes the temporary key after use.
+- `AI_FIGHTER_RENDER_DEPLOY_HOOK`: the existing Render service's secret hook.
+  The script sends the tested commit as `ref`, then waits until `/health`
+  reports that exact `RENDER_GIT_COMMIT`. A response from the old deployment
+  does not count as success. Keep the hook out of logs.
+
+These permissions must be connected before the first workflow deployment.
+Worker credentials and the Supabase service-role key do not belong in CI.
+See [Render deploy hooks](https://render.com/docs/deploy-hooks) and
+[GitHub Pages publishing](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
+
+Supabase migrations and Edge Functions are outside this workflow. In particular,
+the local empty `duel-engine.mjs` adapter must never replace the deployed game
+engine. `publish:rupin` remains the original Wonder Lupin publishing command;
+use `publish:fighter` for AI Fighter.

@@ -13,6 +13,7 @@ test('HTTP health does not claim; unauthorized requests cannot start work; autho
   const gate = new Promise(resolve => { release = resolve; });
   const app = createWorkerServer({
     wakeToken: 'a'.repeat(64), log() {},
+    commit: 'c'.repeat(40),
     async run() {
       calls++; concurrent++; maxConcurrent = Math.max(maxConcurrent, concurrent);
       if (calls === 1) await gate;
@@ -24,6 +25,7 @@ test('HTTP health does not claim; unauthorized requests cannot start work; autho
   const base = `http://127.0.0.1:${app.server.address().port}`;
   try {
     assert.equal((await fetch(`${base}/health`)).status, 200);
+    assert.equal((await (await fetch(`${base}/health`)).json()).commit, 'c'.repeat(40));
     assert.equal((await fetch(`${base}/wake`, { method: 'POST' })).status, 401);
     assert.equal(calls, 0);
     assert.equal((await fetch(`${base}/wake`, { method: 'POST', headers: headers('a'.repeat(64), -181) })).status, 401);

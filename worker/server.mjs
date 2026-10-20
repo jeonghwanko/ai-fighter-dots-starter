@@ -6,7 +6,7 @@ import { makePackageValidator } from '../mcp/package-access.mjs';
 import { runWithConfig } from './run.mjs';
 
 /** HTTP-triggered worker. Supabase owns the durable queue and five-minute leases. */
-export function createWorkerServer({ wakeToken, run, log = console.log }) {
+export function createWorkerServer({ wakeToken, run, log = console.log, commit = null }) {
   if (!/^[a-f0-9]{64}$/.test(wakeToken ?? '')) throw new Error('invalid-wake-token');
   let active = null, stopping = false, requested = false;
   async function drain() {
@@ -30,7 +30,7 @@ export function createWorkerServer({ wakeToken, run, log = console.log }) {
       res.end(JSON.stringify(body));
     };
     if (req.method === 'GET' && req.url === '/health') {
-      return reply(stopping ? 503 : 200, { ok: !stopping });
+      return reply(stopping ? 503 : 200, { ok: !stopping, commit: /^[a-f0-9]{40}$/.test(commit ?? '') ? commit : null });
     }
     if (req.method !== 'POST' || req.url !== '/wake') return reply(404, { ok: false });
     const timestamp = req.headers['x-ai-fighter-time'];
@@ -76,6 +76,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   console.log(JSON.stringify({ stage: 'validator-ready', elapsedMs: Date.now() - started }));
   const app = createWorkerServer({
     wakeToken: process.env.AI_FIGHTER_WAKE_TOKEN,
+    commit: process.env.RENDER_GIT_COMMIT,
     run: () => runWithConfig(config),
   });
   app.server.listen(Number(process.env.PORT ?? 10000), '0.0.0.0');
