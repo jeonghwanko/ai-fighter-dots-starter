@@ -146,7 +146,10 @@ Required Actions secrets in the **private source repository**:
   reports that exact `RENDER_GIT_COMMIT`. A response from the old deployment
   does not count as success. Keep the hook out of logs.
 
-These permissions must be connected before the first workflow deployment.
+These permissions were connected on 2026-10-21 KST. The repository-scoped
+write deploy key has ID `167084548`; both Actions secrets are stored in the
+private source repository. Credential backups and access-restricted operating
+records are stored in the owner's `.secret` directory, outside this repository.
 Worker credentials and the Supabase service-role key do not belong in CI.
 See [Render deploy hooks](https://render.com/docs/deploy-hooks) and
 [GitHub Pages publishing](https://docs.github.com/en/pages/getting-started-with-github-pages/configuring-a-publishing-source-for-your-github-pages-site).
@@ -155,6 +158,21 @@ Supabase migrations and Edge Functions are outside this workflow. In particular,
 the local empty `duel-engine.mjs` adapter must never replace the deployed game
 engine. `publish:rupin` remains the original Wonder Lupin publishing command;
 use `publish:fighter` for AI Fighter.
+
+### Verified workflow deployment (2026-10-21 KST)
+
+[Deployment run 39454712921](https://github.com/jeonghwanko/crashbang-heroes/actions/runs/39454712921)
+completed successfully on `office-stable-1`: two artifact/deployment tests and
+seven worker/dispatch tests passed. The build published 2,159 files from source
+commit `5bdaf3fa7bb92bbfa8084e6433d2cb5586eeef44`, using hosting commit
+`395f047cd39a383795e804e4f70ff7581c5a6463`.
+
+[Pages run 39455458507](https://github.com/jeonghwanko/ai-fighter-dots-starter/actions/runs/39455458507)
+published commit `b1768dc72dacc80a36f8a7498f6737a77b9b0d3b`. The live
+deployment marker matched the build, all three HTML entries and their entry
+assets returned HTTP 200, and Render `/health` returned the exact hosting
+commit above. This was one manually dispatched verification deployment;
+push-triggered source CI and Render auto-deploy remain off.
 
 
 ## Application administration
