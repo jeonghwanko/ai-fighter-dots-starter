@@ -71,13 +71,16 @@ Dot에 다음처럼 요청합니다.
 > examples/sparring-bot/fighter.json을 validate_fighter_package로 검사하고,
 > 통과한 단계와 아직 남은 단계를 구분해서 알려줘.
 
-초대된 베타 계정의 세션 파일을 받은 경우 `AI_FIGHTER_CLIENT_CONFIG` 환경 변수로 그 **비공개 파일 경로**를 지정하고
-설정 명령을 다시 출력합니다. 서비스 키와 작업자 키는 이 파일에 넣지 않습니다.
+제출하려면 로그인합니다. Google 계정으로 브라우저에서 로그인하면 세션 파일 `~/.ai-fighter/client.json`이 생깁니다.
+MCP는 이 파일을 자동으로 찾습니다. 이미 실행 중인 앱은 다시 시작합니다. 서비스 키와 작업자 키는 쓰지 않습니다.
 
-```powershell
-$env:AI_FIGHTER_CLIENT_CONFIG = 'C:/private/ai-fighter/client.json'
-node scripts/print-install.mjs
+```sh
+npm run login -- --url https://YOUR_PROJECT_REF.supabase.co --key YOUR_PROJECT_PUBLISHABLE_KEY
 ```
+
+로그인만으로는 제출할 수 없습니다. 베타 초대가 없으면 AI Fighter 홈페이지에서 초대를 요청합니다.
+Google 로그인은 코드에 구현되었고 운영 서버 반영 전입니다. 상태는 [베타 운영 안내](docs/SUPABASE-BETA.md#google-로그인-코드-구현-운영-반영-전)를 봅니다.
+운영자가 준비한 세션 파일을 쓰는 기존 방식도 `AI_FIGHTER_CLIENT_CONFIG`로 계속 쓸 수 있습니다.
 
 연결 확인 후 실제 제작·제출 요청 예시:
 

@@ -13,7 +13,7 @@ after(async () => { await rm(temporary, { recursive: true, force: true }); });
 
 test('the Edge bundle holds every module the entry imports and nothing Node-only', async () => {
   const files = await edgeFiles();
-  for (const required of ['api/handler.mjs', 'api/http.mjs', 'api/duels.mjs', 'api/fighter-statistics.mjs',
+  for (const required of ['api/handler.mjs', 'api/http.mjs', 'api/duels.mjs', 'api/fighter-statistics.mjs', 'api/account.mjs',
     'contracts/ai-fighter/validate.mjs', 'contracts/ai-fighter/v1/spec.json', 'contracts/ai-fighter/v1/fighter.schema.json',
     'supabase/functions/ai-fighter/duel-engine.mjs']) assert.ok(files.includes(required), required);
   assert.ok(files.every(file => !/^(server|mcp|scripts|worker)\//.test(file)), JSON.stringify(files));

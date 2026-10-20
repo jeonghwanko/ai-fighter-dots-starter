@@ -26,6 +26,31 @@ function accessTokenExpiry(token) {
 }
 const REFRESH_MARGIN_MS = 60000, LOCK_STALE_MS = 30000, LOCK_WAIT_MS = 15000;
 
+/** Run `task` while holding `<configPath>.lock`. Only one process refreshes or replaces a session file at a time. */
+export async function withSessionLock(configPath, task) {
+  const lock = `${configPath}.lock`, started = Date.now();
+  for (;;) {
+    try { await writeFile(lock, String(process.pid), { flag: 'wx', mode: 0o600 }); break; }
+    catch (error) {
+      if (error.code !== 'EEXIST') throw error;
+      const modified = await stat(lock).then(info => info.mtimeMs, () => null);
+      if (modified !== null && Date.now() - modified > LOCK_STALE_MS) { await rm(lock, { force: true }); continue; }
+      if (Date.now() - started > LOCK_WAIT_MS) throw new Error('session-refresh-busy');
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+  }
+  try { return await task(); } finally { await rm(lock, { force: true }); }
+}
+/** Replace the session file atomically: a partial write would lose the only valid session. Call under withSessionLock. */
+export async function writeSessionFile(configPath, config) {
+  const temporary = `${configPath}.${process.pid}.tmp`;
+  try {
+    await rm(temporary, { force: true });
+    await writeFile(temporary, JSON.stringify(config, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+    await rename(temporary, configPath);
+  } catch (error) { await rm(temporary, { force: true }); throw error; }
+}
+
 /**
  * Several MCP processes may share one session file (desktop app, CLI, IDE). Supabase rotates the refresh
  * token on every refresh and ends the whole session when a token two rotations old is used. So a process
@@ -45,29 +70,6 @@ export async function createRemoteClient(configPath, { createAuthClient = create
       }
     } catch { /* keep the session in memory */ }
   }
-  async function withLock(task) {
-    const lock = `${configPath}.lock`, started = Date.now();
-    for (;;) {
-      try { await writeFile(lock, String(process.pid), { flag: 'wx', mode: 0o600 }); break; }
-      catch (error) {
-        if (error.code !== 'EEXIST') throw error;
-        const modified = await stat(lock).then(info => info.mtimeMs, () => null);
-        if (modified !== null && Date.now() - modified > LOCK_STALE_MS) { await rm(lock, { force: true }); continue; }
-        if (Date.now() - started > LOCK_WAIT_MS) throw new Error('session-refresh-busy');
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-    try { return await task(); } finally { await rm(lock, { force: true }); }
-  }
-  async function save() {
-    // The old refresh token is now spent. Replace the file atomically: a partial write would lose the only valid session.
-    const temporary = `${configPath}.${process.pid}.tmp`;
-    try {
-      await rm(temporary, { force: true });
-      await writeFile(temporary, JSON.stringify(config, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
-      await rename(temporary, configPath);
-    } catch (error) { await rm(temporary, { force: true }); throw error; }
-  }
   let pendingAuth;
   async function token() {
     // A valid token needs no auth call.
@@ -75,13 +77,13 @@ export async function createRemoteClient(configPath, { createAuthClient = create
     pendingAuth ??= (async () => {
       await adoptSaved();
       if (fresh()) return config.accessToken;
-      return withLock(async () => {
+      return withSessionLock(configPath, async () => {
         await adoptSaved(); // Another process may have refreshed while this one waited.
         if (fresh()) return config.accessToken;
         const { data, error } = await auth.auth.refreshSession({ refresh_token: config.refreshToken });
         if (error || !data.session) throw new Error('client-sign-in-required');
         config.accessToken = data.session.access_token; config.refreshToken = data.session.refresh_token;
-        await save();
+        await writeSessionFile(configPath, config); // The old refresh token is now spent.
         return config.accessToken;
       });
     })().finally(() => { pendingAuth = undefined; });

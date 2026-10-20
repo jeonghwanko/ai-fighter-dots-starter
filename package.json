@@ -14,6 +14,8 @@
   },
   "scripts": {
     "start": "node mcp/stdio.mjs",
+    "login": "node scripts/login.mjs",
+    "logout": "node scripts/login.mjs logout",
     "sprite:setup": "node scripts/sprite-gen.mjs setup",
     "sprite:status": "node scripts/sprite-gen.mjs status",
     "sprite": "node scripts/sprite-gen.mjs",

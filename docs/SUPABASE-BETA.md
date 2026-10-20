@@ -155,6 +155,42 @@ VITE_AI_FIGHTER_API_BASE=https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fi
 이 값은 공개 API 주소다. 비밀 키가 아니다. 미설정 또는 통신 실패 시 기존 게임 선수는 계속 사용할 수 있다.
 게임 구현은 원본 게임 저장소에 있으며, 이 공개 샘플은 전달 API·DB·MCP·검증 작업자를 제공한다.
 
+## Google 로그인 (코드 구현, 운영 반영 전)
+
+2026-10-21 코드에 구현했다. 운영 Supabase에는 아직 migration·Edge Function·리다이렉트 설정을 반영하지 않았다.
+설계와 남은 단계는 게임 저장소의 `docs/Plan/2026-10-20-ai-fighter-google-login/README.md`가 소유한다.
+
+- 사용자가 직접 로그인한다. 운영자가 세션 파일을 만들어 전달하지 않는다.
+  ```sh
+  AI_FIGHTER_SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co   AI_FIGHTER_PUBLISHABLE_KEY=YOUR_PROJECT_PUBLISHABLE_KEY npm run login
+  ```
+  `--url`, `--key`, `--port` 플래그도 쓸 수 있다. 두 번째 로그인부터는 기존 세션 파일의 공개 값을 다시 쓴다.
+- `scripts/login.mjs`가 `127.0.0.1:47821/callback/<무작위 state>`에 임시 콜백을 열고 Google 로그인(PKCE)을 진행한다.
+  state가 맞지 않는 요청은 404로 무시한다. 다른 로컬 페이지가 진행 중인 로그인을 끝내지 못한다.
+  5분 안에 끝나지 않으면 닫는다. Google 계정 선택 화면을 항상 띄운다. 홈페이지와 같은 계정을 골라야 한다.
+- 세션 파일에 다른 사용자의 세션이 있으면 덮어쓰지 않고 멈춘다(`session-user-differs`).
+  운영자가 준비한 베타 세션이 유일한 사본일 수 있기 때문이다. 기존 계정이면 `--link`, 정말 바꾸려면 `--replace`를 쓴다.
+- 키는 `sb_publishable_` 키나 `role`이 `anon`인 JWT만 받는다. 비밀 키와 `service_role` 키는 거부한다.
+- 세션은 `~/.ai-fighter/client.json`(또는 `AI_FIGHTER_CLIENT_CONFIG`)에 위 형식 그대로 저장한다.
+  `api/client.mjs`의 같은 잠금과 원자적 교체를 쓴다. 비밀 키는 받지 않는다.
+- MCP는 `AI_FIGHTER_CLIENT_CONFIG`가 없으면 기본 경로를 찾는다. 파일이 없으면 로컬 도구만 노출한다.
+  MCP가 실행 중일 때 처음 로그인했다면 호스트 앱을 다시 시작한다.
+- 로그인은 Supabase 사용자를 만들 수 있다. 제출은 여전히 `af_creators` 초대가 필요하다.
+  초대가 없으면 `GET /me`가 `invited: false`를 반환하고, 사용자는 `POST /access-requests`로 초대를 요청한다.
+  운영자는 `af_access_requests`를 확인한 뒤 `af_creators`에 행을 추가하고 요청 상태를 `approved`로 바꾼다.
+- `npm run logout`은 접근 토큰이 만료됐으면 먼저 갱신한 뒤 Supabase에서 이 세션을 끝내고 파일을 지운다.
+  서버에서 끝내지 못하면 그렇게 알린다. 실행 중인 MCP는 메모리에 갱신 토큰을 갖고 있으므로 앱을 다시 시작한다.
+- MCP는 `AI_FIGHTER_CLIENT_CONFIG`로 지정한 파일이 잘못되면 시작하지 않는다. 기본 경로의 파일이 잘못되면
+  stderr에 한 줄을 남기고 로컬 도구만으로 시작한다.
+- 기존 베타 계정(이메일/비밀번호)에 Google을 연결할 때는 그 계정의 세션 파일로 실행한다.
+  `AI_FIGHTER_CLIENT_CONFIG=<기존-계정-client.json> npm run login -- --link`.
+  Supabase Auth의 수동 연결(manual linking)이 켜져 있어야 한다. 연결 후 사용자 ID가 바뀌면 파일을 바꾸지 않고 멈춘다.
+  그 Google 계정으로 먼저 로그인해 별도 사용자가 생겼으면 `identity-already-linked`로 멈춘다.
+- 운영 반영에 필요한 설정: Supabase Auth 리다이렉트 허용 목록에 `http://127.0.0.1:47821/**`을 추가한다.
+  다른 포트를 쓰면 그 주소도 추가한다.
+- 초대 요청이 거절되면 7일 동안 다시 요청할 수 없다(`request-declined`, 409). 그 뒤에는 다시 대기 상태로 열 수 있다.
+  동시에 들어온 첫 요청 두 개는 한 행으로 합쳐진다.
+
 ## 베타 계정과 Dot 연결
 
 이번 베타는 Supabase Auth의 사용자 세션을 사용한다. 기존 게임 계정 연결은 후속 구현이다.
@@ -219,6 +255,8 @@ Dot에서 첫 실제 등록:
 | POST /submissions/:id/submit | 소유자 | 모든 파일 존재·크기 확인 후 검증 큐에 넣기 |
 | GET /submissions/:id | 소유자 | 상태·오류·선수 ID 조회 |
 | GET /fighters/:id | 소유자 | 등록 프로필·검토 상태 조회 |
+| GET /me | 사용자 JWT (초대 불필요) | 초대 여부·만료 시각·초대 요청 상태 |
+| POST /access-requests | 사용자 JWT (초대 불필요) | 베타 초대 요청. 선택 `note` 500자 이하, 사용자당 1건, 24시간 3회 |
 | POST /worker/claim | 작업자 | 큐 임대·일시 다운로드 URL 발급 |
 | POST /worker/finish | 작업자 | 동일 임대·manifest 해시로 검사 확정 |
 
