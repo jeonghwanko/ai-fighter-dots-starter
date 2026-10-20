@@ -24,6 +24,9 @@
    UUID 형식의 `idempotencyKey`를 저장하고 재시도에도 같은 값을 사용한다. 파일을 바꿨으면 새 초안이다.
 10. `get_fighter_submission`으로 결과를 조회한다. `registered`와 `fighterId`를 받은 뒤 등록 완료로 안내한다.
     `runtimeApproved: false`는 경기 출전 승인이 남았다는 뜻이다. 작업자가 꺼져 있으면 검증 대기로 남는다.
+    `pending`이 빈 배열이면 최종 상태다. 더 조회하지 않는다.
+    `rejected`이면 `validation`의 오류를 고친다. 고친 패키지는 새 초안이므로 새 키로 제출한다.
+    `code: "upload-expired"`는 24시간 안에 업로드를 끝내지 못한 제출이다. 새 키로 다시 제출한다.
 
 이미지 생성·애니메이션 제작 도구는 호스트가 제공해야 한다. 이 MCP는 이미지를 생성하지 않는다.
 호스트에 필요한 도구가 없으면 그 제한을 알린다. 기존 샘플의 이름만 바꿔 새 선수라고 제시하지 않는다.
@@ -85,6 +88,9 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 | `hit` | 피격·비틀거림·복귀 | 접촉 1개, `recoil`, `stagger`, `recover` |
 | `groggy` | 흔들림 반복 | 접촉 없음 |
 | `fall` | 넘어짐·누움 | 접촉 1개, `lieSequenceIndex`, `getUp` |
+
+`idle`·`walk`·`run`의 `durationMs`는 **한 칸**의 시간이다. 한 주기는 `durationMs × 칸 수`이고 10초 이하다.
+예: `walk` 16칸이면 칸당 625 ms 이하다.
 
 `sequence`는 `{ frame, durationMs }` 배열이다. 같은 프레임을 반복할 수 있다.
 `hitSequenceIndices`는 **이미지 프레임 번호가 아니라 재생 단계 번호**다. 0보다 크고 오름차순이어야 한다.

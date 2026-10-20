@@ -32,13 +32,16 @@ sequenceDiagram
 업로드는 24시간 안에 끝낸다. 작업 임대는 5분이고, 중단된 작업은 최대 3회 시도한다.
 같은 사용자·idempotencyKey·JSON 원문으로 재시도하면 기존 제출과 선수 ID를 반환한다.
 같은 키에 다른 JSON을 보내면 409다. 수정한 패키지는 새 키로 제출한다.
+24시간 안에 업로드를 끝내지 못한 제출은 같은 사용자의 다음 제출 생성 때 `rejected`(`upload-expired`)로 닫힌다.
+그 전까지 조회 응답은 `uploading`에 `code: "upload-expired"`와 빈 `pending`을 함께 보인다.
 사용자당 등록 선수는 1명이며 등록 후 교체 API는 아직 없다.
 
 ## 배포
 
 원천 파일:
 
-- [DB 마이그레이션](../supabase/migrations/20261019090136_ai_fighter_beta_registration.sql)
+- [DB 마이그레이션](../supabase/migrations/20261019090136_ai_fighter_beta_registration.sql),
+  [업로드 만료 수정](../supabase/migrations/20261020120000_ai_fighter_upload_expiry.sql)(2026-10-20, 운영 미반영)
 - [Edge 진입점](../supabase/functions/ai-fighter/index.ts), [공유 HTTP 처리기](../api/handler.mjs)
 - [검증 작업자](../worker/run.mjs), [MCP 제출 도구](../mcp/remote-tools.mjs)
 
@@ -159,7 +162,9 @@ VITE_AI_FIGHTER_API_BASE=https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fi
 }
 ```
 
-MCP는 만료된 세션을 갱신하고 같은 파일에 저장한다. 갱신이 취소되었으면 다시 로그인해야 한다.
+MCP는 유효한 접근 토큰을 추가 인증 요청 없이 다시 쓴다. 만료 60초 전부터 세션을 갱신한다.
+갱신한 세션은 임시 파일에 쓴 뒤 같은 파일로 바꿔 넣는다. 저장이 중간에 끊겨도 기존 파일이 깨지지 않는다.
+갱신이 취소되었으면 다시 로그인해야 한다.
 검증용 두 계정과 작업자 토큰을 만드는 스크립트는
 [provision-test-accounts.mjs](../scripts/provision-test-accounts.mjs)다.
 이는 테스트 계정용 운영자 도구이며 일반 사용자 로그인 기능이 아니다.
