@@ -1,0 +1,552 @@
+Wonder Lupin - Third-Party Notices
+==================================
+
+This distribution includes the following third-party software. The notices
+below are reproduced from the installed packages used to build this release.
+
+8-Bit Curious Theme
+-------------------
+
+Created by emanresU and published on OpenGameArt.org under Creative Commons
+Zero 1.0 (CC0 1.0).
+
+Source: https://opengameart.org/content/8-bit-curious-theme
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copy: audio/music/lobby-bgm.ogg (gain-normalized OGG Vorbis transcode)
+
+open-RPGBGM — selected and edited music
+---------------------------------------
+
+Source: https://github.com/vetyj2/open-RPGBGM
+Release: v1.0.0-350 (315-track complete collection)
+Publisher: vetyj2 / open-RPGBGM. Source audio generated through Manus AI.
+Terms: LicenseRef-OPEN-RPGBGM-PAAT-1.0 (custom asset terms, not CC0)
+Full terms: audio/music/OPEN-RPGBGM-LICENSE.txt
+Canonical terms: https://github.com/vetyj2/open-RPGBGM/blob/main/LICENSE.md
+Provenance: https://github.com/vetyj2/open-RPGBGM/blob/main/PROVENANCE.md
+Rights status: https://github.com/vetyj2/open-RPGBGM/blob/main/doc/RIGHTS_STATUS.md
+
+ORB-MCH-001 / 멈춘 태엽실 -> audio/music/briefing-bgm.ogg
+ORB-MIR-003 / 멈춘 시계에 내린 서리 -> audio/music/heist-bgm.ogg
+
+Edits: first 4s / last 6s removed, 0.8s circular crossfade, constant gain
+normalization toward -20 LUFS, stereo 44.1 kHz OGG Vorbis conversion.
+These are edited collection recordings, not new original compositions.
+Permission applies to rights owned or lawfully controlled by the publisher;
+third-party rights and non-infringement are not guaranteed by the publisher.
+Source and runtime SHA-256 hashes are recorded in src/assets/runtime-media.json.
+
+Loopable Dungeon Ambience
+-------------------------
+
+Created by JaggedStone and published on OpenGameArt.org under Creative Commons
+Zero 1.0 (CC0 1.0).
+
+Source: https://opengameart.org/content/loopable-dungeon-ambience
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copy: audio/ambience/mansion-ambience.ogg
+
+Determined Pursuit (Epic Orchestra Loop) — boss fight music
+-----------------------------------------------------------
+
+Created by Emma_MA and distributed under Creative Commons Zero 1.0 (CC0 1.0).
+Source: https://opengameart.org/content/determined-pursuit-epic-orchestra-loop
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copy: audio/music/boss-bgm.ogg (quiet 18s intro trimmed, 0.8s circular
+crossfade loop, -20 LUFS normalization, OGG Vorbis transcode)
+
+Battle Theme — mansion guard combat music
+----------------------------------------
+
+Created by Wolfgang_ and distributed under Creative Commons Zero 1.0 (CC0 1.0).
+Source: https://opengameart.org/content/battle-theme-0
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copy: audio/music/combat-bgm.ogg (33 bars after the quiet break,
+0.8s circular crossfade loop, -20 LUFS normalization, OGG Vorbis transcode)
+
+OpenTracks (formerly DOVA-SYNDROME) — title, village and village duel music
+-----------------------------------------------------------------------------
+
+Free BGM used under the OpenTracks audio license (credit not required; listed here
+for provenance). Terms: https://opentracks.com/help/articles/license/
+The audio itself may not be redistributed. It ships only as a scrambled package
+that is not an audio file without conversion (audio/music/*.bin).
+
+"屋根裏で怪盗が作戦会議する的なBGM" (Track 3) by 鷹尾まさき(タカオマサキ)
+  https://opentracks.com/bgm/detail/5440 -> audio/music/title-bgm.bin (title)
+"石畳の街並み" by MATSU
+  https://opentracks.com/bgm/detail/7299 -> audio/music/village-bgm.bin (lobby and village)
+"夏はsummer!!" by Keyta
+  https://opentracks.com/bgm/detail/4599 -> audio/music/village-fight-bgm.bin (village duels)
+
+Edits: a whole number of bars cut at the measured tempo, one-beat circular crossfade
+loop, constant gain normalization toward -20 LUFS, stereo 44.1 kHz OGG Vorbis.
+
+Free Natural UI SFX Pack — menu buttons
+---------------------------------------
+
+Created by Cici Fyre and released under Creative Commons Zero 1.0 (CC0 1.0).
+Source: https://cicifyre.itch.io/free-natural-sfx-pack
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copies: audio/sfx/ui-hover.ogg, audio/sfx/ui-press.ogg,
+  audio/sfx/ui-reject.ogg, audio/sfx/ui-confirm.ogg
+Edits: short mono wood/metal clicks, filtering, attack/tail fades, gain
+normalization; lowered double tap for rejection, wood/metal layer for confirm.
+Original recordings and reproduction recipe: assets/audio/ui-natural-20261018/
+  and tools/audio/build-ui-natural.mjs. File hashes: src/assets/runtime-media.json.
+
+Melee combat sound set (audio/sfx/combat-*.ogg)
+-----------------------------------------------
+
+Layered and edited in-house (trim, peak alignment, envelope, saturation,
+sub-bass sine layer). Hit, hurt and finisher sounds use foley audio generated
+for this project with xAI Grok Imagine (user-generated media) as the body layer;
+every other layer is one of the CC0 1.0 recordings below.
+CC0 license: https://creativecommons.org/publicdomain/zero/1.0/
+
+- "Punching Bag Sound Effects" by qubodup — https://freesound.org/s/53985/
+- "CLARKS Punches Hits heavier big boxing" by cryanrautha — https://freesound.org/s/369323/
+- "Smacks And Thwacks (m).wav" by BarryTheWhite — https://freesound.org/s/396345/
+- "Heavy Wall Pounding" by LunaFarrowe — https://freesound.org/s/448374/
+- "Swosh Sword Swing" by qubodup — https://freesound.org/s/59992/
+- "Whoosh / Dash" by Kastenfrosch — https://freesound.org/s/521999/
+- "Riser Hit sfx 010.wav" by AudioPapkin — https://freesound.org/s/510292/
+- "block3.wav" by Empiremonkey — https://freesound.org/s/616493/
+- "Thud / Falling on wooden floor" by Breviceps — https://freesound.org/s/447922/
+- "BODY FALL - V HVY - DIRT" by leonelmail — https://freesound.org/s/504626/
+- "Swishes Sound Pack" by artisticdude — https://opengameart.org/content/swishes-sound-pack
+- "RPG Sound Pack" by artisticdude — https://opengameart.org/content/rpg-sound-pack
+- "100 CC0 metal and wood SFX" by rubberduck — https://opengameart.org/content/100-cc0-metal-and-wood-sfx
+
+Kenney Impact Sounds 1.0
+------------------------
+
+Created and distributed by Kenney under Creative Commons Zero 1.0 (CC0 1.0).
+The runtime copies use the original pack's medium/heavy punch, bell, glass,
+metal, wood, and soft impact files.
+
+Source: https://kenney.nl/assets/impact-sounds
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copies: audio/sfx/landing-soft.ogg,
+  audio/sfx/alert-bell.ogg, audio/sfx/glass-break.ogg,
+  audio/sfx/wood-impact-heavy.ogg, audio/sfx/metal-impact.ogg,
+  audio/sfx/body-impact-heavy.ogg
+
+Kenney RPG Audio 1.0
+--------------------
+
+Created and distributed by Kenney under Creative Commons Zero 1.0 (CC0 1.0).
+The runtime copies use the pack's cloth, leather, coins, door, blade, latch,
+and equipment-handle foley.
+
+Source: https://kenney.nl/assets/rpg-audio
+License: https://creativecommons.org/publicdomain/zero/1.0/
+Runtime copies: audio/sfx/loot-confirm.ogg, audio/sfx/throw-impact-metal.ogg,
+  audio/sfx/dodge-cloth.ogg,
+  audio/sfx/attack-swish.ogg, audio/sfx/weapon-draw.ogg,
+  audio/sfx/cloth-*.ogg, audio/sfx/leather-drop.ogg,
+  audio/sfx/metal-latch.ogg, audio/sfx/door-open.ogg,
+  audio/sfx/tool-handle.ogg
+
+Phaser 3.90.0
+-------------
+
+The MIT License (MIT)
+
+Copyright (c) 2024 Richard Davey, Phaser Studio Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+eventemitter3 5.0.4
+-------------------
+
+The MIT License (MIT)
+
+Copyright (c) 2014 Arnout Kazemier
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of
+this software and associated documentation files (the "Software"), to deal in
+the Software without restriction, including without limitation the rights to
+use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of
+the Software, and to permit persons to whom the Software is furnished to do so,
+subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS
+FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER
+IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+MaruBuri (마루 부리)
+--------------------
+
+Created by NAVER Corp. and released under the SIL Open Font License 1.1.
+
+Source: https://hangeul.naver.com/font/maru-buri
+License: https://openfontlicense.org/
+Full license text: fonts/OFL-1.1.txt
+Runtime copies: fonts/MaruBuri-Regular.woff2, fonts/MaruBuri-Bold.woff2
+  (unmodified WOFF2 files as distributed by NAVER)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The font files are redistributed unmodified and are not sold on their own.
+
+Pretendard
+----------
+
+Copyright (c) 2021, Kil Hyung-jin, with Reserved Font Name "Pretendard".
+Copyright 2014-2021 Adobe, with Reserved Font Name "Source".
+Copyright (c) 2016 The Inter Project Authors, with Reserved Font Name "Inter".
+Copyright 2021 The M+ FONTS Project Authors, with Reserved Font Name "M PLUS 1".
+Released under the SIL Open Font License 1.1.
+
+Source: https://github.com/orioncactus/pretendard
+License: https://github.com/orioncactus/pretendard/blob/main/LICENSE
+Full license text: fonts/Pretendard-LICENSE.txt
+Runtime copies: fonts/Pretendard-Regular.woff2, fonts/Pretendard-Bold.woff2 (unmodified official WOFF2)
+
+ChosunGs (조선궁서체)
+---------------------
+
+Created and distributed free of charge by Chosun Ilbo (조선일보사).
+
+Source: https://event.chosun.com/100/100font.html
+Runtime copy: fonts/ChosunGs.woff (unmodified WOFF as distributed)
+
+Commercial use and embedding in websites and programs are permitted by the
+publisher's terms. Modifying the font file, renaming it, or selling it is not
+permitted, so this distribution ships the original file without subsetting.
+
+Black Han Sans (블랙한산스) — lettering subset
+---------------------------------------------
+
+Copyright 2015 The Black Han Sans Project Authors (https://github.com/zesstype/Black-Han-Sans)
+Released under the SIL Open Font License 1.1 (no Reserved Font Name).
+
+Source: https://github.com/google/fonts/tree/main/ofl/blackhansans
+License: https://openfontlicense.org/
+Full license text: fonts/BlackHanSans-OFL.txt
+Runtime copy: fonts/BlackHanSans-Lettering.woff2
+  (modified: subset to the glyphs the game uses, re-encoded as WOFF2)
+
+This Font Software is licensed under the SIL Open Font License, Version 1.1.
+The modified font is redistributed under the same license and is not sold on its own.
+
+Matter.js 0.20.0
+----------------
+
+The MIT License (MIT)
+
+Copyright (c) Liam Brummitt and contributors.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+PDF.js (pdfjs-dist) 6.3.289
+-------------------------
+Apache-2.0; full license text: licenses/pdfjs-LICENSE.txt
+Source: https://github.com/mozilla/pdf.js
+Runtime: browser PDF parser and worker. Optional @napi-rs/canvas is not browser bundled.
+
+Adobe CMaps (bundled with pdfjs-dist 6.3.289)
+-----------------------------------------
+Copyright 1990-2009 Adobe Systems Incorporated.
+BSD-3-Clause; full license text: licenses/cmaps-LICENSE.txt
+Runtime copies: assets/*.bcmap (unmodified bundled binary CMaps).
+
+Three.js 0.186.1
+----------------
+
+Source: https://github.com/mrdoob/three.js
+
+The MIT License
+
+Copyright © 2010-2026 three.js authors
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in
+all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
+THE SOFTWARE.
+
+@supabase/supabase-js 2.117.3
+-----------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/supabase-js
+Runtime: browser client for the village player chat (bundled into the game).
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+@supabase/auth-js 2.117.3
+-------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/auth-js
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+tslib 2.8.1
+-----------
+
+Source: https://github.com/Microsoft/tslib
+
+Copyright (c) Microsoft Corporation.
+
+Permission to use, copy, modify, and/or distribute this software for any
+purpose with or without fee is hereby granted.
+
+THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES WITH
+REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF MERCHANTABILITY
+AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR ANY SPECIAL, DIRECT,
+INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES WHATSOEVER RESULTING FROM
+LOSS OF USE, DATA OR PROFITS, WHETHER IN AN ACTION OF CONTRACT, NEGLIGENCE OR
+OTHER TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR
+PERFORMANCE OF THIS SOFTWARE.
+
+@supabase/functions-js 2.117.3
+------------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/functions-js
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+@supabase/postgrest-js 2.117.3
+------------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/postgrest-js
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+@supabase/realtime-js 2.117.3
+-----------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/realtime-js
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+@supabase/phoenix 0.4.5
+-----------------------
+
+Source: https://github.com/supabase/phoenix
+
+# MIT License
+
+Copyright (c) 2014 Chris McCord
+
+Permission is hereby granted, free of charge, to any person obtaining
+a copy of this software and associated documentation files (the
+"Software"), to deal in the Software without restriction, including
+without limitation the rights to use, copy, modify, merge, publish,
+distribute, sublicense, and/or sell copies of the Software, and to
+permit persons to whom the Software is furnished to do so, subject to
+the following conditions:
+
+The above copyright notice and this permission notice shall be
+included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION
+OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
+WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+@supabase/storage-js 2.117.3
+----------------------------
+
+Source: https://github.com/supabase/supabase-js/tree/master/packages/core/storage-js
+
+MIT License
+
+Copyright (c) 2020 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+iceberg-js 0.8.1
+----------------
+
+Source: https://github.com/supabase/iceberg-js
+
+MIT License
+
+Copyright (c) 2025 Supabase
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

@@ -1,0 +1,232 @@
+<!doctype html>
+<!-- AI Fighter(2026-10-19): 주간 무투 토너먼트·연습 경기만 있는 별도 페이지. 본편 index.html 과 같은 빌드·같은 저장을 쓴다. -->
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <link rel="icon" type="image/webp" href="./art/ui/wonder-lupin-icon.webp" />
+    <title>AI Fighter</title>
+    <link
+      rel="preload"
+      href="./fonts/MaruBuri-Regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="./fonts/MaruBuri-Bold.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="./fonts/Pretendard-Regular.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <!-- 아래 둘도 부팅(render/boot/GameBoot.ts)의 loadUiFont 가 기다린다. 빠뜨리면 JS 를 다 받은 뒤에야 따로 받기 시작한다. -->
+    <link
+      rel="preload"
+      href="./fonts/Pretendard-Bold.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <link
+      rel="preload"
+      href="./fonts/BlackHanSans-Lettering.woff2"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+    <style>
+      /*
+       * 번들 글꼴. Phaser Canvas Text 는 생성 시점에 글자 폭을 재서 굳히므로,
+       * 본문 글꼴은 부팅 전에 도착해야 한다(main.ts 의 loadUiFont). swap 으로 두면
+       * 폴백으로 한 번 재고 끝나서 자간이 어긋난 채 남는다 — 그래서 block 이다.
+       */
+      @font-face {
+        font-family: "MaruBuri";
+        src: url("./fonts/MaruBuri-Regular.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "MaruBuri";
+        src: url("./fonts/MaruBuri-Bold.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Pretendard";
+        src: url("./fonts/Pretendard-Regular.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: block;
+      }
+      @font-face {
+        font-family: "Pretendard";
+        src: url("./fonts/Pretendard-Bold.woff2") format("woff2");
+        font-weight: 700;
+        font-style: normal;
+        font-display: block;
+      }
+      /* 웹툰 식자(첫 타이틀 프롤로그 대사). 쓰는 글자만 남긴 10KB 서브셋이라 본문 글꼴과 함께 부팅에서 기다린다. */
+      @font-face {
+        font-family: "Black Han Sans";
+        src: url("./fonts/BlackHanSans-Lettering.woff2") format("woff2");
+        font-weight: 400;
+        font-style: normal;
+        font-display: block;
+      }
+      /* 예고장 표제 전용. 3.4MB 통짜라 부팅을 막지 않고 늦게 도착한다. */
+      @font-face {
+        font-family: "ChosunGs";
+        src: url("./fonts/ChosunGs.woff") format("woff");
+        font-weight: 400;
+        font-style: normal;
+        font-display: block;
+      }
+      html,
+      body {
+        margin: 0;
+        padding: 0;
+        height: 100%;
+        background: #150d2a;
+        overflow: hidden;
+      }
+      body {
+        display: flex;
+        height: 100dvh;
+        box-sizing: border-box;
+        padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
+        align-items: center;
+        justify-content: center;
+      }
+      #game {
+        position: relative;
+        width: 100%;
+        height: 100%;
+      }
+      #game canvas {
+        display: block;
+        touch-action: none;
+      }
+      /* JS와 번들 글꼴을 기다리는 동안에도 시스템 글꼴로 준비 상태를 보여준다. */
+      #boot-loading {
+        position: absolute;
+        inset: 0;
+        z-index: 9;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-direction: column;
+        gap: 14px;
+        background: #150d2a;
+        color: #f1e4c3;
+        font: 600 16px system-ui, sans-serif;
+        pointer-events: none;
+      }
+      .boot-loading-ring {
+        width: 30px;
+        height: 30px;
+        border: 3px solid rgba(241, 228, 195, 0.33);
+        border-top-color: #ffd447;
+        border-radius: 50%;
+        animation: boot-loading-spin 1s linear infinite;
+      }
+      #boot-loading .boot-loading-en { display: none; }
+      html:lang(en) #boot-loading .boot-loading-ko { display: none; }
+      html:lang(en) #boot-loading .boot-loading-en { display: inline; }
+      @keyframes boot-loading-spin { to { transform: rotate(360deg); } }
+      @media (prefers-reduced-motion: reduce) {
+        .boot-loading-ring { animation: none; }
+      }
+      html[data-boot-motion="reduce"] .boot-loading-ring { animation: none; }
+      /*
+       * 하단 고지(무투장 고르기 화면 동안 보인다, `showTitlePrivacyLink`). 본편 index.html 과 같은 모양 —
+       * 잉크색 스크림을 깔고 상아색 글자를 얹어 배경과 무관하게 읽히게 한다.
+       */
+      .title-footnote {
+        position: fixed;
+        right: 12px;
+        bottom: 0;
+        z-index: 2;
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        align-items: baseline;
+        gap: 0.5em;
+        max-width: min(960px, 94vw);
+        padding: 7px 18px 8px;
+        border-radius: 8px 8px 0 0;
+        background: rgba(20, 11, 38, 0.72);
+        color: #e6dcc4;
+        font:
+          12px/1.5 "MaruBuri",
+          "Noto Serif KR",
+          Georgia,
+          serif;
+        text-align: center;
+      }
+      /*
+       * 클래스의 display 는 UA 의 [hidden] 규칙을 이긴다. 이 한 줄이 없으면 타이틀을
+       * 떠난 뒤에도 고지가 화면 아래에 남아 브리핑·저택의 조작 안내를 덮는다.
+       */
+      .title-footnote[hidden] {
+        display: none;
+      }
+      .title-footnote a {
+        color: #f3c866;
+        text-decoration: none;
+        border-bottom: 1px solid rgba(243, 200, 102, 0.45);
+      }
+      .title-footnote a:hover,
+      .title-footnote a:focus-visible {
+        border-bottom-color: #f3c866;
+      }
+      .title-footnote a:focus-visible {
+        outline: 2px solid #f3c866;
+        outline-offset: 2px;
+      }
+    </style>
+    <script type="module" crossorigin src="/ai-fighter-dots-starter/assets/fighter-BJcFNsFN.js"></script>
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/FirstOutfitStage-CcdITTLR.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/modulepreload-polyfill-P2Xu9kJm.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/palette-D5TCto_t.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/CityEnvironment-AhQf9g8O.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/NativeCityOttoEncounter-CsEFKtDd.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/VillageNavigation-DQi2u7nq.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/AttackMoves-B-lq5s5T.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/WebGl2Support-hZXjXmi-.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/TournamentBracketScene-DQD2CM4m.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/rankedDuels-DZj-xEGV.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/PrivacyLink-CMLwhvyG.js">
+  </head>
+  <body>
+    <div id="game">
+      <div id="boot-loading" role="status" aria-live="polite">
+        <span class="boot-loading-ring" aria-hidden="true"></span>
+        <span class="boot-loading-ko">AI Fighter를 준비하고 있어요</span>
+        <span class="boot-loading-en">Preparing AI Fighter</span>
+      </div>
+    </div>
+    <p class="title-footnote" id="privacy-link" hidden>
+      <span
+        ><a href="./privacy.html" target="_blank" rel="noopener noreferrer"
+          >개인정보처리방침</a
+        ></span
+      >
+    </p>
+    <script>
+      const bootParams = new URLSearchParams(location.search);
+      document.documentElement.lang = bootParams.get("lang") === "en" ? "en" : "ko";
+      if (bootParams.get("motion") === "reduce") document.documentElement.dataset.bootMotion = "reduce";
+    </script>
+  </body>
+</html>

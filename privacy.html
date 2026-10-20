@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="description" content="원더루팡의 브라우저 저장 및 개인 유물 사진 처리 안내" />
+    <title>Wonder Lupin Privacy · 원더루팡 개인정보 안내</title>
+    <style>
+      * { box-sizing: border-box; }
+      body { margin: 0; padding: 40px 18px; background: #150d2a; color: #eee5f5; font: 15px/1.7 system-ui, sans-serif; }
+      main { max-width: 820px; margin: auto; padding: 36px; border: 1px solid #745b87; border-radius: 18px; background: #211536; }
+      h1 { margin: 0; color: #f3c866; line-height: 1.25; }
+      h2 { margin-top: 30px; color: #65e3c1; font-size: 19px; }
+      p, li { color: #d8cee2; }
+      a { color: #f3c866; }
+      .summary { padding: 16px 18px; border-left: 3px solid #f3c866; background: #180f2a; }
+      .en { margin-top: 52px; padding-top: 34px; border-top: 1px solid #745b87; }
+      .meta { color: #aa9ab9; font-size: 13px; }
+      @media (max-width: 600px) { body { padding: 12px 8px; } main { padding: 24px 18px; } }
+    </style>
+  </head>
+  <body>
+    <main>
+      <section lang="ko">
+        <h1>원더루팡 개인정보 안내</h1>
+        <p class="meta">Wonder Lupin Privacy · 시행일 2026년 9월 20일 · 적용 주소 https://rupin.pryzm.gg</p>
+        <p>같은 주소의 <strong>AI Fighter</strong>(https://rupin.pryzm.gg/fighter.html)도 이 안내를 따릅니다. AI Fighter는 원더루팡과 같은 브라우저 저장(설정·대진·상금·전적)을 씁니다.</p>
+        <p class="summary"><strong>핵심:</strong> 게임 계정·광고·분석 도구·결제 기능이 없습니다. 개인 유물 사진과 일반 게임 진행 정보는 자동으로 서버에 전송되지 않습니다. 이용자가 <strong>파수꾼 만들기</strong>를 선택하면 아래 3항의 제작 문장과 생성 준비용 파생 이미지가 비공개로 전송됩니다. 초대장 공개는 결과 확인과 별도 공개 동의 후 발행할 때 이루어집니다. 받은 초대의 친선 런을 마치면 사진·리플레이가 아닌 최소 공략 결과가 제작자에게 자동 전달됩니다.</p>
+
+        <h2>1. 브라우저에 저장되는 정보</h2>
+        <ul>
+          <li>언어, 접근성, 음향, 키 설정과 튜토리얼·게임 진행 상태</li>
+          <li>리플레이와 플레이 로그. 개인 유물 사진 원문이나 data URL은 포함하지 않습니다.</li>
+          <li>선택적으로 등록한 개인 유물의 이름·설명과 가공 이미지</li>
+          <li>받은 초대장의 공개 계약·받은 시각과 축소된 공개 WebP 파생본. 만료 전 서버 장애에도 받은 초대를 다시 플레이하기 위한 로컬 캐시입니다.</li>
+        </ul>
+
+        <h2>2. 개인 유물 사진 처리</h2>
+        <p>직접 촬영했거나 사용할 권리가 있는 사진만 등록해야 합니다. 선택한 JPG·PNG·WebP 파일은 기기 안에서 중앙 정사각형으로 잘라 256px 및 48px WebP로 다시 인코딩합니다. 원본 파일과 EXIF 등 원본 메타데이터는 보관하지 않습니다. 가공 이미지는 IndexedDB에 저장되며, 일반 잠입·리플레이·플레이 로그가 자동 업로드하지 않습니다.</p>
+
+        <h2>내 사진 캐릭터 생성</h2>
+        <p>사진 사용에 동의하고 생성을 누르면 메타데이터를 제거한 512px WebP를 비공개 전송해 모더레이션과 sprite-gen 캐릭터·동작 생성에 사용합니다. 비밀번호는 저장하지 않습니다. 입력 이미지는 생성 완료·실패 뒤, 서버 결과는 다운로드·취소 시 삭제합니다. 남은 작업과 결과는 24시간 뒤 만료하고 정리합니다. 선택한 생성 WebP와 동작 정보만 이 브라우저의 IndexedDB에 보관하며 사이트 데이터 삭제로 지울 수 있습니다. 리플레이·플레이 로그·공개 초대장에 사진을 넣지 않습니다.</p>
+
+        <h2>3. AI 초대장 제작과 공개</h2>
+        <p><strong>파수꾼 만들기</strong>을 누르면 제작자 표시 이름, 초대 제목·메시지, 선택한 기본 예고장과 세 파수꾼의 행동 지시가 same-origin 초대장 API로 전송됩니다. 서버는 <code>omni-moderation-latest</code>로 내용을 검사하고 OpenAI Responses API의 strict JSON Schema로 문장을 닫힌 게임 규칙으로 변환합니다. 모델 응답은 <code>store: false</code>로 요청합니다. 자유 문장은 공개 초대 계약·리플레이·플레이 로그에 포함되지 않으며, 서버의 임시 draft는 비공개 준비·발행 시 또는 20분이 지나면 폐기됩니다.</p>
+        <p>친구 사진으로 파수꾼을 만들면 유물 이름·설명과 256px/48px WebP 파생본을 비공개 생성 준비에 전송합니다. 생성된 애니메이션을 검토하고 사진 공개 동의에 체크한 뒤 <strong>발행</strong>을 누르면 공개됩니다. 친구 사진을 사용하지 않는 초대는 발행할 때 유물 파생본을 전송합니다. 원본 사진은 전송하지 않습니다. 서버는 파생본을 다시 디코딩·WebP 인코딩하고 이미지 모더레이션을 수행합니다. 발행된 파생본, 제작자 표시 이름, 제목·메시지와 게임 규칙은 초대 링크를 가진 사람이 발행일로부터 30일 동안 볼 수 있습니다.</p>
+        <p>선택 기능인 <strong>친구 파수꾼 룩</strong>은 사진을 올린 사람(한 명에서 세 명까지) 각각의 별도 허락을 확인하고 생성 비밀번호를 입력한 경우에만 동작합니다. 사진을 올리지 않은 파수꾼은 기본 원화로 남습니다. 올린 JPG·PNG·WebP는 기기에서 512px 정사각형 WebP로 다시 인코딩되어 EXIF·원본 파일명 없이 전송되고 이미지 모더레이션 뒤 sprite-gen 이미지 제공자에서 2D 원화와 동작 프레임 생성에 사용됩니다. 비밀번호 원문은 저장·로그·공개 계약에 넣지 않습니다. 512px 입력 파생본과 완성 WebP atlas는 해당 초대의 비공개 생성 입력·링크 소유자용 결과로 서버에 보관되며, 초대 삭제·만료 정리 때 함께 삭제됩니다. 생성 중인 초대는 제작자만 확인할 수 있으며, 완성된 애니메이션을 확인한 뒤 같은 결과로 초대장을 발행합니다. 발행하지 않은 생성 준비는 24시간 뒤 만료되고 정리됩니다. 기다리기를 멈춰도 이미 접수된 생성은 계속될 수 있습니다.</p>
+        <p>온라인 초대 런을 시작할 때 서버가 익명의 단회 런 capability를 발급합니다. 런을 마치면 이 capability와 함께 초대 ID, 성공·실패, 친선 점수, 플레이 시간, 대표 수법과 예고 이행 여부가 제작자 결과함으로 전송되며 한 capability로 한 결과만 기록됩니다. 전송 실패 시 이 최소 결과와 capability만 브라우저 outbox에 최대 20개 보관하고 다음 연결에서 재시도합니다. 서버 장애 때 받은 캐시로 진행한 오프라인 런, 개발용 시드·스테이지·시간·위치 옵션을 쓴 QA 런과 오프라인 심사용 fixture 결과는 전송하지 않습니다. 사진, 자유 문장, 리플레이, 입력 기록과 일반 플레이 로그는 결과 API로 보내지 않습니다. 초대 런은 골드·명성·공식 연승·마지막 공식 리플레이에 반영되지 않습니다.</p>
+        <p>받은 초대에서 <strong>신고</strong>를 선택하면 개인정보 노출, 부적절 콘텐츠, 저작권 또는 기타 운영 검토 중 하나의 사유와 초대 ID만 전송됩니다. 자유 문장과 신고자 계정은 받지 않으며, 중복·남용 방지를 위한 IP 기반 해시와 신고 시각을 최대 90일 보관합니다.</p>
+
+        <h2>이야기 제작실 계정·저장·전송</h2>
+        <p>링크의 <strong>가져오기</strong>는 입력한 공개 HTTPS 주소를 원더루팡 서버로 보내 공개 본문을 읽습니다. 대상 사이트에는 원더루팡 서버의 요청이 전달됩니다. 로그인·유료 회차를 우회하거나 쿠키를 전송하지 않습니다. PDF는 브라우저에서만 읽으며 파일 자체를 업로드하지 않습니다. 링크·PDF에서 읽은 텍스트도 아래 전송 동의 후 <strong>추출하기</strong>를 누를 때만 OpenAI로 보냅니다. 파일명·출처 링크와 짧은 원문 인용은 내려받는 JSON에 포함될 수 있습니다. 이미지 속 글자와 텍스트로 추출할 수 없는 문자는 제외되므로 불러온 내용을 확인해 주세요.</p>
+        <p>Google 로그인 시 계정 식별자·이름·이메일을 받아 제작실 계정을 만듭니다. 비밀번호는 받지 않습니다. 로그인 유지에는 최대 7일의 HttpOnly 세션 쿠키를 사용합니다. 프로젝트 이름은 서버에 저장되며, <strong>원문·결과 저장</strong>에 동의하면 원문(최대 12,000자), 출처, 추출 결과와 수정 버전을 계정별 비공개 프로젝트로 자동 저장합니다. 저장된 프로젝트는 직접 삭제할 때까지 보관합니다. 프로젝트 삭제는 해당 원문·결과·버전을, 계정 삭제는 모든 프로젝트와 로그인 세션을 삭제합니다. 저장 동의 해제나 브라우저 데이터 삭제만으로 기존 서버 데이터가 삭제되지는 않습니다.</p>
+        <p><strong>설정 확정</strong>을 누르면 게임의 인물·배경·목표와 승인 버전 연결 정보를 같은 비공개 프로젝트에 저장합니다. 이 단계는 AI에 추가 전송하지 않습니다. 게임 설정은 프로젝트 또는 계정 삭제 시 함께 삭제됩니다. GameSpec 내려받기는 공개 게시가 아닙니다.</p>
+        <p>별도 전송 동의 후 <strong>추출하기</strong>를 누르면 원문과 형식을 OpenAI 모더레이션 및 Responses API로 보냅니다. 모델 요청은 <code>store: false</code>를 사용하며, 공개 초대장이나 게임 리플레이에 원문을 넣지 않습니다. 샘플은 저장·AI 전송 없이 열립니다. 결과는 직접 검토·수정하고 JSON으로 내려받을 수 있습니다. 원문 인용의 일치가 해석의 정확성을 보장하지는 않습니다.</p>
+
+        <h2>4. 삭제와 내보내기</h2>
+        <p>브리핑 화면에서 <strong>U → 등록 해제</strong>를 선택하면 로컬 개인 유물을 삭제할 수 있고, 초대 카드의 <strong>숨김</strong>으로 받은 목록에서 개별 삭제할 수 있습니다. 제작자는 <strong>결과 → 공개 초대 삭제</strong>로 관리 capability가 남아 있는 자신의 계약·파생 이미지·결과를 즉시 삭제할 수 있습니다. capability는 이 브라우저에만 저장되며 서버에는 해시만 남습니다. capability를 잃은 경우 아래 운영자에게 초대 코드와 함께 삭제를 요청할 수 있습니다. 서버가 삭제 또는 만료를 확인하면 받은 로컬 캐시도 정리합니다. 만료된 공개 데이터는 7일의 삭제 유예가 끝나면 서버 저장소에서 제거됩니다. 브라우저의 <strong>rupin.pryzm.gg 사이트 데이터 삭제</strong>는 로컬 유물·받은 목록·관리 capability·결과 outbox를 지웁니다.</p>
+
+        <h2>5. 웹 호스팅 정보</h2>
+        <p>사이트 전송, 속도 제한과 보안을 위해 AWS 로드 밸런서, Nginx와 초대장 API가 IP 주소, 브라우저 user-agent, 요청 시각 같은 표준 접속 정보를 일시적으로 처리할 수 있습니다. 제작은 수명이 짧은 익명 Bearer 세션을 사용하며 쿠키나 사용자 계정을 만들지 않습니다. 원더루팡은 광고 SDK와 행동 분석 SDK를 사용하지 않습니다.</p>
+
+        <h2>6. 문의·신고·공개 초대 삭제</h2>
+        <p>초대 카드의 <strong>신고</strong>로 운영 검토를 요청할 수 있습니다. 추가 문의 또는 관리 capability를 잃은 공개 초대 삭제: Supervillain Labs · <a href="mailto:contact@supervlabs.io">contact@supervlabs.io</a></p>
+      </section>
+
+      <section class="en" lang="en">
+        <h1>Wonder Lupin Privacy Notice</h1>
+        <p class="meta">Effective September 20, 2026 · Applies to https://rupin.pryzm.gg</p>
+        <p><strong>AI Fighter</strong> at https://rupin.pryzm.gg/fighter.html follows this notice too. It uses the same browser storage as Wonder Lupin (settings, bracket, prize gold, bout record).</p>
+        <p class="summary"><strong>In short:</strong> The game has no account, advertising, analytics, or payment feature. Your keepsake photo and regular game progress are not automatically sent to a server. Choosing <strong>Create Guard</strong> sends the authoring text and generation-preparation image derivatives described in Section 3 privately. The invitation becomes public only after you review the result, provide separate publishing consent, and publish. Completing a received honor invitation automatically sends a minimal result—not the photo or replay—back to its creator.</p>
+
+        <h2>1. Data stored in your browser</h2>
+        <ul>
+          <li>Language, accessibility, audio, key bindings, tutorial progress, and game progress.</li>
+          <li>Replays and play logs, which exclude the keepsake image and its data URL.</li>
+          <li>The name, description, and processed images of a keepsake you optionally register.</li>
+          <li>Public contracts, receipt times, and reduced public WebP derivatives for invitations you receive. This local cache lets you replay a received invitation during a server outage before it expires.</li>
+        </ul>
+
+        <h2>2. Keepsake photo processing</h2>
+        <p>Register only a photo you took or have the right to use. Your selected JPG, PNG, or WebP is center-cropped and re-encoded on your device as 256px and 48px WebP images. The original file and source metadata such as EXIF are not retained. The processed images are stored in IndexedDB. Regular heists, replays, and play logs do not automatically upload them.</p>
+
+        <h2>Creating a character from your photo</h2>
+        <p>After you consent and choose Generate, a 512px WebP with source metadata removed is sent privately for moderation and character/animation generation through the sprite-gen provider. The password is not stored. Input images are deleted after generation succeeds or fails; server results are deleted after download or cancellation. Abandoned jobs and results expire after 24 hours and are cleaned up. Choosing the result stores only generated WebP atlases and animation metadata in this browser's IndexedDB. Clearing site data removes them. They are not added to replays, play logs, or public invitations.</p>
+
+        <h2>3. AI invitation authoring and publishing</h2>
+        <p>When you choose <strong>Create Guard</strong>, your creator display name, invitation title and message, selected base notice, and three guard prompts are sent to the same-origin invitation API. The server checks the content with <code>omni-moderation-latest</code> and uses strict JSON Schema through the OpenAI Responses API to compile it into bounded game rules. Model responses are requested with <code>store: false</code>. Raw prompts are excluded from the public invitation contract, replay, and play log; the temporary server draft is discarded after private preparation, publication, or 20 minutes.</p>
+        <p>Creating a guard from a friend photo sends your keepsake name, description, and 256px/48px WebP derivatives for private generation preparation. They become public after you review the animation, check the image-publishing consent, and choose <strong>Publish</strong>. Invitations without friend photos send the keepsake derivatives at publication. The original photo is not sent. The server decodes and re-encodes the derivatives as WebP and moderates the image. Anyone with the link may view the derivatives, creator display name, title, message, and game rules for 30 days after publication.</p>
+        <p>The optional <strong>Friend Guard Look</strong> runs only after you confirm separate permission from everyone whose photo you attach (one to three people) and enter the generation password. Guards without a photo keep the standard art. Each attached JPG, PNG, or WebP is re-encoded on-device as a square 512px WebP, removing EXIF and the original filename, then sent for image moderation and 2D art and motion-frame generation through the sprite-gen image provider. The plaintext password is not stored, logged, or added to the public contract. The 512px input derivatives and completed WebP atlases are retained as private generation inputs and link-holder results for that invitation and are deleted with the invitation or expiry cleanup. Only the creator can access the generation preview. The same completed animation is used in the published invitation. Unpublished preparations expire after 24 hours and are cleaned up. Stopping the wait may leave an already submitted generation running.</p>
+        <p>At the start of an online invitation heist, the server issues an anonymous one-use run capability. After the heist, that capability and the invitation ID, outcome, honor score, duration, dominant tactic, and whether the notice was fulfilled are sent to the creator's results inbox; one capability can record only one result. If delivery fails, only this minimal result and capability are queued in the browser, up to 20 entries, and retried on the next connection. Offline runs from a previously received cache, QA runs that use developer seed, stage, time, or position options, and offline review-fixture results are not sent. Photos, raw prompts, replay inputs, and regular play logs are not sent to the results API. Invitation heists do not affect Gold, Fame, official streaks, or the latest official replay.</p>
+        <p>Choosing <strong>Flag</strong> on a received invitation sends only the invitation ID and one closed review category: personal-data exposure, unsafe content, copyright, or other. No free text or reporter account is collected. An IP-derived hash and report time are retained for up to 90 days to prevent duplicates and abuse.</p>
+
+        <h2>Story Studio source transmission</h2>
+        <p>Importing a link sends its public HTTPS URL to our server, which requests the public page without your cookies or bypassing access restrictions. PDF files are read locally in the browser and are not uploaded. Imported text is sent to OpenAI only after separate consent and choosing Extract. Downloaded JSON may include the filename, source URL, and source excerpts. Images and characters without extractable text are not included; check the imported text.</p>
+        <p>In Story Studio, pasting novel, webtoon transcript, or character-chat text, checking the separate transmission consent, and choosing <strong>Extract draft with AI</strong> sends the source text (up to 12,000 characters) and selected type through the same-origin invitation API to OpenAI moderation and the Responses API. The source is not saved in server files, browser storage, public invitations, or game replays. The model request uses <code>store: false</code>. The returned setting, characters, events, and short source quotations can be reviewed, edited, and downloaded as JSON in your browser; they are not saved or published by the server. Viewing the sample result does not transmit source text. Missing names or events may remain empty, and matching quotations do not guarantee the interpretation is correct; review the source yourself.</p>
+
+        <h2>4. Deletion and export</h2>
+        <p>Choose <strong>U → Remove</strong> to delete the local keepsake, or <strong>Hide</strong> on an invitation card to remove an individual received invitation. A creator can choose <strong>Results → Delete Published Invite</strong> to immediately delete their public contract, derivatives, and results while the browser still holds its management capability. Only a hash of that capability is stored by the server. If it is lost, request deletion from the operator below with the invitation code. A server-confirmed deletion or expiry also removes the received local cache. Expired public data is removed after a seven-day deletion grace period. Clearing site data for <strong>rupin.pryzm.gg</strong> deletes local keepsakes, received invitations, management capabilities, and queued results.</p>
+
+        <h2>5. Web hosting data</h2>
+        <p>For delivery, rate limiting, and security, the AWS load balancer, Nginx, and invitation API may temporarily process standard request information such as IP address, browser user-agent, and request time. Authoring uses a short-lived anonymous Bearer session; no cookie or user account is created. Wonder Lupin uses no advertising or behavioral analytics SDKs.</p>
+
+        <h2>6. Contact, report, or delete a public invitation</h2>
+        <p>Use <strong>Flag</strong> on an invitation card to request moderation review. For other questions or deletion after losing the management capability: Supervillain Labs · <a href="mailto:contact@supervlabs.io">contact@supervlabs.io</a></p>
+      </section>
+    </main>
+  </body>
+</html>
