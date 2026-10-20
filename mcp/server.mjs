@@ -10,7 +10,8 @@ import { registerRemoteTools } from './remote-tools.mjs';
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const outputSchema = { ok: z.boolean(), stage: z.string(), data: z.unknown().optional(), errors: z.array(z.unknown()).optional(),
-  pending: z.array(z.string()).optional(), assetBytes: z.number().optional(), decodedPixels: z.number().optional(), errorCount: z.number().optional() };
+  pending: z.array(z.string()).optional(), assetBytes: z.number().optional(), decodedPixels: z.number().optional(), errorCount: z.number().optional(),
+  code: z.string().optional() };
 function respond(result) {
   // Bound tool output even if every field fails. Do not echo input text as instructions.
   const diagnostic = (value, depth = 0) => {
@@ -34,7 +35,12 @@ export function createServer({ root, remote } = {}) {
     description: 'Read the public AI Fighter authoring contract. Read overview first; request guide, schema, or example as needed.',
     inputSchema: { section: z.enum(['overview', 'guide', 'schema', 'example']).default('overview') }, outputSchema, annotations,
   }, async ({ section }) => {
-    if (remote && section === 'overview') return respond(await remote.request('spec'));
+    if (remote && section === 'overview') {
+      // Authoring continues offline: the local contract reports registration.available=false, and code says why.
+      try { return respond(await remote.request('spec')); }
+      catch (error) { return respond({ ok: true, stage: 'public-contract', data: spec,
+        code: /^[a-z0-9-]+$/.test(error.message) ? error.message : 'remote-spec-unavailable' }); }
+    }
     const data = section === 'schema' ? schema : section === 'example' ? example : section === 'guide'
       ? await readFile(new URL('../docs/AUTHORING.md', import.meta.url), 'utf8') : spec;
     return respond({ ok: true, stage: 'public-contract', data });
@@ -46,13 +52,14 @@ export function createServer({ root, remote } = {}) {
     const parsed = parseFighterJson(manifestJson);
     return respond(parsed.ok ? validateFighter(parsed.data) : { ...parsed, stage: 'json' });
   });
-  if (root) {
-    const validatePackage = makePackageValidator(root);
+  // One validator for all file tools, so validate and submit share the single serial decoder.
+  const validatePackage = root ? makePackageValidator(root) : undefined;
+  if (validatePackage) {
     server.registerTool('validate_fighter_package', {
       description: 'Local-only: fully decode and check WebP files under the configured workspace. Pass a relative path such as output/my-fighter/fighter.json. Serial worker, 20-second timeout; never uploads or approves.',
       inputSchema: { manifestPath: z.string().min(1).max(512) }, outputSchema, annotations,
     }, async ({ manifestPath }) => respond(await validatePackage(manifestPath)));
   }
-  if (remote) registerRemoteTools(server, { remote, root, respond });
+  if (remote) registerRemoteTools(server, { remote, validatePackage, root, respond });
   return server;
 }

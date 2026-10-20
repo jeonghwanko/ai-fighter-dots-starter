@@ -52,16 +52,18 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   const watch = process.argv.includes('--watch');
   let idleMs = 15000;
   do {
+    // Drain the queue: claim again at once after a finished job. Back off only while idle or failing.
+    let waitMs = 0;
     try {
       const result = await runOnce(config, process.argv.find(arg => /^[a-f0-9-]{36}$/.test(arg)));
       if (!watch || result.stage !== 'idle') console.log(JSON.stringify(result));
-      idleMs = result.stage === 'idle' ? Math.min(idleMs * 2, 120000) : 15000;
+      if (result.stage === 'idle') { waitMs = idleMs; idleMs = Math.min(idleMs * 2, 120000); } else idleMs = 15000;
     } catch (error) {
       if (!watch || error.status === 401 || error.status === 403) throw error;
       console.error(JSON.stringify({ stage: 'retry-wait', code: 'worker-api-unavailable' }));
-      idleMs = Math.min(idleMs * 2, 120000);
+      waitMs = idleMs; idleMs = Math.min(idleMs * 2, 120000);
     }
     if (!watch) break;
-    await new Promise(resolve => setTimeout(resolve, idleMs));
+    if (waitMs) await new Promise(resolve => setTimeout(resolve, waitMs));
   } while (true);
 }

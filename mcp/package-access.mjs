@@ -32,11 +32,13 @@ export function makePackageValidator(root, { timeoutMs = 20000 } = {}) {
           stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: ['--max-old-space-size=128'],
           env: { ...process.env, VIPS_CONCURRENCY: '1' },
         });
-        let result;
-        const timer = setTimeout(() => { result = issue('VALIDATION_TIMEOUT'); child.kill(); }, timeoutMs);
-        child.on('message', message => { result = message; });
+        // A result that arrived before the deadline wins, even if the child is slow to exit.
+        let result, timedOut = false;
+        const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
+        child.on('message', message => { if (!timedOut) result ??= message; });
         child.once('error', () => { clearTimeout(timer); resolve(issue('WORKER_START_FAILED')); });
-        child.once('exit', code => { clearTimeout(timer); resolve(result ?? issue(code === 0 ? 'WORKER_NO_RESULT' : 'WORKER_FAILED')); });
+        child.once('exit', code => { clearTimeout(timer);
+          resolve(result ?? issue(timedOut ? 'VALIDATION_TIMEOUT' : code === 0 ? 'WORKER_NO_RESULT' : 'WORKER_FAILED')); });
       });
     } catch { return issue('PACKAGE_UNAVAILABLE'); }
     finally { busy = false; }
