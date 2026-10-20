@@ -93,7 +93,7 @@ node scripts/print-install.mjs
 
 | 도구 | 입력 | 결과 |
 | --- | --- | --- |
-| `get_fighter_spec` | `section`: overview/creation/guide/schema/example | 버전·한도·sprite-gen 제작 흐름·스키마·예제 |
+| `get_fighter_spec` | `section`: overview/creation/guide/schema/example, 선택 `motion` | 버전·한도·sprite-gen 제작 흐름·스키마·예제. `motion`이 있으면 그 동작의 스키마·예제만 |
 | `validate_fighter_manifest` | `manifestJson`: 원문 문자열 | 구조·참조·예산 검사 |
 | `validate_fighter_package` | `manifestPath`: 작업 폴더 기준 상대 경로 | 파일·해시·전체 디코딩 검사 |
 | `submit_fighter_package` | 상대 경로, `idempotencyKey`: UUID | 인증된 업로드 후 서버 검증 대기 |
@@ -136,6 +136,8 @@ MCP 파일 검사는 한 번에 한 개의 자식 프로세스로 실행하며 2
 
 규격 원천은 `contracts/ai-fighter/v1/contract-source.mjs`입니다.
 이 저장소에는 게임 제작 계약의 v1 스냅샷을 포함합니다. 원본 저장소를 내려받을 필요가 없습니다.
+검사기와 패키지 검사 파일은 게임 저장소 파일의 바이트 복사본이며 [SOURCE.json](contracts/ai-fighter/SOURCE.json)이 해시를 고정합니다.
+게임이 계약을 바꾸면 `npm run contract:vendored -- --compare <게임의 kaito_web 폴더>`로 차이를 확인하고 다시 복사합니다.
 한도나 필수 필드를 호환되지 않게 바꾸면 새 규격 버전으로 배포해야 합니다.
 
 검증 범위: 공식 MCP SDK와 실제 stdio 프로세스, 실제 Supabase 업로드·등록, 다른 계정 접근 차단과 중복 방지.

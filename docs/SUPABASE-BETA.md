@@ -41,7 +41,8 @@ sequenceDiagram
 원천 파일:
 
 - [DB 마이그레이션](../supabase/migrations/20261019090136_ai_fighter_beta_registration.sql),
-  [업로드 만료 수정](../supabase/migrations/20261020120000_ai_fighter_upload_expiry.sql)(2026-10-20, 운영 미반영)
+  [업로드 만료 수정](../supabase/migrations/20261020120000_ai_fighter_upload_expiry.sql),
+  [안정성 수정](../supabase/migrations/20261020150000_ai_fighter_stability.sql)(둘 다 2026-10-20, 운영 미반영)
 - [Edge 진입점](../supabase/functions/ai-fighter/index.ts), [공유 HTTP 처리기](../api/handler.mjs)
 - [검증 작업자](../worker/run.mjs), [MCP 제출 도구](../mcp/remote-tools.mjs)
 
@@ -56,6 +57,10 @@ Supabase CLI에서 계정 로그인·프로젝트 선택 후:
 supabase functions deploy ai-fighter --project-ref YOUR_PROJECT_REF --no-verify-jwt
 ```
 
+함수 파일 목록은 `node scripts/edge-bundle.mjs`가 진입점의 import 그래프에서 만든다. 새 import가 배포에서 빠지지 않는다.
+Deno import map에 없는 모듈(sharp, `node:` 모듈)을 Edge 코드가 import하면 목록 생성이 실패한다.
+마이그레이션을 먼저, Edge 함수를 다음에, 작업자를 마지막에 반영한다.
+
 **서버 대결을 운영할 때:** 먼저 `supabase/functions/ai-fighter/duel-engine.mjs`를 게임 원천에서 생성·검증한
 순수 엔진 번들로 교체하고 배포한다. 샘플에 있는 파일은 엔진 없는 설치에서 경기 저장을 503으로 막는 어댑터다.
 게임 소스·원화는 이 공개 스타터에 포함하지 않는다. 기존 운영 함수에 빈 어댑터를 덮어쓰지 않는다.
@@ -63,7 +68,10 @@ supabase functions deploy ai-fighter --project-ref YOUR_PROJECT_REF --no-verify-
 `simulateDuel(a, manifestA, b, manifestB, seed)`와 `engineVersion`을 내보낸다.
 게임 엔진을 변경할 때는 버전을 올리고 서버·브라우저의 동일 결과 시험 후 함께 반영한다.
 
-`verify_jwt = false`여도 등록 API는 사용자 JWT를 Supabase Auth `getUser`로 검증하고 활성 초대를 매 요청 확인한다.
+`verify_jwt = false`여도 등록 API는 사용자 JWT를 매 요청 검증하고 활성 초대를 확인한다.
+검증은 `auth.getClaims`다. 프로젝트가 비대칭 JWT 서명 키를 쓰면 공개 키(JWKS, 캐시)로 Edge 안에서 검증하므로
+Auth 서버 왕복이 없다. 대칭 키(기존 JWT secret)면 이전처럼 Auth 서버의 `getUser`로 검증한다.
+로컬 검증은 만료 전 로그아웃을 보지 못한다. 등록 권한은 `af_creators` 초대를 끄면 즉시 막힌다.
 작업자는 별도 토큰으로 인증한다. 승인 선수의 공개 조회와 서버 대결 요청은 게스트에게 허용한다.
 게스트는 승인된 선수 ID 두 개와 재시도 키만 보낼 수 있다. 시드·승패·전적을 직접 쓰지 못한다.
 Edge의 내장 `SUPABASE_URL`과 `SUPABASE_SERVICE_ROLE_KEY`만 DB·Storage의 권한 있는 쓰기에 사용한다.
@@ -107,7 +115,10 @@ GET /duels/:id는 완료 결과를, GET /rankings는 승인 선수 최대 20명�
 선수 선택 카드와 경기 결과 화면의 등록 선수 대결 전적은 서버 값을 사용한다.
 
 무료 베타의 자체 상한은 UTC 기준 전체 100경기/일, 같은 두 선수 20경기/일, 보관 10,000건이다.
-미완료 예약도 상한에 포함하며 같은 키의 재시도는 추가 차감하지 않는다. 초과 시 429를 반환한다.
+완료·진행 중인 경기가 상한에 포함되며 같은 키의 재시도는 추가 차감하지 않는다. 초과 시 429를 반환한다.
+엔진 오류·잘못된 결과·패키지 불일치로 끝나지 못한 경기는 `failed_at`·`failure`가 기록되고 상한에서 빠진다.
+같은 키로 다시 요청하면 다시 계산한다. 실패한 계산이 UTC 하루 20회가 되면 새 경기와 미완료 재시도를
+503 `duels-failing`으로 멈춘다. 엔진을 고친 다음 날 다시 열린다. 운영자는 `af_duels.failure`로 원인을 본다.
 `af_settings.paused`는 새 경기 예약도 중단한다. 이 상한은 기존 프로젝트의 모든 비용을 보장하거나
 공개 서비스의 남용 방지를 대신하지 않는다. 현재는 소수의 승인 선수로 시험하는 베타다.
 
@@ -164,6 +175,10 @@ VITE_AI_FIGHTER_API_BASE=https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fi
 
 MCP는 유효한 접근 토큰을 추가 인증 요청 없이 다시 쓴다. 만료 60초 전부터 세션을 갱신한다.
 갱신한 세션은 임시 파일에 쓴 뒤 같은 파일로 바꿔 넣는다. 저장이 중간에 끊겨도 기존 파일이 깨지지 않는다.
+여러 MCP 프로세스(데스크톱 앱·CLI·IDE)가 같은 파일을 쓸 수 있다. Supabase는 두 번 전의 refresh token을
+다시 쓰면 세션 전체를 끝낸다. 그래서 갱신 전에 파일을 다시 읽어 다른 프로세스가 저장한 새 세션을 쓰고,
+`<파일>.lock`을 잡은 프로세스 하나만 갱신한다. 30초 넘은 잠금은 비정상 종료의 흔적으로 보고 지운다.
+업로드·다운로드 제한 시간은 30초에 64 KiB당 1초를 더한다.
 갱신이 취소되었으면 다시 로그인해야 한다.
 검증용 두 계정과 작업자 토큰을 만드는 스크립트는
 [provision-test-accounts.mjs](../scripts/provision-test-accounts.mjs)다.
@@ -230,6 +245,16 @@ npm run worker:watch
 ```
 
 작업자는 사용자 MCP와 별도 프로세스로 운영한다. 빈 큐 조회는 최대 120초 간격으로 늦춘다.
+작업을 마치면 다음 작업을 바로 가져온다. 다운로드는 4개씩 받고 파일 크기에 비례한 제한 시간을 쓴다.
+작업 전체는 4분 안에 끝낸다. 서버 임대 5분 안에 검사와 확정을 마치기 위해서다.
+
+**판정과 인프라 실패를 구분한다.** 패키지 결함(계약 위반·해시·디코딩·빈 프레임)만 `rejected`로 확정한다.
+다운로드 실패·저장소 바이트 불일치·작업 시간 초과·검사 프로세스 오류는 확정하지 않고 `retry-later`로 끝낸다.
+임대가 끝나면 다른 실행이 다시 가져간다. 세 번 모두 실패하면 서버가 `worker-attempt-limit`로 반려한다.
+따라서 일시적인 네트워크 오류가 제작자의 제출 횟수를 쓰지 않는다.
+
+**검사기 버전.** 작업자는 `VALIDATOR_VERSION`을 영수증에 적고 서버는 `af_settings.validator_versions`에 있는 값만 받는다.
+새 검사기를 배포할 때는 먼저 새 버전을 목록에 추가하고, 모든 작업자를 바꾼 뒤 옛 버전을 지운다.
 결과가 즉시 나타나지 않을 수 있다. PC가 꺼지면 제출은 대기하며 자동 시작 설치는 포함하지 않는다.
 항상 켜진 기존 실행 환경이 없다면 이 구성은 24시간 즉시 등록을 보장하지 않는다.
 작업자 토큰은 큐를 검사·확정할 권한이다. 이를 Dot에 제공하지 않는다.
@@ -335,7 +360,7 @@ PGlite 시험은 동시 신규 요청, 결과 변경 거부, 승인 취소, 경�
 ## 소유 선수의 전체 전적 (2026-10-20 로컬 구현, 운영 미반영)
 
 `GET /functions/v1/ai-fighter/fighters/{fighterId}/statistics`는 `Authorization: Bearer <사용자 접근 토큰>`을 받는다.
-Edge가 `auth.getUser()`로 사용자 ID를 검증한 뒤 그 ID와 선수 ID를 service 전용 SQL에 전달한다.
+Edge가 `auth.getClaims()`로 사용자 ID를 검증한 뒤 그 ID와 선수 ID를 service 전용 SQL에 전달한다.
 등록 초대가 종료되어도 자기 선수의 기록은 조회할 수 있다. 타 소유자와 없는 선수는 모두 404,
 비로그인·만료 토큰·익명 계정은 401이다. CORS preflight는 GET과 Authorization 헤더만 허용한다.
 

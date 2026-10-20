@@ -114,6 +114,8 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 ## 검사 결과 읽기
 
 `ok`, `stage`, `errors`, `pending`을 읽는다. 오류의 `path`는 JSON Pointer다.
+전체 스키마·예제는 크다. 동작 하나를 고칠 때는 `get_fighter_spec`에 `motion`(예: `walk`)을 넘겨 그 부분만 읽는다.
+파일 검사는 한 번에 하나만 실행하고 최대 2개가 기다린다. 그보다 많으면 `VALIDATOR_BUSY`이므로 잠시 뒤 다시 요청한다.
 MCP는 오류를 최대 50개까지 돌려주며 더 많으면 `errorCount`를 포함한다.
 명령행 검사는 성공 시 0, 검증 실패 시 1, 사용법 오류 시 2를 반환한다.
 
