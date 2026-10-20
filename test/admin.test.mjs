@@ -10,7 +10,7 @@ test('admin authentication, private listing, atomic decisions, replay, stale rev
     await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
       create schema auth; create table auth.users(id uuid primary key,email text,encrypted_password text);
       create function auth.uid() returns uuid language sql as 'select null::uuid';
-      grant usage on schema auth to authenticated,service_role; 
+      grant usage on schema auth to authenticated,service_role;
       create schema storage;
       create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
       create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
