@@ -130,7 +130,8 @@ async function loadPack(file) {
     }
     return pages.get(index);
   };
-  return { pack, frames, page };
+  // Decoded pages are only needed while frames are cut out; release them before packing.
+  return { pack, frames, page, release: () => pages.clear() };
 }
 
 /** Frames of one animation in playback order, and its durations, at the game pack's scale. */
@@ -274,6 +275,7 @@ export async function packFighter(planFile) {
     const source = await loadPack(gamePack);
     const animations = {};
     for (const name of MOTIONS) animations[name] = await readAnimation(source, name, plan.motions[name]);
+    source.release();
     // One scale for every motion, from the idle body: the game draws a sprite at actor height / bodyHeight.
     const idleFrame = animations.idle.frames[plan.motions.idle.frame ?? 0];
     if (!idleFrame) fail('PLAN_FIELD', 'idle: frame outside its animation');

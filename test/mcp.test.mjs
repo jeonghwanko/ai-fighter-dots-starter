@@ -63,11 +63,10 @@ test('local paths reject traversal, Windows devices, URLs and absolute paths', a
   for (const relative of ['../x/fighter.json', '/tmp/fighter.json', 'C:/secret/fighter.json', 'file:///a/fighter.json', 'assets\\fighter.json', 'x//fighter.json', 'x/./fighter.json', 'x/fighter.json:stream'])
     assert.equal(await resolveManifest(root, relative), null);
 });
-test('worker serialization and deadline are enforced', async () => {
+test('one decoder runs at a time, two calls wait, more are refused; the deadline is enforced', async () => {
   const validate = makePackageValidator(root);
-  const first = validate('examples/sparring-bot/fighter.json');
-  assert.equal((await validate('examples/sparring-bot/fighter.json')).errors[0].code, 'VALIDATOR_BUSY');
-  assert.equal((await first).ok, true);
+  const results = await Promise.all(Array.from({ length: 4 }, () => validate('examples/sparring-bot/fighter.json')));
+  assert.deepEqual(results.map(r => r.ok ? 'ok' : r.errors[0].code), ['ok', 'ok', 'ok', 'VALIDATOR_BUSY']);
   const short = makePackageValidator(root, { timeoutMs: 1 });
   assert.equal((await short('examples/sparring-bot/fighter.json')).errors[0].code, 'VALIDATION_TIMEOUT');
 });
@@ -105,11 +104,12 @@ test('submit uploads exactly the validated manifest and asset bytes', async () =
 test('validate and submit share one serial decoder; a busy or invalid package is never uploaded', async () => {
   const { requests, remote } = recordingRemote(), client = await connectInProcess({ remote });
   try {
-    const validating = client.callTool({ name: 'validate_fighter_package', arguments: { manifestPath: 'examples/sparring-bot/fighter.json' } });
+    // One running and two waiting validations fill the shared queue, so the submit is refused.
+    const validating = Array.from({ length: 3 }, () => client.callTool({ name: 'validate_fighter_package', arguments: { manifestPath: 'examples/sparring-bot/fighter.json' } }));
     const busy = await client.callTool({ name: 'submit_fighter_package', arguments: { manifestPath: 'examples/sparring-bot/fighter.json', idempotencyKey: crypto.randomUUID() } });
     assert.equal(busy.structuredContent.code, 'local-validation-unavailable');
     assert.equal(busy.structuredContent.errors[0].code, 'VALIDATOR_BUSY');
-    assert.equal((await validating).structuredContent.ok, true);
+    assert.ok((await Promise.all(validating)).every(result => result.structuredContent.ok));
     assert.equal(requests.length, 0);
   } finally { await client.close(); }
   const temporary = await mkdtemp(path.join(tmpdir(), 'fighter-submit-'));
@@ -131,5 +131,18 @@ test('an unreachable beta server leaves the offline contract readable', async ()
     assert.equal(result.structuredContent.ok, true);
     assert.equal(result.structuredContent.code, 'api-unreachable');
     assert.equal(result.structuredContent.data.registration.available, false);
+  } finally { await client.close(); }
+});
+test('one motion of the schema or example is a small read', async () => {
+  const client = await connectInProcess({});
+  try {
+    const size = async args => JSON.stringify((await client.callTool({ name: 'get_fighter_spec', arguments: args })).content).length;
+    for (const section of ['schema', 'example']) {
+      const full = await size({ section }), one = await size({ section, motion: 'walk' });
+      assert.ok(one * 3 < full, `${section}: ${one} of ${full}`);
+    }
+    const walk = (await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'example', motion: 'walk' } })).structuredContent.data;
+    assert.equal(walk.clip.frames.length, 16); assert.equal(walk.asset.id, walk.clip.assetId);
+    assert.equal((await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'schema', motion: 'hp' } })).isError, true);
   } finally { await client.close(); }
 });

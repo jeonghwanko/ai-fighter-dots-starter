@@ -1,6 +1,6 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { createRemoteClient } from '../api/client.mjs';
@@ -46,4 +46,34 @@ test('a revoked session asks for a new sign-in and keeps the saved file', async 
   const before = await readFile(file, 'utf8');
   await assert.rejects(client.request('spec'), /client-sign-in-required/);
   assert.equal(await readFile(file, 'utf8'), before); assert.deepEqual(sentTokens, []);
+});
+test('processes sharing one session file adopt a saved refresh instead of spending an old token', async () => {
+  const fresh = jwt(3600);
+  const shared = await clientWith(jwt(10), () => ({ data: { session: { access_token: fresh, refresh_token: 'r2' } } }));
+  // A second process: same file, same stale session in memory.
+  const refreshes = [];
+  const second = await createRemoteClient(shared.file, { createAuthClient: () => ({ auth: { refreshSession: async ({ refresh_token }) => {
+    refreshes.push(refresh_token); return { data: { session: { access_token: jwt(3600), refresh_token: 'r3' } } }; } } }) });
+  await shared.client.request('spec');
+  sentTokens = [];
+  await second.request('spec');
+  assert.deepEqual(refreshes, []); // r1 is spent; using it again could end the whole session.
+  assert.deepEqual(sentTokens, [fresh]);
+});
+test('concurrent refreshes in separate processes run one at a time; a stale lock is cleared', async () => {
+  const { file, client, refreshes } = await clientWith(jwt(10), () => ({ data: { session: { access_token: jwt(3600), refresh_token: 'r2' } } }));
+  const lock = `${file}.lock`;
+  await writeFile(lock, '99999');
+  const past = new Date(Date.now() - 60000);
+  await utimes(lock, past, past);
+  const peer = await createRemoteClient(file, { createAuthClient: () => ({ auth: { refreshSession: async () => {
+    refreshes.push('peer'); return { data: { session: { access_token: jwt(3600), refresh_token: 'r3' } } }; } } }) });
+  await Promise.all([client.request('spec'), peer.request('spec')]);
+  assert.equal(refreshes.length, 1, JSON.stringify(refreshes));
+  await assert.rejects(stat(lock), { code: 'ENOENT' });
+});
+test('transfer timeouts grow with the body size', async () => {
+  const { transferTimeoutMs } = await import('../api/client.mjs');
+  assert.equal(transferTimeoutMs(0), 30000);
+  assert.ok(transferTimeoutMs(4000000) >= 90000);
 });

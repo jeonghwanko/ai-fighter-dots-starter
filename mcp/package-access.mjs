@@ -19,11 +19,12 @@ export async function resolveManifest(root, relative) {
   return resolved;
 }
 
-export function makePackageValidator(root, { timeoutMs = 20000 } = {}) {
-  let busy = false;
-  return async relative => {
-    if (busy) return issue('VALIDATOR_BUSY');
-    busy = true;
+/**
+ * One decoder at a time. Up to `maxWaiting` further calls wait their turn; more return VALIDATOR_BUSY.
+ * Each run gets its own deadline from the moment it starts.
+ */
+export function makePackageValidator(root, { timeoutMs = 20000, maxWaiting = 2 } = {}) {
+  const validateOnce = async relative => {
     try {
       const manifest = await resolveManifest(root, relative);
       if (!manifest) return issue('PATH_NOT_ALLOWED');
@@ -41,6 +42,13 @@ export function makePackageValidator(root, { timeoutMs = 20000 } = {}) {
           resolve(result ?? issue(timedOut ? 'VALIDATION_TIMEOUT' : code === 0 ? 'WORKER_NO_RESULT' : 'WORKER_FAILED')); });
       });
     } catch { return issue('PACKAGE_UNAVAILABLE'); }
-    finally { busy = false; }
+  };
+  let pending = 0, tail = Promise.resolve();
+  return async relative => {
+    if (pending > maxWaiting) return issue('VALIDATOR_BUSY');
+    pending++;
+    const run = tail.then(() => validateOnce(relative));
+    tail = run.then(() => {}, () => {});
+    try { return await run; } finally { pending--; }
   };
 }
