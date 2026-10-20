@@ -1,9 +1,9 @@
-import { copyFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
 
-// Build the original creator source with explicit public settings, without loading its .env files.
+// Build both AI Fighter entries with explicit public settings, without loading source .env files.
 const [sourceArg, outputArg] = process.argv.slice(2);
 if (!sourceArg || !outputArg) throw new Error('Usage: node scripts/build-creator-site.mjs <kaito_web> <empty-output-directory>');
 const source = resolve(sourceArg), output = resolve(outputArg);
@@ -16,16 +16,29 @@ if ((await readdir(output)).length) throw new Error('Output directory must be em
 const { build } = await import(pathToFileURL(join(source, 'node_modules/vite/dist/node/index.js')).href);
 await build({
   configFile: false, root: source, envDir: false, base: config.base,
+  plugins: [{
+    name: 'standalone-creator-origin',
+    transform(code, id) {
+      if (!id.replaceAll('\\', '/').endsWith('/src/platform/fighterCreator.ts')) return;
+      const old = 'export const PUBLIC_CREATOR_ORIGIN = "https://rupin.pryzm.gg";';
+      if (!code.includes(old)) throw new Error('Creator origin source changed; review the standalone build');
+      return code.replace(old, `export const PUBLIC_CREATOR_ORIGIN = ${JSON.stringify(new URL(config.siteUrl).origin)};`);
+    },
+  }],
   define: {
     'import.meta.env.VITE_AI_FIGHTER_API_BASE': JSON.stringify(config.apiBase),
     'import.meta.env.VITE_AI_FIGHTER_PUBLISHABLE_KEY': JSON.stringify(config.publishableKey),
     'import.meta.env.VITE_AI_FIGHTER_GAME_URL': JSON.stringify(config.gameUrl),
   },
-  build: { outDir: output, emptyOutDir: false, copyPublicDir: false, rolldownOptions: { input: join(source, 'creator.html') } },
+  build: {
+    target: 'es2022', outDir: output, emptyOutDir: false, copyPublicDir: false,
+    rolldownOptions: { input: { creator: join(source, 'creator.html'), fighter: join(source, 'fighter.html') } },
+  },
 });
-await mkdir(join(output, 'fonts'));
-for (const font of ['Pretendard-Regular.woff2', 'Pretendard-Bold.woff2', 'Pretendard-LICENSE.txt']) {
-  await copyFile(join(source, 'public/fonts', font), join(output, 'fonts', font));
+// Keep original asset names, manifests and license notices, including lazily loaded character packs.
+// The public tree is under Pages' 1 GB site limit and contains no environment or server files.
+for (const entry of await readdir(join(source, 'public'))) {
+  await cp(join(source, 'public', entry), join(output, entry), { recursive: true, force: false, errorOnExist: true });
 }
 await writeFile(join(output, '.nojekyll'), '');
 await writeFile(join(output, 'index.html'), `<!doctype html>
@@ -41,6 +54,7 @@ for (const value of [config.apiBase, config.publishableKey, config.gameUrl]) {
   if (!js.includes(value)) throw new Error('Public configuration missing from build');
 }
 if (/sb_secret_[A-Za-z0-9_-]{20,}/.test(js)) throw new Error('Private key found in build');
+if (js.includes('rupin.pryzm.gg') || js.includes('findthem')) throw new Error('Old host dependency found in build');
 for (const token of js.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g) ?? []) {
   let claims;
   try { claims = JSON.parse(Buffer.from(token.split('.')[1], 'base64url')); } catch { continue; }
