@@ -8,9 +8,9 @@ export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 
 export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'admin.html'];
 
 function assertPublicContent(data, path) {
-  if (!['sb_secret_', 'afw_', 'PRIVATE KEY', 'api.render.com', 'eyJ'].some(value => data.includes(value))) return;
+  if (!['sb_secret_', 'afw_', 'AI_FIGHTER_WAKE_TOKEN', 'PRIVATE KEY', 'api.render.com', 'eyJ'].some(value => data.includes(value))) return;
   const text = data.toString('utf8').replaceAll('\\/', '/');
-  const privateValue = /sb_secret_[A-Za-z0-9_-]{20,}|afw_[a-f0-9]{64}|-----BEGIN [A-Z ]*PRIVATE KEY-----|https:\/\/api\.render\.com\/deploy\/[^\s"'<>]*[?&]key=[A-Za-z0-9_-]+/;
+  const privateValue = /sb_secret_[A-Za-z0-9_-]{20,}|afw_[a-f0-9]{64}|AI_FIGHTER_WAKE_TOKEN["'\s:=\\]+[a-f0-9]{64}|-----BEGIN [A-Z ]*PRIVATE KEY-----|https:\/\/api\.render\.com\/deploy\/[^\s"'<>]*[?&]key=[A-Za-z0-9_-]+/;
   if (privateValue.test(text)) throw new Error(`Private credential found in artifact: ${path}`);
   for (const token of text.match(/eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+/g) ?? []) {
     let claims;

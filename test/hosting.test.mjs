@@ -50,6 +50,7 @@ test('credentials are rejected in copied JSON, HTML, CSS, and the unhashed deplo
       ['style.css', '-----BEGIN OPENSSH PRIVATE KEY-----'],
       ['deployment.json', 'https://api.render.com/deploy/srv-test?key=example'],
       ['settings.json', jwt],
+      ['settings.json', 'AI_FIGHTER_WAKE_TOKEN = ' + 'b'.repeat(64)],
     ]) {
       await writeFile(join(root, file), '\0' + JSON.stringify({ credential }));
       await assert.rejects(fingerprint(root), error => /Private credential/.test(error.message) && !error.message.includes(credential));

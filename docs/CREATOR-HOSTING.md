@@ -133,6 +133,10 @@ The builder requires clean inputs, records source revisions before building,
 and refuses changes to either revision during the build. Its output directory
 must be outside the source tree. Saved MCP configurations containing the legacy
 creator address are upgraded to GitHub Pages before a sign-in link is minted.
+The 2026-10-21 review verified these guards with eight focused tests, a clean
+four-entry build/dry run, and read-only comparison against the live HTML,
+entry/shared/lazy assets and MIME types. No additional CI run or deployment
+was started for this review.
 
 From this checkout, with dependencies installed in the private source:
 
