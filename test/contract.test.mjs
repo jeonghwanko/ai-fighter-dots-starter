@@ -123,3 +123,8 @@ test('a blank used frame fails even when the rest of the sheet contains art', as
     hasCode(await validateFighterPackage(manifest), 'EMPTY_FRAME');
   } finally { await writeFile(location, original); await writeFile(manifest, JSON.stringify(example)); }
 });
+test('vendored contract files are the pinned byte copies of the game repository', async () => {
+  const { contractDrift, readSource } = await import('../tools/ai-fighter/vendored-contract.mjs');
+  assert.deepEqual(await contractDrift(), []);
+  assert.match((await readSource()).verifiedAgainst.commit, /^[a-f0-9]{40}$/);
+});

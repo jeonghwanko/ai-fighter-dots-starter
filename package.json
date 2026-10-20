@@ -23,6 +23,7 @@
     "test": "node --test test/*.test.mjs",
     "spec:check": "node tools/ai-fighter/build-contract.mjs --check",
     "spec:build": "node tools/ai-fighter/build-contract.mjs",
+    "contract:vendored": "node tools/ai-fighter/vendored-contract.mjs",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
     "worker:once": "node worker/run.mjs",
     "worker:watch": "node worker/run.mjs --watch",
