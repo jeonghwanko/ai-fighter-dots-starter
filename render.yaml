@@ -11,7 +11,7 @@ services:
     autoDeployTrigger: off
     envVars:
       - key: NODE_VERSION
-        value: 22.22.0
+        value: 22.22.2
       - key: AI_FIGHTER_PROJECT_URL
         value: https://ztfxxhtmtrvxvuxlqmgz.supabase.co
       - key: AI_FIGHTER_WORKER_TOKEN

@@ -1,7 +1,8 @@
 import { createServer } from 'node:http';
 import { timingSafeEqual } from 'node:crypto';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validProjectUrl } from '../api/client.mjs';
+import { makePackageValidator } from '../mcp/package-access.mjs';
 import { runWithConfig } from './run.mjs';
 
 /** HTTP-triggered worker. Supabase owns the durable queue and five-minute leases. */
@@ -61,6 +62,12 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   if (!validProjectUrl(config.url) || !/^afw_[a-f0-9]{64}$/.test(config.workerToken ?? '')) {
     throw new Error('invalid-worker-config');
   }
+  // Exercise the actual native WebP decoder and child-process validator on this host.
+  // This existing geometric fixture is a readiness check, never a new registered fighter.
+  const started = Date.now();
+  const preflight = await makePackageValidator(fileURLToPath(new URL('../', import.meta.url)))('examples/sparring-bot/fighter.json');
+  if (!preflight.ok) throw new Error(`validator-preflight-failed:${preflight.stage}`);
+  console.log(JSON.stringify({ stage: 'validator-ready', elapsedMs: Date.now() - started }));
   const app = createWorkerServer({
     wakeToken: process.env.AI_FIGHTER_WAKE_TOKEN,
     run: () => runWithConfig(config),
