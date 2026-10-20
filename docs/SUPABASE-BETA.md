@@ -155,9 +155,10 @@ VITE_AI_FIGHTER_API_BASE=https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fi
 이 값은 공개 API 주소다. 비밀 키가 아니다. 미설정 또는 통신 실패 시 기존 게임 선수는 계속 사용할 수 있다.
 게임 구현은 원본 게임 저장소에 있으며, 이 공개 샘플은 전달 API·DB·MCP·검증 작업자를 제공한다.
 
-## Google 로그인 (코드 구현, 운영 반영 전)
+## Google 로그인
 
-2026-10-21 코드에 구현했다. 운영 Supabase에는 아직 migration·Edge Function·리다이렉트 설정을 반영하지 않았다.
+2026-10-21 운영 Supabase에 반영했다. migration `20261021090000_ai_fighter_access_requests.sql` 적용, Edge Function 재배포,
+Auth 리다이렉트 주소 추가와 수동 계정 연결 켜기까지 끝났다. 운영 반영 기록은 아래 설계 문서 6절에 있다.
 설계와 남은 단계는 게임 저장소의 `docs/Plan/2026-10-20-ai-fighter-google-login/README.md`가 소유한다.
 
 - 사용자가 직접 로그인한다. 운영자가 세션 파일을 만들어 전달하지 않는다.

@@ -79,7 +79,7 @@ npm run login -- --url https://YOUR_PROJECT_REF.supabase.co --key YOUR_PROJECT_P
 ```
 
 로그인만으로는 제출할 수 없습니다. 베타 초대가 없으면 AI Fighter 홈페이지에서 초대를 요청합니다.
-Google 로그인은 코드에 구현되었고 운영 서버 반영 전입니다. 상태는 [베타 운영 안내](docs/SUPABASE-BETA.md#google-로그인-코드-구현-운영-반영-전)를 봅니다.
+Google 로그인은 2026-10-21 운영 서버에 반영되었습니다. 상태는 [베타 운영 안내](docs/SUPABASE-BETA.md#google-로그인)를 봅니다.
 운영자가 준비한 세션 파일을 쓰는 기존 방식도 `AI_FIGHTER_CLIENT_CONFIG`로 계속 쓸 수 있습니다.
 
 연결 확인 후 실제 제작·제출 요청 예시:
