@@ -59,3 +59,18 @@ test('rejected and expired submissions are final: nothing is pending', async () 
   const open = await read();
   assert.equal(open.code, undefined); assert.deepEqual(open.pending, ['server-validation', 'registration']);
 });
+test('a verifiable JWT is checked locally; the Auth server is not called', async () => {
+  const owner = crypto.randomUUID(), calls = [];
+  const auth = { getClaims: async token => { calls.push('getClaims'); return token === 'signed-user-token-for-test'
+      ? { data: { claims: { sub: owner, is_anonymous: false } } } : { data: null, error: new Error('invalid') }; },
+    getUser: async () => { calls.push('getUser'); return { data: { user: { id: owner } } }; } };
+  const handle = createHandler({ db: { auth, rpc: async name => { calls.push(name); return { data: name === 'af_authorize' ? true : null }; },
+    from: () => { const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null }) }; return q; } } });
+  const read = token => handle(new Request(`https://test/ai-fighter/fighters/${crypto.randomUUID()}`, { headers: { authorization: `Bearer ${token}` } }));
+  assert.equal((await read('signed-user-token-for-test')).status, 404);
+  assert.deepEqual(calls, ['getClaims', 'af_authorize']);
+  assert.equal((await read('forged-token-long-enough-1')).status, 401);
+  const anonymous = { getClaims: async () => ({ data: { claims: { sub: owner, is_anonymous: true } } }) };
+  assert.equal((await createHandler({ db: { auth: anonymous } })(new Request('https://test/ai-fighter/submissions', {
+    method: 'POST', headers: { authorization: 'Bearer signed-user-token-for-test' }, body: '{}' }))).status, 401);
+});

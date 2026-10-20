@@ -1,14 +1,13 @@
-import { Problem, readBody, sha256 } from './handler.mjs';
+import { Problem, UUID, jsonResponse, readBody, sha256 } from './http.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
-const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-const reply = (body,status=200) => new Response(JSON.stringify(body), {status,headers:{'content-type':'application/json','cache-control':'no-store',
-  'access-control-allow-origin':'*','access-control-allow-methods':'GET, POST, OPTIONS','access-control-allow-headers':'Content-Type','x-content-type-options':'nosniff'}});
+const CORS = {methods:'GET, POST, OPTIONS',headers:'Content-Type'};
+const reply = (body,status=200) => jsonResponse(body,status,CORS);
 const present = row => ({id:row.id,a:row.a,b:row.b,hashes:[row.hash_a,row.hash_b],seed:row.seed,engine:row.engine,
   createdAt:row.created_at,completedAt:row.completed_at,result:row.result});
 function check(error) {
   if (!error) return;
   const status = {'idempotency-conflict':409,'duel-not-approved':409,'duels-paused':503,'duel-budget':429,
-    'invalid-duel':422,'not-found':404,'engine-mismatch':409,'result-conflict':409}[error.message];
+    'invalid-duel':422,'not-found':404,'engine-mismatch':409,'result-conflict':409,'duels-failing':503,'invalid-result':503}[error.message];
   throw new Problem(status ?? 503,status ? error.message : 'duel-service-unavailable');
 }
 /** Guest-triggered, server-computed matches. No client result or seed is accepted. All DB access stays service-only. */
@@ -40,9 +39,19 @@ export function createDuelHandler({db,simulateDuel,engineVersion}) {
       const row=await rpc('af_reserve_duel',{p_key:body.idempotencyKey,p_a:body.a,p_b:body.b,p_engine:engineVersion});
       if (row.result) return reply({ok:true,match:present(row)});
       if(row.engine!==engineVersion) throw new Problem(409,'engine-mismatch');
-      const [ma,mb]=await Promise.all([manifest(row.a,row.hash_a),manifest(row.b,row.hash_b)]);
-      const result=await simulateDuel(row.a,ma,row.b,mb,row.seed);
-      const completed=await rpc('af_complete_duel',{p_id:row.id,p_engine:engineVersion,p_result:result});
+      // A run that cannot finish is recorded as failed: it leaves the match budget and counts toward the failure brake.
+      const fail = code => db.rpc('af_fail_duel',{p_id:row.id,p_engine:engineVersion,p_code:code}).then(()=>{},()=>{});
+      let result;
+      try {
+        const [ma,mb]=await Promise.all([manifest(row.a,row.hash_a),manifest(row.b,row.hash_b)]);
+        result=await simulateDuel(row.a,ma,row.b,mb,row.seed);
+      } catch(e) {
+        await fail(e instanceof Problem ? e.message : 'engine-error');
+        throw e instanceof Problem ? e : new Problem(503,'duel-engine-failed');
+      }
+      let completed;
+      try { completed=await rpc('af_complete_duel',{p_id:row.id,p_engine:engineVersion,p_result:result}); }
+      catch(e) { if (e instanceof Problem && ['invalid-result','duel-not-approved'].includes(e.message)) await fail(e.message); throw e; }
       return reply({ok:true,match:present(completed)});
     } catch(e) { return reply({ok:false,code:e instanceof Problem ? e.message:'duel-service-unavailable'},e instanceof Problem ? e.status:503); }
   };

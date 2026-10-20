@@ -2,32 +2,16 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
+import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, verifiedUserId } from './http.mjs';
 
+export { Problem, readBody, sha256 } from './http.mjs';
 export const BUCKET = 'ai-fighter-beta';
+// The worker stamps this on every receipt. af_settings.validator_versions lists the versions af_finish accepts.
 export const VALIDATOR_VERSION = 'ai-fighter-validator-0.2.0';
-const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
-export class Problem extends Error { constructor(status, code, errors) { super(code); this.status = status; this.errors = errors; } }
-export const sha256 = async bytes => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
 export const objectKey = (submission, asset) => `${submission.owner_id}/${submission.id}/${asset.id}.webp`;
-const json = (body, status = 200) => new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' } });
+const json = (body, status = 200) => jsonResponse(body, status);
+const ROSTER_CORS = { methods: 'GET, OPTIONS' };
 const requireId = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value; };
-export async function readBody(request, maximum) {
-  if (Number(request.headers.get('content-length')) > maximum) throw new Problem(413, 'body-limit');
-  const reader = request.body?.getReader();
-  if (!reader) return new Uint8Array();
-  const parts = []; let count = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read(); if (done) break;
-      count += value.length;
-      if (count > maximum) { await reader.cancel(); throw new Problem(413, 'body-limit'); }
-      parts.push(value);
-    }
-  } finally { reader.releaseLock(); }
-  const result = new Uint8Array(count); let offset = 0;
-  for (const part of parts) { result.set(part, offset); offset += part.length; }
-  return result;
-}
 // rejected and expired uploads are final: nothing remains to wait for, so pending is empty.
 const uploadExpired = row => row.status === 'uploading' && Date.parse(row.expires_at) <= Date.now();
 const view = (row, admission) => ({ ok: true, stage: row.status, submissionId: row.id, manifestSha256: row.manifest_sha,
@@ -62,8 +46,19 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
     const { data, error } = await db.from('af_fighters').select('runtime_approved,runtime_scope').eq('submission_id', row.id).maybeSingle();
     check(error); return view(row, data);
   }
+  /** One Storage call signs every asset of a submission, in manifest order. */
+  async function signedUrls(row, seconds) {
+    const paths = row.manifest.assets.map(asset => objectKey(row, asset));
+    const { data, error } = await db.storage.from(BUCKET).createSignedUrls(paths, seconds);
+    const signed = new Map((Array.isArray(data) ? data : []).map(item => [item.path, item]));
+    return paths.map(key => {
+      const item = signed.get(key);
+      if (error || !item || item.error || typeof item.signedUrl !== 'string') throw new Problem(503, 'storage-unavailable');
+      return item.signedUrl;
+    });
+  }
   async function authenticate(request, worker) {
-    const token = request.headers.get('authorization')?.match(/^Bearer ([^\s]{16,4096})$/)?.[1];
+    const token = bearerToken(request);
     if (!token) throw new Problem(401, 'authentication-required');
     if (worker) {
       if (!/^afw_[a-f0-9]{64}$/.test(token)) throw new Problem(403, 'worker-required');
@@ -72,10 +67,10 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
       check(error); if (!data) throw new Problem(403, 'worker-required');
       return null;
     }
-    const { data, error } = await db.auth.getUser(token);
-    if (error || !data?.user || data.user.is_anonymous) throw new Problem(401, 'authentication-required');
-    await rpc('af_authorize', { p_owner: data.user.id });
-    return data.user.id;
+    const owner = await verifiedUserId(db, request);
+    if (!owner) throw new Problem(401, 'authentication-required');
+    await rpc('af_authorize', { p_owner: owner });
+    return owner;
   }
   async function ownSubmission(owner, id) {
     const { data, error } = await db.from('af_submissions').select('*').eq('id', requireId(id)).eq('owner_id', owner).maybeSingle();
@@ -91,8 +86,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
         registration: { available: true, mode: 'invite-only-beta', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary', runtimeApproved: false } } });
       // Only explicitly reviewed arena packages are publicly readable. Uploads and pending drafts stay private.
       if (parts[0] === 'roster' && (method === 'GET' || method === 'OPTIONS')) {
-        const reply = (body, status = 200) => { const response = json(body, status); response.headers.set('access-control-allow-origin', '*');
-          response.headers.set('access-control-allow-methods', 'GET, OPTIONS'); return response; };
+        const reply = (body, status = 200) => jsonResponse(body, status, ROSTER_CORS);
         if (method === 'OPTIONS') return reply({ ok: true });
         let query = db.from('af_fighters').select('id,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha')
           .eq('runtime_approved', true).eq('runtime_scope', 'arena-player-v1').eq('review_state', 'approved');
@@ -108,12 +102,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
         const { data: row, error: readError } = await db.from('af_submissions').select('*').eq('id', fighter.submission_id).eq('status', 'registered').maybeSingle();
         check(readError);
         if (!row || row.manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
-        const files = [];
-        for (const asset of row.manifest.assets) {
-          const { data, error: signError } = await db.storage.from(BUCKET).createSignedUrl(objectKey(row, asset), 600);
-          if (signError || !data) throw new Problem(503, 'storage-unavailable');
-          files.push({ id: asset.id, downloadUrl: data.signedUrl });
-        }
+        const urls = await signedUrls(row, 600);
+        const files = row.manifest.assets.map((asset, index) => ({ id: asset.id, downloadUrl: urls[index] }));
         return reply({ ok: true, fighterId: fighter.id, manifestSha256: fighter.manifest_sha, runtimeApproved: true,
           runtimeScope: fighter.runtime_scope, duelApproved: fighter.duel_approved === true && fighter.duel_manifest_sha === fighter.manifest_sha,
           manifestText: row.manifest_text, files });
@@ -172,12 +162,9 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
           if (body.submissionId) requireId(body.submissionId);
           const row = await rpc('af_claim', { p_id: body.submissionId ?? null });
           if (!row?.id) return json({ ok: true, stage: 'idle' });
-          const files = [];
-          for (const asset of row.manifest.assets) {
-            const { data, error } = await db.storage.from(BUCKET).createSignedUrl(objectKey(row, asset), 300);
-            if (error || !data) throw new Problem(503, 'storage-unavailable');
-            files.push({ ...asset, downloadUrl: data.signedUrl });
-          }
+          // The lease is five minutes; the URLs outlive it so a slow job fails on its deadline, not on a dead link.
+          const urls = await signedUrls(row, 360);
+          const files = row.manifest.assets.map((asset, index) => ({ ...asset, downloadUrl: urls[index] }));
           return json({ ok: true, stage: 'validating', submissionId: row.id, leaseToken: row.lease_token,
             manifestText: row.manifest_text, manifestSha256: row.manifest_sha, files });
         }

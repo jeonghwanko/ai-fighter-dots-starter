@@ -10,6 +10,7 @@ test('only scoped, reviewed immutable packages are delivered to the browser; no 
   const pending = { ...approved, id: crypto.randomUUID(), runtime_approved: false };
   const changed = { ...approved, id: crypto.randomUUID(), runtime_manifest_sha: 'f'.repeat(64) };
   const row = { id: approved.submission_id, owner_id: crypto.randomUUID(), status: 'registered', manifest_sha: sha, manifest_text: text, manifest: example };
+  let signCalls = 0;
   const query = source => {
     let selected = source;
     const q = { select: () => q, order: () => q, limit: n => { selected = selected.slice(0, n); return q; },
@@ -18,7 +19,8 @@ test('only scoped, reviewed immutable packages are delivered to the browser; no 
     return q;
   };
   const handle = createHandler({ db: { from: table => query(table === 'af_fighters' ? [approved, pending, changed] : [row]),
-    storage: { from: () => ({ createSignedUrl: async key => ({ data: { signedUrl: `https://example.supabase.co/storage/v1/object/sign/ai-fighter-beta/${key}?token=temporary` } }) }) } } });
+    storage: { from: () => ({ createSignedUrls: async keys => { signCalls++;
+      return { data: keys.map(key => ({ path: key, error: null, signedUrl: `https://example.supabase.co/storage/v1/object/sign/ai-fighter-beta/${key}?token=temporary` })) }; } }) } } });
   const get = id => handle(new Request(`https://test/ai-fighter/roster${id ? '/' + id : ''}`));
   const list = await get(); assert.equal(list.headers.get('access-control-allow-origin'), '*');
   const entries = (await list.json()).fighters;
@@ -28,6 +30,8 @@ test('only scoped, reviewed immutable packages are delivered to the browser; no 
   assert.equal((await get(changed.id)).status, 404);
   const pkg = await (await get(approved.id)).json();
   assert.equal(pkg.manifestText, text); assert.equal(pkg.runtimeApproved, true); assert.equal(pkg.files.length, example.assets.length);
+  assert.equal(signCalls, 1); // One Storage round trip signs every asset.
+  assert.deepEqual(pkg.files.map(f => f.id), example.assets.map(a => a.id));
   assert.equal('owner_id' in pkg, false); assert.equal('lease_token' in pkg, false);
   assert.equal(pkg.duelApproved, false);
   approved.duel_approved = true; approved.duel_manifest_sha = 'f'.repeat(64);

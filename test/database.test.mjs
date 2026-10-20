@@ -102,3 +102,24 @@ test('an expired upload closes instead of blocking the creator; integers written
     assert.equal((await db.query('select (public.af_submit($1,$2)).status', [owner, fresh.id])).rows[0].status, 'queued');
   } finally { await db.close(); }
 });
+
+test('a new validator version finishes only after the operator allows it', async () => {
+  const db = await migratedDatabase();
+  try {
+    const owner = crypto.randomUUID(), text = JSON.stringify(example), sha = await sha256(new TextEncoder().encode(text));
+    await db.query('insert into auth.users values($1)', [owner]);
+    await db.query('insert into public.af_creators(owner_id) values($1)', [owner]);
+    const row = (await db.query('select to_jsonb(public.af_create_submission($1,$2,$3,$4,$5)) as value',
+      [owner, crypto.randomUUID(), text, sha, example.assets.reduce((sum, a) => sum + a.bytes, 0)])).rows[0].value;
+    for (const a of example.assets) await db.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta', `${owner}/${row.id}/${a.id}.webp`, { size: a.bytes }]);
+    await db.query('select public.af_submit($1,$2)', [owner, row.id]);
+    const claim = (await db.query('select to_jsonb(public.af_claim($1)) as value', [row.id])).rows[0].value;
+    const finish = version => db.query('select (public.af_finish($1,$2,$3,true,$4)).status', [row.id, claim.lease_token, sha,
+      { validatorVersion: version, stage: 'bytes-hashes-and-full-decode', errors: [] }]).then(r => r.rows[0].status);
+    await assert.rejects(finish('ai-fighter-validator-0.3.0'), /validator-version/);
+    await db.query("update public.af_settings set validator_versions=array_append(validator_versions,'ai-fighter-validator-0.3.0')");
+    assert.equal(await finish('ai-fighter-validator-0.3.0'), 'registered');
+    assert.deepEqual((await db.query('select validator_versions from public.af_settings')).rows[0].validator_versions,
+      [VALIDATOR_VERSION, 'ai-fighter-validator-0.3.0']);
+  } finally { await db.close(); }
+});

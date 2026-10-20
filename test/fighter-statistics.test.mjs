@@ -17,7 +17,10 @@ test('owned statistics use all completed matches beyond top 20, preserve public 
       grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
     const dir = new URL('../supabase/migrations/', import.meta.url);
     const migrations = (await readdir(dir)).filter(name => name.endsWith('.sql')).sort();
-    for (const name of migrations.slice(0, -1)) await sql.exec(await readFile(new URL(name, dir), 'utf8'));
+    // Compare rankings before and after this migration; later migrations apply after the comparison.
+    const target = migrations.indexOf('20261020090000_ai_fighter_owned_statistics.sql');
+    assert.ok(target > 0);
+    for (const name of migrations.slice(0, target)) await sql.exec(await readFile(new URL(name, dir), 'utf8'));
     const owners = Array.from({ length: 23 }, () => crypto.randomUUID());
     const owner = owners[20], other = owners[0], ids = Array.from({ length: 23 }, () => crypto.randomUUID()), hash = 'a'.repeat(64);
     for (const [index, id] of ids.entries()) {
@@ -38,8 +41,10 @@ test('owned statistics use all completed matches beyond top 20, preserve public 
       values(gen_random_uuid(),$1,$2,$3,$3,0,'unfinished')`, [ids[20], ids[22], hash]);
     const rankings = async () => (await sql.query('select to_jsonb(r) as record from af_duel_rankings() r')).rows.map(row => row.record);
     const before = await rankings(); assert.equal(before.length, 20); assert.ok(before.every(row => row.id !== ids[20]));
-    await sql.exec(await readFile(new URL(migrations.at(-1), dir), 'utf8'));
+    await sql.exec(await readFile(new URL(migrations[target], dir), 'utf8'));
     assert.deepEqual(await rankings(), before); // Top-20 behavior and ties stay backward compatible.
+    for (const name of migrations.slice(target + 1)) await sql.exec(await readFile(new URL(name, dir), 'utf8'));
+    assert.deepEqual(await rankings(), before);
     await sql.exec('set role service_role');
     const calls = [];
     const db = { auth: { getUser: async token => token === 'fixture-owner-token' ? { data: { user: { id: owner } } }
