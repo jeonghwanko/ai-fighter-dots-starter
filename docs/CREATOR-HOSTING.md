@@ -79,8 +79,8 @@ still apply. See [Render Free](https://render.com/docs/free) and
 
 - Pages commit `80d1612` built successfully; creator links to the independent game.
 - Browser character selection and practice fight loaded with no console errors.
-- Render commit `b52ca7d`: real fixture validation passed in 6.617 seconds.
-- HTTPS health returned 200; unauthenticated wake returned 401; authenticated wake
+- Render commit `8770138`: real fixture validation passed in 7.190 seconds.
+- HTTPS health returned 200; direct durable-key wake returned 401; signed wake
   returned 202. Supabase pg_net also received 202, and Render logged an idle queue.
 - Dispatch permission, pending/expired-lease, worker concurrency, validation and
   creator-handoff tests passed. No new fighter was submitted for this migration.
