@@ -13,13 +13,14 @@ export async function fingerprint(root) {
   async function visit(dir, prefix = '') {
     for (const entry of (await readdir(dir, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name, 'en'))) {
       const path = prefix + entry.name;
-      if (path === 'deployment.json') continue;
       if (entry.isSymbolicLink() || /(^|\/)(\.git|\.env[^/]*|node_modules|\.secret)(\/|$)|\.(?:tsx?|map|pem|key)$/i.test(path)) {
         throw new Error(`Non-public artifact rejected: ${path}`);
       }
+      if (path === 'deployment.json') continue;
       if (entry.isDirectory()) await visit(join(dir, entry.name), path + '/');
       else if (entry.isFile()) {
         const data = await readFile(join(dir, entry.name));
+        if (data.length >= 100 * 1024 * 1024) throw new Error(`Artifact exceeds GitHub's single-file limit: ${path}`);
         if (data.subarray(0, 42).toString().startsWith('version https://git-lfs.github.com/spec/v1')) {
           throw new Error(`Unresolved Git LFS asset: ${path}`);
         }

@@ -37,6 +37,7 @@ if (option === '--dry-run') {
     for (const entry of await readdir(source)) await cp(join(source, entry), join(checkout, entry), { recursive: true, errorOnExist: true, force: false });
     git(checkout, 'config', 'user.name', 'AI Fighter deploy');
     git(checkout, 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com');
+    git(checkout, 'config', 'core.autocrlf', 'false');
     git(checkout, 'add', '-A');
     git(checkout, 'commit', '-m', `Deploy AI Fighter ${release.sourceCommit.slice(0, 12)}`);
     // No force: concurrent deploys must fail instead of replacing newer work.
