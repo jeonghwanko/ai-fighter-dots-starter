@@ -1,5 +1,5 @@
 import { createServer } from 'node:http';
-import { timingSafeEqual } from 'node:crypto';
+import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validProjectUrl } from '../api/client.mjs';
 import { makePackageValidator } from '../mcp/package-access.mjs';
@@ -8,7 +8,6 @@ import { runWithConfig } from './run.mjs';
 /** HTTP-triggered worker. Supabase owns the durable queue and five-minute leases. */
 export function createWorkerServer({ wakeToken, run, log = console.log }) {
   if (!/^[a-f0-9]{64}$/.test(wakeToken ?? '')) throw new Error('invalid-wake-token');
-  const expected = Buffer.from(`Bearer ${wakeToken}`);
   let active = null, stopping = false, requested = false;
   async function drain() {
     do {
@@ -34,6 +33,13 @@ export function createWorkerServer({ wakeToken, run, log = console.log }) {
       return reply(stopping ? 503 : 200, { ok: !stopping });
     }
     if (req.method !== 'POST' || req.url !== '/wake') return reply(404, { ok: false });
+    const timestamp = req.headers['x-ai-fighter-time'];
+    const seconds = typeof timestamp === 'string' && /^\d{10}$/.test(timestamp) ? Number(timestamp) : 0;
+    const age = Math.floor(Date.now() / 1000) - seconds;
+    if (seconds === 0 || age < -30 || age > 180) return reply(401, { ok: false });
+    // The managed pg_net queue can be readable by database roles. It receives only
+    // a short-lived HMAC, never the durable wake key stored in Vault and Render.
+    const expected = Buffer.from(`Bearer ${createHmac('sha256', wakeToken).update(timestamp).digest('hex')}`);
     const supplied = Buffer.from(req.headers.authorization ?? '');
     if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
       return reply(401, { ok: false });

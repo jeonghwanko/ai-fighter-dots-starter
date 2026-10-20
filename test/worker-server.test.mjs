@@ -1,6 +1,12 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { createHmac } from 'node:crypto';
 import { createWorkerServer } from '../worker/server.mjs';
+
+function headers(key, offset = 0) {
+  const timestamp = String(Math.floor(Date.now() / 1000) + offset);
+  return { 'x-ai-fighter-time': timestamp, authorization: `Bearer ${createHmac('sha256', key).update(timestamp).digest('hex')}` };
+}
 
 test('HTTP health does not claim; unauthorized requests cannot start work; authorized wake drains serially', async () => {
   let calls = 0, concurrent = 0, maxConcurrent = 0, release;
@@ -20,7 +26,9 @@ test('HTTP health does not claim; unauthorized requests cannot start work; autho
     assert.equal((await fetch(`${base}/health`)).status, 200);
     assert.equal((await fetch(`${base}/wake`, { method: 'POST' })).status, 401);
     assert.equal(calls, 0);
-    const wake = () => fetch(`${base}/wake`, { method: 'POST', headers: { authorization: `Bearer ${'a'.repeat(64)}` } });
+    assert.equal((await fetch(`${base}/wake`, { method: 'POST', headers: headers('a'.repeat(64), -181) })).status, 401);
+    assert.equal((await fetch(`${base}/wake`, { method: 'POST', headers: headers('b'.repeat(64)) })).status, 401);
+    const wake = () => fetch(`${base}/wake`, { method: 'POST', headers: headers('a'.repeat(64)) });
     assert.equal((await wake()).status, 202);
     assert.equal((await wake()).status, 202);
     assert.equal(calls, 1);
@@ -41,7 +49,7 @@ test('worker errors leave the service available for the next durable retry', asy
   const base = `http://127.0.0.1:${app.server.address().port}`;
   try {
     for (let i = 0; i < 2; i++) {
-      assert.equal((await fetch(`${base}/wake`, { method: 'POST', headers: { authorization: `Bearer ${'b'.repeat(64)}` } })).status, 202);
+      assert.equal((await fetch(`${base}/wake`, { method: 'POST', headers: headers('b'.repeat(64)) })).status, 202);
     }
     assert.equal(calls, 2);
   } finally { await app.stop(); }

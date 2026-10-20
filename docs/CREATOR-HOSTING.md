@@ -1,22 +1,28 @@
-# Creator homepage
+# Independent AI Fighter hosting
 
 Public URL: https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html
+Game URL: https://jeonghwanko.github.io/ai-fighter-dots-starter/fighter.html
+Validator health: https://ai-fighter-validator.onrender.com/health
 
 GitHub Pages serves the `codex/creator-pages` branch of this public repository.
-The branch contains the built page, assets, Pretendard fonts with their license,
-and `.nojekyll`. GitHub performs only its Pages publication; source tests and
-the page build run locally.
+The branch contains both built pages, the original public assets and license
+notices, and `.nojekyll`. GitHub performs its Pages publication; source tests
+and the page build run locally. The game's runtime no longer uses FindThem.
 
-The original page source remains `kaito_web/creator.html` and `src/creator/`
+The original source remains `kaito_web/creator.html`, `fighter.html` and `src/`
 in `jeonghwanko/crashbang-heroes`. Build that source into a new empty directory:
 
 ```sh
 node scripts/build-creator-site.mjs /path/to/crashbang-heroes/kaito_web output/creator-site-new
 ```
 
+The migration build used source commit `7e7fd491b56c3fcbd82ddc08c73c9a0e39a38f96`.
+
 Public build settings are in `deploy/creator-site.json`. The builder does not
 read the source checkout's environment files. It includes only the publishable
-Supabase key, copies the required fonts, and checks the deployed asset paths.
+Supabase key, copies the public assets, and checks the deployed asset paths.
+The standalone build replaces the legacy creator origin and rejects bundles
+containing the old host. Existing source checkout files are not edited.
 Publish the resulting files to the existing Pages branch after local review.
 
 The existing Supabase project `ztfxxhtmtrvxvuxlqmgz` continues to own login,
@@ -27,3 +33,73 @@ remain available. No service key belongs in the website.
 
 Dot's default one-use sign-in links now target the Pages URL. The former
 `https://rupin.pryzm.gg/creator.html` remains an explicitly allowed legacy target.
+
+## Free validation service
+
+Render service `ai-fighter-validator` (`srv-dbbohr8m7kps73flja7g`) uses the Free
+instance in Singapore, with no payment card added. It deploys the
+`codex/creator-hosting` branch. Auto-deploy is off; deploy reviewed commits
+manually. `render.yaml` records the configuration.
+
+- Build: `npm ci --omit=dev`
+- Start: `node worker/server.mjs`
+- Health path: `/health`
+- Environment: `NODE_VERSION=22.22.2`, `AI_FIGHTER_PROJECT_URL`,
+  `AI_FIGHTER_WORKER_TOKEN`, `AI_FIGHTER_WAKE_TOKEN`
+
+The worker key can claim validation jobs and finish leased jobs; it is not a
+Supabase service-role key. Its hash is registered as `render-free validator`.
+The current key expires **2027-01-18 UTC**. Rotate it in `af_workers` and Render's
+environment before expiry. Keep values out of source, logs and website files.
+
+Startup runs the real child-process WebP validator against the existing
+geometric test fixture. Health is available only after it passes. No fighter
+registration or gameplay approval is created by this readiness check.
+
+`20261021090000_ai_fighter_worker_dispatch.sql` installs a private dispatch
+function and submission trigger. Supabase Vault stores
+`ai_fighter_worker_url` (the Render `/wake` URL) and `ai_fighter_wake_token`.
+Supabase Cron checks pending work each minute, and pg_net sends authenticated
+requests only for queued work or an expired validation lease. An empty queue
+sends no keep-alive. A failed trigger does not roll back a submission.
+Render handles one validator job at a time; Supabase retains the durable queue,
+asset storage and results across restarts.
+Hosted pg_net keeps its own PUBLIC grants despite attempted revokes by postgres.
+The signed-dispatch migration therefore sends a timestamp and HMAC valid for
+three minutes, rather than putting the durable wake key in pg_net's queue.
+Render rejects invalid/expired signatures. Replaying a valid signature can only
+wake the existing durable queue; it cannot create jobs or choose packages.
+
+Free instances sleep after inactivity; the first subsequent submission can
+take an extra minute or longer. Render's free quota and Supabase Free quotas
+still apply. See [Render Free](https://render.com/docs/free) and
+[Supabase scheduling](https://supabase.com/docs/guides/functions/schedule-functions).
+
+## Cutover verification (2026-10-21 KST)
+
+- Pages commit `80d1612` built successfully; creator links to the independent game.
+- Browser character selection and practice fight loaded with no console errors.
+- Render commit `b52ca7d`: real fixture validation passed in 6.617 seconds.
+- HTTPS health returned 200; unauthenticated wake returned 401; authenticated wake
+  returned 202. Supabase pg_net also received 202, and Render logged an idle queue.
+- Dispatch permission, pending/expired-lease, worker concurrency, validation and
+  creator-handoff tests passed. No new fighter was submitted for this migration.
+- FindThem's `ai-fighter-worker.service` is stopped and disabled; its worker key
+  (`findthem-prod systemd`) is disabled. Existing registered packages remain intact.
+
+For rollback, deploy a previous reviewed Render commit. Do not silently restore
+the old FindThem dependency. The source changes are tracked in PR #1 while
+the Pages deployment branch contains the live built files.
+
+## Founding League recruitment
+
+`league.html` is the English recruitment page. The creator homepage links to it,
+and its application links return to `creator.html?lang=en&apply=founding-league`.
+The existing authenticated invitation request stores the introduction with a
+`[Founding League]` prefix inside its existing note limit. Google sign-in retains
+only this known campaign parameter and the selected language. Existing pending
+requests can be updated; existing invitations are not automatically league entries.
+
+The page uses existing arena character art as labelled examples. Cohort dates and
+the proposed match format are plans, not a live tournament or remaining-seat counter.
+The Pages builder includes the league entry alongside the creator page and game.

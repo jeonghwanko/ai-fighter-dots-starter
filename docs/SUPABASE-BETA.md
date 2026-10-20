@@ -316,8 +316,9 @@ npm run worker:watch
 **검사기 버전.** 작업자는 `VALIDATOR_VERSION`을 영수증에 적고 서버는 `af_settings.validator_versions`에 있는 값만 받는다.
 새 검사기를 배포할 때는 먼저 새 버전을 목록에 추가하고, 모든 작업자를 바꾼 뒤 옛 버전을 지운다.
 결과가 즉시 나타나지 않을 수 있다. PC에서 실행하면 PC가 꺼진 동안 제출은 대기한다.
-상시 운영은 [systemd 유닛 예시](../deploy/ai-fighter-worker.service)처럼 서버 서비스로 둔다.
-전용 사용자, 메모리 512 MB·CPU 50% 상한, 작업 폴더만 쓰기 가능, 비정상 종료 시 재시작이다.
+현재 운영은 [독립 무료 호스팅](CREATOR-HOSTING.md)의 Render Free 웹 작업자다.
+Supabase가 대기 제출이 있을 때만 인증된 HTTP 요청으로 깨우고, 중단된 임대는 다시 시도한다.
+기존 FindThem의 systemd 작업자는 중지·비활성화했다. [systemd 유닛](../deploy/ai-fighter-worker.service)은 별도 서버 운영을 위한 참고 예시다.
 작업자를 옮길 때는 새 토큰 해시를 먼저 등록하고, 새 작업자가 큐를 정상 조회하는지 확인한 뒤 옛 작업자를 멈추고 옛 토큰을 끈다.
 작업자 토큰은 큐를 검사·확정할 권한이다. 이를 Dot에 제공하지 않는다.
 
