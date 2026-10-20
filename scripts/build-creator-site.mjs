@@ -3,7 +3,7 @@ import { resolve, join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
 
-// Build both AI Fighter entries with explicit public settings, without loading source .env files.
+// Build the AI Fighter entries with explicit public settings, without loading source .env files.
 const [sourceArg, outputArg] = process.argv.slice(2);
 if (!sourceArg || !outputArg) throw new Error('Usage: node scripts/build-creator-site.mjs <kaito_web> <empty-output-directory>');
 const source = resolve(sourceArg), output = resolve(outputArg);
@@ -31,8 +31,8 @@ await build({
     'import.meta.env.VITE_AI_FIGHTER_GAME_URL': JSON.stringify(config.gameUrl),
   },
   build: {
-    target: 'es2022', outDir: output, emptyOutDir: false, copyPublicDir: false,
-    rolldownOptions: { input: { creator: join(source, 'creator.html'), fighter: join(source, 'fighter.html') } },
+    target: 'es2022', manifest: true, outDir: output, emptyOutDir: false, copyPublicDir: false,
+    rolldownOptions: { input: { creator: join(source, 'creator.html'), fighter: join(source, 'fighter.html'), league: join(source, 'league.html') } },
   },
 });
 // Keep original asset names, manifests and license notices, including lazily loaded character packs.
