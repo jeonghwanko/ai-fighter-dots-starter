@@ -1,16 +1,9 @@
--- Contact support replaces the unconfigured automatic review mail feature.
--- Preserve historical schema/data, stop new enqueueing and scheduled dispatch.
-drop trigger if exists af_review_email_enqueued on public.af_access_reviews;
+-- Preserve historical schema/data; disable all new review email enqueueing.
+create or replace function public.af_enqueue_review_email() returns trigger
+language plpgsql security invoker set search_path='' as $$
+begin return new; end $$;
 update public.af_review_emails set status='cancelled',lease_id=null,lease_until=null
 where status in ('pending','failed','sending');
-do $$ declare job record; begin
-  if to_regclass('cron.job') is not null then
-    for job in select jobid from cron.job where jobname='ai-fighter-review-emails' loop
-      perform cron.alter_job(job.jobid,active:=false);
-    end loop;
-  end if;
-end $$;
-
 create or replace function public.af_admin_requests(p_actor uuid, p_status text default 'pending', p_search text default '', p_page integer default 0)
 returns jsonb language plpgsql security invoker set search_path = '' as $$
 declare result jsonb;
