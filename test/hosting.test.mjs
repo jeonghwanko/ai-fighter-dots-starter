@@ -10,7 +10,7 @@ test('public artifacts reject changed bytes, private inputs and dirty source met
   const root = await mkdtemp(join(tmpdir(), 'fighter-artifact-test-'));
   try {
     await mkdir(join(root, '.vite'));
-    for (const file of ['creator.html', 'fighter.html', 'league.html', 'index.html', '.nojekyll', '.vite/manifest.json']) {
+    for (const file of ['creator.html', 'fighter.html', 'league.html', 'admin.html', 'index.html', '.nojekyll', '.vite/manifest.json']) {
       await writeFile(join(root, file), 'test');
     }
     const release = { siteUrl: hosting.siteUrl, sourceCommit: 'a'.repeat(40), hostingCommit: 'b'.repeat(40), dirty: false, ...await fingerprint(root) };

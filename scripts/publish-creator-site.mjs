@@ -46,7 +46,7 @@ if (option === '--dry-run') {
     const marker = new URL('deployment.json', hosting.siteUrl);
     marker.searchParams.set('build', release.buildId);
     await waitForJson(marker, body => body.buildId === release.buildId && body.digest === release.digest);
-    for (const page of ['creator.html', 'fighter.html', 'league.html']) {
+    for (const page of ['creator.html', 'fighter.html', 'league.html', 'admin.html']) {
       const response = await fetch(new URL(page, hosting.siteUrl), { signal: AbortSignal.timeout(30_000) });
       if (!response.ok) throw new Error(`Published entry unavailable: ${page} (${response.status})`);
     }

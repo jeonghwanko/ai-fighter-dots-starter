@@ -1,6 +1,7 @@
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { createAccountHandler } from './account.mjs';
+import { createAdminHandler } from './admin.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
 import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, verifiedUserId } from './http.mjs';
@@ -42,6 +43,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
   const duelHandler = createDuelHandler({db,simulateDuel,engineVersion});
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
+  const adminHandler = createAdminHandler({ db });
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
   async function present(row) {
     if (row.status !== 'registered') return view(row);
@@ -82,6 +84,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
     try {
       const segments = new URL(request.url).pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter');
       const parts = prefix >= 0 ? segments.slice(prefix + 1) : segments, method = request.method;
+      if (parts[0] === 'admin') return adminHandler(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
       // Before authenticate(): these routes must work for signed-in users who are not invited yet.

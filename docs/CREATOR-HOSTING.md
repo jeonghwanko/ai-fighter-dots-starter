@@ -155,3 +155,28 @@ Supabase migrations and Edge Functions are outside this workflow. In particular,
 the local empty `duel-engine.mjs` adapter must never replace the deployed game
 engine. `publish:rupin` remains the original Wonder Lupin publishing command;
 use `publish:fighter` for AI Fighter.
+
+
+## Application administration
+
+Open `admin.html` on the same published site and sign in with a pre-provisioned
+administrator's Google account. The creator homepage shows **Applications**
+only after the API confirms that account's enabled `af_admins` membership.
+Routine review requires no SQL: filter or search applications, read their
+email and note, then confirm **Approve** or **Decline** with an optional
+internal review note.
+
+Approval atomically records the decision and grants at least 30 days of
+creator submission access, subject to the existing 20-active-creator beta
+capacity. The recruitment target remains 16 creators. Fighter visual/runtime
+admission is still a separate review. Decline applies the existing seven-day
+reapplication cooldown and does not revoke a separate active invitation.
+Review notes stay private; no notification email is sent automatically.
+
+`api/admin.mjs` verifies the bearer user's identity; the database checks the
+enabled administrator membership again. Applicant emails come from Auth on
+the server only. Browser roles cannot read the administrator/review tables
+or execute the administrator RPCs. Review versions reject stale decisions,
+and identical retries reuse the original audit record. Provision additional
+administrators only through a trusted server-side operation; there is no
+public role-management endpoint.

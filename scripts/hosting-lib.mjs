@@ -35,7 +35,7 @@ export async function fingerprint(root) {
 }
 
 export async function verifyArtifact(root) {
-  for (const path of ['creator.html', 'fighter.html', 'league.html', 'index.html', '.nojekyll', '.vite/manifest.json']) {
+  for (const path of ['creator.html', 'fighter.html', 'league.html', 'admin.html', 'index.html', '.nojekyll', '.vite/manifest.json']) {
     if (!(await stat(join(root, path))).isFile()) throw new Error(`Missing site entry: ${path}`);
   }
   const release = JSON.parse(await readFile(join(root, 'deployment.json'), 'utf8'));

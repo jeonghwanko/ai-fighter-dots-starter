@@ -35,7 +35,7 @@ await build({
   },
   build: {
     target: 'es2022', manifest: true, outDir: output, emptyOutDir: false, copyPublicDir: false,
-    rolldownOptions: { input: { creator: join(source, 'creator.html'), fighter: join(source, 'fighter.html'), league: join(source, 'league.html') } },
+    rolldownOptions: { input: { creator: join(source, 'creator.html'), fighter: join(source, 'fighter.html'), league: join(source, 'league.html'), admin: join(source, 'admin.html') } },
   },
 });
 // Keep original asset names, manifests and license notices, including lazily loaded character packs.
@@ -71,7 +71,7 @@ const release = {
   buildId: randomUUID(), siteUrl: config.siteUrl, builtAt: new Date().toISOString(),
   sourceCommit: git(source, 'rev-parse', 'HEAD'), hostingCommit: git(hostingRoot, 'rev-parse', 'HEAD'),
   // Unrelated source-repository edits do not change this site's inputs.
-  dirty: Boolean(git(source, 'status', '--porcelain', '--', 'creator.html', 'fighter.html', 'league.html', 'src', 'public', 'package.json', 'package-lock.json') ||
+  dirty: Boolean(git(source, 'status', '--porcelain', '--', 'creator.html', 'fighter.html', 'league.html', 'admin.html', 'src', 'public', 'package.json', 'package-lock.json') ||
     git(hostingRoot, 'status', '--porcelain', '--untracked-files=no')),
   ...await fingerprint(output),
 };

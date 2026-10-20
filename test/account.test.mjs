@@ -15,8 +15,9 @@ async function database() {
     create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
     create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
     grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
+  // Hosted pg_net/Vault dispatch is unrelated to account access and is unavailable in PGlite.
   const dir = new URL('../supabase/migrations/', import.meta.url);
-  for (const name of (await readdir(dir)).filter(file => file.endsWith('.sql')).sort()) await sql.exec(await readFile(new URL(name, dir), 'utf8'));
+  for (const name of (await readdir(dir)).filter(file => file.endsWith('.sql') && !file.includes('dispatch')).sort()) await sql.exec(await readFile(new URL(name, dir), 'utf8'));
   return sql;
 }
 
