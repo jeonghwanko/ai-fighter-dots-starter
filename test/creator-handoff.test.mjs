@@ -1,27 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { request as httpRequest } from 'node:http';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { PUBLIC_CREATOR_PAGE, creatorPage, startCreatorHandoff } from '../mcp/creator-handoff.mjs';
+import { PUBLIC_CREATOR_PAGE, creatorLink, creatorPage } from '../mcp/creator-handoff.mjs';
 
 const PUBLIC_ORIGIN = 'https://rupin.pryzm.gg';
-const ACCESS = { url: 'https://abcdefghijklmnopqrst.supabase.co', accessToken: 'access-token', expiresAt: 4102444800, refreshToken: 'must-not-leak' };
-
-/** node:http so the test can send the browser's Origin and preflight headers as they are. */
-function call(port, { method = 'POST', origin = PUBLIC_ORIGIN, body, headers = {} } = {}) {
-  return new Promise((resolve, reject) => {
-    const req = httpRequest({ host: '127.0.0.1', port, path: '/exchange', method,
-      headers: { origin, ...(body ? { 'content-type': 'application/json' } : {}), ...headers } }, res => {
-      let text = ''; res.setEncoding('utf8'); res.on('data', part => { text += part; });
-      res.on('end', () => resolve({ status: res.statusCode, headers: res.headers, json: text ? JSON.parse(text) : null }));
-    });
-    req.on('error', reject); req.end(body ? JSON.stringify(body) : undefined);
-  });
-}
-function linkParts(loginUrl) {
-  const url = new URL(loginUrl), fragment = new URLSearchParams(url.hash.slice(1));
-  return { page: `${url.origin}${url.pathname}`, code: fragment.get('dot'), port: Number(fragment.get('port')) };
-}
+const HASH = 'b'.repeat(56);
+const EXPIRES = '2099-01-01T00:10:00.000Z';
 
 test('links open only the public creator homepage or a loopback development page', () => {
   assert.deepEqual(creatorPage(), { origin: PUBLIC_ORIGIN, href: PUBLIC_CREATOR_PAGE });
@@ -31,39 +15,32 @@ test('links open only the public creator homepage or a loopback development page
     assert.throws(() => creatorPage(page), /creator-page-not-allowed/, page);
 });
 
-test('the public homepage exchanges the one-use code for an access token only', async () => {
-  const link = await startCreatorHandoff({ loadAccess: async () => ACCESS });
-  try {
-    const { page, code, port } = linkParts(link.loginUrl);
-    assert.equal(page, PUBLIC_CREATOR_PAGE);
-    assert.match(code, /^[a-f0-9]{64}$/);
-    // Chrome's preflight for a public page calling 127.0.0.1.
-    const preflight = await call(port, { method: 'OPTIONS', headers: { 'access-control-request-method': 'POST', 'access-control-request-private-network': 'true' } });
-    assert.equal(preflight.status, 200);
-    assert.equal(preflight.headers['access-control-allow-origin'], PUBLIC_ORIGIN);
-    assert.equal(preflight.headers['access-control-allow-private-network'], 'true');
-    assert.equal((await call(port, { origin: 'https://evil.example', body: { code } })).status, 403);
-    assert.equal((await call(port, { body: { code: 'a'.repeat(64) } })).status, 403);
-    const granted = await call(port, { body: { code } });
-    assert.equal(granted.status, 200);
-    assert.deepEqual(granted.json, { url: ACCESS.url, accessToken: ACCESS.accessToken, expiresAt: ACCESS.expiresAt });
-    assert.equal((await call(port, { body: { code } })).status, 410);
-  } finally { link.close(); }
+test('the link carries only the server-issued token hash, in the fragment', async () => {
+  const calls = [];
+  const link = await creatorLink({ request: async (route, options) => { calls.push({ route, options }); return { ok: true, tokenHash: HASH, expiresAt: EXPIRES }; } });
+  assert.deepEqual(calls, [{ route: 'creator-handoffs', options: { method: 'POST' } }]);
+  assert.equal(link.loginUrl, `${PUBLIC_CREATOR_PAGE}#handoff=${HASH}`);
+  assert.equal(link.expiresAt, EXPIRES);
+  for (const reply of [{ tokenHash: 'not-hex', expiresAt: EXPIRES }, { tokenHash: HASH }, {}])
+    await assert.rejects(creatorLink({ request: async () => reply }), /invalid-api-response/);
+  await assert.rejects(creatorLink({ page: 'https://evil.example/creator.html', request: async () => ({ tokenHash: HASH, expiresAt: EXPIRES }) }), /creator-page-not-allowed/);
 });
 
 test('open_creator_homepage is offered with a beta session and returns the public link', async () => {
   const [{ createServer }, { InMemoryTransport }] = await Promise.all([import('../mcp/server.mjs'), import('@modelcontextprotocol/sdk/inMemory.js')]);
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
-  await createServer({ remote: { request: async () => ({ ok: true, stage: 'unused' }), session: async () => ACCESS } }).connect(serverSide);
+  const remote = { request: async route => route === 'creator-handoffs' ? { ok: true, stage: 'creator-link', tokenHash: HASH, expiresAt: EXPIRES } : { ok: true } };
+  await createServer({ remote }).connect(serverSide);
   const client = new Client({ name: 'creator-link-test', version: '1.0.0' });
   await client.connect(clientSide);
   try {
     assert.ok((await client.listTools()).tools.some(tool => tool.name === 'open_creator_homepage'));
     const result = await client.callTool({ name: 'open_creator_homepage', arguments: {} });
-    assert.equal(result.structuredContent.ok, true, JSON.stringify(result.structuredContent));
-    const { page, port, code } = linkParts(result.structuredContent.loginUrl);
-    assert.equal(page, PUBLIC_CREATOR_PAGE);
-    assert.ok(Date.parse(result.structuredContent.expiresAt) > Date.now());
-    assert.equal((await call(port, { body: { code } })).json.accessToken, ACCESS.accessToken);
+    assert.deepEqual(result.structuredContent, { ok: true, stage: 'creator-link', loginUrl: `${PUBLIC_CREATOR_PAGE}#handoff=${HASH}`, expiresAt: EXPIRES });
+
+    remote.request = async () => { throw new Error('handoff-email-required'); };
+    const refused = await client.callTool({ name: 'open_creator_homepage', arguments: {} });
+    assert.equal(refused.structuredContent.ok, false);
+    assert.equal(refused.structuredContent.code, 'handoff-email-required');
   } finally { await client.close(); }
 });

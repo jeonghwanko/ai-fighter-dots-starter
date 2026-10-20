@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { resolveManifest } from './package-access.mjs';
-import { startCreatorHandoff } from './creator-handoff.mjs';
+import { creatorLink } from './creator-handoff.mjs';
 
 const CHANGED = 'package-changed-after-validation';
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -74,10 +74,10 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
     }));
   }
   server.registerTool('open_creator_homepage', {
-    description: 'Make a one-use link that signs the current user into the AI Fighter creator homepage (https://rupin.pryzm.gg/creator.html) with this beta session: their registered fighters, animations, statistics and downloads. Use when the user asks to see their fighters on the homepage. Give the link to the user to open in a browser on this computer within 5 minutes; it works once. The page receives only an access token.',
+    description: 'Make a one-use link that signs the current user into the AI Fighter creator homepage (https://rupin.pryzm.gg/creator.html) with this beta account: their registered fighters, animations, statistics and downloads. Use when the user asks to see their fighters on the homepage. Give the link to the user as a clickable link; it opens in any browser on any device, works once and expires in 10 minutes. Do not open it yourself: opening it uses it up.',
     inputSchema: {}, outputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, safe(async () => {
-    const { loginUrl, expiresAt } = await startCreatorHandoff({ page: creatorPage, loadAccess: () => remote.session() });
+    const { loginUrl, expiresAt } = await creatorLink({ page: creatorPage, request: remote.request });
     return { ok: true, stage: 'creator-link', loginUrl, expiresAt };
   }));
   server.registerTool('get_fighter_submission', { description: 'Read the current user’s submission status. registered means server file validation and registry creation; gameplay approval is separate. Empty pending means the status is final.',

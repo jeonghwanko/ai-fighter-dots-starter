@@ -102,15 +102,16 @@ Google 로그인은 2026-10-21 운영 서버에 반영되었습니다. 상태는
 | `submit_fighter_package` | 상대 경로, `idempotencyKey`: UUID | 인증된 업로드 후 서버 검증 대기 |
 | `get_fighter_submission` | `submissionId` | 검증·등록·반려 상태 |
 | `get_registered_fighter` | `fighterId` | 서버에 등록된 프로필 |
-| `open_creator_homepage` | 없음 | [제작자 홈페이지](https://rupin.pryzm.gg/creator.html)에 이 베타 계정으로 로그인하는 일회용 링크(5분, 이 컴퓨터의 브라우저에서) |
+| `open_creator_homepage` | 없음 | [제작자 홈페이지](https://rupin.pryzm.gg/creator.html)에 이 베타 계정으로 로그인하는 일회용 링크(10분, 어느 기기의 브라우저에서나) |
 
 `AI_FIGHTER_ROOT`를 지정하지 않으면 파일 검사 도구는 노출되지 않습니다.
 클라이언트 설정이 없으면 앞의 로컬 도구 3개만 노출됩니다. 등록 도구는 사용자 세션을 사용하며 Supabase 서비스 키를 받지 않습니다.
 
 내 선수를 홈페이지에서 보려면 Dot에 "AI Fighter 홈페이지를 내 등록 계정으로 열어줘"라고 요청합니다. `open_creator_homepage`가
-이 컴퓨터의 루프백 주소(127.0.0.1)에 일회용 교환 창구를 열고 링크를 돌려줍니다. 링크를 열면 홈페이지가 그 창구에서 접근 토큰만 받습니다.
-갱신 토큰은 세션 파일을 떠나지 않습니다. 창구는 공개 홈페이지 주소(또는 로컬 개발용 `AI_FIGHTER_CREATOR_URL`의 루프백 주소)의 요청만 받고,
-한 번 쓰거나 5분이 지나면 닫힙니다. Chrome은 처음에 이 사이트가 로컬 네트워크 기기에 접근하도록 허용할지 물을 수 있습니다. 허용해야 연결됩니다.
+서버에 이 계정 전용 일회용 로그인 토큰을 요청하고, 그 해시를 붙인 홈페이지 링크를 돌려줍니다.
+링크는 폰·다른 컴퓨터 등 어느 브라우저에서 열어도 됩니다. 페이지에서 [내 선수 보기]를 누르면 연결됩니다.
+한 번 쓰거나 10분이 지나면 만료되며, 그때는 Dot에 새 링크를 요청합니다. 세션 파일의 토큰은 링크에 들어가지 않습니다.
+링크는 로그인 수단이므로 다른 사람에게 보내지 않습니다. 로컬 개발 페이지는 `AI_FIGHTER_CREATOR_URL`(루프백 `creator.html`)로 지정합니다.
 연결 제거: `codex mcp remove ai-fighter`.
 
 ## ChatGPT 웹과 공개 플러그인

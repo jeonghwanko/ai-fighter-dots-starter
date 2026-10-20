@@ -38,10 +38,10 @@ function check(error) {
   if (error.message === 'byte-budget-mismatch') throw new Problem(422, error.message);
   throw new Problem(503, 'database-unavailable');
 }
-export function createHandler({ db, simulateDuel = null, engineVersion = null }) {
+export function createHandler({ db, simulateDuel = null, engineVersion = null, creatorLink = null }) {
   const duelHandler = createDuelHandler({db,simulateDuel,engineVersion});
   const statisticsHandler = createFighterStatisticsHandler({ db });
-  const accountHandler = createAccountHandler({ db });
+  const accountHandler = createAccountHandler({ db, creatorLink });
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
   async function present(row) {
     if (row.status !== 'registered') return view(row);
@@ -85,7 +85,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
       // Before authenticate(): these routes must work for signed-in users who are not invited yet.
-      if (parts.length === 1 && (parts[0] === 'me' || parts[0] === 'access-requests')) return accountHandler(request, parts);
+      if (parts.length === 1 && ['me', 'access-requests', 'creator-handoffs'].includes(parts[0])) return accountHandler(request, parts);
       if (method === 'GET' && parts.join('/') === 'spec') return json({ ok: true, stage: 'public-contract', data: { ...spec,
         registration: { available: true, mode: 'invite-only-beta', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary', runtimeApproved: false } } });
       // Only explicitly reviewed arena packages are publicly readable. Uploads and pending drafts stay private.

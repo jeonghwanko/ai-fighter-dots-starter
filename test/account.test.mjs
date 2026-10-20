@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { createHandler } from '../api/handler.mjs';
+import { createCreatorLink } from '../api/creator-link.mjs';
 
 async function database() {
   const sql = new PGlite();
@@ -118,4 +119,48 @@ test('signed-in users without an invitation read their status and leave one rate
     await assert.rejects(sql.query('select af_account($1)', [guest]));
     await assert.rejects(sql.query('select af_request_access($1,$2)', [other, '']));
   } finally { await sql.close(); }
+});
+
+test('a signed-in user gets a one-use homepage token for their own account only', async () => {
+  const owner = crypto.randomUUID(), other = crypto.randomUUID(), hash = 'a'.repeat(56);
+  const emails = { [owner]: 'creator@example.test', [other]: '' };
+  const minted = [];
+  const admin = {
+    getUserById: async id => emails[id] === undefined ? { error: new Error('missing') } : { data: { user: { id, email: emails[id] || null } } },
+    generateLink: async ({ type, email }) => {
+      minted.push({ type, email });
+      const id = Object.keys(emails).find(key => emails[key] === email);
+      return { data: { user: { id }, properties: { hashed_token: hash, action_link: 'https://auth.example/verify?token=secret' } } };
+    },
+  };
+  const tokens = { 'fixture-owner-token': owner, 'fixture-other-token': other };
+  const db = { auth: { admin, getUser: async token => tokens[token] ? { data: { user: { id: tokens[token] } } } : { error: new Error('invalid') } } };
+  const handle = createHandler({ db, creatorLink: createCreatorLink({ db, now: () => Date.parse('2026-10-20T00:00:00Z') }) });
+  const post = (token, init = {}) => handle(new Request('https://test/ai-fighter/creator-handoffs',
+    { method: 'POST', ...init, headers: token ? { authorization: `Bearer ${token}` } : {} }));
+
+  assert.equal((await post()).status, 401);
+  assert.equal((await post('fixture-unknown-token')).status, 401);
+  assert.equal((await post('fixture-owner-token', { method: 'GET' })).status, 405);
+
+  // A user named in the body is ignored: the verified token alone picks the account.
+  const response = await post('fixture-owner-token', { body: JSON.stringify({ owner: other }) });
+  const body = await response.json();
+  assert.equal(response.status, 200);
+  assert.deepEqual(body, { ok: true, stage: 'creator-link', tokenHash: hash, expiresAt: '2026-10-20T00:10:00.000Z' });
+  assert.deepEqual(minted, [{ type: 'magiclink', email: 'creator@example.test' }]);
+  assert.ok(!JSON.stringify(body).includes('secret'), 'the emailed action link never leaves the server');
+
+  const noEmail = await post('fixture-other-token');
+  assert.equal(noEmail.status, 422); assert.equal((await noEmail.json()).code, 'handoff-email-required');
+
+  // A token Auth issued for a different user is refused.
+  admin.generateLink = async () => ({ data: { user: { id: other }, properties: { hashed_token: hash } } });
+  const mismatch = await post('fixture-owner-token');
+  assert.equal(mismatch.status, 503); assert.equal((await mismatch.json()).code, 'handoff-unavailable');
+
+  // Without the Auth admin wiring the route says so instead of failing open.
+  const bare = createHandler({ db });
+  assert.equal((await (await bare(new Request('https://test/ai-fighter/creator-handoffs',
+    { method: 'POST', headers: { authorization: 'Bearer fixture-owner-token' } }))).json()).code, 'handoff-unavailable');
 });

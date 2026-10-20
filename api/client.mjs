@@ -91,7 +91,5 @@ export async function createRemoteClient(configPath, { createAuthClient = create
   }
   return {
     request: async (route, options) => apiRequest(config.url, await token(), route, options),
-    /** A fresh access token for the creator homepage sign-in link. The refresh token stays in this process and its file. */
-    session: async () => { const accessToken = await token(); return { url: config.url, accessToken, expiresAt: Math.floor(accessTokenExpiry(accessToken) / 1000) }; },
   };
 }

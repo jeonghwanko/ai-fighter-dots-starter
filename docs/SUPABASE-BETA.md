@@ -241,6 +241,21 @@ Dot에서 첫 실제 등록:
 같은 호스트의 새 로컬 대화에서 도구가 보이지 않으면 앱을 다시 시작한다.
 웹 ChatGPT용 공개 HTTP MCP·OAuth 배포는 이 로컬 연결과 별도다.
 
+## 제작자 홈페이지 연결 링크
+
+`open_creator_homepage`는 `POST /creator-handoffs`로 이 계정 전용 일회용 토큰을 받아
+`https://rupin.pryzm.gg/creator.html#handoff=<tokenHash>` 링크를 만든다. 어느 기기의 브라우저에서나 열린다.
+
+- 서버는 `auth.admin.generateLink({ type: 'magiclink' })`로 토큰을 만든다. 메일은 보내지 않으며 해시만 돌려준다.
+  발급된 토큰의 사용자 ID가 요청한 사용자와 다르면 거부한다. 이메일이 없는 계정은 `handoff-email-required`(422).
+- 페이지는 [내 선수 보기]를 누를 때 브라우저에서 `POST /auth/v1/verify`로 토큰을 쓴다. 접근 토큰만 탭에 보관하고
+  갱신 토큰은 버린다. Edge Function이 대신 verify하지 않는 이유는 Auth의 IP별 검증 한도를 모든 사용자가 나눠 쓰게 되기 때문이다.
+- 한 번만 쓸 수 있고 만료는 Auth가 강제한다. **Auth의 Email OTP expiration을 600초로 둔다.**
+  `api/creator-link.mjs`의 `HANDOFF_TTL_SECONDS`(링크에 표시하는 만료 시각)와 같은 값이어야 한다. 같은 설정이 이메일 OTP 로그인에도 적용된다.
+- 링크는 해시(`#`)에 토큰을 담아 서버 로그와 링크 미리보기 요청에 실리지 않는다. 클릭 한 번을 요구해 링크 검사기가 먼저 소비하지 못하게 한다.
+- 이전 MCP가 만든 loopback 링크(`#dot=…&port=…`)는 페이지가 당분간 계속 받는다. 새 MCP는 만들지 않는다.
+- 배포 순서: Edge Function → Auth OTP 만료 600초 → 홈페이지 → 이 저장소 공개. 홈페이지가 `#handoff`를 받기 전에 새 MCP를 공개하지 않는다.
+
 ## API 계약
 
 | 메서드·경로 | 인증 | 역할 |
@@ -258,6 +273,7 @@ Dot에서 첫 실제 등록:
 | GET /fighters/:id | 소유자 | 등록 프로필·검토 상태 조회 |
 | GET /me | 사용자 JWT (초대 불필요) | 초대 여부·만료 시각·초대 요청 상태 |
 | POST /access-requests | 사용자 JWT (초대 불필요) | 베타 초대 요청. 선택 `note` 500자 이하, 사용자당 1건, 24시간 3회 |
+| POST /creator-handoffs | 사용자 JWT (초대 불필요) | 제작자 홈페이지 일회용 로그인 토큰 해시(`tokenHash`)와 만료 시각. 본문은 읽지 않는다 |
 | POST /worker/claim | 작업자 | 큐 임대·일시 다운로드 URL 발급 |
 | POST /worker/finish | 작업자 | 동일 임대·manifest 해시로 검사 확정 |
 
