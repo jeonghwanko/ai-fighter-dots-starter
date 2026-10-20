@@ -207,7 +207,8 @@ creator submission access, subject to the existing 20-active-creator beta
 capacity. The recruitment target remains 16 creators. Fighter visual/runtime
 admission is still a separate review. Decline applies the existing seven-day
 reapplication cooldown and does not revoke a separate active invitation.
-Review notes stay private; no notification email is sent automatically.
+Review notes stay private. Each new review queues one English notification email;
+older review records are not emailed retroactively.
 
 `api/admin.mjs` verifies the bearer user's identity; the database checks the
 enabled administrator membership again. Applicant emails come from Auth on
@@ -216,3 +217,42 @@ or execute the administrator RPCs. Review versions reject stale decisions,
 and identical retries reuse the original audit record. Provision additional
 administrators only through a trusted server-side operation; there is no
 public role-management endpoint.
+
+
+### Review notification email
+
+The Edge function uses Resend. Set `RESEND_API_KEY` and
+`AI_FIGHTER_MAIL_FROM` (for example, `AI Fighter <team@example.com>`) in
+Supabase Edge Function Secrets. The sender must belong to a verified domain
+in that Resend account. Keep both settings server-side. Never put a provider
+key in the site build, a committed file, or a chat message.
+
+Approval messages link to the public creator homepage and explain Google
+sign-in, agent-assisted creation, submission, and fighter review. Decline
+messages state when the seven-day reapplication window opens. Internal
+review notes and applicant free text are never included in either template.
+
+The review and its outbox row commit together. The API attempts delivery
+immediately; a private signed Cron wake retries pending mail every five
+minutes, with bounded backoff and an exclusive two-minute lease. Configure
+the `ai_fighter_mail_url` Vault value to the deployed
+`/functions/v1/ai-fighter/internal/review-emails` endpoint. The wake reuses
+the worker's existing Vault token with a separate HMAC audience. No durable
+credential enters the HTTP request queue. These hosted dispatch migrations
+require pg_net, pg_cron, and Supabase Vault.
+
+The administrator page shows configuration readiness and each review's email
+state. **Accepted by provider** means Resend accepted the send; it does not
+confirm inbox delivery. Failed sends retain the decision and can be retried
+from the page. A stable per-review idempotency key and sender prevent duplicate
+sends on repeated review clicks or timeouts. Automated retries stop before
+Resend's 24-hour idempotency window ends; an uncertain older send requires
+checking the provider before any new send. See the
+[Resend idempotency contract](https://resend.com/docs/dashboard/emails/idempotency-keys).
+
+Source owners: `api/review-email.mjs` owns immutable versioned English
+templates and delivery; `api/internal-mail.mjs` owns signed wake verification;
+the `review_email_outbox` and `mail_dispatch` migrations own the durable
+queue and scheduled retries. To revise a template used by pending deliveries,
+introduce a new version and retain the previous renderer until its queue is
+settled.
