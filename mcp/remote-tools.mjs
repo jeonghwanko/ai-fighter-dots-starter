@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { resolveManifest } from './package-access.mjs';
+import { startCreatorHandoff } from './creator-handoff.mjs';
 
 const CHANGED = 'package-changed-after-validation';
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -35,11 +36,11 @@ async function readManifest(root, manifestPath) {
   } catch { return null; }
 }
 
-export function registerRemoteTools(server, { remote, validatePackage, root, respond }) {
+export function registerRemoteTools(server, { remote, validatePackage, root, respond, creatorPage }) {
   const outputSchema = { ok: z.boolean(), stage: z.string(), submissionId: z.string().optional(), manifestSha256: z.string().optional(),
     fighterId: z.string().nullable().optional(), runtimeApproved: z.boolean().optional(), runtimeScope: z.string().nullable().optional(), pending: z.array(z.string()).optional(),
     validation: z.unknown().optional(), code: z.string().optional(), fighter: z.unknown().optional(),
-    errors: z.array(z.unknown()).optional(), errorCount: z.number().optional() };
+    errors: z.array(z.unknown()).optional(), errorCount: z.number().optional(), loginUrl: z.string().optional(), expiresAt: z.string().optional() };
   const read = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
   const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: /^[a-z0-9-]+$/.test(error.message) ? error.message : 'remote-operation-failed' }); } };
   if (validatePackage) {
@@ -72,6 +73,13 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
       return remote.request(`submissions/${created.submissionId}/submit`, { method: 'POST' });
     }));
   }
+  server.registerTool('open_creator_homepage', {
+    description: 'Make a one-use link that signs the current user into the AI Fighter creator homepage (https://rupin.pryzm.gg/creator.html) with this beta session: their registered fighters, animations, statistics and downloads. Use when the user asks to see their fighters on the homepage. Give the link to the user to open in a browser on this computer within 5 minutes; it works once. The page receives only an access token.',
+    inputSchema: {}, outputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, safe(async () => {
+    const { loginUrl, expiresAt } = await startCreatorHandoff({ page: creatorPage, loadAccess: () => remote.session() });
+    return { ok: true, stage: 'creator-link', loginUrl, expiresAt };
+  }));
   server.registerTool('get_fighter_submission', { description: 'Read the current user’s submission status. registered means server file validation and registry creation; gameplay approval is separate. Empty pending means the status is final.',
     inputSchema: { submissionId: z.string().uuid() }, outputSchema, annotations: read }, safe(({ submissionId }) => remote.request(`submissions/${submissionId}`)));
   server.registerTool('get_registered_fighter', { description: 'Read the current user’s persisted fighter ID and profile from the beta registry.',
