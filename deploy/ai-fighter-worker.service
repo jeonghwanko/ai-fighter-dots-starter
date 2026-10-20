@@ -1,0 +1,55 @@
+# 예시: 검증 작업자를 서버의 systemd 서비스로 상시 운영한다. 아래 유닛은 2026-10-20 운영 설치의 유닛과 같다.
+# 설치 순서(예시): 전용 사용자 ai-fighter-worker → 코드를 /opt/ai-fighter-worker/app 에 커밋 고정 체크아웃(root 소유)
+#   → npm ci --ignore-scripts(README 와 같은 설치) → output/ 만 서비스 사용자 소유 → /etc/ai-fighter-worker/worker.json(600)
+#   → 토큰 해시를 af_workers 에 등록 → systemctl enable --now ai-fighter-worker
+# /etc/systemd/system/ai-fighter-worker.service
+# AI Fighter 제출 검증 워커 — Supabase 큐(af_claim)를 임대해 패키지를 sharp 로 전체 디코딩·검사하고 확정한다.
+# 코드: ai-fighter-dots-starter 공개 저장소를 SHA 고정으로 체크아웃한 /opt/ai-fighter-worker/app
+# 비밀: /etc/ai-fighter-worker/worker.json (600, 이 서비스 사용자 소유) — { url, workerToken }
+# 같은 서버의 다른 서비스와 메모리를 나눠 쓰므로 상한을 건다.
+
+[Unit]
+Description=AI Fighter submission validation worker
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=300
+StartLimitBurst=5
+
+[Service]
+Type=simple
+User=ai-fighter-worker
+Group=ai-fighter-worker
+WorkingDirectory=/opt/ai-fighter-worker/app
+Environment=NODE_ENV=production
+Environment=AI_FIGHTER_WORKER_CONFIG=/etc/ai-fighter-worker/worker.json
+ExecStart=/usr/bin/node worker/run.mjs --watch
+Restart=on-failure
+RestartSec=10
+# 임대는 5분, 다운로드 4분 + 검사 20초. 멈출 때 검사 자식까지 정리할 시간.
+TimeoutStopSec=30
+KillMode=mixed
+
+# 자원 상한 — 2 vCPU / 4 GB급 공유 서버 기준. 검사 자식은 V8 힙 128 MB + sharp 네이티브 메모리.
+MemoryHigh=384M
+MemoryMax=512M
+MemorySwapMax=0
+CPUQuota=50%
+TasksMax=64
+Nice=10
+IOSchedulingClass=idle
+
+# 격리 — 쓰기는 작업 폴더 하나만.
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictSUIDSGID=true
+ReadWritePaths=/opt/ai-fighter-worker/app/output
+UMask=0077
+
+[Install]
+WantedBy=multi-user.target

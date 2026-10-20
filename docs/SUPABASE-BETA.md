@@ -42,7 +42,7 @@ sequenceDiagram
 
 - [DB 마이그레이션](../supabase/migrations/20261019090136_ai_fighter_beta_registration.sql),
   [업로드 만료 수정](../supabase/migrations/20261020120000_ai_fighter_upload_expiry.sql),
-  [안정성 수정](../supabase/migrations/20261020150000_ai_fighter_stability.sql)(둘 다 2026-10-20, 운영 미반영)
+  [안정성 수정](../supabase/migrations/20261020150000_ai_fighter_stability.sql)(둘 다 2026-10-20 운영 반영)
 - [Edge 진입점](../supabase/functions/ai-fighter/index.ts), [공유 HTTP 처리기](../api/handler.mjs)
 - [검증 작업자](../worker/run.mjs), [MCP 제출 도구](../mcp/remote-tools.mjs)
 
@@ -255,8 +255,10 @@ npm run worker:watch
 
 **검사기 버전.** 작업자는 `VALIDATOR_VERSION`을 영수증에 적고 서버는 `af_settings.validator_versions`에 있는 값만 받는다.
 새 검사기를 배포할 때는 먼저 새 버전을 목록에 추가하고, 모든 작업자를 바꾼 뒤 옛 버전을 지운다.
-결과가 즉시 나타나지 않을 수 있다. PC가 꺼지면 제출은 대기하며 자동 시작 설치는 포함하지 않는다.
-항상 켜진 기존 실행 환경이 없다면 이 구성은 24시간 즉시 등록을 보장하지 않는다.
+결과가 즉시 나타나지 않을 수 있다. PC에서 실행하면 PC가 꺼진 동안 제출은 대기한다.
+상시 운영은 [systemd 유닛 예시](../deploy/ai-fighter-worker.service)처럼 서버 서비스로 둔다.
+전용 사용자, 메모리 512 MB·CPU 50% 상한, 작업 폴더만 쓰기 가능, 비정상 종료 시 재시작이다.
+작업자를 옮길 때는 새 토큰 해시를 먼저 등록하고, 새 작업자가 큐를 정상 조회하는지 확인한 뒤 옛 작업자를 멈추고 옛 토큰을 끈다.
 작업자 토큰은 큐를 검사·확정할 권한이다. 이를 Dot에 제공하지 않는다.
 
 파일은 작업별 새 디렉터리에 다운로드한다. 해시·크기·전체 디코딩·프레임·crop을 다시 검사한다.
@@ -283,6 +285,18 @@ Storage 객체를 SQL로만 삭제하지 않는다. 등록된 제출은 선수�
 이미지 생성 도구 요금·PC 전력·인터넷은 Supabase 무료 사용량과 별개다. 유료 전환은 자동화하지 않는다.
 [유출 비밀번호 차단은 Pro 이상](https://supabase.com/docs/guides/auth/password-security)이며 이 Free 테스트에서는 켜지 않았다.
 테스트 계정은 무작위 긴 비밀번호를 사용하고 세션 발급 후 비밀번호를 보관하지 않았다.
+
+## 운영 반영 기록 (2026-10-20)
+
+- 업로드 만료 migration과 안정성 migration을 적용했다. 안정성 migration은 운영 DB에서 트랜잭션을 되돌리는 시험 적용을
+  먼저 했다. 적용 뒤 새 함수 `af_fail_duel`은 `service_role`만 실행할 수 있고 `anon`·`authenticated`는 실행할 수 없다.
+- Edge Function 9판: 이 저장소의 현재 코드와 기존 운영 엔진 번들(`standard-duel-2026-10-19-v1`)이다.
+  저장소의 빈 엔진 어댑터는 배포하지 않았다. 배포 전후 읽기 전용 확인 8개가 통과했다(규격·선수 목록·서명 다운로드의
+  해시·순위표, 인증 없는 등록 401, 가짜 작업자 토큰 403, 인증 없는 전적 401, 잘못된 경기 요청 422).
+- 검증 작업자를 PC에서 서버의 systemd 서비스로 옮겼다. 새 토큰 해시 등록 → 서비스 시작(재시작 0회, 큐 조회 200)
+  → PC 작업자 종료 → 옛 토큰 끄기 순서다. 옛 토큰을 끈 뒤 403 거부 요청은 없었고, 서버 작업자의 큐 조회는
+  2분 간격으로 계속 200이었다.
+- 아직 실제 제출을 서버 작업자가 검사한 기록은 없다. 다음 제출에서 확인한다.
 
 ## 검증 기록
 
@@ -357,7 +371,7 @@ Sparring Bot 0승 1패·Challenger Bot 1승 0패가 시험 브라우저에 저�
 공개 샘플의 관련 시험 34개와 게임의 관련 시험 37개, 타입 검사·빌드·산출물 검증이 통과했다.
 PGlite 시험은 동시 신규 요청, 결과 변경 거부, 승인 취소, 경기 한도와 anon/authenticated의 직접 쓰기 차단도 검증한다.
 게임 전체 시험·GitHub CI·게임 웹 공개 배포는 실행하지 않았다. 공개 부하·장기 운영·다양한 선수 밸런스는 미검증이다.
-## 소유 선수의 전체 전적 (2026-10-20 로컬 구현, 운영 미반영)
+## 소유 선수의 전체 전적 (2026-10-20 운영 반영)
 
 `GET /functions/v1/ai-fighter/fighters/{fighterId}/statistics`는 `Authorization: Bearer <사용자 접근 토큰>`을 받는다.
 Edge가 `auth.getClaims()`로 사용자 ID를 검증한 뒤 그 ID와 선수 ID를 service 전용 SQL에 전달한다.
@@ -384,4 +398,4 @@ PGlite에 기존 migration을 적용하고 계정당 한 명씩 23명과 완료�
 21위 선수의 4전 1승 3패, 22위 0전, 타 계정 차단, 순위 제외 후 전적 보존,
 기존 상위 20명 응답과 migration 전후 일치, 직접 테이블·RPC 접근 차단을 검사한다.
 `scripts/edge-bundle.mjs`에는 새 처리기와 기존 대결 처리기·엔진도 포함된다.
-실제 반영은 SQL migration 후 Edge Function, 마지막으로 홈페이지 순서이며 이번 작업에서는 실행하지 않는다.
+SQL migration과 Edge Function은 2026-10-20에 운영에 반영했다. 홈페이지 반영은 게임 저장소의 배포 절차를 따른다.
