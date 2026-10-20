@@ -102,7 +102,7 @@ Google 로그인은 2026-10-21 운영 서버에 반영되었습니다. 상태는
 | `submit_fighter_package` | 상대 경로, `idempotencyKey`: UUID | 인증된 업로드 후 서버 검증 대기 |
 | `get_fighter_submission` | `submissionId` | 검증·등록·반려 상태 |
 | `get_registered_fighter` | `fighterId` | 서버에 등록된 프로필 |
-| `open_creator_homepage` | 없음 | [제작자 홈페이지](https://rupin.pryzm.gg/creator.html)에 이 베타 계정으로 로그인하는 일회용 링크(10분, 어느 기기의 브라우저에서나) |
+| `open_creator_homepage` | 없음 | [제작자 홈페이지](https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html)에 이 베타 계정으로 로그인하는 일회용 링크(10분, 어느 기기의 브라우저에서나) |
 
 `AI_FIGHTER_ROOT`를 지정하지 않으면 파일 검사 도구는 노출되지 않습니다.
 클라이언트 설정이 없으면 앞의 로컬 도구 3개만 노출됩니다. 등록 도구는 사용자 세션을 사용하며 Supabase 서비스 키를 받지 않습니다.
@@ -142,6 +142,7 @@ MCP 파일 검사는 한 번에 한 개의 자식 프로세스로 실행하며 2
 - [Dot과 포함된 sprite-gen으로 내 선수 만들기](docs/DOT-CREATION.md)
 - [적대적 리뷰와 남은 출시 조건](docs/ADVERSARIAL-REVIEW.md)
 - [Supabase 무료 베타 배포·인증·작업자 운영](docs/SUPABASE-BETA.md)
+- [제작자 홈페이지 무료 호스팅·재배포](docs/CREATOR-HOSTING.md)
 - [보안 경계](SECURITY.md)
 
 규격 원천은 `contracts/ai-fighter/v1/contract-source.mjs`입니다.

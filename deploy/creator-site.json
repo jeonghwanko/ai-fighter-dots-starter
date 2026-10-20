@@ -1,0 +1,8 @@
+{
+  "siteUrl": "https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html",
+  "base": "/ai-fighter-dots-starter/",
+  "apiBase": "https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter",
+  "publishableKey": "sb_publishable_6UkV7tRAQ1P4qss5cTYSwQ_kVxSIv_V",
+  "gameUrl": "https://rupin.pryzm.gg/fighter.html",
+  "branch": "codex/creator-pages"
+}
