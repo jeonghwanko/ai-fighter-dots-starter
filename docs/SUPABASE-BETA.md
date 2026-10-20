@@ -327,3 +327,31 @@ Sparring Bot 0승 1패·Challenger Bot 1승 0패가 시험 브라우저에 저�
 공개 샘플의 관련 시험 34개와 게임의 관련 시험 37개, 타입 검사·빌드·산출물 검증이 통과했다.
 PGlite 시험은 동시 신규 요청, 결과 변경 거부, 승인 취소, 경기 한도와 anon/authenticated의 직접 쓰기 차단도 검증한다.
 게임 전체 시험·GitHub CI·게임 웹 공개 배포는 실행하지 않았다. 공개 부하·장기 운영·다양한 선수 밸런스는 미검증이다.
+## 소유 선수의 전체 전적 (2026-10-20 로컬 구현, 운영 미반영)
+
+`GET /functions/v1/ai-fighter/fighters/{fighterId}/statistics`는 `Authorization: Bearer <사용자 접근 토큰>`을 받는다.
+Edge가 `auth.getUser()`로 사용자 ID를 검증한 뒤 그 ID와 선수 ID를 service 전용 SQL에 전달한다.
+등록 초대가 종료되어도 자기 선수의 기록은 조회할 수 있다. 타 소유자와 없는 선수는 모두 404,
+비로그인·만료 토큰·익명 계정은 401이다. CORS preflight는 GET과 Authorization 헤더만 허용한다.
+
+성공 응답은 `{ ok: true, statistics: { id, appearances, won, lost, points, rank } }`이다.
+출전은 완료된 서버 경기의 승리+패배이며, 점수는 승리×3이다. 승인된 선수의 전체 순위를 계산하므로
+21위 이후도 반환한다. 승패가 같은 선수는 같은 순위를 쓴다. 승인 철회 후에도 전적을 유지하고 rank만 null로 반환한다.
+0전은 0/0/0으로 반환하며 오류나 없는 선수를 0전으로 대체하지 않는다. 조회는 경기나 호출 카운터를 쓰지 않는다.
+
+[선수별 전적 migration](../supabase/migrations/20261020090000_ai_fighter_owned_statistics.sql)의
+`af_duel_statistics()`가 전체 집계를 소유한다. 공개 랭킹은 같은 집계에서 기존 순서로 20명만 반환한다.
+새 함수도 SECURITY INVOKER, 빈 search_path, service_role 전용 EXECUTE를 사용한다.
+브라우저에 경기 원시 테이블 권한이나 서비스 키를 주지 않는다. 새 테이블·중복 전적 카운터는 없다.
+
+관련 로컬 검증:
+
+```sh
+node --test test/fighter-statistics.test.mjs test/duels.test.mjs test/api.test.mjs
+```
+
+PGlite에 기존 migration을 적용하고 계정당 한 명씩 23명과 완료·미완료 경기를 만든다.
+21위 선수의 4전 1승 3패, 22위 0전, 타 계정 차단, 순위 제외 후 전적 보존,
+기존 상위 20명 응답과 migration 전후 일치, 직접 테이블·RPC 접근 차단을 검사한다.
+`scripts/edge-bundle.mjs`에는 새 처리기와 기존 대결 처리기·엔진도 포함된다.
+실제 반영은 SQL migration 후 Edge Function, 마지막으로 홈페이지 순서이며 이번 작업에서는 실행하지 않는다.
