@@ -2,7 +2,8 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
-import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, verifiedUserId } from './http.mjs';
+import { createConnectionAccess } from './connections.mjs';
+import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256 } from './http.mjs';
 
 export { Problem, readBody, sha256 } from './http.mjs';
 export const BUCKET = 'ai-fighter-beta';
@@ -37,9 +38,10 @@ function check(error) {
   if (error.message === 'byte-budget-mismatch') throw new Problem(422, error.message);
   throw new Problem(503, 'database-unavailable');
 }
-export function createHandler({ db, simulateDuel = null, engineVersion = null }) {
+export function createHandler({ db, simulateDuel = null, engineVersion = null, issuer, resource }) {
+  const connections = createConnectionAccess({ db, issuer, resource });
   const duelHandler = createDuelHandler({db,simulateDuel,engineVersion});
-  const statisticsHandler = createFighterStatisticsHandler({ db });
+  const statisticsHandler = createFighterStatisticsHandler({ db, connections });
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
   async function present(row) {
     if (row.status !== 'registered') return view(row);
@@ -57,7 +59,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
       return item.signedUrl;
     });
   }
-  async function authenticate(request, worker) {
+  async function authenticate(request, worker, parts) {
     const token = bearerToken(request);
     if (!token) throw new Problem(401, 'authentication-required');
     if (worker) {
@@ -67,8 +69,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
       check(error); if (!data) throw new Problem(403, 'worker-required');
       return null;
     }
-    const owner = await verifiedUserId(db, request);
-    if (!owner) throw new Problem(401, 'authentication-required');
+    const { owner } = await connections.principal(request, parts);
     await rpc('af_authorize', { p_owner: owner });
     return owner;
   }
@@ -80,6 +81,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
     try {
       const segments = new URL(request.url).pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter');
       const parts = prefix >= 0 ? segments.slice(prefix + 1) : segments, method = request.method;
+      if (parts[0] === 'connections') return connections.handle(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
       if (method === 'GET' && parts.join('/') === 'spec') return json({ ok: true, stage: 'public-contract', data: { ...spec,
@@ -109,7 +111,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
           manifestText: row.manifest_text, files });
       }
       const isWorker = parts[0] === 'worker';
-      const owner = await authenticate(request, isWorker);
+      const owner = await authenticate(request, isWorker, parts);
       if (method === 'POST' && parts.join('/') === 'submissions') {
         const key = requireId(request.headers.get('idempotency-key'));
         let text;
@@ -150,9 +152,12 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null })
           return json({ ok: true, stage: 'uploaded', assetId: asset.id, bytes: bytes.length });
         }
       }
-      if (method === 'GET' && parts[0] === 'fighters' && parts.length === 2) {
-        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
-        check(error); if (!data) throw new Problem(404, 'not-found'); return json({ ok: true, stage: 'registered', fighter: data });
+      if (method === 'GET' && parts[0] === 'fighters' && [1, 2].includes(parts.length)) {
+        let query = db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at').eq('owner_id', owner);
+        if (parts.length === 2) query = query.eq('id', requireId(parts[1]));
+        const { data, error } = await query.maybeSingle();
+        check(error); if (!data && parts.length === 2) throw new Problem(404, 'not-found');
+        return json({ ok: true, stage: parts.length === 1 ? 'owned-fighter' : 'registered', fighter: data });
       }
       if (isWorker && method === 'POST') {
         let body;

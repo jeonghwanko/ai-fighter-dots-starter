@@ -1,5 +1,6 @@
-import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createClient } from '@supabase/supabase-js';
+import { readPrivateConfig, createPrivateConfig } from './private-config.mjs';
 
 export function validProjectUrl(url) {
   return typeof url === 'string' && /^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(url);
@@ -32,13 +33,22 @@ const REFRESH_MARGIN_MS = 60000, LOCK_STALE_MS = 30000, LOCK_WAIT_MS = 15000;
  * first adopts a newer session another process saved, and refreshes only under a lock file.
  */
 export async function createRemoteClient(configPath, { createAuthClient = createClient } = {}) {
-  const config = JSON.parse(await readFile(configPath, 'utf8'));
+  const config = await readPrivateConfig(configPath);
+  if (config.kind === 'agent-connection') {
+    if (!validProjectUrl(config.url) || !/^afg_[a-f0-9]{64}$/.test(config.agentToken ?? '')
+      || !/^[a-z0-9-]{1,64}$/.test(config.clientId ?? '')
+      || config.resource !== `${config.url}/functions/v1/ai-fighter`) throw new Error('invalid-client-config');
+    // No owner session or refresh token is handed to the agent. Server checks the grant on every call.
+    return { request: (route, options = {}) => apiRequest(config.url, config.agentToken, route, {
+      ...options, headers: { ...options.headers, 'x-af-client-id': config.clientId, 'x-af-resource': config.resource },
+    }) };
+  }
   if (!validProjectUrl(config.url) || !config.publishableKey || !config.accessToken || !config.refreshToken) throw new Error('invalid-client-config');
   const auth = createAuthClient(config.url, config.publishableKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
   const fresh = () => accessTokenExpiry(config.accessToken) - Date.now() > REFRESH_MARGIN_MS;
   async function adoptSaved() {
     try {
-      const saved = JSON.parse(await readFile(configPath, 'utf8'));
+      const saved = await readPrivateConfig(configPath);
       if (saved.url === config.url && typeof saved.accessToken === 'string' && typeof saved.refreshToken === 'string'
         && accessTokenExpiry(saved.accessToken) > accessTokenExpiry(config.accessToken)) {
         config.accessToken = saved.accessToken; config.refreshToken = saved.refreshToken;
@@ -64,7 +74,7 @@ export async function createRemoteClient(configPath, { createAuthClient = create
     const temporary = `${configPath}.${process.pid}.tmp`;
     try {
       await rm(temporary, { force: true });
-      await writeFile(temporary, JSON.stringify(config, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
+      await createPrivateConfig(temporary, config);
       await rename(temporary, configPath);
     } catch (error) { await rm(temporary, { force: true }); throw error; }
   }

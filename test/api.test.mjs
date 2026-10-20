@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHandler, readBody, sha256 } from '../api/handler.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
+import { authFor, claimsFor } from './support/auth.mjs';
 
 test('public spec announces beta registration while anonymous writes fail', async () => {
   const handle = createHandler({ db: {} });
@@ -21,7 +22,7 @@ test('body limit is enforced even with a missing or lying Content-Length', async
 });
 test('server validates JSON before writing a submission', async () => {
   const owner = crypto.randomUUID(), calls = [];
-  const handle = createHandler({ db: { auth: { getUser: async () => ({ data: { user: { id: owner } } }) },
+  const handle = createHandler({ db: { auth: authFor(owner),
     rpc: async (name, args) => { calls.push(name); return { data: name === 'af_authorize' ? true : { id: crypto.randomUUID(), manifest_sha: args.p_sha, status: 'uploading' } }; } } });
   const send = text => handle(new Request('https://test/ai-fighter/submissions', { method: 'POST', headers: { authorization: 'Bearer signed-user-token-for-test', 'idempotency-key': crypto.randomUUID() }, body: text }));
   assert.equal((await send('{"schemaVersion":1,"schemaVersion":2}')).status, 422);
@@ -32,7 +33,7 @@ test('server validates JSON before writing a submission', async () => {
 });
 test('text that Postgres jsonb cannot store is rejected with 422 before any write', async () => {
   const owner = crypto.randomUUID(), calls = [];
-  const handle = createHandler({ db: { auth: { getUser: async () => ({ data: { user: { id: owner } } }) },
+  const handle = createHandler({ db: { auth: authFor(owner),
     rpc: async name => { calls.push(name); return { data: true }; } } });
   for (const escape of ['\\u0000', '\\ud800']) {
     const text = JSON.stringify(example).replace(`"${example.profile.name}"`, `"Sparring${escape}Bot"`);
@@ -47,7 +48,7 @@ test('rejected and expired submissions are final: nothing is pending', async () 
   const owner = crypto.randomUUID(), id = crypto.randomUUID();
   let row;
   const query = { select: () => query, eq: () => query, maybeSingle: async () => ({ data: row }) };
-  const handle = createHandler({ db: { auth: { getUser: async () => ({ data: { user: { id: owner } } }) },
+  const handle = createHandler({ db: { auth: authFor(owner),
     rpc: async () => ({ data: true }), from: () => query } });
   const read = async () => (await handle(new Request(`https://test/ai-fighter/submissions/${id}`, { headers: { authorization: 'Bearer signed-user-token-for-test' } }))).json();
   row = { id, owner_id: owner, status: 'rejected', manifest_sha: 'a'.repeat(64), validation: { code: 'worker-attempt-limit' } };
@@ -62,7 +63,7 @@ test('rejected and expired submissions are final: nothing is pending', async () 
 test('a verifiable JWT is checked locally; the Auth server is not called', async () => {
   const owner = crypto.randomUUID(), calls = [];
   const auth = { getClaims: async token => { calls.push('getClaims'); return token === 'signed-user-token-for-test'
-      ? { data: { claims: { sub: owner, is_anonymous: false } } } : { data: null, error: new Error('invalid') }; },
+      ? { data: { claims: claimsFor(owner) } } : { data: null, error: new Error('invalid') }; },
     getUser: async () => { calls.push('getUser'); return { data: { user: { id: owner } } }; } };
   const handle = createHandler({ db: { auth, rpc: async name => { calls.push(name); return { data: name === 'af_authorize' ? true : null }; },
     from: () => { const q = { select: () => q, eq: () => q, maybeSingle: async () => ({ data: null }) }; return q; } } });

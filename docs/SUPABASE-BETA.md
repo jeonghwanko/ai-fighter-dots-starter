@@ -1,5 +1,9 @@
 # Supabase Free 베타 운영
 
+에이전트의 제한 권한 연결은 [AGENT-CONNECTIONS.md](AGENT-CONNECTIONS.md)에 구현·설치·보안 경계를 정리했다.
+Google 로그인/연결 승인 로컬 UI·CLI·API와 SQL 준비 파일이 추가되었으며 **아직 운영에 적용하지 않았다**.
+기존 사용자 세션·stdio MCP·초대·계정당 선수 1명 제한은 유지한다.
+
 v0.2는 초대된 사용자의 업로드 → 서버 파일 검사 → 선수 레지스트리 등록을 구현한다.
 2026-10-19 기존 Free 프로젝트에서 실제 MCP로 예제 선수 1명을 등록했다.
 등록은 데이터와 파일의 기술 검사 결과다. 새 등록은 runtimeApproved=false다.

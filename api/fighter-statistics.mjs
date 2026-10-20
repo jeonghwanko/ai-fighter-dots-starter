@@ -1,10 +1,10 @@
-import { UUID, bearerToken, jsonResponse, verifiedUserId } from './http.mjs';
+import { Problem, UUID, bearerToken, jsonResponse } from './http.mjs';
 
 const CORS = { methods: 'GET, OPTIONS', headers: 'Authorization, Content-Type' };
 const reply = (body, status = 200) => jsonResponse(body, status, CORS);
 
 /** Read access depends on verified ownership, not an active submission invitation or leaderboard membership. */
-export function createFighterStatisticsHandler({ db }) {
+export function createFighterStatisticsHandler({ db, connections }) {
   return async (request, parts) => {
     try {
       if (parts.length !== 3 || parts[0] !== 'fighters' || parts[2] !== 'statistics' || !UUID.test(parts[1]))
@@ -12,8 +12,7 @@ export function createFighterStatisticsHandler({ db }) {
       if (request.method === 'OPTIONS') return reply({ ok: true });
       if (request.method !== 'GET') return reply({ ok: false, code: 'method-not-allowed' }, 405);
       if (!bearerToken(request)) return reply({ ok: false, code: 'authentication-required' }, 401);
-      const owner = await verifiedUserId(db, request);
-      if (!owner) return reply({ ok: false, code: 'authentication-required' }, 401);
+      const { owner } = await connections.principal(request, parts);
       const { data: rows, error: queryError } = await db.rpc('af_owned_fighter_statistics', {
         p_owner: owner, p_fighter: parts[1],
       });
@@ -22,6 +21,6 @@ export function createFighterStatisticsHandler({ db }) {
       if (!rows.length) return reply({ ok: false, code: 'not-found' }, 404);
       if (rows.length !== 1 || rows[0].id !== parts[1].toLowerCase()) return reply({ ok: false, code: 'statistics-unavailable' }, 503);
       return reply({ ok: true, statistics: rows[0] });
-    } catch { return reply({ ok: false, code: 'statistics-unavailable' }, 503); }
+    } catch (error) { return reply({ ok: false, code: error instanceof Problem ? error.message : 'statistics-unavailable' }, error instanceof Problem ? error.status : 503); }
   };
 }

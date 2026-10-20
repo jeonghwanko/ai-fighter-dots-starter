@@ -13,6 +13,9 @@
     "url": "https://github.com/jeonghwanko/ai-fighter-dots-starter.git"
   },
   "scripts": {
+    "connect": "node scripts/agent-connect.mjs",
+    "connect:ui": "node scripts/connection-ui.mjs",
+    "test:connections": "node --test test/connections.test.mjs test/connection-client.test.mjs test/connection-security.test.mjs",
     "start": "node mcp/stdio.mjs",
     "sprite:setup": "node scripts/sprite-gen.mjs setup",
     "sprite:status": "node scripts/sprite-gen.mjs status",

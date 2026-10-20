@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="ko">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width">
+<title>AI Fighter · 에이전트 연결</title>
+<link rel="stylesheet" href="/style.css">
+<main>
+  <h1>AI Fighter 에이전트 연결</h1>
+  <p>Google로 가입·로그인한 후 직접 연결을 승인하세요. 에이전트에 Google 비밀번호나 사용자 세션을 보내지 않습니다.</p>
+  <p id="account">로그인 확인 중…</p>
+  <button id="login">Google로 가입 / 로그인</button>
+  <button id="logout">로그아웃</button>
+  <label>에이전트가 표시한 연결 코드 <input id="code" maxlength="32" autocomplete="off" spellcheck="false"></label>
+  <button id="inspect">요청 확인</button>
+  <section id="consent" hidden>
+    <h2>요청 정보</h2>
+    <pre id="details"></pre>
+    <p>이름은 등록된 공개 클라이언트의 이름이며 실행 프로그램의 신원 보증은 아닙니다.
+      직접 시작한 요청인지 코드와 에이전트 ID를 대조하세요. 모르는 사람이 보낸 코드는 거절하세요.</p>
+    <label><input id="read" type="checkbox"> 내 선수·제출·전적 조회</label>
+    <label><input id="submit" type="checkbox"> 선수 패키지 제출 (기존 선수 교체 불가)</label>
+    <label>유효 시간 <select id="seconds"><option value="900">15분</option><option value="3600">1시간</option></select></label>
+    <button id="approve">선택한 권한 승인</button>
+    <button id="deny">거절</button>
+    <button id="cancel">화면 취소</button>
+  </section>
+  <h2>내 연결</h2>
+  <button id="refresh">목록 새로고침</button>
+  <div id="connections"></div>
+  <p id="message" role="status"></p>
+</main>
+<script src="/supabase.js"></script>
+<script type="module" src="/app.mjs"></script>
+</html>

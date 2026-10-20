@@ -18,16 +18,19 @@ export const bearerToken = request => request.headers.get('authorization')?.matc
  * to the Auth server for symmetric keys. It does not see a sign-out before expiry; revoking the
  * af_creators invitation stops registration at once.
  */
-export async function verifiedUserId(db, request) {
+export async function verifiedUserId(db, request, issuer) {
   const token = bearerToken(request);
-  if (!token) return null;
-  if (typeof db.auth.getClaims === 'function') {
-    const { data, error } = await db.auth.getClaims(token);
-    const claims = data?.claims;
-    return !error && claims && claims.is_anonymous !== true && UUID.test(claims.sub ?? '') ? claims.sub : null;
-  }
-  const { data, error } = await db.auth.getUser(token);
-  return !error && data?.user && !data.user.is_anonymous && UUID.test(data.user.id ?? '') ? data.user.id : null;
+  if (!token || !db.auth?.getClaims) return null;
+  // supabase-js verifies the signature/expiry (and uses Auth for symmetric signing keys).
+  // Only first-party sessions may act as an owner. Native OAuth tokens must never fall
+  // through to the old owner-only policy, even with a valid signature and matching sub.
+  const { data, error } = await db.auth.getClaims(token);
+  const c = data?.claims;
+  return !error && c && c.is_anonymous !== true && UUID.test(c.sub ?? '')
+    && c.role === 'authenticated' && c.aud === 'authenticated' && c.client_id == null
+    && Number.isFinite(c.exp) && c.exp * 1000 > Date.now()
+    && typeof c.iss === 'string' && (!issuer || c.iss === issuer)
+    ? c.sub : null;
 }
 
 export class Problem extends Error { constructor(status, code, errors) { super(code); this.status = status; this.errors = errors; } }

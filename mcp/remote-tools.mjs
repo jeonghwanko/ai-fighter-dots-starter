@@ -73,7 +73,8 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
       return remote.request(`submissions/${created.submissionId}/submit`, { method: 'POST' });
     }));
   }
-  server.registerTool('open_creator_homepage', {
+  // Limited agent grants have no owner session and must not mint homepage sign-in links.
+  if (typeof remote.session === 'function') server.registerTool('open_creator_homepage', {
     description: 'Make a one-use link that signs the current user into the AI Fighter creator homepage (https://rupin.pryzm.gg/creator.html) with this beta session: their registered fighters, animations, statistics and downloads. Use when the user asks to see their fighters on the homepage. Give the link to the user to open in a browser on this computer within 5 minutes; it works once. The page receives only an access token.',
     inputSchema: {}, outputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, safe(async () => {
@@ -84,4 +85,6 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
     inputSchema: { submissionId: z.string().uuid() }, outputSchema, annotations: read }, safe(({ submissionId }) => remote.request(`submissions/${submissionId}`)));
   server.registerTool('get_registered_fighter', { description: 'Read the current user’s persisted fighter ID and profile from the beta registry.',
     inputSchema: { fighterId: z.string().uuid() }, outputSchema, annotations: read }, safe(({ fighterId }) => remote.request(`fighters/${fighterId}`)));
+  server.registerTool('get_my_fighter', { description: 'Find the connected owner’s existing fighter, or null when none exists. Ownership comes from the verified session or approved connection. Never replace an existing fighter.',
+    inputSchema: {}, outputSchema, annotations: read }, safe(() => remote.request('fighters')));
 }

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { createHandler } from '../api/handler.mjs';
+import { authFor, claimsFor } from './support/auth.mjs';
 
 test('owned statistics use all completed matches beyond top 20, preserve public ranking and enforce access', async () => {
   const sql = new PGlite();
@@ -47,9 +48,9 @@ test('owned statistics use all completed matches beyond top 20, preserve public 
     assert.deepEqual(await rankings(), before);
     await sql.exec('set role service_role');
     const calls = [];
-    const db = { auth: { getUser: async token => token === 'fixture-owner-token' ? { data: { user: { id: owner } } }
-      : token === 'fixture-zero-owner-token' ? { data: { user: { id: owners[21] } } }
-      : token === 'fixture-anon-token' ? { data: { user: { id: owner, is_anonymous: true } } } : { error: new Error('invalid') } },
+    const db = { auth: { getClaims: async token => token === 'fixture-owner-token' ? { data: { claims: claimsFor(owner) } }
+      : token === 'fixture-zero-owner-token' ? { data: { claims: claimsFor(owners[21]) } }
+      : token === 'fixture-anon-token' ? { data: { claims: claimsFor(owner, { is_anonymous: true }) } } : { error: new Error('invalid') } },
       rpc: async (name, args) => {
         calls.push({ name, args }); assert.equal(name, 'af_owned_fighter_statistics');
         return { data: (await sql.query('select to_jsonb(r) as record from af_owned_fighter_statistics($1,$2) r', [args.p_owner, args.p_fighter])).rows.map(row => row.record) };
@@ -92,7 +93,7 @@ test('owned statistics use all completed matches beyond top 20, preserve public 
 test('statistics failure never becomes a zero record, and errors retain CORS without raw database messages', async () => {
   const owner = crypto.randomUUID(), fighter = crypto.randomUUID();
   for (const [error, status, code] of [[{ code: 'PGRST202', message: 'private SQL' }, 503, 'statistics-not-ready'], [{ message: 'private SQL' }, 503, 'statistics-unavailable']]) {
-    const handle = createHandler({ db: { auth: { getUser: async () => ({ data: { user: { id: owner } } }) }, rpc: async () => ({ error }) } });
+    const handle = createHandler({ db: { auth: authFor(owner), rpc: async () => ({ error }) } });
     const response = await handle(new Request(`https://test/ai-fighter/fighters/${fighter}/statistics`, { headers: { authorization: 'Bearer fixture-owner-token' } }));
     assert.equal(response.status, status); assert.deepEqual(await response.json(), { ok: false, code });
     assert.equal(response.headers.get('access-control-allow-origin'), '*');
