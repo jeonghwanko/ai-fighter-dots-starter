@@ -6,6 +6,10 @@ Dot이 이 저장소에 포함된 **sprite-gen**으로 사용자의 새 선수 �
 
 ## 0. 대화하며 한 단계씩 만들기
 
+먼저 [제작 UX 규격](CREATION-UX.md)으로 실제 제작 요청과 과정 설계·평가 요청을 구분한다.
+후자에는 생성 도구를 실행하지 않는다. 텍스트·참조 이미지·둘의 조합을 받고, 이미지의 역할과
+결과에 영향을 주는 충돌만 확인한다. 테스트 예시를 실제 사용자 선택으로 기록하지 않는다.
+
 **기본은 외형 → 대기·이동 → 공격 → 방어·피격 → 최종 확인의 다섯 묶음이다.**
 이 흐름은 로컬 도구를 사용할 수 있는 Dot·Codex·Claude에서 같은 제작 원칙으로 따른다.
 묶음은 사용자가 하나의 감각을 함께 판단할 수 있는 범위로 나눈다. 묶음 안의 생성·검수는 이어서 처리하고,
@@ -113,9 +117,19 @@ Python 탐지가 필요한 호스트는 `AI_FIGHTER_BOOTSTRAP_PYTHON`에 Python 
    질문이 남으면 종료 코드 2로 끝난다. 실패가 아니라 `questions`를 처리하라는 뜻이다.
    사용자가 이미 밝힌 원화 제공자·동작 방식·구독 접근 가능 여부는 다시 묻지 않는다.
    다른 사용자의 확인이나 이 예제의 GPT 선택을 현재 사용자의 계정 확인으로 취급하지 않는다.
-4. 사용자가 GPT 원화·GPT 동작과 자신의 구독 사용 가능 여부를 확인한 경우:
+4. 원화·동작 방식을 따로 설문하지 않고 본인 계정에서 현재 사용할 수 있는 구독을 한 번에 확인한다.
+   권장 순서는 GPT 원화 + Grok 동작, Grok만 가능하면 둘 다 Grok, GPT만 가능하면 둘 다 GPT다.
+   사용자가 명시한 방식이 우선하며, 이 순서는 실행 중 자동 전환 규칙이 아니다.
+   이미 전달받은 선택·접근 확인은 다시 묻지 않는다. 다음 명령은 해당 사용자가 실제로 확인한 경우에만 쓴다.
 
 ```sh
+# GPT와 Grok 모두 사용 가능: 기본 제안
+npm run sprite -- workflow --kind sprite --image-provider codex --motion-method grok-video --confirmed-access codex --confirmed-access grok
+
+# Grok만 사용 가능
+npm run sprite -- workflow --kind sprite --image-provider grok --motion-method grok-video --confirmed-access grok
+
+# GPT만 사용 가능 또는 사용자가 원화·동작 모두 GPT를 지정
 npm run sprite -- workflow --kind sprite --image-provider codex --motion-method gpt-rows --confirmed-access codex
 ```
 
@@ -124,6 +138,10 @@ GPT를 사용할 수 없을 경우의 선택도 남아 있을 수 있다. Dot이
 `status: ready` 이후에 실제 생성 명령을 실행한다.
 생성 계정은 각자 로그인한다. 소스가 포함됐다는 사실만으로 생성 구독·한도가 제공되는 것은 아니다.
 API 과금 제공자로 임의 전환하지 않는다. 상위 도구의 종료 코드 75는 사용자 선택이 필요한 상태이므로 그대로 처리한다.
+
+외형에 필요한 제공자는 준비됐지만 이후 동작 제공자의 로그인만 남았다면 그 상태를 알리고,
+현재 원화의 `workflow --kind image`를 별도로 확인할 수 있다. 원화 단계가 `ready`일 때만 외형을 만들고,
+동작을 시작하기 전 선택된 `workflow --kind sprite`의 접근 상태를 확인한다. 사용자 피드백 경계는 유지한다.
 
 ## 3. 원화 → 애니메이션 → AI Fighter 패키지
 

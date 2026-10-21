@@ -3,6 +3,15 @@
 This repository lets each user create their own fighter through Dot. Read
 `docs/DOT-CREATION.md`, `docs/AUTHORING.md`, and the live AI Fighter spec before creating a package.
 
+- Read `docs/CREATION-UX.md` for intent, text/image intake, account choices and the process evaluation rubric.
+  Process design/review requests and forwarded example characters are not authorization to generate a character.
+  Follow the latest direct user intent; stop dependent generation when that intent changes.
+- Accept text, reference images, or both. Ask only about missing reference roles or material conflicts.
+  Distinguish user requirements from proposed details; do not make users complete a long character form.
+- Default recommendation: GPT base + Grok video when both are available, all Grok when only Grok is available,
+  all GPT when only GPT is available. Explicit user choices override this product preference. Confirm current
+  access in one understandable question; this recommendation never authorizes an automatic runtime provider switch.
+
 - Creation is conversational in meaningful review groups: appearance (concept/idle), locomotion
   (fightIdle/walk/run), attacks (combo/slam/dash), defense and reactions (block/hit/groggy/fall), then final review.
   Complete the agreed group autonomously, show its actual previews together, and wait for feedback at the
