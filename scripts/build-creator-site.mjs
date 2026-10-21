@@ -24,9 +24,10 @@ await readFile(join(source, 'creator.html'));
 await mkdir(output, { recursive: true });
 if ((await readdir(output)).length) throw new Error('Output directory must be empty');
 const { build } = await import(pathToFileURL(join(source, 'node_modules/vite/dist/node/index.js')).href);
+const { creationContextPlugin } = await import(pathToFileURL(join(source, 'tools/ai-fighter/creation-context-plugin.mjs')).href);
 await build({
   configFile: false, root: source, envDir: false, base: config.base,
-  plugins: [{
+  plugins: [creationContextPlugin(), {
     name: 'standalone-creator-origin',
     transform(code, id) {
       if (!id.replaceAll('\\', '/').endsWith('/src/platform/fighterCreator.ts')) return;

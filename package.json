@@ -32,6 +32,7 @@
     "spec:build": "node tools/ai-fighter/build-contract.mjs",
     "contract:vendored": "node tools/ai-fighter/vendored-contract.mjs",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
+    "creation:context": "node scripts/creation-context.mjs",
     "worker:once": "node worker/run.mjs",
     "worker:watch": "node worker/run.mjs --watch",
     "test:live": "node scripts/live-registration-test.mjs"

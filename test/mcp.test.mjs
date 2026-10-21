@@ -25,7 +25,7 @@ test('real stdio initialize, tools/list and tools/call cover authoring end to en
   const client = await connect(true);
   try {
     const catalog = await client.listTools();
-    assert.deepEqual(catalog.tools.map(t => t.name).sort(), ['get_fighter_spec', 'validate_fighter_manifest', 'validate_fighter_package']);
+    assert.deepEqual(catalog.tools.map(t => t.name).sort(), ['get_fighter_spec', 'review_creation_progress', 'validate_fighter_manifest', 'validate_fighter_package']);
     assert.ok(catalog.tools.every(t => t.annotations.readOnlyHint && t.outputSchema));
     for (const section of ['overview', 'creation', 'schema', 'example', 'guide']) {
       const result = await client.callTool({ name: 'get_fighter_spec', arguments: { section } });
@@ -60,7 +60,7 @@ test('real stdio initialize, tools/list and tools/call cover authoring end to en
 });
 test('no configured root means no filesystem tool', async () => {
   const client = await connect(false);
-  try { assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), ['get_fighter_spec', 'validate_fighter_manifest']); }
+  try { assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), ['get_fighter_spec', 'review_creation_progress', 'validate_fighter_manifest']); }
   finally { await client.close(); }
 });
 test('local paths reject traversal, Windows devices, URLs and absolute paths', async () => {

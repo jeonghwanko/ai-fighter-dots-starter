@@ -7,6 +7,7 @@ import example from '../contracts/ai-fighter/v1/example.fighter.json' with { typ
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { makePackageValidator } from './package-access.mjs';
 import { registerRemoteTools } from './remote-tools.mjs';
+import { fetchCreationContext, reviewCreationProgress } from './creation-context.mjs';
 import { spriteStatus } from '../scripts/sprite-gen.mjs';
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
@@ -29,9 +30,10 @@ function respond(result) {
     ...(result.errors.length > 50 ? { errorCount: result.errors.length } : {}) } : result;
   return { isError: !bounded.ok, structuredContent: bounded, content: [{ type: 'text', text: JSON.stringify(bounded) }] };
 }
-export function createServer({ root, remote, creatorPage } = {}) {
+export function createServer({ root, remote, creatorPage, contextRequest } = {}) {
   const server = new McpServer({ name: 'ai-fighter-authoring', version: '0.2.0' }, {
     instructions: [
+      'Read get_fighter_spec context at entry and each group. The game owns current motions, controls and timing. Preserve context revision and item/version selections; review_creation_progress checks the group boundary. A link starts intake directly; detail choices never approve the whole appearance.',
       'Read get_fighter_spec overview and creation first, including its interactionGuide. Process evaluation and forwarded test examples do not authorize character generation.',
       'Create in review groups: appearance; locomotion/stance; attacks; defense/reactions; final review. Finish each agreed group autonomously and show its actual previews together. Do not ask permission per motion.',
       'Interpret the full feedback and prior selections by motion and version. A revision request is not acceptance. Praise of one motion accepts only that version; if all other current versions were already selected and required checks pass, advance without asking again. Otherwise wait only for missing feedback.',
@@ -46,10 +48,15 @@ export function createServer({ root, remote, creatorPage } = {}) {
     ].join(' '),
   });
   server.registerTool('get_fighter_spec', {
-    description: 'Read overview first, then creation for grouped creation, its interactionGuide for intent and feedback rules, and bundled sprite-gen setup. Review appearance, locomotion/stance, attacks, defense/reactions, then final results. Work autonomously within each group and get feedback between groups, not per motion. Read guide, schema and example for the package contract. The full schema and example are large; pass motion to read one clip. Example art is for format tests only.',
-    inputSchema: { section: z.enum(['overview', 'creation', 'guide', 'schema', 'example']).default('overview'),
+    description: 'Read context first for game-owned current motions, frames, controls, timing and group gates; refresh at each new group and preserve its revision. Optional group narrows context motions. Read overview and creation for the package workflow and sprite-gen setup. Read guide, schema and example for the package contract; motion narrows schema/example. Example art is a format fixture.',
+    inputSchema: { section: z.enum(['overview', 'creation', 'guide', 'schema', 'example', 'context']).default('overview'),
+      group: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'final']).optional(),
       motion: z.enum(MOTIONS).optional() }, outputSchema, annotations,
-  }, async ({ section, motion }) => {
+  }, async ({ section, motion, group }) => {
+    if (section === 'context') {
+      try { return respond({ ok: true, stage: 'game-creation-context', data: await fetchCreationContext({ request: contextRequest, group }) }); }
+      catch { return respond({ ok: false, stage: 'game-creation-context', code: 'creation-context-unavailable', pending: ['fetch-current-game-context'] }); }
+    }
     if (motion && section === 'schema')
       return respond({ ok: true, stage: 'public-contract', data: { motion, clip: schema.properties.clips.properties[motion], definitions: schema.definitions } });
     if (motion && section === 'example') {
@@ -70,6 +77,16 @@ export function createServer({ root, remote, creatorPage } = {}) {
     const data = section === 'schema' ? schema : section === 'example' ? example : section === 'guide'
       ? await readFile(new URL('../docs/AUTHORING.md', import.meta.url), 'utf8') : spec;
     return respond({ ok: true, stage: 'public-contract', data });
+  });
+  server.registerTool('review_creation_progress', {
+    description: 'Check the current group against the latest game context. Supply only selections actually stated in this conversation, by item/version. Hypothetical reviews work only in dialogue-only mode. Never grants registration permission.',
+    inputSchema: { stateJson: z.string().max(32768) }, outputSchema, annotations,
+  }, async ({ stateJson }) => {
+    try {
+      const context = await fetchCreationContext({ request: contextRequest });
+      const decision = reviewCreationProgress(context, JSON.parse(stateJson));
+      return respond({ ok: true, stage: 'group-review', data: decision });
+    } catch { return respond({ ok: false, stage: 'group-review', code: 'creation-context-or-state-invalid' }); }
   });
   server.registerTool('validate_fighter_manifest', {
     description: 'Validate raw fighter.json text. Reject duplicates, unknown fields, invalid references and over-budget data. Does not read files or grant registration.',
