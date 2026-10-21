@@ -4,7 +4,7 @@ import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 import { createHandler } from '../api/handler.mjs';
 
-test('admin authentication, private listing, atomic decisions, replay, stale reviews and capacity', async () => {
+test('admin-only post-publication moderation, stale actions, audit, and retired invitations', async () => {
   const sql = new PGlite();
   try {
     await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
@@ -33,6 +33,7 @@ test('admin authentication, private listing, atomic decisions, replay, stale rev
     const methods = {
       af_admin_account: ['p_actor'], af_admin_requests: ['p_actor','p_status','p_search','p_page'],
       af_admin_review: ['p_actor','p_owner','p_version','p_decision','p_reason'],
+      af_admin_fighters:['p_actor','p_status','p_search','p_page'],af_moderate_fighter:['p_actor','p_fighter','p_version','p_action','p_reason'],
     };
     const tokens = { 'fixture-admin-token': admin, 'fixture-person-token': first };
     const handle = createHandler({ db: {
@@ -59,34 +60,30 @@ test('admin authentication, private listing, atomic decisions, replay, stale rev
     assert.equal((await (await call('access-requests?search=person2')).json()).total,1);
     assert.equal((await call('access-requests?status=garbage')).status,400);
     assert.equal((await call('access-requests?page=-1')).status,400);
-    const application = list.applications.find(row=>row.ownerId===first);
-    const body = {decision:'approved',version:application.updatedAt,reason:'Originality reviewed'};
-    const review = () => call(`access-requests/${first}/review`,undefined,body);
-    const reviewed = await review(); assert.equal(reviewed.status,200, JSON.stringify({body, response:await reviewed.json()}));
-    assert.equal((await (await review()).json()).review.replayed,true);
-    assert.equal((await sql.query('select count(*)::int as n from af_access_reviews')).rows[0].n,1);
-    const account = (await sql.query('select af_account($1) as a',[first])).rows[0].a;
-    assert.equal(account.invited,true); assert.equal(account.request.status,'approved');
-    assert.ok(Date.parse(account.expiresAt)>Date.now()+29*86400000);
-    assert.equal((await call(`access-requests/${first}/review`,undefined,{...body,decision:'declined'})).status,409);
-    assert.equal((await call(`access-requests/${second}/review`,undefined,{decision:'approved',version:application.updatedAt,actor:admin})).status,400);
-    const rejection = list.applications.find(row=>row.ownerId===second);
-    assert.equal((await call(`access-requests/${second}/review`,undefined,{decision:'declined',version:rejection.updatedAt,reason:'Needs a fighter concept'})).status,200);
-    assert.equal((await sql.query('select af_account($1) as a',[second])).rows[0].a.invited,false);
-    await assert.rejects(sql.query('select af_request_access($1,$2)',[second,'retry']),/request-declined/);
-    const stale = list.applications.find(row=>row.ownerId===third);
-    await sql.query("update af_access_requests set updated_at=updated_at+interval '1 second' where owner_id=$1",[third]);
-    assert.equal((await call(`access-requests/${third}/review`,undefined,{decision:'approved',version:stale.updatedAt})).status,409);
-    await sql.exec('reset role');
-    for (let i=0;i<19;i++) { const id=crypto.randomUUID(); await sql.query('insert into auth.users(id) values($1)',[id]); await sql.query('insert into af_creators(owner_id) values($1)',[id]); }
-    await sql.exec('set role service_role');
-    const latest = (await (await call('access-requests')).json()).applications.find(row=>row.ownerId===third);
-    const capped = await call(`access-requests/${third}/review`,undefined,{decision:'approved',version:latest.updatedAt});
-    assert.equal(capped.status,409); assert.equal((await capped.json()).code,'beta-capacity');
-    assert.equal((await sql.query('select af_account($1) as a',[third])).rows[0].a.request.status,'pending');
-    assert.equal((await sql.query('select count(*)::int as n from af_access_reviews')).rows[0].n,2);
-    await sql.query('update af_admins set enabled=false where owner_id=$1',[admin]);
-    assert.equal((await call('access-requests')).status,403);
-    assert.equal(calls.find(c=>c.name==='af_admin_account').args.p_actor,first);
+    assert.equal((await call('fighters','fixture-person-token')).status,403);
+    assert.equal((await call('fighters?status=pending')).status,400);
+    assert.equal((await call('fighters?page=-1')).status,400);
+    const old=list.applications[0];
+    assert.equal((await call('access-requests/'+old.ownerId+'/review',undefined,{decision:'approved',version:old.updatedAt,reason:''})).status,410);
+    const sub=crypto.randomUUID(),fighter=crypto.randomUUID(),hash='a'.repeat(64);
+    await sql.query('select af_authorize($1)',[first]);
+    await sql.query("insert into af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status,validation) values($1,$2,$3,'{}','{}',$4,1,'registered',$5)",[sub,first,crypto.randomUUID(),hash,{stage:'bytes-hashes-and-full-decode'}]);
+    await sql.query("insert into af_fighters(id,submission_id,owner_id,manifest_sha,profile,review_state,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha,review_evidence) values($1,$2,$3,$4,$5,'approved',true,'arena-player-v1',$4,true,$4,$6)",[fighter,sub,first,hash,{name:'Fixture fighter',description:'Unit test fixture'},{authorization:'test',validation:'test',duelValidation:'test'}]);
+    const fighters=await(await call('fighters')).json();assert.equal(fighters.total,1);assert.equal(fighters.fighters[0].state,'active');
+    const route='fighters/'+fighter+'/moderation',remove={action:'remove',version:0,reason:'Test rule'};
+    assert.equal((await call(route,'fixture-person-token',remove)).status,403);
+    assert.equal((await call(route,undefined,{...remove,actor:admin})).status,400);
+    assert.equal((await call(route,undefined,{...remove,reason:' '})).status,400);
+    assert.equal((await call(route,undefined,remove)).status,200);
+    let row=(await sql.query('select * from af_fighters where id=$1',[fighter])).rows[0];
+    assert.equal(row.runtime_approved,false);assert.equal(row.duel_approved,false);assert.equal(row.review_state,'rejected');
+    assert.equal((await call(route,undefined,remove)).status,409);
+    assert.equal((await(await call('fighters')).json()).total,0);assert.equal((await(await call('fighters?status=removed')).json()).total,1);
+    assert.equal((await call(route,undefined,{action:'restore',version:1,reason:'Test resolved'})).status,200);
+    row=(await sql.query('select * from af_fighters where id=$1',[fighter])).rows[0];assert.equal(row.runtime_approved,true);assert.equal(row.duel_approved,true);
+    assert.equal((await sql.query('select count(*)::int as n from af_moderation_events')).rows[0].n,2);
+    await sql.exec('reset role; set role authenticated');
+    await assert.rejects(sql.query('select * from af_moderation_events'),/permission denied/);
+    await assert.rejects(sql.query('select af_moderate_fighter($1,$2,2,$3,$4)',[admin,fighter,'remove','forged']),/permission denied/);
   } finally { await sql.close(); }
 });

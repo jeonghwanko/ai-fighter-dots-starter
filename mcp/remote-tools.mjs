@@ -45,7 +45,7 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
   const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: /^[a-z0-9-]+$/.test(error.message) ? error.message : 'remote-operation-failed' }); } };
   if (validatePackage) {
     server.registerTool('submit_fighter_package', {
-      description: 'Upload the checked local fighter package to the configured Supabase beta and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. This does not approve the fighter for gameplay.',
+      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically.',
       inputSchema: { manifestPath: z.string().min(1).max(512), idempotencyKey: z.string().uuid() }, outputSchema,
       annotations: { ...read, readOnlyHint: false },
     }, safe(async ({ manifestPath, idempotencyKey }) => {
@@ -74,14 +74,14 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
     }));
   }
   server.registerTool('open_creator_homepage', {
-    description: 'Make a one-use link that signs the current user into the AI Fighter creator homepage (https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html) with this beta account: their registered fighters, animations, statistics and downloads. Use when the user asks to see their fighters on the homepage. Give the link to the user as a clickable link; it opens in any browser on any device, works once and expires in 10 minutes. Do not open it yourself: opening it uses it up.',
+    description: 'Make a one-use link that signs the current user into the AI Fighter creator homepage (https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html) with this account: their registered fighters, animations, statistics and downloads. Use when the user asks to see their fighters on the homepage. Give the link to the user as a clickable link; it opens in any browser on any device, works once and expires in 10 minutes. Do not open it yourself: opening it uses it up.',
     inputSchema: {}, outputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, safe(async () => {
     const { loginUrl, expiresAt } = await creatorLink({ page: creatorPage, request: remote.request });
     return { ok: true, stage: 'creator-link', loginUrl, expiresAt };
   }));
-  server.registerTool('get_fighter_submission', { description: 'Read the current user’s submission status. registered means server file validation and registry creation; gameplay approval is separate. Empty pending means the status is final.',
+  server.registerTool('get_fighter_submission', { description: 'Read the current user’s submission status. registered means server file validation and registry creation; validated registrations are available automatically, unless removed afterward. Empty pending means the status is final.',
     inputSchema: { submissionId: z.string().uuid() }, outputSchema, annotations: read }, safe(({ submissionId }) => remote.request(`submissions/${submissionId}`)));
-  server.registerTool('get_registered_fighter', { description: 'Read the current user’s persisted fighter ID and profile from the beta registry.',
+  server.registerTool('get_registered_fighter', { description: 'Read the current user’s persisted fighter ID and profile from the registry.',
     inputSchema: { fighterId: z.string().uuid() }, outputSchema, annotations: read }, safe(({ fighterId }) => remote.request(`fighters/${fighterId}`)));
 }

@@ -16,7 +16,7 @@ export const bearerToken = request => request.headers.get('authorization')?.matc
  * The verified, non-anonymous user ID for the request, or null.
  * getClaims verifies an asymmetric JWT locally with the cached JWKS (no Auth round trip) and falls back
  * to the Auth server for symmetric keys. It does not see a sign-out before expiry; revoking the
- * af_creators invitation stops registration at once.
+ * af_creators account stops registration at once.
  */
 export async function verifiedUserId(db, request) {
   const token = bearerToken(request);

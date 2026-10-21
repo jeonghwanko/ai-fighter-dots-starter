@@ -15,9 +15,10 @@ This repository lets each user create their own fighter through Dot. Read
   (see `docs/DOT-CREATION.md`). It measures scale, frames, origins, contacts and hashes from the pixels.
   Do not hand-assemble sheets or type those values. The plan holds only contact steps and landmarks.
 - Never invent hashes, origins, contact timing, successful generation, or registration results.
-- Creation is local. Current server registration is invitation-only and needs the user's beta session.
+- Creation is local. Any signed-in user may upload without an invitation or manual approval.
   Submit only within the user's request, reuse the same idempotency key for retries, and distinguish
-  server registration from gameplay approval. Never overwrite a registered immutable package.
+  validation failures from post-publication moderation. Validated registrations become usable automatically.
+  Never overwrite a registered immutable package.
 - Preserve unrelated working-tree changes. Run only relevant tests. Do not run CI unless explicitly requested.
 
 The sprite-gen gitlink pins the upstream revision. Keep its Apache-2.0 LICENSE and NOTICE.

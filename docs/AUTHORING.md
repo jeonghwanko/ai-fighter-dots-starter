@@ -10,8 +10,8 @@ Dot은 먼저 `get_fighter_spec`의 `creation`과 [사용자별 제작 흐름](D
 이 저장소의 `vendor/sprite-gen`을 설치하고 사용자 본인의 생성 계정으로 새 원화·동작을 만든다.
 도형 테스트 샘플은 생성 결과로 납품하지 않는다.
 
-연결된 베타 서버의 `get_fighter_spec` 응답에서 `registration.available`을 확인한다.
-오프라인 계약은 `false`, 베타 연결 시에는 `true`다. 로컬 검사 성공과 서버 등록, 경기 출전 승인은 구분한다.
+연결된 서버의 `get_fighter_spec` 응답에서 `registration.available`을 확인한다.
+오프라인 계약은 `false`, 서버 연결 시에는 `true`다. Google 로그인 후 초대 없이 제출하며 서버 파일 검사 후 자동으로 이용한다. [현재 정책](OPEN-REGISTRATION.md)을 따른다.
 
 ## 제작 흐름
 
@@ -24,10 +24,10 @@ Dot은 먼저 `get_fighter_spec`의 `creation`과 [사용자별 제작 흐름](D
 6. 최종 파일에서 실제 바이트 크기, 이미지 크기, SHA-256을 계산한다. 수치를 추측하지 않는다.
 7. `validate_fighter_manifest`에 원문 JSON을 넣고 오류를 수정한다.
 8. `validate_fighter_package`에 작업 폴더 아래 상대 경로를 넣어 실제 파일까지 검사한다.
-9. 사용자가 등록을 요청했고 베타가 연결되어 있으면 `submit_fighter_package`로 같은 패키지를 제출한다.
+9. 사용자가 등록을 요청했고 본인 계정이 연결되어 있으면 `submit_fighter_package`로 같은 패키지를 제출한다.
    UUID 형식의 `idempotencyKey`를 저장하고 재시도에도 같은 값을 사용한다. 파일을 바꿨으면 새 초안이다.
 10. `get_fighter_submission`으로 결과를 조회한다. `registered`와 `fighterId`를 받은 뒤 등록 완료로 안내한다.
-    `runtimeApproved: false`는 경기 출전 승인이 남았다는 뜻이다. 작업자가 꺼져 있으면 검증 대기로 남는다.
+    `runtimeApproved: true`이면 이용 가능하다. 등록 후 false라면 사후 이용 제한 여부를 확인한다. 작업자가 꺼져 있으면 자동 검증 대기로 남는다.
     `pending`이 빈 배열이면 최종 상태다. 더 조회하지 않는다.
     `rejected`이면 `validation`의 오류를 고친다. 고친 패키지는 새 초안이므로 새 키로 제출한다.
     `code: "upload-expired"`는 24시간 안에 업로드를 끝내지 못한 제출이다. 새 키로 다시 제출한다.

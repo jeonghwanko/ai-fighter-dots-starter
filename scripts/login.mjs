@@ -137,11 +137,11 @@ export async function login({ argv = process.argv.slice(2), log = console.error,
   log(`세션 파일: ${sessionPath}`);
   try {
     const result = await request(url, session.access_token, 'me');
-    log(result.account?.invited ? '베타 초대가 확인되었습니다. 선수를 제출할 수 있습니다.'
-      : '아직 베타 초대가 없습니다. AI Fighter 홈페이지에서 초대를 요청하세요. 검사와 제작은 지금도 할 수 있습니다.');
+    log(result.account?.invited ? '로그인이 확인되었습니다. 사전 승인 없이 선수를 제출할 수 있습니다.'
+      : '이 계정은 현재 이용이 제한되어 있습니다. 홈페이지에서 계정 상태를 확인하세요.');
   } catch (problem) {
-    log(problem.message === 'route-not-found' ? '서버가 아직 초대 상태 확인을 지원하지 않습니다. 제출할 때 초대 여부를 확인합니다.'
-      : '초대 상태를 확인하지 못했습니다. 제출할 때 다시 확인합니다.');
+    log(problem.message === 'route-not-found' ? '서버가 계정 상태 조회를 지원하지 않습니다. 제출할 때 다시 확인합니다.'
+      : '계정 상태를 확인하지 못했습니다. 제출할 때 다시 확인합니다.');
   }
   log('Dot 앱이 이미 실행 중이었다면 앱을 다시 시작하세요.');
   return { sessionPath, userId: session.user.id };

@@ -12,10 +12,14 @@ import { makePackageValidator, resolveManifest } from '../mcp/package-access.mjs
 const root = fileURLToPath(new URL('../', import.meta.url));
 
 async function connect(withFiles) {
+  const isolatedHome = await mkdtemp(path.join(tmpdir(), 'fighter-mcp-home-'));
   const transport = new StdioClientTransport({ command: process.execPath, args: [fileURLToPath(new URL('../mcp/stdio.mjs', import.meta.url))],
-    env: { ...(withFiles ? { AI_FIGHTER_ROOT: root } : {}) }, stderr: 'pipe' });
+    env: { HOME: isolatedHome, USERPROFILE: isolatedHome, ...(withFiles ? { AI_FIGHTER_ROOT: root } : {}) }, stderr: 'pipe' });
   const client = new Client({ name: 'authoring-integration-test', version: '1.0.0' });
-  await client.connect(transport); return client;
+  await client.connect(transport);
+  const close = client.close.bind(client);
+  client.close = async () => { try { await close(); } finally { await rm(isolatedHome, { recursive: true, force: true }); } };
+  return client;
 }
 test('real stdio initialize, tools/list and tools/call cover authoring end to end', async () => {
   const client = await connect(true);
@@ -33,7 +37,7 @@ test('real stdio initialize, tools/list and tools/call cover authoring end to en
         assert.equal(result.structuredContent.data.tool.sourceRoot, path.join(root, 'vendor', 'sprite-gen'));
         assert.equal(result.structuredContent.data.tool.setupCommand, 'npm run sprite:setup');
         assert.equal(result.structuredContent.data.tool.packCommand, 'npm run fighter:pack -- <plan.json>');
-        assert.match(result.structuredContent.data.guide, /초대 베타/);
+        assert.match(result.structuredContent.data.guide, /초대나 사전 승인은 없다/);
         assert.match(result.structuredContent.data.guide, /형식 테스트 전용/);
       }
     }

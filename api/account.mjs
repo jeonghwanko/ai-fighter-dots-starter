@@ -8,7 +8,7 @@ const ROUTES = { me: 'GET', 'access-requests': 'POST', 'creator-handoffs': 'POST
 
 /**
  * GET /me, POST /access-requests and POST /creator-handoffs. Any signed-in, non-anonymous user may call them:
- * these routes run before af_authorize, so a user without an invitation can see that and ask for one.
+ * invitations are retired; access-requests remains a compatibility alias for the current account state.
  * creatorLink(owner) mints a one-use sign-in token for the creator homepage; the browser redeems it with Supabase Auth.
  */
 export function createAccountHandler({ db, creatorLink = null }) {
@@ -19,7 +19,8 @@ export function createAccountHandler({ db, creatorLink = null }) {
       throw new Problem(503, error.code === 'PGRST202' ? 'account-not-ready' : 'account-unavailable');
     }
     if (!data || typeof data !== 'object' || typeof data.invited !== 'boolean') throw new Problem(503, 'account-unavailable');
-    return { invited: data.invited, expiresAt: data.invited ? data.expiresAt ?? null : null, request: data.request ?? null };
+    return { invited: data.invited, expiresAt: data.invited ? data.expiresAt ?? null : null, request: data.request ?? null,
+      ...(data.accessMode === 'open' ? { accessMode: 'open', canSubmit: data.canSubmit === true } : {}) };
   }
   return async (request, parts) => {
     try {

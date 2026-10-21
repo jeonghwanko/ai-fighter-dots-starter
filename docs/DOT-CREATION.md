@@ -130,21 +130,21 @@ npm run sprite -- game-pack --request game.json --out-dir pack
 
 `examples/sparring-bot`과 `npm run example`은 **연결·형식 테스트 전용**이다.
 사용자 캐릭터 생성 요청에 이 도형 로봇을 복사하거나 이름만 바꿔 납품하지 않는다.
-형식 검사가 통과해도 시각 품질·경기 출전 승인을 자동으로 얻는 것은 아니다.
+형식 검사 통과만으로 동작의 시각 품질이 보장되지는 않는다. 실제 애니메이션을 검수한다.
 
 ## 4. 자기 계정으로 등록
 
-제작과 로컬 검사는 누구나 사용할 수 있다. 현재 Supabase 등록은 **초대 베타**다.
-사용자 본인의 베타 세션 파일을 `AI_FIGHTER_CLIENT_CONFIG`로 연결한 뒤 `submit_fighter_package`를 호출한다.
-`registered`와 `fighterId`를 실제로 확인한다. 출전 승인은 별도이며 작업자가 꺼져 있으면 검증 대기로 남는다.
-기존 선수의 불변 파일을 덮어쓰지 않는다. 공개 OAuth·누구나 가입 가능한 등록은 아직 별도 작업이다.
+Google 로그인 후 누구나 제작·업로드할 수 있다. **초대나 사전 승인은 없다.** [현재 운영 정책](OPEN-REGISTRATION.md)을 따른다.
+사용자 본인의 로그인 세션 파일을 `AI_FIGHTER_CLIENT_CONFIG`로 연결한 뒤 `submit_fighter_package`를 호출한다.
+`registered`와 `fighterId`를 실제로 확인한다. 파일 검사 후 자동으로 게임에서 이용할 수 있다. 작업자가 꺼져 있으면 자동 검증 대기로 남는다.
+기존 선수의 불변 파일을 덮어쓰지 않는다. 부적절한 선수는 사후 조치로 공개 목록에서 내려갈 수 있다.
 
 사용자 요청 예시:
 
 > 이 AI Fighter 저장소의 sprite-gen으로 내가 설명한 인간형 격투가를 만들어줘.
 > 제작 규격과 creation 안내를 읽고 내 계정에서 가능한 생성 경로를 확인해.
 > 새 원화와 필수 11개 동작을 만들고, 실제 애니메이션을 검수해서 보여줘.
-> fighter.json과 WebP를 검사한 뒤 내 베타 계정에 등록해줘.
+> fighter.json과 WebP를 검사한 뒤 내 계정에 등록하고 홈페이지에서 실제 애니메이션까지 확인해줘.
 
 sprite-gen은 [공식 저장소](https://github.com/aldegad/sprite-gen)의 고정 커밋을 서브모듈로 포함한다.
 원본 Apache-2.0 [LICENSE](../vendor/sprite-gen/LICENSE)와 [NOTICE](../vendor/sprite-gen/NOTICE)를 보존한다.

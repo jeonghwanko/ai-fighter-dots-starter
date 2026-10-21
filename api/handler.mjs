@@ -19,7 +19,8 @@ const uploadExpired = row => row.status === 'uploading' && Date.parse(row.expire
 const view = (row, admission) => ({ ok: true, stage: row.status, submissionId: row.id, manifestSha256: row.manifest_sha,
   fighterId: row.fighter_id ?? null, validation: row.validation ?? null, ...(uploadExpired(row) ? { code: 'upload-expired' } : {}),
   runtimeApproved: admission?.runtime_approved === true, runtimeScope: admission?.runtime_scope ?? null,
-  pending: row.status === 'registered' ? admission?.runtime_approved ? [] : ['runtime-preview', 'visual-review', 'game-integration']
+  ...(row.status === 'registered' ? { availability: admission?.runtime_approved ? 'active' : 'removed', moderationReason: admission?.moderation_reason ?? '' } : {}),
+  pending: row.status === 'registered' ? []
     : row.status === 'rejected' || uploadExpired(row) ? [] : ['server-validation', 'registration'] });
 /** Postgres jsonb cannot store U+0000 or an unpaired surrogate. JSON.parse and the v1 schema accept both. */
 function unstorableTextPath(value, at = '') {
@@ -34,7 +35,7 @@ function check(error) {
   if (conflictCodes.includes(error.message)) throw new Problem(409, error.message);
   if (error.message === 'not-found') throw new Problem(404, 'not-found');
   if (error.message === 'rate-limit') throw new Problem(429, 'rate-limit');
-  if (error.message === 'invite-required') throw new Problem(403, 'invite-required');
+  if (error.message === 'account-disabled') throw new Problem(403, 'account-disabled');
   if (['validator-version','validation-incomplete','validation-result-limit'].includes(error.message)) throw new Problem(400, error.message);
   if (error.message === 'byte-budget-mismatch') throw new Problem(422, error.message);
   throw new Problem(503, 'database-unavailable');
@@ -47,7 +48,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
   async function present(row) {
     if (row.status !== 'registered') return view(row);
-    const { data, error } = await db.from('af_fighters').select('runtime_approved,runtime_scope').eq('submission_id', row.id).maybeSingle();
+    const { data, error } = await db.from('af_fighters').select('runtime_approved,runtime_scope,moderation_reason').eq('submission_id', row.id).maybeSingle();
     check(error); return view(row, data);
   }
   /** One Storage call signs every asset of a submission, in manifest order. */
@@ -87,11 +88,12 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
       if (parts[0] === 'admin') return adminHandler(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
-      // Before authenticate(): these routes must work for signed-in users who are not invited yet.
+      // Account and sign-in handoff routes work for every verified account.
       if (parts.length === 1 && ['me', 'access-requests', 'creator-handoffs'].includes(parts[0])) return accountHandler(request, parts);
       if (method === 'GET' && parts.join('/') === 'spec') return json({ ok: true, stage: 'public-contract', data: { ...spec,
-        registration: { available: true, mode: 'invite-only-beta', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary', runtimeApproved: false } } });
-      // Only explicitly reviewed arena packages are publicly readable. Uploads and pending drafts stay private.
+        registration: { available: true, mode: 'open', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary',
+          approvalRequired: false, publication: 'automatic-after-file-validation', moderation: 'post-publication' } } });
+      // Validated, active packages are public; uploads and removed packages remain private.
       if (parts[0] === 'roster' && (method === 'GET' || method === 'OPTIONS')) {
         const reply = (body, status = 200) => jsonResponse(body, status, ROSTER_CORS);
         if (method === 'OPTIONS') return reply({ ok: true });
@@ -158,7 +160,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
         }
       }
       if (method === 'GET' && parts[0] === 'fighters' && parts.length === 2) {
-        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
+        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at,moderation_reason').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
         check(error); if (!data) throw new Problem(404, 'not-found'); return json({ ok: true, stage: 'registered', fighter: data });
       }
       if (isWorker && method === 'POST') {

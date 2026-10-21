@@ -34,7 +34,19 @@ export async function withSessionLock(configPath, task) {
     catch (error) {
       if (error.code !== 'EEXIST') throw error;
       const modified = await stat(lock).then(info => info.mtimeMs, () => null);
-      if (modified !== null && Date.now() - modified > LOCK_STALE_MS) { await rm(lock, { force: true }); continue; }
+      if (modified !== null && Date.now() - modified > LOCK_STALE_MS) {
+        // Serialize stale-lock reclamation: two waiters must not delete a freshly acquired lock.
+        const reaper = `${lock}.reap`;
+        const claimed = await writeFile(reaper, String(process.pid), { flag: 'wx', mode: 0o600 })
+          .then(() => true, error => { if (error.code === 'EEXIST') return false; throw error; });
+        if (claimed) {
+          try {
+            const current = await stat(lock).then(info => info.mtimeMs, () => null);
+            if (current !== null && Date.now() - current > LOCK_STALE_MS) await rm(lock, { force: true });
+          } finally { await rm(reaper, { force: true }); }
+          continue;
+        }
+      }
       if (Date.now() - started > LOCK_WAIT_MS) throw new Error('session-refresh-busy');
       await new Promise(resolve => setTimeout(resolve, 100));
     }

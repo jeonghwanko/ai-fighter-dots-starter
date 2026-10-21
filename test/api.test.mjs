@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { createHandler, readBody, sha256 } from '../api/handler.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 
-test('public spec announces beta registration while anonymous writes fail', async () => {
+test('public spec announces open registration while anonymous writes fail', async () => {
   const handle = createHandler({ db: {} });
   const spec = await (await handle(new Request('https://test/ai-fighter/spec'))).json();
   assert.equal(spec.data.registration.available, true);
+  assert.equal(spec.data.registration.mode, 'open');
+  assert.equal(spec.data.registration.approvalRequired, false);
   const result = await handle(new Request('https://test/ai-fighter/submissions', { method: 'POST', body: '{}' }));
   assert.equal(result.status, 401);
 });

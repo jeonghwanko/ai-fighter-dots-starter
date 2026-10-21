@@ -20,7 +20,7 @@ async function migratedDatabase() {
   return db;
 }
 
-test('Postgres enforces invite, immutability, queue, leases, unique registration and RLS', async () => {
+test('Postgres enforces open registration, immutability, queue, leases, unique registration and RLS', async () => {
   const db = await migratedDatabase();
   try {
     const owner = crypto.randomUUID(), other = crypto.randomUUID(), key = crypto.randomUUID();
@@ -49,17 +49,11 @@ test('Postgres enforces invite, immutability, queue, leases, unique registration
     assert.equal((await db.query('select count(*)::int as n from public.af_fighters')).rows[0].n, 1);
     assert.equal((await create(owner, key)).fighter_id, registered.fighter_id);
     await assert.rejects(create(owner, crypto.randomUUID()), /fighter-quota/);
-    // An operator must bind the runtime admission to the exact manifest and record its authority and validation.
-    await assert.rejects(db.query('update public.af_fighters set runtime_approved=true'), /af_fighters_runtime_admission/);
-    await assert.rejects(db.query("update public.af_fighters set runtime_approved=true,review_state='approved',runtime_scope='arena-player-v1',runtime_manifest_sha=$1,review_evidence=$2",
-      ['f'.repeat(64), { authorization: 'test', validation: 'test' }]), /af_fighters_runtime_admission/);
-    await db.query("update public.af_fighters set runtime_approved=true,review_state='approved',runtime_scope='arena-player-v1',runtime_manifest_sha=manifest_sha,review_evidence=$1",
-      [{ authorization: 'test operator', validation: 'test arena consumer' }]);
-    await assert.rejects(db.query('update public.af_fighters set duel_approved=true'), /af_fighters_duel_admission/);
-    await assert.rejects(db.query('update public.af_fighters set duel_approved=true,duel_manifest_sha=manifest_sha'), /af_fighters_duel_admission/);
-    await db.query("update public.af_fighters set duel_approved=true,duel_manifest_sha=manifest_sha,review_evidence=review_evidence || $1::jsonb",
-      [{ duelValidation: 'symmetric engine and package validation' }]);
-    await assert.rejects(db.query('update public.af_fighters set duel_manifest_sha=$1', ['f'.repeat(64)]), /af_fighters_duel_admission/);
+    const admitted=(await db.query('select * from af_fighters where id=$1',[registered.fighter_id])).rows[0];
+    assert.equal(admitted.runtime_approved,true); assert.equal(admitted.duel_approved,true);
+    assert.equal(admitted.runtime_manifest_sha,sha); assert.equal(admitted.review_evidence.authorization,'open-registration');
+    await assert.rejects(db.query('update af_fighters set runtime_manifest_sha=$1',['f'.repeat(64)]),/af_fighters_runtime_admission/);
+    await assert.rejects(db.query('update af_fighters set duel_manifest_sha=$1',['f'.repeat(64)]),/af_fighters_duel_admission/);
     // Real roles and RLS: a normal caller cannot perform privileged transitions or read another owner.
     await db.exec(`set role authenticated; set request.jwt.claim.sub='${other}';`);
     assert.equal((await db.query('select id from public.af_submissions')).rows.length, 0);

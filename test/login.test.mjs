@@ -72,7 +72,8 @@ test('login runs PKCE through a state-bound loopback callback and writes only th
   assert.deepEqual(Object.keys(file), ['url', 'publishableKey', 'accessToken', 'refreshToken']);
   assert.equal(file.refreshToken, 'refresh-user-1');
   assert.equal(result.userId, 'user-1');
-  assert.ok(logs.some(line => line.includes('초대를 요청')));
+  assert.ok(logs.some(line => line.includes('이용이 제한')));
+  assert.ok(logs.every(line => !line.includes('초대를 요청')));
   assert.ok(logs.every(line => !line.includes('refresh-user-1') && !line.includes(file.accessToken)));
 
   // The same user may log in again; a different user would silently replace an operator-issued session.
