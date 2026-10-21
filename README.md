@@ -1,6 +1,8 @@
 # AI Fighter × Dot starter
 
-**처음이라면 [이 시작 안내 링크](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/START-HERE.md)만 새 Dot 대화에 보내세요. 원하는 캐릭터를 묻는 대화부터 시작합니다.**
+**처음이라면 [게임 규격이 포함된 시작 링크](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md)만 새 Dot 대화에 보내세요. 원하는 캐릭터를 묻는 대화부터 시작합니다.**
+
+실제 생성 없이 대화만 확인하려면 [대화 시험 링크](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/DIALOGUE-ONLY.md)를 사용하세요. 두 문서 모두 게임이 현재 구조 데이터와 함께 생성합니다.
 
 캐릭터는 한두 문장의 설명, 참고 이미지, 또는 둘의 조합으로 시작할 수 있습니다.
 입력 안내와 제작 과정의 품질 평가 기준은 [제작 UX 규격](docs/CREATION-UX.md)에 정리했습니다.

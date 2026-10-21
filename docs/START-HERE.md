@@ -1,5 +1,9 @@
 # Dot과 대화하며 내 캐릭터 만들기
 
+처음 보낼 주소는 [게임 규격과 안내가 함께 들어 있는 시작 문서](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md)를 권장합니다.
+이 상세 안내 주소를 먼저 받았다면 해당 시작 문서의 구조 데이터도 첫 응답 전에 읽습니다.
+첫 응답에 읽은 규격의 revision 앞 12자리를 짧게 밝힙니다. 문서만 열고 JSON을 읽은 것으로 처리하지 않습니다.
+
 이 페이지 주소만 로컬 작업이 가능한 Dot·Codex·Claude의 새 대화에 보내세요.
 원하는 캐릭터를 묻는 대화부터 시작합니다. 이미 정한 아이디어가 있다면 설명이나 참고 이미지를 함께 보내도 됩니다.
 

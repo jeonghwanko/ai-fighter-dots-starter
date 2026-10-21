@@ -5,6 +5,9 @@
 
 ## 자료 읽기
 
+- [규격이 포함된 제작 시작 문서](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md)와
+  [대화 시험 문서](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/DIALOGUE-ONLY.md)는 같은 JSON을 포함한다.
+  게임이 생성·게시하며, 첫 링크를 읽을 때 구조 데이터가 빠지는 일을 줄인다. 첫 응답에 읽은 revision 앞 12자리를 표시한다.
 - [현재 게임 제공 JSON](https://raw.githubusercontent.com/jeonghwanko/ai-fighter-dots-starter/refs/heads/codex/game-context/creation-context.json)
 - MCP: `get_fighter_spec`의 `section: "context"`. `group`을 주면 해당 묶음의 모션 규격만 받는다.
 - CLI: `npm run creation:context`. 로그인·생성 계정 접근 없이 읽는다.
@@ -13,6 +16,9 @@
 제작 저장소에서 수치를 수동으로 작성하거나 고정 사본을 규칙 원본으로 쓰지 않는다.
 게임 빌드는 같은 생성기로 `ai-fighter/creation-context.json`도 제공한다. 개발 규격 채널은 배포된
 플레이 페이지와 버전이 다를 수 있으므로 `provenance.sourceCommit`과 `revision`을 기록한다.
+게임의 수동 사이트 배포는 기존 Pages 배포 키로 같은 공개 저장소의 규격 브랜치도 갱신한다.
+일반 소스 push만으로 배포나 CI를 시작하지 않는다. 시작 문서의 포함 JSON은 해당 게시 시점의 자료이며,
+이후 묶음에서는 현재 JSON 주소로 갱신한다.
 
 | 구조 | 쓰임 |
 | --- | --- |
