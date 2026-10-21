@@ -8,9 +8,11 @@ This repository lets each user create their own fighter through Dot. Read
   Follow the latest direct user intent; stop dependent generation when that intent changes.
 - Accept text, reference images, or both. Ask only about missing reference roles or material conflicts.
   Distinguish user requirements from proposed details; do not make users complete a long character form.
+  An explicit edit overrides the reference's existing detail; do not ask again whether to keep what the user said to remove.
 - Default recommendation: GPT base + Grok video when both are available, all Grok when only Grok is available,
   all GPT when only GPT is available. Explicit user choices override this product preference. Confirm current
   access in one understandable question; this recommendation never authorizes an automatic runtime provider switch.
+  Track image and video access separately. Honor an already chosen stop-on-failure policy without reoffering rejected alternatives.
 
 - Creation is conversational in meaningful review groups: appearance (concept/idle), locomotion
   (fightIdle/walk/run), attacks (combo/slam/dash), defense and reactions (block/hit/groggy/fall), then final review.
@@ -18,7 +20,14 @@ This repository lets each user create their own fighter through Dot. Read
   group boundary, not after every motion. A positive response advances to the next group without another
   permission question. Only skip review boundaries when the user explicitly delegates those groups.
   Reuse choices the user already made; a request to create/register alone does not waive group feedback.
-  Read the full feedback: praise with a revision request is a revision; praise of one motion is not group acceptance.
+  Read the full feedback: praise with a revision request is a revision; praise of one motion applies to that motion's current version.
+- Track acceptance per motion and version. A positive response about the last pending motion completes the group
+  when the other current versions are already accepted and the required checks pass; do not ask for those approvals again.
+  Delegating later groups does not waive an earlier pending review. Preserve the user's actual delegated scope.
+- An unknown generation outcome is not a confirmed failure, even without a request ID. Inspect existing records
+  and outputs before retrying; do not treat a generic continuation request as authorization for a potentially duplicate generation.
+- A user-requested metadata-only final edit followed by an explicit registration request needs fresh validation,
+  but not repeated approval of unchanged animations. Use a new key for changed package bytes, the same key for immutable retries.
 - Ask only for missing creative decisions that affect the next preview. Handle installation, extraction,
   measurement and validation within the agreed step without making the user approve each command.
   Show actual images/animation, not only progress text. Preserve selected versions and revise affected
