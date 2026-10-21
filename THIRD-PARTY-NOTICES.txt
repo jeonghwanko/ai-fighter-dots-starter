@@ -95,6 +95,21 @@ normalization; lowered double tap for rejection, wood/metal layer for confirm.
 Original recordings and reproduction recipe: assets/audio/ui-natural-20261018/
   and tools/audio/build-ui-natural.mjs. File hashes: src/assets/runtime-media.json.
 
+Fight shouts — recorded battle cries and grunts (some audio/voice/*.ogg)
+-----------------------------------------------------------------------
+
+Some fighters' battle cries, grunts and knockout screams are recordings released
+under Creative Commons Zero 1.0 (CC0 1.0). Spoken lines are not; they are the
+generated voices described in the asset rights ledger.
+CC0 license: https://creativecommons.org/publicdomain/zero/1.0/
+
+- "Male Grunt/Yelling sounds" by HaelDB — https://opengameart.org/content/male-gruntyelling-sounds
+- "Female RPG Voice Starter Pack" by Cici Fyre — https://opengameart.org/content/female-rpg-voice-starter-pack
+
+Edits: edge silence trim, 70 Hz high-pass, gain normalization, mono 24 kHz OGG Vorbis.
+Which clip came from which recording: tools/audio/fight-voice/cc0-shouts.json.
+Original recordings: assets/audio/fight-voice-cc0-20261021/. File hashes: src/assets/runtime-media.json.
+
 Melee combat sound set (audio/sfx/combat-*.ogg)
 -----------------------------------------------
 
