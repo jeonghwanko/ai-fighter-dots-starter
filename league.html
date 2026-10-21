@@ -25,11 +25,11 @@
       }
     } catch {}
   </script>
-  <script type="module" crossorigin src="/ai-fighter-dots-starter/assets/league-sF9Sl9p2.js"></script>
+  <script type="module" crossorigin src="/ai-fighter-dots-starter/assets/league-BRzAEUo4.js"></script>
   <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/modulepreload-polyfill-P2Xu9kJm.js">
   <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/fighterCreatorLocale-Dk6RFzzb.js">
   <link rel="stylesheet" crossorigin href="/ai-fighter-dots-starter/assets/fighterCreatorLocale-H9AosXvK.css">
-  <link rel="stylesheet" crossorigin href="/ai-fighter-dots-starter/assets/league-BVy82hLV.css">
+  <link rel="stylesheet" crossorigin href="/ai-fighter-dots-starter/assets/league-ClmzxUM4.css">
 </head>
 <body>
   <a class="skip" href="#main"><span data-copy="skip">본문으로 건너뛰기</span></a>
@@ -67,6 +67,10 @@
         <div class="roster-layout">
           <div class="roster" id="roster" tabindex="0" aria-label="좌우로 넘겨 파이터 선택" data-label="roster">
             <button class="fighter-card selected tyson" data-fighter="tyson" aria-label="타이푼 선택"><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/ui/oddbout-roster-v1/typhoon.webp" alt="검은 글러브와 반바지를 입고 가드를 올린 타이푼" width="1024" height="1536"></div><span class="fighter-name">타이푼</span></button>
+            <button class="fighter-card bing" data-fighter="bing" aria-label="미스터 빙 선택"><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/ui/oddbout-roster-v1/bing.webp" alt="갈색 트위드 재킷을 입고 테디베어를 안은 미스터 빙" width="966" height="1628" loading="lazy"></div><span class="fighter-name">미스터 빙</span></button>
+            <button class="fighter-card dolseok" data-fighter="dolseok" aria-label="마돌석 형사 선택"><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/ui/oddbout-roster-v1/dolseok.webp" alt="검은 티셔츠와 회색 바지 차림에 배지와 수갑을 찬 마돌석 형사" width="966" height="1628" loading="lazy"></div><span class="fighter-name">마돌석 형사</span></button>
+            <button class="fighter-card zuck" data-fighter="zuck" aria-label="마크 주커베리 선택"><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/ui/oddbout-roster-v1/zuck.webp" alt="검은 래시가드와 반바지를 입고 주짓수 자세를 잡은 마크 주커베리" width="1024" height="1536" loading="lazy"></div><span class="fighter-name">마크 주커베리</span></button>
+            <button class="fighter-card cinnamon" data-fighter="cinnamon" aria-label="존 시나몬 선택"><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/ui/oddbout-roster-v1/cinnamon.webp" alt="카키 카고 반바지와 검은 보호대를 착용하고 경례하는 존 시나몬" width="943" height="1667" loading="lazy"></div><span class="fighter-name">존 시나몬</span></button>
             <button class="fighter-card singha" data-fighter="singha" aria-label="킥하형 선택"><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/ui/oddbout-roster-v1/kick-bro.webp" alt="검은 줄무늬의 노란 일체형 트레이닝복을 입은 킥하형" width="1024" height="1536"></div><span class="fighter-name">킥하형</span></button>
             <button class="fighter-card malfoy" data-fighter="malfoy" aria-label="여자 말포이 선택"><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/ui/oddbout-roster-v1/miss-malfoy-wand.webp" alt="초록 안감의 검은 로브를 입고 마법서와 나무 지팡이를 든 여자 말포이" width="1024" height="1536"></div><span class="fighter-name">여자 말포이</span></button>
             <button class="fighter-card elon" data-fighter="elon" aria-label="엘롱 머스캣 선택"><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/ui/oddbout-roster-v1/elong-muscat.webp" alt="검은 재킷과 티셔츠 차림으로 스마트폰 통화 중인 엘롱 머스캣" width="1024" height="1536"></div><span class="fighter-name">엘롱 머스캣</span></button>
@@ -78,7 +82,7 @@
           </div>
           <a class="your-slot" href="#join"><span class="slot-symbol" aria-hidden="true">＋</span><div><span class="slot-title"><span data-copy="slotTitle">나의 선수.</span></span><span class="slot-link"><span data-copy="slotLink">선수 만들기 →</span></span></div></a>
         </div>
-        <div class="showcase-bottom wrap"><div class="roster-voice"><button class="sound-button" id="sound" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="m17 9 5 6m0-6-5 6" class="sound-off"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" class="sound-on"/></svg><span>목소리 켜기</span></button><div class="speech"><span class="speech-name" id="speaker">타이푼</span><p id="quote">“셋까지 셀게. 그 전에 끝나면 미안하고.”</p><span class="equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div></div><p class="sr-only"><span data-copy="hint">선수를 골라보세요.</span></p><div class="carousel-controls"><button id="autoplay" aria-label="자동 넘김 일시정지" aria-pressed="true">Ⅱ</button><span class="slide-count"><b id="current">01</b> / <span id="total">09</span></span><button id="prev" aria-label="이전 파이터" data-label="prev">←</button><button id="next" aria-label="다음 파이터" data-label="next">→</button></div></div>
+        <div class="showcase-bottom wrap"><div class="roster-voice"><button class="sound-button" id="sound" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="m17 9 5 6m0-6-5 6" class="sound-off"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" class="sound-on"/></svg><span>목소리 켜기</span></button><div class="speech"><span class="speech-name" id="speaker">타이푼</span><p id="quote">“셋까지 셀게. 그 전에 끝나면 미안하고.”</p><span class="equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div></div><p class="sr-only"><span data-copy="hint">선수를 골라보세요.</span></p><div class="carousel-controls"><button id="autoplay" aria-label="자동 넘김 일시정지" aria-pressed="true">Ⅱ</button><span class="slide-count"><b id="current">01</b> / <span id="total">13</span></span><button id="prev" aria-label="이전 파이터" data-label="prev">←</button><button id="next" aria-label="다음 파이터" data-label="next">→</button></div></div>
       </div>
     </section>
     <section class="match-section wrap" id="match" aria-labelledby="match-title">
@@ -116,7 +120,7 @@
         <p class="profile-bio" id="profile-bio"></p>
         <ul class="profile-tags" id="profile-tags" aria-label="캐릭터 특징" data-label="tags"></ul>
         <div class="profile-voice"><blockquote id="profile-quote"></blockquote><button id="profile-listen" class="profile-listen" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span>목소리 듣기</span><span class="profile-wave" aria-hidden="true">▂ ▅ ▃ ▆</span></button></div>
-        <div class="profile-actions"><a id="profile-arena" class="button dark" href="./fighter.html?lang=ko" data-destination="fighter.html"><span data-copy="profileArena">경기장 입장</span></a><a id="profile-join" href="#join"><span data-copy="profileCreate">선수 만들기 →</span></a></div>
+        <div class="profile-actions"><span id="profile-status" class="profile-status" hidden></span><a id="profile-arena" class="button dark" href="./fighter.html?lang=ko" data-destination="fighter.html"><span data-copy="profileArena">경기장 입장</span></a><a id="profile-join" href="#join"><span data-copy="profileCreate">선수 만들기 →</span></a></div>
       </div>
     </div>
     <div class="profile-footer"><button id="profile-prev" aria-label="이전 파이터 프로필" data-label="profilePrev">← <span id="profile-prev-name"></span></button><span id="profile-position">01 / 09</span><button id="profile-next" aria-label="다음 파이터 프로필" data-label="profileNext"><span id="profile-next-name"></span> →</button></div>
