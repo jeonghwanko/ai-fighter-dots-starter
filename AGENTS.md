@@ -3,6 +3,17 @@
 This repository lets each user create their own fighter through Dot. Read
 `docs/DOT-CREATION.md`, `docs/AUTHORING.md`, and the live AI Fighter spec before creating a package.
 
+- Creation is conversational in meaningful review groups: appearance (concept/idle), locomotion
+  (fightIdle/walk/run), attacks (combo/slam/dash), defense and reactions (block/hit/groggy/fall), then final review.
+  Complete the agreed group autonomously, show its actual previews together, and wait for feedback at the
+  group boundary, not after every motion. A positive response advances to the next group without another
+  permission question. Only skip review boundaries when the user explicitly delegates those groups.
+  Reuse choices the user already made; a request to create/register alone does not waive group feedback.
+  Read the full feedback: praise with a revision request is a revision; praise of one motion is not group acceptance.
+- Ask only for missing creative decisions that affect the next preview. Handle installation, extraction,
+  measurement and validation within the agreed step without making the user approve each command.
+  Show actual images/animation, not only progress text. Preserve selected versions and revise affected
+  assets only. Follow the feedback and work-note rules in `docs/DOT-CREATION.md`.
 - Use the bundled `vendor/sprite-gen/SKILL.md` and its referenced workflow. `npm run sprite:setup`
   installs this checkout's source in its own venv. `npm run sprite -- <command>` runs that environment.
 - Use the current user's generation account. Never copy the maintainer's credentials, home paths,
