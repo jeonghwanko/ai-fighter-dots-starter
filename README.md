@@ -1,6 +1,6 @@
 # AI Fighter × Dot starter
 
-Dot 사용자가 AI Fighter의 제작 규격을 읽고, **함께 포함된 sprite-gen으로 자기 캐릭터의 원화·애니메이션과 JSON을 만든 뒤 Supabase 베타에 제출·등록**하는 로컬 MCP 제작 키트입니다.
+Dot 사용자가 AI Fighter의 제작 규격을 읽고, **함께 포함된 sprite-gen으로 자기 캐릭터의 원화·애니메이션과 JSON을 만든 뒤 AI Fighter에 제출·등록**하는 로컬 MCP 제작 키트입니다.
 MIT 오픈소스입니다. 포함된 sprite-gen 서브모듈은 별도의 Apache-2.0입니다. Node 22.12 이상이 필요합니다.
 
 sprite-gen 소스는 `vendor/sprite-gen` Git 서브모듈에 포함됩니다. 각 사용자의 Dot이 이를 로컬에서 실행하고,
@@ -8,11 +8,11 @@ sprite-gen 소스는 `vendor/sprite-gen` Git 서브모듈에 포함됩니다. �
 [Dot 제작 흐름](docs/DOT-CREATION.md)에 설치부터 생성·검수·등록까지 설명합니다.
 
 **현재 가능:** 규격 조회, JSON·WebP 검사, 인증된 업로드, 서버 재검증, 중복 없는 선수 등록과 조회, 자동 검사된 패키지의 게임 전달, 서버 경기 결과·전적·랭킹 API.
-**후속 구현:** 공개 OAuth 설치 흐름, 기존 게임 계정 연결, 신규 그림의 품질 검수와 공개 운영 부하 검증.
+Google 로그인은 홈페이지와 제작 도구에서 같은 계정으로 진행합니다. 신규 그림은 동작 품질을 검수한 뒤 등록합니다.
 아래 기본 실행은 로컬 검사입니다. 실제 제출에는 본인의 Google 로그인과 서버 검증 작업자가 필요합니다. 사전 승인은 없습니다.
 2026-10-19 실제 Free 프로젝트에서 MCP 제출→저장 파일 재검증→선수 1명 등록을 확인했습니다.
-상세 조건과 시험 결과는 [베타 운영 안내](docs/SUPABASE-BETA.md)에 있습니다.
-등록된 Sparring Bot은 `arena-player-v1` 범위로 승인하여 로컬 AI Fighter 선수 목록과 실제 WebGL 경기에 연결했습니다.
+현재 이용 조건은 [공개 이용 안내](docs/OPEN-REGISTRATION.md), 과거 시험 기록은 [이전 베타 운영 기록](docs/SUPABASE-BETA.md)에 있습니다.
+Sparring Bot과 Challenger Bot은 서버·형식 검사용 기하학 견본입니다. 생성 캐릭터가 아니며 공개 선수 목록에서 제외했습니다.
 게임에서는 직접 조종과 공통 AI의 자동 조종을 선택할 수 있습니다. 선수 JSON에 실행 코드를 넣지 않습니다.
 자동 검사를 통과한 등록 선수끼리는 같은 AI 규칙으로 싸울 수 있습니다. 서버가 경기를 계산해 Supabase에 저장하고 게임이 같은 경기를 재생합니다.
 승패·랭킹은 다른 브라우저에서도 유지됩니다. 실제 Sparring Bot 대 Challenger Bot 경기, 동시 재시도 4회와 새 브라우저 조회를 검증했습니다.
