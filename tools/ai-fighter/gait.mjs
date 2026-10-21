@@ -93,6 +93,25 @@ export function inspectGeometry(sequence, plan) {
   return { errors, warnings, frames };
 }
 
+// A declared exception requires the matching explicit evidence engine. No silent
+// fallback to ordinary geometry or a hand-written stride value.
+function contactEvidenceMatches(report, stance, sequence, facing) {
+  const extended = report?.measurement_engine;
+  if (stance.footEvidence === undefined && extended === undefined) return true;
+  if (typeof stance.footEvidence !== 'string' || !stance.footEvidence.trim() || extended !== 'ai-fighter-foot-evidence-v1') return false;
+  const proof = report.foot_evidence, binding = proof?.sequence;
+  const expected = { foot: stance.foot, start: stance.start, end: stance.end, box: stance.box, facing };
+  return proof?.status === 'verified' && proof.issues?.length === 0 &&
+    Object.entries(expected).every(([key, value]) => JSON.stringify(proof.stance?.[key]) === JSON.stringify(value)) &&
+    binding?.rgbaSha256?.length === sequence.frames.length && binding.rgbaSha256.every((hash, i) => hash === digest(sequence.frames[i].data)) &&
+    binding?.durationsSeconds?.length === sequence.durations.length && binding.durationsSeconds.every((duration, i) => duration === sequence.durations[i] / 1000) &&
+    binding?.size?.[0] === sequence.frames[0].width && binding?.size?.[1] === sequence.frames[0].height &&
+    proof.observations?.length === stance.end - stance.start + 1 &&
+    proof.observations.every((observation, i) => observation.frame === stance.start + i && observation.issues?.length === 0) &&
+    proof.declaration?.kind === 'ai-fighter-foot-evidence' && proof.declaration.version === 1 &&
+    proof.declaration.frames?.length === proof.observations.length && report.upstream_report !== undefined;
+}
+
 export function combineReview(sequence, plan, annotations, stanceReports = []) {
   const geometry = inspectGeometry(sequence, plan), errors = [...geometry.errors], missing = [];
   if (!annotations || annotations.sequenceSha256 !== sequence.sha256) missing.push('Current-sequence annotations');
@@ -113,6 +132,7 @@ export function combineReview(sequence, plan, annotations, stanceReports = []) {
       errors.push({ code: 'STANCE_PLAN_MISMATCH', stance: i }); continue;
     }
     const report = stanceReports[i];
+    if (!contactEvidenceMatches(report, stance, sequence, plan.facing)) { missing.push('Matching explicit foot evidence: ' + i); continue; }
     if (!report?.stride_verified) { missing.push('Unverified stance: ' + i); continue; }
     const speed = report.foot_velocity_px_per_second;
     if (!Number.isFinite(speed) || (plan.facing === 'right' ? speed >= 0 : speed <= 0)) errors.push({ code: 'FOOT_DIRECTION', stance: i });
@@ -122,7 +142,7 @@ export function combineReview(sequence, plan, annotations, stanceReports = []) {
   const status = errors.length ? 'fail' : missing.length ? 'unverified' : 'pass';
   const durationSeconds = sequence.durations.reduce((sum, ms) => sum + ms, 0) / 1000;
   const speed = status === 'pass' ? speeds.reduce((a, b) => a + b, 0) / speeds.length : null;
-  return { kind: 'ai-fighter-gait-review', version: 1, motion: plan.motion, status, sequenceSha256: sequence.sha256,
+  return { kind: 'ai-fighter-gait-review', version: 1, motion: plan.motion, facing: plan.facing, status, sequenceSha256: sequence.sha256,
     durationSeconds, geometry: plan.geometry, phases: plan.phases, errors, missing, warnings: geometry.warnings,
     frames: geometry.frames, visual: current?.visual ?? null, stances, stanceReports,
     speedPixelsPerSecond: speed === null ? null : round(speed), stridePixels: speed === null ? null : round(speed * durationSeconds),
@@ -137,7 +157,8 @@ export function requireReview(review, sequence, motion) {
     !positive(review.geometry.groundY) || review.geometry.groundY > review.geometry.height ||
     !['identity', 'anatomy', 'alternation', 'loop'].every(key => review.visual?.[key] === 'pass') ||
     !['near', 'far'].every(foot => review.stances?.some(s => s.foot === foot)) ||
-    review.stanceReports?.length !== review.stances?.length || !review.stanceReports.every(r => r.stride_verified)) throw Error('GAIT_REVIEW_INCOMPLETE: ' + motion);
+    review.stanceReports?.length !== review.stances?.length || !review.stanceReports.every((r, i) => r.stride_verified &&
+      contactEvidenceMatches(r, review.stances[i], sequence, review.facing))) throw Error('GAIT_REVIEW_INCOMPLETE: ' + motion);
   if (!positive(review.stridePixels)) throw Error('GAIT_STRIDE_UNVERIFIED: ' + motion);
   return review;
 }

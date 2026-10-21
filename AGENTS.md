@@ -14,6 +14,8 @@ This repository lets each user create their own fighter through Dot. Read
 - Follow `docs/GAIT-REVIEW.md`: keep one coordinate/scale reference, write the phase plan before generation,
   run `fighter:gait review` with both same-foot stance ROIs, and show its preview before registration.
   Missing or uncertain observations stay unverified. Bind gait reviews to the final game-pack pixels and durations.
+  Split heel/forefoot contacts may use docs/FOOT-EVIDENCE.md only with fresh per-frame outlines of both feet.
+  This is an explicit AI Fighter extension; retain the upstream report and every other rejection. Never fabricate foot identity.
 - Build the package with `npm run sprite -- game-pack` and then `npm run fighter:pack -- <plan.json>`
   (see `docs/DOT-CREATION.md`). It measures scale, frames, origins, contacts and hashes from the pixels.
   Do not hand-assemble sheets or type those values. The plan holds contact steps, landmarks and gait review paths.

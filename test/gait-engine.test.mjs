@@ -6,11 +6,39 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import sharp from 'sharp';
-import { walkPlan, loadSequence } from '../tools/ai-fighter/gait.mjs';
+import { walkPlan, loadSequence, alphaBounds } from '../tools/ai-fighter/gait.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const python = path.join(root, 'vendor/sprite-gen/.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 const installed = await access(python).then(() => true, () => false);
+
+test('official game-pack preserves vertical travel of full-canvas external frames', { skip: !installed }, async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gait-flight-'));
+  try {
+    const originals = [];
+    for (const [i, bottom] of [70, 60, 70].entries()) {
+      const data = Buffer.alloc(64 * 80 * 4);
+      for (let y = bottom - 40; y < bottom; y++) for (let x = 25; x < 39; x++) {
+        const at = (y * 64 + x) * 4; data[at] = 100 + i; data[at + 3] = 255;
+      }
+      originals.push(data);
+      await sharp(data, { raw: { width: 64, height: 80, channels: 4 } }).png().toFile(path.join(dir, `${i}.png`));
+    }
+    await writeFile(path.join(dir, 'run.asset.json'), JSON.stringify({ kind: 'sprite-gen-asset', version: 1, anchor: [32, 70],
+      frames: [0, 1, 2].map(i => ({ file: `${i}.png`, duration: .1 })) }));
+    await writeFile(path.join(dir, 'game.json'), JSON.stringify({ version: 1, assets: [{ id: 'run', source: 'run.asset.json', display: { height: 80 }, resample: 'nearest' }] }));
+    const packed = spawnSync(python, ['-m', 'sprite_gen.cli', 'game-pack', '--request', path.join(dir, 'game.json'), '--out-dir', path.join(dir, 'pack')],
+      { cwd: root, encoding: 'utf8', windowsHide: true, env: { ...process.env, PYTHONUTF8: '1' } });
+    assert.equal(packed.status, 0, packed.stdout + packed.stderr);
+    const result = await loadSequence({ file: 'pack/game-pack.json', animation: 'run' }, dir);
+    assert.deepEqual(result.frames.map(f => alphaBounds(f).bottom), [70, 60, 70]);
+    assert.deepEqual(result.durations, [100, 100, 100]);
+    result.frames.forEach((f, i) => assert.deepEqual(f.data, originals[i]));
+  } finally {
+    assert.ok(path.resolve(dir).startsWith(path.resolve(tmpdir()) + path.sep));
+    await rm(dir, { recursive: true, force: true });
+  }
+});
 test('real bundled inspect-motion verifies both known fixture tracks and rejects a vertical jump', { skip: !installed }, async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'gait-engine-'));
   try {
