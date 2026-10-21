@@ -1,0 +1,453 @@
+{
+  "contextVersion": 1,
+  "specVersion": "ai-fighter-side-v1",
+  "owner": "game",
+  "scope": {
+    "runtime": "arena-player-v1",
+    "meaning": "Player-controlled arena authoring; opponent AI and server duels use separate rules.",
+    "localizedMeaning": "현재 게임의 플레이어 조작과 제작 계약. 상대 AI·서버 자동 대전의 규칙과 구분한다.",
+    "packageMayOverrideCombat": false
+  },
+  "contract": {
+    "input": {
+      "manifest": "fighter.json",
+      "assetsDirectory": "assets",
+      "animationMetadata": "inline:clips",
+      "imageEncoding": "static-webp-with-alpha",
+      "frameIndex": "zero-based-row-major",
+      "originUnit": "frame-local-pixels",
+      "durationUnit": "milliseconds",
+      "frames": "contiguous-zero-based",
+      "landmarks": "sequence-step-indices-except-borrowed-frame",
+      "mirror": "right-source-left-runtime-flip",
+      "bodyHeight": 400,
+      "cameraElevationDegrees": 16
+    },
+    "limits": {
+      "jsonBytes": 262144,
+      "assetBytes": 4000000,
+      "packageAssetBytes": 10000000,
+      "assetCount": 16,
+      "imageDimension": 4096,
+      "imagePixels": 16777216,
+      "packagePixels": 33554432,
+      "clipDurationMs": 10000
+    },
+    "motions": {
+      "idle": {
+        "kind": "gait",
+        "frames": 1,
+        "loop": false,
+        "purpose": "정지 전신. 모든 동작과 같은 정체성."
+      },
+      "walk": {
+        "kind": "gait",
+        "frames": 16,
+        "loop": true,
+        "purpose": "걷기 한 주기. 양발 교대, 같은 접지 기준."
+      },
+      "run": {
+        "kind": "gait",
+        "frames": 12,
+        "loop": true,
+        "purpose": "달리기 한 주기. 양발 교대."
+      },
+      "fightIdle": {
+        "kind": "action",
+        "loop": true,
+        "minHits": 0,
+        "maxHits": 0,
+        "purpose": "전투 준비 자세 반복."
+      },
+      "combo": {
+        "kind": "action",
+        "loop": false,
+        "minHits": 3,
+        "maxHits": 8,
+        "purpose": "3개 구간으로 나누어 재생할 연타. 접촉 시점 최소 3개."
+      },
+      "slam": {
+        "kind": "action",
+        "loop": false,
+        "minHits": 1,
+        "maxHits": 1,
+        "purpose": "강타의 준비·접촉·회수."
+      },
+      "dash": {
+        "kind": "action",
+        "loop": false,
+        "minHits": 0,
+        "maxHits": 1,
+        "purpose": "돌진. 준비와 회수는 같은 선수의 명시한 프레임 사용."
+      },
+      "block": {
+        "kind": "action",
+        "loop": false,
+        "minHits": 1,
+        "maxHits": 1,
+        "purpose": "가드와 막기. 접촉 직전 단계가 유지 자세."
+      },
+      "hit": {
+        "kind": "action",
+        "loop": false,
+        "minHits": 1,
+        "maxHits": 1,
+        "purpose": "피격·뒤로 젖힘·비틀거림·복귀."
+      },
+      "groggy": {
+        "kind": "action",
+        "loop": true,
+        "minHits": 0,
+        "maxHits": 0,
+        "purpose": "기절/흔들림 반복."
+      },
+      "fall": {
+        "kind": "action",
+        "loop": false,
+        "minHits": 1,
+        "maxHits": 1,
+        "purpose": "넘어짐·착지·누움. 일어서기 프레임도 명시."
+      }
+    },
+    "frameRules": {
+      "imageFrames": "0-based row-major; image frame index and sequence step index are different",
+      "gaitDurationMs": "per image frame; cycle = durationMs * frame count",
+      "actionDurationMs": "per sequence step; same image may be held or reused",
+      "runtimeTime": "game clock in ms; art duration does not set hit stun, damage, or input lock",
+      "uniqueGaitFrames": true,
+      "timingEvidence": "measure generated pixels and playback; never invent contact indices",
+      "auxiliary": {
+        "getUp": "fall.landmarks.getUp, not a twelfth required clip"
+      }
+    },
+    "landmarks": {
+      "combo": [
+        "hitSequenceIndices (3..8)",
+        "spinStart"
+      ],
+      "slam": [
+        "hitSequenceIndices (1)"
+      ],
+      "dash": [
+        "hitSequenceIndices (0..1)",
+        "windup",
+        "recover"
+      ],
+      "block": [
+        "hitSequenceIndices (1); preceding step is held guard"
+      ],
+      "hit": [
+        "recoil = contact step",
+        "stagger",
+        "recover"
+      ],
+      "fall": [
+        "contact = landing",
+        "lieSequenceIndex",
+        "getUp"
+      ]
+    }
+  },
+  "workflow": {
+    "entry": "A starter URL alone begins intake immediately. Ask for a character description or reference; do not ask whether to start.",
+    "groups": [
+      {
+        "id": "appearance",
+        "label": "외형",
+        "motions": [
+          "idle"
+        ],
+        "auxiliaries": [],
+        "editable": [
+          "체형",
+          "표정",
+          "복장",
+          "색",
+          "화풍"
+        ]
+      },
+      {
+        "id": "locomotion",
+        "label": "대기·이동",
+        "motions": [
+          "fightIdle",
+          "walk",
+          "run"
+        ],
+        "auxiliaries": [],
+        "editable": [
+          "자세",
+          "보폭",
+          "무게감"
+        ]
+      },
+      {
+        "id": "attacks",
+        "label": "공격",
+        "motions": [
+          "combo",
+          "slam",
+          "dash"
+        ],
+        "auxiliaries": [],
+        "editable": [
+          "준비 자세",
+          "접촉 표현",
+          "회수 동작",
+          "박자"
+        ]
+      },
+      {
+        "id": "defense",
+        "label": "방어·피격",
+        "motions": [
+          "block",
+          "hit",
+          "groggy",
+          "fall"
+        ],
+        "auxiliaries": [
+          "getUp"
+        ],
+        "editable": [
+          "막기",
+          "반동",
+          "비틀거림",
+          "쓰러짐",
+          "기상"
+        ]
+      },
+      {
+        "id": "final",
+        "label": "최종 확인",
+        "motions": [],
+        "auxiliaries": [],
+        "editable": [
+          "이름",
+          "소개",
+          "전체 일관성"
+        ]
+      }
+    ],
+    "gates": {
+      "advance": "Every current item/version in this group is selected and checked, or this group was explicitly delegated. Earlier pending groups still block advancement.",
+      "appearance": "Choosing an accessory, provider, or color is a detail edit, not acceptance of the whole appearance. Do not propose movement until appearance is accepted.",
+      "partial": "Accept only named current items. Preserve previous selections. When the last pending item is accepted, advance without reconfirmation.",
+      "revision": "A change creates a pending version only for affected items. Praise plus a change is not whole-group acceptance.",
+      "membership": "Use group motion IDs exactly. Extra controls or character personality cannot replace/add required clips.",
+      "evidence": "Dialogue-only choices are hypothetical, never real previews, validation, provider access, or registration authorization."
+    },
+    "state": {
+      "fields": [
+        "mode",
+        "contextRevision",
+        "groupId",
+        "items[id].version",
+        "items[id].selectedVersion",
+        "items[id].review",
+        "pendingEdits",
+        "delegatedGroups",
+        "profile"
+      ],
+      "reviewValues": [
+        "pending",
+        "passed",
+        "failed",
+        "hypothetical"
+      ],
+      "modeValues": [
+        "creation",
+        "dialogue-only"
+      ],
+      "final": "All groups, final package validation and profile; registration remains a separate user request."
+    }
+  },
+  "controls": {
+    "defaultsOnly": true,
+    "rebindable": true,
+    "source": "InputBindings + NativeCityFightInputController",
+    "actions": [
+      {
+        "action": "move",
+        "keys": [
+          "LEFT",
+          "RIGHT"
+        ],
+        "motion": "walk",
+        "behavior": "상대를 보며 전진·후진. 방향키 두 번 돌진·백스텝 입력은 제거됐다."
+      },
+      {
+        "action": "combo",
+        "keys": [
+          "C"
+        ],
+        "motion": "combo",
+        "behavior": "누름마다 연타 구간 진행. 공중 연계는 게임 상태가 결정.",
+        "defaultPad": "A"
+      },
+      {
+        "action": "heavy",
+        "keys": [
+          "V"
+        ],
+        "motion": "slam",
+        "behavior": "누르고 모은 뒤 놓으면 강타. 준비 자세를 유지할 수 있어야 한다.",
+        "defaultPad": "Y"
+      },
+      {
+        "action": "guard",
+        "keys": [
+          "Z"
+        ],
+        "motion": "block",
+        "behavior": "누르는 동안 가드. 현재 조작에서 패리 제거.",
+        "defaultPad": "LB"
+      },
+      {
+        "action": "evade",
+        "keys": [
+          "X"
+        ],
+        "motion": null,
+        "behavior": "상대와 거리에 따라 넘기·회피. v1 추가 필수 모션 아님; 현재 스킨 어댑터의 대체 표현 사용.",
+        "defaultPad": "B"
+      },
+      {
+        "action": "super",
+        "keys": [
+          "S"
+        ],
+        "motion": "slam",
+        "behavior": "게이지를 쓰는 강화 강타. 별도 필살기 클립을 추가하거나 dash를 대체하지 않음. 오토전에서는 기술 방출.",
+        "defaultPad": "RB"
+      }
+    ],
+    "unboundRequired": [
+      {
+        "motion": "dash",
+        "reason": "v1 필수 애셋이며 상대/어댑터가 사용한다. 현재 플레이어 직접 입력 키는 없다."
+      }
+    ]
+  },
+  "timing": {
+    "units": "milliseconds",
+    "editableByCreator": false,
+    "clocks": {
+      "art": "authored sequence durations",
+      "fight": "simulation time, paused by hit stop",
+      "screen": "wall/display time; not equivalent to art frames or fight time"
+    },
+    "playerHit": {
+      "drawnLockMs": 250,
+      "fallbackLockMs": 280,
+      "rule": "공격별 stunMs가 있으면 우선한다. 피격 그림의 전체 길이와 조작 불가 시간은 별개."
+    },
+    "guard": {
+      "blockStunMs": {
+        "light": 160,
+        "slam": 380,
+        "dash": 420
+      },
+      "breakStunMs": 700
+    },
+    "charge": {
+      "entryMs": 100,
+      "fullMs": 650,
+      "maxHoldMs": 1500,
+      "releaseStartupMs": 110
+    },
+    "cancel": {
+      "afterLastContactMs": {
+        "chain": {
+          "afterHitMs": 60,
+          "afterWhiffMs": 140
+        },
+        "heavy": {
+          "afterHitMs": 140,
+          "afterWhiffMs": 260
+        },
+        "dash": {
+          "afterHitMs": 220,
+          "afterWhiffMs": 600
+        }
+      },
+      "enderRecoveryMs": 290,
+      "semantics": "명중/헛침에 따라 마지막 접촉 뒤 창이 다르다. 지상 방어 취소는 즉시 가능하나 피격 등 상위 잠금은 별도. 공중은 착지/공중 연계 조건을 따른다. 연타 끝·강타를 다음 공격으로 취소할 수 없다."
+    },
+    "inputBufferMs": {
+      "swing": 240,
+      "defense": 560
+    },
+    "hitStop": {
+      "sharedBetweenFighters": true,
+      "whiffFreezes": false,
+      "ordinaryTierMs": {
+        "light": 67,
+        "heavy": 133,
+        "slam": 152.95,
+        "dash": 140,
+        "counter": 196,
+        "break": 150,
+        "ko": 187.5
+      },
+      "armoredTierMs": {
+        "light": 33.5,
+        "heavy": 66.5,
+        "slam": 76.475,
+        "dash": 70,
+        "counter": 98,
+        "break": 75,
+        "ko": 93.75
+      },
+      "globalScale": 1,
+      "overridesBeforeGlobalScale": {
+        "chainLightMs": [
+          110,
+          125
+        ],
+        "comboBurstMs": [
+          80,
+          50,
+          120
+        ],
+        "comboEnderMs": 160,
+        "heavyEnderMs": 170,
+        "fullChargeMs": 200,
+        "airLightMs": 75,
+        "koMs": 110
+      },
+      "rule": "기본 티어값은 모든 타격의 최종값이 아니다. NativeCityFightContacts/Defend가 연타·충전·공중·가드·반격·붕괴·KO 문맥에 따라 선택한다."
+    },
+    "poseHold": {
+      "minimumAfterFreezeMs": 16,
+      "rule": "접촉 때 공격·피격 자세를 같이 멈추고, 정지 후 남은 그림 유지 시간을 조절한다. 포즈 유지로 실제 경직을 늘리지 않는다."
+    },
+    "mapping": "FighterFightSkin maps art contact steps to rules contacts; combo is split into three spans. Preserve startup/contact/recovery and fall/get-up landmarks."
+  },
+  "freshness": {
+    "refresh": "Fetch at entry, resume, each new group and before packaging. Compare revision.",
+    "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
+    "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
+  },
+  "revision": "ffbbfac41195d27027bb93026d420655dfff9fd715db716840b54ff58548e436",
+  "provenance": {
+    "sourceCommit": "efe0722b08bcb1189b59b0207940f97db989d58c",
+    "sourceDirty": false,
+    "sourceFiles": {
+      "tools/ai-fighter/creation-context.mjs": "4c282476b625026f10dc2c43fe14c1d054ab1ab7743f322cb9771b5176aada7d",
+      "tools/ai-fighter/export-creation-context.mjs": "fcad318b37dae57a352b4c8ee509a1b03dd143a83f0518d726b06ff53df6d30d",
+      "contracts/ai-fighter/v1/contract-source.mjs": "299e0db90e50396ec3bf68744ebb7d2c4d200decae9e9acef37d05e702de3484",
+      "src/world/native-city-combat.json": "bbde3495517417f0f15b8c42595a6ce063dbea309c8c740689c3ccaf072da12c",
+      "src/app/InputBindings.ts": "dfd88fc875a6a46b1817a49279031b8123b9dcc7e8e8c0b1657090a2a9f73404",
+      "src/render/scenes/village/NativeCityFightInputController.ts": "cee92834a65065cba31231d0fcdeda1c26f31c4ccb366bd90729744cb3c94c65",
+      "src/render/art/FighterFightSkin.ts": "558be04b7f971123ef8f37af38f673bd6eeaac7cee4d997ef2f09b9179098faf",
+      "src/render/effects/NativeCityFightFeel.ts": "7cbb1bf98527169b7d8c77ddb7af332f5f45745aa3626fdf30c62a4afc069209",
+      "src/render/effects/CombatPresentation.ts": "ba46230f581f26d3c62c6498f4f5adf0700e70f18048228bc0391876565732ee",
+      "src/sim/cityFight/NativeCityLupinSwing.ts": "52768ec343135aab088a200b33d32f4a23d997ee732b0d90cf99baeb683af21a",
+      "src/sim/cityFight/NativeCityFight.ts": "45af2a7df7aafff71c7691741f88fcae2a0b659d804487eddae4dc1428d0393d",
+      "src/sim/cityFight/NativeCityFightContacts.ts": "92593cd02f444f0bf9e16636cbf11430dfbb68583abeaf01a2ecbea676a2767f",
+      "src/sim/cityFight/NativeCityFightDefend.ts": "e1b77a1ab4850096390bffe89740897de61eb6499f66a2306c5af0ac945b13ba"
+    },
+    "generated": true
+  }
+}
