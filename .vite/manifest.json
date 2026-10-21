@@ -313,7 +313,7 @@
     "src": "assets/coop-campaign/animations/handsome-actions-v2-20261014.webp"
   },
   "creator.html": {
-    "file": "assets/creator-Bys6XdSN.js",
+    "file": "assets/creator-FD8POcvG.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -326,6 +326,9 @@
       "_NativeCityOrthoPack-YhXeDzGu.js",
       "_rankedDuels-DpvcMFYH.js",
       "_palette-D5TCto_t.js"
+    ],
+    "css": [
+      "assets/creator-CgvHhO_r.css"
     ]
   },
   "docs.html": {
