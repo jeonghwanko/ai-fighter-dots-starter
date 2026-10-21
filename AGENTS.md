@@ -11,9 +11,13 @@ This repository lets each user create their own fighter through Dot. Read
   for a generated character. Do not rename or restyle that fixture and call it sprite-gen output.
 - The v1 contract requires all 11 motions, including 16 walk frames and 12 run frames. Validate actual
   motion, identity, foot alternation, and ground contact; schema/decoder success alone is not visual approval.
+- Follow `docs/GAIT-REVIEW.md`: keep one coordinate/scale reference, write the phase plan before generation,
+  run `fighter:gait review` with both same-foot stance ROIs, and show its preview before registration.
+  Missing or uncertain observations stay unverified. Bind gait reviews to the final game-pack pixels and durations.
 - Build the package with `npm run sprite -- game-pack` and then `npm run fighter:pack -- <plan.json>`
   (see `docs/DOT-CREATION.md`). It measures scale, frames, origins, contacts and hashes from the pixels.
-  Do not hand-assemble sheets or type those values. The plan holds only contact steps and landmarks.
+  Do not hand-assemble sheets or type those values. The plan holds contact steps, landmarks and gait review paths.
+  Normal authoring uses the default reviewPolicy required; format-only is for format fixtures, not visual approval.
 - Never invent hashes, origins, contact timing, successful generation, or registration results.
 - Creation is local. Any signed-in user may upload without an invitation or manual approval.
   Submit only within the user's request, reuse the same idempotency key for retries, and distinguish

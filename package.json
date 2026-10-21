@@ -23,6 +23,7 @@
     "sprite:status": "node scripts/sprite-gen.mjs status",
     "sprite": "node scripts/sprite-gen.mjs",
     "fighter:pack": "node scripts/pack-fighter.mjs",
+    "fighter:gait": "node scripts/gait.mjs",
     "example": "node scripts/create-example.mjs",
     "validate": "node tools/ai-fighter/validate-package.mjs",
     "test": "node --test test/*.test.mjs",

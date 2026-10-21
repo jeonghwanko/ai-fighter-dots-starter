@@ -7,6 +7,7 @@ import path from 'node:path';
 import sharp from 'sharp';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { packFighter } from '../scripts/pack-fighter.mjs';
+import { loadSequence, sequenceHash } from '../tools/ai-fighter/gait.mjs';
 
 const fixture = fileURLToPath(new URL('../examples/sparring-bot/', import.meta.url));
 let temporary;
@@ -63,6 +64,7 @@ function plan(directory, out, change = () => {}) {
   motions.dash.landmarks = { windup: { clip: 'fightIdle', step: 0 }, recover: { clip: 'fightIdle', step: 1 } };
   motions.fall.landmarks.getUp = [{ clip: 'hit', step: 4, durationMs: 90 }, { clip: 'fightIdle', step: 0, durationMs: 90 }];
   const value = { gamePack: 'game-pack.json', out, localId: 'packed-bot',
+    reviewPolicy: 'format-only',
     profile: { name: 'Packed Bot', description: 'Packed from a sprite-gen game pack fixture.' }, motions };
   change(value);
   return value;
@@ -131,6 +133,8 @@ test('plan fields are checked against the motion they belong to', async () => {
   assert.equal(unknown.errors[0].code, 'PLAN_SCHEMA');
   const badStep = await run(directory, plan(directory, 'c', value => { value.motions.dash.landmarks.windup.step = 40; }));
   assert.equal(badStep.errors[0].code, 'PLAN_FIELD');
+  const misplacedReview = await run(directory, plan(directory, 'd', value => { value.motions.idle.gaitReview = 'walk-review.json'; }));
+  assert.equal(misplacedReview.errors[0].code, 'PLAN_FIELD');
   assert.equal(await stat(path.join(directory, 'a')).then(() => true, () => false), false);
 });
 test('feet on the canvas edge still get transparent room for their contacts', async () => {
@@ -141,4 +145,36 @@ test('feet on the canvas edge still get transparent room for their contacts', as
   const idle = fighter.clips.idle;
   assert.equal(idle.origins[0].groundContacts.length, 2);
   assert.ok(idle.frameHeight - idle.origins[0].originY >= 8);
+});
+
+test('normal authoring requires gait reviews; format-only is an explicit fixture exception', async () => {
+  const directory = await gamePack('review-required');
+  const result = await run(directory, plan(directory, 'fighter', value => { delete value.reviewPolicy; }));
+  assert.equal(result.errors[0].code, 'GAIT_REVIEW_REQUIRED');
+  assert.equal(await stat(path.join(directory, 'fighter')).then(() => true, () => false), false);
+});
+
+test('reviewed input uses the verified stride and rejects changed playback timing', async () => {
+  const directory = await gamePack('review-bound');
+  const value = plan(directory, 'fighter', p => { delete p.reviewPolicy; delete p.motions.walk.stridePixels; });
+  for (const motion of ['walk', 'run']) {
+    const sequence = await loadSequence({ file: 'game-pack.json', animation: `bot/${motion}` }, directory);
+    // Fixture evidence exercises binding/packaging only, not a claim that the sample bot walks well.
+    const review = { kind: 'ai-fighter-gait-review', version: 1, motion, status: 'pass', sequenceSha256: sequenceHash(sequence),
+      errors: [], missing: [], stridePixels: 123, geometry: { width: sequence.frames[0].width, height: sequence.frames[0].height, groundY: 441 },
+      visual: { identity: 'pass', anatomy: 'pass', alternation: 'pass', loop: 'pass' },
+      stances: [{ foot: 'near' }, { foot: 'far' }], stanceReports: [{ stride_verified: true }, { stride_verified: true }] };
+    await writeFile(path.join(directory, `${motion}-review.json`), JSON.stringify(review));
+    value.motions[motion].gaitReview = `${motion}-review.json`;
+  }
+  const first = await run(directory, value);
+  assert.equal(first.ok, true, JSON.stringify(first.errors));
+  const fighter = JSON.parse(await readFile(path.join(directory, 'fighter/fighter.json'), 'utf8'));
+  assert.equal(fighter.clips.walk.stridePixels, 123);
+  const packFile = path.join(directory, 'game-pack.json'), pack = JSON.parse(await readFile(packFile, 'utf8'));
+  pack.animations['bot/walk'].durations_ms[0] += 1;
+  await writeFile(packFile, JSON.stringify(pack));
+  value.out = 'changed';
+  const stale = await run(directory, value);
+  assert.equal(stale.errors[0].code, 'GAIT_REVIEW_STALE');
 });

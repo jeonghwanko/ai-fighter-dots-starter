@@ -66,6 +66,8 @@ API 과금 제공자로 임의 전환하지 않는다. 상위 도구의 종료 �
   특히 `walk`는 16칸, `run`은 12칸이다. 원화 생성 성공과 실제 보행 품질 통과는 다르다.
   [sprite-gen 동작 검수](../vendor/sprite-gen/docs/qa-motion.md)로 발 교대·루프·몸통 고정·접지·공격 준비/접촉/회수를 확인한다.
   실패한 걷기를 정지 프레임 복제나 시간 조절로 통과시키지 않는다.
+- [보행 설계·검수 흐름](GAIT-REVIEW.md)을 따른다. 공통 좌표와 배율을 고정하고 프레임별 지지발을 계획한 뒤,
+  실제 양발의 접지 구간을 `fighter:gait review`로 검사한다. 미검증 상태에서도 등록 전 미리보기를 먼저 보여준다.
 - 검수한 동작은 아래 [패키지 만들기](#패키지-만들기-game-pack--fighterpack)로 AI Fighter 패키지로 바꾼다.
   시트·해시·크기·origin·접지를 손으로 만들지 않는다. sprite-gen manifest를 그대로 AI Fighter JSON이라고 제출하지 않는다.
 - 결과 폴더는 `AI_FIGHTER_ROOT` 아래 `output/<새-선수>/`로 둔다. 그림의 생성 보고서와 동작 검수 근거는 별도로 보존한다.
@@ -76,8 +78,9 @@ API 과금 제공자로 임의 전환하지 않는다. 상위 도구의 종료 �
 
 1. 11개 동작의 sprite-gen 결과를 [game-pack](../vendor/sprite-gen/docs/game-pack.md) 요청 하나에 모은다.
    행 아틀라스는 `manifest.json`(모든 상태가 `<id>/<상태>`로 펼쳐진다), 영상 루프는 `<name>.strip.json`을 `source`로 쓴다.
-   모든 항목에 `"display": { "body_height": 400 }`을 쓴다. 출처에 `body_h`가 없으면 `source_body_height`에
-   원본의 실제 몸높이(머리 끝~발바닥 픽셀)를 적는다.
+   모든 항목에 `"display": { "body_height": 400 }`을 쓴다. 출처에 `body_h`가 없으면 공통 좌표로 제작된
+   **중립 자세의 실제 키를 한 번 측정해** 같은 `source_body_height`로 쓴다. 웅크림·누움마다 외곽 높이를 재서 400px로 확대하지 않는다.
+   `fighter:gait game-request`가 공통 기준 측정과 요청 생성을 지원한다. 다른 캔버스는 거절하며 체형 일치는 실제 그림에서도 확인한다.
 
 ```sh
 npm run sprite -- game-pack --request game.json --out-dir pack
@@ -95,8 +98,8 @@ npm run sprite -- game-pack --request game.json --out-dir pack
   "profile": { "name": "파란 고양이", "description": "파란 갑옷의 고양이 복서" },
   "motions": {
     "idle": { "animation": "cat/idle" },
-    "walk": { "animation": "cat/walk" },
-    "run": { "animation": "cat/run" },
+    "walk": { "animation": "cat/walk", "gaitReview": "review-walk/review.json" },
+    "run": { "animation": "cat/run", "gaitReview": "review-run/review.json" },
     "fightIdle": { "animation": "cat/guard" },
     "combo": { "animation": "cat/combo", "hitSequenceIndices": [2, 5, 8], "landmarks": { "spinStart": 4 } },
     "slam": { "animation": "cat/slam", "hitSequenceIndices": [3] },
@@ -111,7 +114,8 @@ npm run sprite -- game-pack --request game.json --out-dir pack
 }
 ```
 
-3. `npm run fighter:pack -- plan.json`을 실행한다. 경로는 계획 파일 기준이다. 출력 폴더가 이미 있으면 거절한다.
+3. 최종 game-pack의 walk/run을 `fighter:gait review`로 검수하고 실제 미리보기를 보여준다.
+   `npm run fighter:pack -- plan.json`을 실행한다. 경로는 계획 파일 기준이다. 출력 폴더가 이미 있으면 거절한다.
 
 `fighter:pack`이 그림에서 재는 값:
 
@@ -121,7 +125,9 @@ npm run sprite -- game-pack --request game.json --out-dir pack
   반복 칸이 있으면 채워 넣지 않고 거절한다.
 - **기준점·접지.** 동작마다 지면선은 그 동작에서 가장 낮은 발바닥이다. 기준점은 game-pack anchor의 x와 그 지면선이다.
   접지는 지면선 바로 위의 불투명 열 묶음(최대 2개)이다. 계획의 `origin`으로 덮어쓸 수 있다.
-- **보폭.** `walk.stridePixels`를 비우면 디딘 발이 한 주기 동안 뒤로 간 거리로 잰다. 잴 수 없으면 값을 요구한다.
+- **보행 근거.** 기본 `reviewPolicy: required`는 양발 측정과 시각 검수가 통과한 결과를 요구한다. 그림이나 시간이 바뀐 근거는 거절한다.
+- **보폭.** 검수된 같은 발의 후방 이동 속도 × 주기 시간을 사용한다. `stridePixels` 수기 덮어쓰기는 거절한다.
+  형식 fixture용 `format-only`에서는 기존 바닥 실루엣 추정을 쓸 수 있으나 발 정체성을 보장하지 않는 추정치로 보고한다.
 - **초상·미리보기.** idle 몸 윗부분의 정사각형과 idle 전체 칸. `profile.portraitCrop`·`previewCrop`으로 바꿀 수 있다.
 
 계약 검사를 통과하지 못하면 아무것도 쓰지 않고 오류를 JSON Pointer로 알린다. 통과하면 폴더를 한 번에 만들고

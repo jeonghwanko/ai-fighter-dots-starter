@@ -16,6 +16,8 @@ export async function spriteStatus() {
     environmentPresent: await exists(spritePython), repositoryRoot: kitRoot, sourceRoot: spriteRoot,
     skillPath: path.join(spriteRoot, 'SKILL.md'), pythonPath: spritePython,
     setupCommand: 'npm run sprite:setup', runCommand: 'npm run sprite --', packCommand: 'npm run fighter:pack -- <plan.json>',
+    gaitCommand: 'npm run fighter:gait -- review <gait-plan.json> <review-directory> [annotations.json]',
+    gaitGuidePath: path.join(kitRoot, 'docs', 'GAIT-REVIEW.md'),
     authentication: 'Each creator uses their own generation account. Presence of a venv does not verify login, quota, or generation quality.',
   };
 }
