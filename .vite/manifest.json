@@ -260,7 +260,7 @@
     "name": "three.core"
   },
   "about.html": {
-    "file": "assets/about-DDsauQzw.js",
+    "file": "assets/about-MARaMhKw.js",
     "name": "about",
     "src": "about.html",
     "isEntry": true,
@@ -272,7 +272,7 @@
     ]
   },
   "admin.html": {
-    "file": "assets/admin-KwGHGTYj.js",
+    "file": "assets/admin-Ba3kBE5E.js",
     "name": "admin",
     "src": "admin.html",
     "isEntry": true,
@@ -294,7 +294,7 @@
     "src": "assets/coop-campaign/animations/handsome-actions-v2-20261014.webp"
   },
   "creator.html": {
-    "file": "assets/creator-CvJBEUxA.js",
+    "file": "assets/creator-BIqhmbRt.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -326,7 +326,7 @@
     ]
   },
   "league.html": {
-    "file": "assets/league-6122wUK8.js",
+    "file": "assets/league-BzYuOXYx.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
