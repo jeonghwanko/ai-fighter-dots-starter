@@ -326,7 +326,7 @@
     ]
   },
   "league.html": {
-    "file": "assets/league-BzYuOXYx.js",
+    "file": "assets/league-8jOsnEC2.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
@@ -335,7 +335,7 @@
       "_fighterCreatorLocale-Bh29uOe8.js"
     ],
     "css": [
-      "assets/league-CrQALEUq.css"
+      "assets/league-Dt2vowIq.css"
     ]
   },
   "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
