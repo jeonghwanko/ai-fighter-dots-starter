@@ -25,6 +25,7 @@ const round = value => Math.round(value * 100) / 100;
 const crop = z.strictObject({ x: z.number().int().min(0), y: z.number().int().min(0), width: z.number().int().min(1), height: z.number().int().min(1) });
 const motionPlan = z.strictObject({
   animation: z.string().min(1),
+  getUpAnimation: z.string().min(1).optional(),
   frame: z.number().int().min(0).optional(),
   flipX: z.boolean().optional(),
   origin: z.strictObject({ x: z.number(), y: z.number() }).optional(),
@@ -161,6 +162,7 @@ async function readAnimation(source, name, motion) {
 function checkPlanFields(name, motion) {
   const kind = spec.motions[name].kind;
   const misplaced = [
+    name !== 'fall' && motion.getUpAnimation !== undefined && 'getUpAnimation',
     name !== 'idle' && motion.frame !== undefined && 'frame',
     name !== 'walk' && motion.stridePixels !== undefined && 'stridePixels',
     !['walk', 'run'].includes(name) && motion.gaitReview !== undefined && 'gaitReview',
@@ -168,6 +170,8 @@ function checkPlanFields(name, motion) {
     kind === 'gait' && motion.landmarks !== undefined && 'landmarks',
   ].filter(Boolean);
   if (misplaced.length) fail('PLAN_FIELD', `${name}: ${misplaced.join(', ')} not used by this motion`);
+  if (motion.getUpAnimation !== undefined && motion.landmarks?.getUp !== undefined)
+    fail('PLAN_FIELD', 'fall: choose getUpAnimation or landmarks.getUp, not both');
 }
 
 function encode(sheet, plan) {
@@ -185,12 +189,16 @@ async function packMotion(name, motion, animation, plan) {
     if (index >= playback.length) fail('PLAN_FIELD', `idle: frame ${index} outside ${playback.length} playback steps`);
     playback = [playback[index]];
   }
-  const unique = [], identity = new Map(), steps = [];
-  for (const step of playback) {
+  const unique = [], identity = new Map();
+  const include = step => {
     const hash = createHash('sha256').update(step.frame.data).digest('hex');
     if (!identity.has(hash)) { identity.set(hash, unique.length); unique.push({ frame: step.frame, key: step.key }); }
-    steps.push({ frame: identity.get(hash), durationMs: step.durationMs });
-  }
+    return { frame: identity.get(hash), durationMs: step.durationMs };
+  };
+  // Get-up cells share the fall sheet and deduplication, but never enter fall playback.
+  const steps = playback.map(include);
+  const getUp = animation.getUp?.frames.map((frame, step) => ({ clip: 'fall', ...include({ frame,
+    durationMs: animation.getUp.durations[step], key: animation.getUp.keys[step] }) }));
   if (motionSpec.kind === 'gait') {
     if (unique.length !== (motionSpec.frames ?? 1) || steps.some((step, index) => step.frame !== index))
       fail('GAIT_FRAMES', `${name}: needs ${motionSpec.frames} distinct frames played once in order; found ${unique.length} distinct in ${steps.length} steps`);
@@ -241,12 +249,15 @@ async function packMotion(name, motion, animation, plan) {
     clip.sequence = steps;
     clip.hitSequenceIndices = motion.hitSequenceIndices ?? [];
     if (motion.landmarks) clip.landmarks = structuredClone(motion.landmarks);
+    if (getUp) clip.landmarks = { ...clip.landmarks, getUp };
   }
   const report = { animation: motion.animation, playbackSteps: steps.length, distinctFrames: unique.length, frameSize: [frameWidth, frameHeight],
     origin: { x: round(origin.x), y: round(origin.y), source: motion.origin ? 'plan' : 'anchor-x, measured ground line' },
     contactsPerFrame: contacts.map(list => list.length), frameKeys: unique.map(u => u.key), events: animation.events,
     ...(animation.loop !== undefined && animation.loop !== motionSpec.loop ? { loopOverridden: { gamePack: animation.loop, contract: motionSpec.loop } } : {}),
     ...(animation.gaitReview ? { gaitReview: { status: 'pass', sequenceSha256: animation.gaitReview.sequenceSha256 } } : {}),
+    ...(getUp ? { getUp: { animation: motion.getUpAnimation, playbackSteps: getUp.length,
+      frames: getUp.map(step => step.frame), frameKeys: animation.getUp.keys, events: animation.getUp.events } } : {}),
     ...(name === 'walk' ? { stride: { used: clip.stridePixels, measured: measureStride(contacts),
       source: animation.gaitReview ? 'same-foot-review' : motion.stridePixels ? 'plan' : 'silhouette-estimate',
       estimateWarning: 'Nearest silhouette matching may exchange feet and fills missing steps with a median; it is not verified contact.' } } : {}) };
@@ -282,6 +293,17 @@ export async function packFighter(planFile) {
     const source = await loadPack(gamePack);
     const animations = {};
     for (const name of MOTIONS) animations[name] = await readAnimation(source, name, plan.motions[name]);
+    if (plan.motions.fall.getUpAnimation !== undefined) {
+      const fall = animations.fall, getUp = await readAnimation(source, 'fall.getUp', {
+        animation: plan.motions.fall.getUpAnimation, flipX: plan.motions.fall.flipX,
+      });
+      if (getUp.frames.length < 2 || getUp.frames.length > 8)
+        fail('PLAN_FIELD', 'fall.getUpAnimation: needs 2–8 playback steps');
+      if (getUp.frames[0].width !== fall.frames[0].width || getUp.frames[0].height !== fall.frames[0].height ||
+        Math.abs(getUp.anchor.x - fall.anchor.x) > 1e-6 || Math.abs(getUp.anchor.y - fall.anchor.y) > 1e-6)
+        fail('GET_UP_GEOMETRY', 'fall and getUpAnimation must share the same canvas and anchor');
+      fall.getUp = getUp;
+    }
     source.release();
     for (const name of ['walk', 'run']) {
       const motion = plan.motions[name];
@@ -305,6 +327,10 @@ export async function packFighter(planFile) {
       const animation = animations[name];
       animation.frames = await Promise.all(animation.frames.map(frame => resize(frame, ratio, plan.resample)));
       animation.anchor = { x: animation.anchor.x * ratio, y: animation.anchor.y * ratio };
+      if (animation.getUp) {
+        animation.getUp.frames = await Promise.all(animation.getUp.frames.map(frame => resize(frame, ratio, plan.resample)));
+        animation.getUp.anchor = { x: animation.getUp.anchor.x * ratio, y: animation.getUp.anchor.y * ratio };
+      }
       if (plan.motions[name].origin) plan.motions[name].origin = { x: plan.motions[name].origin.x * ratio, y: plan.motions[name].origin.y * ratio };
       if (animation.gaitReview) {
         animation.gaitReview.geometry.groundY *= ratio;

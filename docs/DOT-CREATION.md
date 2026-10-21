@@ -117,6 +117,33 @@ npm run sprite -- game-pack --request game.json --out-dir pack
 3. 최종 game-pack의 walk/run을 `fighter:gait review`로 검수하고 실제 미리보기를 보여준다.
    `npm run fighter:pack -- plan.json`을 실행한다. 경로는 계획 파일 기준이다. 출력 폴더가 이미 있으면 거절한다.
 
+#### 별도 기상 애니메이션을 fall 시트에 보관하기
+
+쓰러짐과 기상을 별도로 만들었다면 공식 game-pack에 두 애니메이션을 넣고 `fall.getUpAnimation`을 지정한다.
+다음 숫자·이름은 구조 예시다. 쓰러짐 6단계의 마지막은 실제 누운 자세여야 한다.
+
+```json
+"fall": {
+  "animation": "rook/fall",
+  "getUpAnimation": "rook/get_up",
+  "hitSequenceIndices": [3],
+  "landmarks": { "lieSequenceIndex": 5 }
+}
+```
+
+- `getUpAnimation`은 같은 game-pack의 애니메이션 이름이며 fall에만 허용된다. 별도 입력은 2~8개 재생 단계여야 한다.
+- 두 입력은 동일한 캔버스·배율·기준점(anchor)을 공유해야 한다. 다른 캔버스·anchor는 `GET_UP_GEOMETRY`로 거절한다.
+  원본에서 먼저 맞춘다. 패커는 fall의 좌우 반전과 중립 기준 공통 배율을 기상 프레임에도 동일하게 적용한다.
+- 기상 그림은 fall의 같은 시트와 공통 크롭·origin에 포함하고 픽셀 중복을 제거한다. `fall.sequence`에는 추가하지 않는다.
+  `landmarks.getUp`의 `{clip:"fall", frame, durationMs}`는 실제 기상 순서·시간과 중복 제거 결과에서 자동으로 만든다.
+- `getUpAnimation`과 수동 `landmarks.getUp`을 함께 쓰면 거절한다. 기존 수동 빌리기 경로는 계속 지원한다.
+  `{clip, step}`의 `step`은 해당 클립의 기본 재생 단계이며 기상 보조 프레임까지 확장되지 않는다.
+- 기상의 단계별 1~2000ms, 합산 10초, 최종 시트 크기·바이트·전체 프레임 한도와 walk/run 검수 게이트는 유지된다.
+  `pack-report.json`의 `motions.fall.getUp`에 원본 애니메이션·프레임 키·최종 프레임 매핑을 기록한다.
+
+쓰러짐을 재생한 뒤 다시 일어서거나 다시 눕는 구간을 fall에 붙이지 않는다. 실제 fall 재생은 누움으로 끝나고,
+기상은 getUp을 사용하는 상황에서만 재생되는지 최종 미리보기에서 별도로 확인한다.
+
 `fighter:pack`이 그림에서 재는 값:
 
 - **크기.** idle 몸높이를 재서 400px가 아니면(2% 초과) 모든 동작을 같은 비율로 다시 맞춘다. 게임은 `actor 높이 / bodyHeight`로

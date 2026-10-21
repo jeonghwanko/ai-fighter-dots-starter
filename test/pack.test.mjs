@@ -75,6 +75,107 @@ async function run(directory, value) {
   return packFighter(file);
 }
 
+// Only a format fixture: a lying hold, repeated recovery cell, then standing.
+// Real characters must supply their own separate, visually reviewed get_up art.
+async function addGetUp(directory, change = () => {}) {
+  const file = path.join(directory, 'game-pack.json'), pack = JSON.parse(await readFile(file, 'utf8'));
+  pack.animations['bot/get_up'] = { ...structuredClone(pack.animations['bot/fall']),
+    frames: [pack.animations['bot/fall'].frames.at(-1), pack.animations['bot/hit'].frames[4],
+      pack.animations['bot/hit'].frames[4], pack.animations['bot/fightIdle'].frames[0]],
+    durations_ms: [120, 90, 150, 110], loop: false };
+  change(pack.animations['bot/get_up'], pack);
+  await writeFile(file, JSON.stringify(pack));
+}
+function useGetUp(value) {
+  value.motions.fall.getUpAnimation = 'bot/get_up';
+  delete value.motions.fall.landmarks.getUp;
+}
+
+test('separate get-up cells share fall storage without entering fall playback, including dedupe', async () => {
+  const directory = await gamePack('get-up');
+  const sourceFile = path.join(directory, 'game-pack.json'), source = JSON.parse(await readFile(sourceFile, 'utf8'));
+  source.animations['bot/fall'].frames.push(source.animations['bot/fall'].frames.at(-1));
+  source.animations['bot/fall'].durations_ms.push(130);
+  await writeFile(sourceFile, JSON.stringify(source));
+  assert.equal((await run(directory, plan(directory, 'baseline'))).ok, true);
+  await addGetUp(directory);
+  const result = await run(directory, plan(directory, 'auxiliary', useGetUp));
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  const baseline = JSON.parse(await readFile(path.join(directory, 'baseline/fighter.json'), 'utf8'));
+  const fighter = JSON.parse(await readFile(path.join(directory, 'auxiliary/fighter.json'), 'utf8'));
+  const fall = fighter.clips.fall, before = baseline.clips.fall;
+  assert.equal(fall.sequence.length, 6);
+  assert.deepEqual(fall.sequence, before.sequence);
+  assert.deepEqual(fall.hitSequenceIndices, before.hitSequenceIndices);
+  assert.equal(fall.sequence.at(-1).frame, fall.sequence[fall.landmarks.lieSequenceIndex].frame);
+  const n = before.frames.length;
+  assert.deepEqual(fall.landmarks.getUp, [
+    { clip: 'fall', frame: fall.sequence.at(-1).frame, durationMs: 120 },
+    { clip: 'fall', frame: n, durationMs: 90 }, { clip: 'fall', frame: n, durationMs: 150 },
+    { clip: 'fall', frame: fall.sequence[0].frame, durationMs: 110 },
+  ]);
+  assert.equal(fall.frames.length, n + 1);
+  assert.ok(fall.sequence.every(step => step.frame < n));
+  assert.deepEqual(fighter.clips.dash.landmarks, baseline.clips.dash.landmarks);
+  for (const asset of fighter.assets.filter(asset => asset.id !== 'fall')) {
+    assert.equal(asset.sha256, baseline.assets.find(before => before.id === asset.id).sha256);
+  }
+  for (const [name, clip] of Object.entries(fighter.clips)) if (name !== 'fall') assert.deepEqual(clip, baseline.clips[name]);
+  const report = JSON.parse(await readFile(result.report, 'utf8'));
+  assert.equal(report.motions.fall.playbackSteps, before.sequence.length);
+  assert.deepEqual(report.motions.fall.getUp.frames, fall.landmarks.getUp.map(step => step.frame));
+  const repeat = await run(directory, plan(directory, 'auxiliary-repeat', useGetUp));
+  assert.equal(repeat.ok, true);
+  for (const file of ['fighter.json', 'assets/fall.webp']) assert.deepEqual(
+    await readFile(path.join(directory, 'auxiliary', file)), await readFile(path.join(directory, 'auxiliary-repeat', file)));
+});
+
+test('get-up shares fall mirroring and body resampling; borrowed steps still refer only to playback', async () => {
+  const directory = await gamePack('get-up-scaled', { scale: .5 });
+  await addGetUp(directory);
+  const value = plan(directory, 'fighter', p => {
+    useGetUp(p); p.motions.fall.flipX = true;
+    p.motions.dash.landmarks.windup = { clip: 'fall', step: 0 };
+  });
+  const result = await run(directory, value);
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  const fighter = JSON.parse(await readFile(path.join(directory, 'fighter/fighter.json'), 'utf8'));
+  const fall = fighter.clips.fall;
+  assert.equal(fall.landmarks.getUp[0].frame, fall.sequence.at(-1).frame);
+  assert.equal(fall.landmarks.getUp[1].frame, fall.landmarks.getUp[2].frame);
+  assert.deepEqual(fighter.clips.dash.landmarks.windup, { clip: 'fall', frame: fall.sequence[0].frame });
+  assert.equal(JSON.parse(await readFile(result.report, 'utf8')).scale.resampled, 'lanczos3');
+  value.out = 'bad-borrow'; value.motions.dash.landmarks.windup.step = fall.sequence.length;
+  const bad = await run(directory, value);
+  assert.equal(bad.errors[0].code, 'PLAN_FIELD');
+  assert.equal(await stat(path.join(directory, value.out)).then(() => true, () => false), false);
+});
+
+test('get-up rejects conflicting plans, mismatched coordinates and invalid contracts without output', async () => {
+  const directory = await gamePack('get-up-invalid');
+  for (const [label, change, mutate, code] of [
+    ['misplaced', p => { p.motions.walk.getUpAnimation = 'bot/get_up'; }, () => {}, 'PLAN_FIELD'],
+    ['conflict', p => { p.motions.fall.landmarks.getUp = [{ clip: 'hit', step: 4, durationMs: 90 }]; }, () => {}, 'PLAN_FIELD'],
+    ['missing', p => { p.motions.fall.getUpAnimation = 'missing'; }, () => {}, 'ANIMATION_NOT_FOUND'],
+    ['anchor', () => {}, a => { a.anchor[1] -= 1; }, 'GET_UP_GEOMETRY'],
+    ['canvas', () => {}, (a, p) => {
+      a.frames = a.frames.map((key, i) => {
+        const texture = p.textures.find(t => t.frames[key]), copy = structuredClone(texture.frames[key]);
+        copy.frame.w -= 1; texture.frames[`aux-${i}`] = copy; return `aux-${i}`;
+      });
+    }, 'GET_UP_GEOMETRY'],
+    ['count', () => {}, a => { a.frames = Array(9).fill(a.frames[0]); a.durations_ms = Array(9).fill(100); }, 'PLAN_FIELD'],
+    ['duration', () => {}, a => { a.frames = Array(6).fill(a.frames[0]); a.durations_ms = Array(6).fill(2000); }, 'GET_UP_DURATION_LIMIT'],
+    ['lying', p => { p.motions.fall.landmarks.lieSequenceIndex = 2; }, () => {}, 'FALL_END_POSE'],
+  ]) {
+    await addGetUp(directory, mutate);
+    const result = await run(directory, plan(directory, label, p => { useGetUp(p); change(p); }));
+    assert.equal(result.ok, false, label);
+    assert.ok(result.errors.some(e => e.code === code), label + JSON.stringify(result.errors));
+    assert.equal(await stat(path.join(directory, label)).then(() => true, () => false), false);
+  }
+});
+
 test('a game pack becomes a package that passes full file validation', async () => {
   const directory = await gamePack('valid');
   const result = await run(directory, plan(directory, 'fighter'));
@@ -149,14 +250,16 @@ test('feet on the canvas edge still get transparent room for their contacts', as
 
 test('normal authoring requires gait reviews; format-only is an explicit fixture exception', async () => {
   const directory = await gamePack('review-required');
-  const result = await run(directory, plan(directory, 'fighter', value => { delete value.reviewPolicy; }));
+  await addGetUp(directory);
+  const result = await run(directory, plan(directory, 'fighter', value => { useGetUp(value); delete value.reviewPolicy; }));
   assert.equal(result.errors[0].code, 'GAIT_REVIEW_REQUIRED');
   assert.equal(await stat(path.join(directory, 'fighter')).then(() => true, () => false), false);
 });
 
 test('reviewed input uses the verified stride and rejects changed playback timing', async () => {
   const directory = await gamePack('review-bound');
-  const value = plan(directory, 'fighter', p => { delete p.reviewPolicy; delete p.motions.walk.stridePixels; });
+  await addGetUp(directory);
+  const value = plan(directory, 'fighter', p => { useGetUp(p); delete p.reviewPolicy; delete p.motions.walk.stridePixels; });
   for (const motion of ['walk', 'run']) {
     const sequence = await loadSequence({ file: 'game-pack.json', animation: `bot/${motion}` }, directory);
     // Fixture evidence exercises binding/packaging only, not a claim that the sample bot walks well.

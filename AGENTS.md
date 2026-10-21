@@ -20,6 +20,7 @@ This repository lets each user create their own fighter through Dot. Read
   (see `docs/DOT-CREATION.md`). It measures scale, frames, origins, contacts and hashes from the pixels.
   Do not hand-assemble sheets or type those values. The plan holds contact steps, landmarks and gait review paths.
   Normal authoring uses the default reviewPolicy required; format-only is for format fixtures, not visual approval.
+  Separate get-up art uses fall.getUpAnimation (docs/DOT-CREATION.md); keep auxiliary cells out of fall playback.
 - Never invent hashes, origins, contact timing, successful generation, or registration results.
 - Creation is local. Any signed-in user may upload without an invitation or manual approval.
   Submit only within the user's request, reuse the same idempotency key for retries, and distinguish
