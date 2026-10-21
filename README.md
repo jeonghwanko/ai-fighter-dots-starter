@@ -22,12 +22,15 @@ sprite-gen 소스는 `vendor/sprite-gen` Git 서브모듈에 포함됩니다. �
 ## 3분 실행
 
 ```sh
-git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run validate -- examples/sparring-bot/fighter.json
 npm run mcp:smoke
 ```
+
+홈페이지와 연결할 제작 도구는 `codex/creator-hosting` 브랜치를 사용합니다.
+이 브랜치의 `deploy/creator-site.json`에 공개 로그인 연결 설정이 있습니다. 기본 `main`으로 대체하지 않습니다.
 
 `mcp:smoke`는 공식 SDK 클라이언트로 서버를 띄워 `initialize → tools/list → tools/call`을 실제 호출합니다.
 성공 결과에도 `pending: ["runtime-preview", "visual-review", "server-registration"]`이 남습니다.

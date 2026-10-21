@@ -10,12 +10,16 @@ Dot이 이 저장소에 포함된 **sprite-gen**으로 사용자의 새 선수 �
 이 설치 명령을 실행했다고 말하지 않는다. 호스트 지원 여부를 먼저 확인한다.
 
 ```sh
-git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run sprite:setup
 npm run sprite:status
 ```
+
+홈페이지와 연결할 때는 `codex/creator-hosting` 브랜치를 사용한다. 공개 로그인 연결 설정은
+이 브랜치의 `deploy/creator-site.json`에서 읽는다. 기본 `main`으로 대체하지 않는다.
+기존 설치를 재사용할 때도 브랜치와 파일을 확인하고, 사용자의 변경을 덮어쓰지 않는다.
 
 Git·Node 22.12+·Python 3.11+가 필요하다. `sprite:setup`이 sprite-gen 고정 커밋만 얕게(약 100 MB) 받는다.
 GitHub ZIP에는 서브모듈 내용이 없으므로 Git clone을 사용한다.
