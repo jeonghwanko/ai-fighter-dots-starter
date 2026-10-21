@@ -1,97 +1,83 @@
 <!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <meta name="referrer" content="no-referrer" />
-    <meta name="theme-color" content="#14212d" />
-    <meta name="description" content="Make a character with your AI agent, upload it, and join AI Fighter. No invitation or manual approval is needed." />
-    <meta property="og:title" content="AI Fighter — The Founding League" />
-    <meta property="og:description" content="Your agent. Your fighter. Our first league. Create, upload, and play without prior approval." />
-    <meta property="og:type" content="website" />
-    <meta property="og:image" content="https://jeonghwanko.github.io/ai-fighter-dots-starter/art/ui/ai-fighter-logo.webp" />
-    <meta property="og:url" content="https://jeonghwanko.github.io/ai-fighter-dots-starter/league.html" />
-    <meta name="twitter:card" content="summary_large_image" />
-    <link rel="canonical" href="https://jeonghwanko.github.io/ai-fighter-dots-starter/league.html" />
-    <link rel="icon" href="/ai-fighter-dots-starter/art/ui/ai-fighter-logo.webp" type="image/webp" />
-    <title>The Founding League · AI Fighter</title>
-    <link rel="stylesheet" crossorigin href="/ai-fighter-dots-starter/assets/league-vh8fVP0l.css">
-  </head>
-  <body>
-    <a class="skip" href="#main">Skip to content</a>
-    <aside class="game-introduction-banner" aria-label="Meet AI Fighter">
-      <div class="wrap introduction-banner-inner">
-        <a class="introduction-banner-main" href="./about.html?lang=en"><span class="introduction-banner-copy"><strong>What is AI Fighter?</strong></span><span class="introduction-banner-cta">Explore the game <span aria-hidden="true">↗</span></span></a>
-        <a class="introduction-banner-ko" href="./about.html?lang=ko" lang="ko">한국어 소개</a>
+<html lang="ko">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#14212d">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="상상한 캐릭터를 만들고, AI Fighter의 링에서 함께 만나세요. 파이터들의 이야기와 목소리를 만나고 직접 참여하세요.">
+  <meta property="og:title" content="AI Fighter · 다음 도전자, 당신입니다">
+  <meta property="og:description" content="상상한 캐릭터를 만들고, AI Fighter의 링에서 함께 만나세요.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://jeonghwanko.github.io/ai-fighter-dots-starter/art/ui/ai-fighter-logo.webp">
+  <meta property="og:url" content="https://jeonghwanko.github.io/ai-fighter-dots-starter/league.html">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://jeonghwanko.github.io/ai-fighter-dots-starter/league.html">
+  <link rel="icon" href="/ai-fighter-dots-starter/art/ui/ai-fighter-logo.webp" type="image/webp">
+  <title>AI Fighter · 다음 도전자, 당신입니다</title>
+  <script type="module" crossorigin src="/ai-fighter-dots-starter/assets/league-D1b_iI3p.js"></script>
+  <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/modulepreload-polyfill-P2Xu9kJm.js">
+  <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/fighterCreatorLocale-Bh29uOe8.js">
+  <link rel="stylesheet" crossorigin href="/ai-fighter-dots-starter/assets/league-CD57kfu0.css">
+</head>
+<body>
+  <a class="skip" href="#main"><span data-copy="skip">본문으로 건너뛰기</span></a>
+  <header class="header wrap">
+    <a href="#" class="brand" aria-label="AI Fighter 홈" data-label="home">AI FIGHTER<span class="brand-star" aria-hidden="true">✳</span></a>
+    <nav aria-label="주요 메뉴" data-label="navigation"><a href="#fighters"><span data-copy="navFighters">파이터들</span></a><a href="#join"><span data-copy="navJoin">참여하는 방법</span></a><a class="account" href="./creator.html?lang=ko" data-destination="creator.html"><span data-copy="account">내 선수</span> <span aria-hidden="true">↗</span></a><span class="languages" aria-label="언어" data-label="language"><a href="?lang=ko" data-lang="ko" lang="ko">한국어</a><span aria-hidden="true">/</span><a href="?lang=en" data-lang="en" lang="en">EN</a></span></nav>
+  </header>
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-top wrap">
+        <h1 id="hero-title"><span data-copy="heroFirst">다음 도전자,</span><br> <em><span data-copy="heroLast">당신입니다.</span></em></h1>
+        <div class="hero-invite"><p><span data-copy="invite">상상한 캐릭터를 만들고,<br> 이 무대에 함께 서세요.</span></p><div class="actions"><a class="button primary" href="#join"><span data-copy="join">나도 참전하기</span> <span aria-hidden="true">↗</span></a><a class="text-link" href="#match"><span aria-hidden="true">▷</span> <span data-copy="watchFirst">먼저 한 경기 보기</span></a></div></div>
       </div>
-    </aside>
-    <header class="masthead wrap">
-      <a class="wordmark" href="./league.html" aria-label="AI Fighter Founding League home">AI FIGHTER</a>
-      <nav aria-label="Main navigation">
-        <a href="#how-it-works">The experience</a>
-        <a href="#requirements">Who can join</a>
-        <a class="nav-account" href="./creator.html?lang=en">My fighters <span aria-hidden="true">↗</span></a>
-      </nav>
-    </header>
-    <main id="main">
-      <section class="hero wrap" aria-labelledby="hero-title">
-        <div class="hero-copy">
-          <h1 id="hero-title">YOUR AGENT.<br />YOUR FIGHTER.<br /><span>OUR FIRST LEAGUE.</span></h1>
-          <p class="hero-intro">That character in your head?<br />Give it a place in the ring.</p>
-          <p class="hero-body">Make an original fighter with your AI agent, upload it, and watch it face off in AI Fighter. Everyone can start without an invitation.</p>
-          <div class="hero-actions">
-            <a class="button button-primary" href="./creator.html?lang=en">Start creating your fighter <span aria-hidden="true">↗</span></a>
-            <a class="text-link" href="./fighter.html?lang=en">Try the arena <span aria-hidden="true">↗</span></a>
-          </div>
+      <div class="showcase" id="fighters" role="region" aria-label="파이터 쇼케이스" data-label="showcase">
+        <div class="showcase-top wrap">
+          <div class="speech"><span class="speech-name" id="speaker">쿠마</span><p id="quote">“…뭘 봐. 몸 좀 풀어 볼 텐가?”</p><span class="equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div>
+          <button class="sound-button" id="sound" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="m17 9 5 6m0-6-5 6" class="sound-off"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" class="sound-on"/></svg><span>목소리 켜기</span></button>
         </div>
-        <figure class="fight-poster">
-          <div class="poster-stage">
-            <span class="poster-number" aria-hidden="true">OPEN</span>
-            <span class="poster-ring" aria-hidden="true"></span>
-            <img class="fighter fighter-kuma" src="/ai-fighter-dots-starter/art/arena/concept/kuma.webp" width="342" height="600" alt="Kuma, an existing arena fighter: a formidable teddy bear in a waistcoat" fetchpriority="high" />
-            <img class="fighter fighter-yume" src="/ai-fighter-dots-starter/art/arena/concept/yume.webp" width="340" height="600" alt="Yume, an existing arena fighter in flowing purple martial arts robes" fetchpriority="high" />
+        <div class="roster-layout">
+          <div class="roster" id="roster" tabindex="0" aria-label="좌우로 넘겨 파이터 선택" data-label="roster">
+            <button class="fighter-card selected kuma" data-fighter="kuma" aria-label="쿠마 선택"><span class="card-number" aria-hidden="true">01</span><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/arena/concept/kuma.webp" alt="조끼와 나비넥타이를 입은 곰 탈의 쿠마" width="343" height="600" fetchpriority="high"></div><span class="fighter-name">쿠마 <span aria-hidden="true">↗</span></span></button>
+            <button class="fighter-card yume" data-fighter="yume" aria-label="유메 선택"><span class="card-number" aria-hidden="true">02</span><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/arena/concept/yume.webp" alt="보라색 무술복을 입은 유메" width="256" height="600"></div><span class="fighter-name">유메 <span aria-hidden="true">↗</span></span></button>
+            <button class="fighter-card lupin" data-fighter="lupin-male" aria-label="루팡 선택"><span class="card-number" aria-hidden="true">03</span><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/arena/concept/lupin-male.webp" alt="검은 정장을 입은 루팡" width="202" height="600"></div><span class="fighter-name">루팡 <span aria-hidden="true">↗</span></span></button>
+            <button class="fighter-card female" data-fighter="lupin-female" aria-label="여성 루팡 선택"><span class="card-number" aria-hidden="true">04</span><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/arena/concept/lupin-female.webp" alt="검은 재킷과 선글라스를 착용한 여성 루팡" width="267" height="600"></div><span class="fighter-name">여성 루팡 <span aria-hidden="true">↗</span></span></button>
+            <button class="fighter-card singha" data-fighter="singha" aria-label="킥하형 선택"><span class="card-number" aria-hidden="true">05</span><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/arena/concept/singha.webp" alt="검은 민소매와 바지를 입은 킥하형" width="217" height="600"></div><span class="fighter-name">킥하형 <span aria-hidden="true">↗</span></span></button>
+            <button class="fighter-card pink" data-fighter="pink" aria-label="핑크형님 선택"><span class="card-number" aria-hidden="true">06</span><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/arena/concept/pink.webp" alt="핑크색 의상의 핑크형님" width="235" height="600"></div><span class="fighter-name">핑크형님 <span aria-hidden="true">↗</span></span></button>
           </div>
-        </figure>
-      </section>
-
-      <div class="league-strip" aria-label="League overview">
-        <div class="wrap strip-inner"><p><strong>ALL</strong><span>CREATORS WELCOME</span></p><p><strong>01</strong><span>ORIGINAL FIGHTER EACH</span></p><p><strong>03</strong><span>MATCHES EACH, PLANNED</span></p></div>
+          <a class="your-slot" href="#join"><span class="slot-symbol" aria-hidden="true">＋</span><div><span class="slot-title"><span data-copy="slotTitle">여기,<br> 당신의 자리.</span></span><span class="slot-link"><span data-copy="slotLink">내 캐릭터로 참전하기</span> <span aria-hidden="true">↗</span></span></div><span class="slot-outline" aria-hidden="true">?</span></a>
+        </div>
+        <div class="showcase-bottom wrap"><p><span data-copy="hint">마음에 드는 파이터를 눌러보세요.</span></p><div class="carousel-controls"><button id="autoplay" aria-label="자동 넘김 일시정지" aria-pressed="true">Ⅱ</button><span class="slide-count"><b id="current">01</b> / 06</span><button id="prev" aria-label="이전 파이터" data-label="prev">←</button><button id="next" aria-label="다음 파이터" data-label="next">→</button></div></div>
       </div>
-
-      <section id="how-it-works" class="experience wrap" aria-labelledby="experience-title">
-        <div class="section-heading"><h2 id="experience-title">Make it yours.<br />Then let it fight.</h2></div>
-        <ol class="steps">
-          <li><h3>A fighter only<br />you would imagine.</h3><p>A moonlighting bear boxer? A knight with a day job? Describe your original character and build its art and motions with your agent.</p></li>
-          <li><h3>From your workspace<br />to the roster.</h3><p>Use the creator kit to prepare and submit your fighter. We check the package and review it for game admission before it enters.</p></li>
-          <li><h3>Your character.<br />A real first match.</h3><p>Watch it face other creations under shared game AI and server rules. The planned league includes group matches before a knockout final.</p></li>
-        </ol>
-      </section>
-
-      <section id="requirements" class="brief-section" aria-labelledby="brief-title">
-        <div class="wrap brief-layout">
-          <div class="brief-copy"><h2 id="brief-title">A little imagination.<br />A working agent.<br />A fighter of your own.</h2><p>For builders, character makers, and curious people who want to see something they made come alive.</p><a class="text-link" href="https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/main/docs/DOT-CREATION.md" target="_blank" rel="noopener noreferrer">Read the creation guide <span aria-hidden="true">↗</span></a></div>
-          <ul class="requirements">
-            <li><span aria-hidden="true">✓</span><div><h3>Your own original character</h3><p>Bring a concept you created and artwork or references you have permission to use.</p></div></li>
-            <li><span aria-hidden="true">✓</span><div><h3>A supported agent and generation account</h3><p>Use Dot/Codex with local tool access and your own supported image-generation account. Your plan’s limits or generation charges apply.</p></div></li>
-            <li><span aria-hidden="true">✓</span><div><h3>A computer for the creator kit</h3><p>Be comfortable following a guided setup. The kit needs Git, Node.js, and Python; your agent can help with the steps.</p></div></li>
-            <li><span aria-hidden="true">✓</span><div><h3>Time to finish and share feedback</h3><p>Plan to complete one fighter during the creation window. You can create and upload at your own pace.</p></div></li>
-          </ul>
-        </div>
-      </section>
-
-      <section class="details-section wrap" aria-labelledby="details-title">
-        <div class="section-heading"><h2 id="details-title">The useful details.</h2></div>
-        <div class="faq">
-          <details><summary>Can I start right away?<span aria-hidden="true">+</span></summary><p>Yes. Sign in with Google, prepare the tools in Dot, create your fighter, and upload it. Files are checked automatically. No invitation or manual approval is required.</p></details>
-          <details><summary>Do we all need to be online at once?<span aria-hidden="true">+</span></summary><p>No. We’re planning asynchronous matches so creators can participate across time zones. You can create and upload your fighter at any time. Event schedules are separate from access to AI Fighter.</p></details>
-          <details><summary>Does my AI agent control the fight?<span aria-hidden="true">+</span></summary><p>Your agent helps create and package your fighter. Battles use the game’s shared AI and server-controlled rules. Valid uploads become available automatically. Inappropriate content may be removed afterward.</p></details>
-          <details><summary>How do I start?<span aria-hidden="true">+</span></summary><p>Continue with Google on the creator homepage. Copy the structured request into a new Dot conversation, then follow the setup, creation, and upload steps. There is no application review. For help, contact <a href="mailto:turbo08@gmail.com">turbo08@gmail.com</a>.</p></details>
-          <details><summary>What does it cost?<span aria-hidden="true">+</span></summary><p>There’s no league entry fee. You use your own generation account, so its subscription, usage limits, and any generation charges remain yours. The creator kit is open source.</p></details>
-        </div>
-      </section>
-
-      <section class="final-call" aria-labelledby="call-title"><div class="wrap call-inner"><div><h2 id="call-title">Give us someone<br />to root for.</h2></div><div class="call-action"><a class="button button-dark" href="./creator.html?lang=en">Start creating your fighter <span aria-hidden="true">↗</span></a></div></div></section>
-    </main>
-    <footer class="wrap"><a class="wordmark" href="./league.html">AI FIGHTER</a><p>For questions, contact <a href="mailto:turbo08@gmail.com">turbo08@gmail.com</a>.</p><div><a href="./creator.html?lang=en">Creator homepage ↗</a><a href="https://github.com/jeonghwanko/ai-fighter-dots-starter" target="_blank" rel="noopener noreferrer">Creator kit ↗</a></div></footer>
-  </body>
-</html>
+    </section>
+    <section class="match-section wrap" id="match" aria-labelledby="match-title">
+      <div class="section-head"><h2 id="match-title"><span data-copy="matchTitle">그림으로 시작해서,<br> 한 판의 주인공으로.</span></h2><p><span data-copy="matchIntro">직접 싸우거나, AI 대결을 보며 응원하세요.</span></p></div>
+      <div class="match-grid">
+        <div class="video-panel"><video id="match-video" controls playsinline preload="none" aria-label="루팡과 쿠마의 대결 영상" data-label="video" poster="/ai-fighter-dots-starter/video/ai-fighter/match-poster.webp"><source src="/ai-fighter-dots-starter/video/ai-fighter/match.mp4" type="video/mp4"></video><div class="video-caption"><span><span data-copy="matchNames">루팡 vs 쿠마</span></span><span><span data-copy="matchCaption">실제 플레이 하이라이트 · 10초</span></span></div></div>
+        <div class="play-paths"><a href="./fighter.html?lang=ko" data-destination="fighter.html" class="play-path"><span class="path-icon" aria-hidden="true">↗</span><h3><span data-copy="playTitle">내 손으로 한 판</span></h3><p><span data-copy="playBody">공격과 방어의 타이밍을 잡고,<br> 내 캐릭터의 한 방을 느껴보세요.</span></p><span class="path-link"><span data-copy="arena">무투장으로 가기 →</span></span></a><div class="watch-path"><span class="path-icon" aria-hidden="true">▷</span><h3><span data-copy="watchTitle">함께 보고 응원하기</span></h3><p><span data-copy="watchBody">무투장에서 자동 조종을 선택하면<br> 게임 AI가 경기를 진행합니다.</span></p><button id="watch" class="path-link"><span data-copy="watch">플레이 영상 보기 →</span></button></div></div>
+      </div>
+    </section>
+    <section class="join-section" id="join" aria-labelledby="join-title"><div class="wrap">
+      <div class="section-head"><h2 id="join-title"><span data-copy="joinTitle">이제, 당신의 캐릭터를<br> 소개할 차례.</span></h2><p><span data-copy="joinIntro">설명 한두 문장이나 참고 이미지로 시작하세요.</span></p></div>
+      <ol class="creation-steps"><li><span>01</span><h3><span data-copy="step1Title">상상하고</span></h3><p><span data-copy="step1Body">Dot에게 원하는 캐릭터를 설명하고,<br> 첫 외형을 함께 다듬으세요.</span></p></li><li><span>02</span><h3><span data-copy="step2Title">움직임을 고르고</span></h3><p><span data-copy="step2Body">이동, 공격, 방어를 미리 보며<br> 캐릭터다운 동작을 정하세요.</span></p></li><li><span>03</span><h3><span data-copy="step3Title">링에서 만나고</span></h3><p><span data-copy="step3Body">완성한 캐릭터를 등록하고,<br> 게임에서 첫 대결을 시작하세요.</span></p></li></ol>
+      <div class="join-bottom"><div><h3><span data-copy="requirementsTitle">제작은 PC의 Dot에서 이어집니다.</span></h3><p><span data-copy="requirementsBody">본인 이미지·영상 생성 계정을 사용합니다.<br> 참가비는 없으며, 생성 서비스의 구독·사용 요금은 별도입니다.</span></p></div><a href="./creator.html?lang=ko" data-destination="creator.html" class="button dark"><span data-copy="create">내 캐릭터 만들러 가기</span> <span aria-hidden="true">↗</span></a></div>
+    </div></section>
+    <footer class="wrap"><a class="brand" href="#">AI FIGHTER</a><p><span data-copy="footer">당신이 만든 캐릭터. 우리가 함께 보는 첫 대결.</span></p><a href="./about.html?lang=ko" data-destination="about.html"><span data-copy="about">게임 자세히 보기 ↗</span></a></footer>
+  </main>
+  <dialog class="profile-dialog" id="profile" aria-labelledby="profile-name" aria-describedby="profile-bio">
+    <button class="profile-close" id="profile-close" aria-label="프로필 닫기" data-label="close" autofocus>×</button>
+    <div class="profile-layout">
+      <div class="profile-portrait"><span class="portrait-ring" aria-hidden="true"></span><img id="profile-image" alt=""><span class="portrait-word" id="profile-word" aria-hidden="true">KUMA</span></div>
+      <div class="profile-copy">
+        <p class="profile-intro" id="profile-title"></p>
+        <h2 id="profile-name"></h2>
+        <p class="profile-bio" id="profile-bio"></p>
+        <ul class="profile-tags" id="profile-tags" aria-label="캐릭터 특징" data-label="tags"></ul>
+        <div class="profile-voice"><blockquote id="profile-quote"></blockquote><button id="profile-listen" class="profile-listen" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span>목소리 듣기</span><span class="profile-wave" aria-hidden="true">▂ ▅ ▃ ▆</span></button></div>
+        <div class="profile-actions"><a class="button dark" href="./fighter.html?lang=ko" data-destination="fighter.html"><span data-copy="profileArena">무투장에서 만나기</span> <span aria-hidden="true">↗</span></a><a id="profile-join" href="#join"><span data-copy="profileCreate">나도 캐릭터 만들기 →</span></a></div>
+      </div>
+    </div>
+    <div class="profile-footer"><button id="profile-prev" aria-label="이전 파이터 프로필" data-label="profilePrev">← <span id="profile-prev-name"></span></button><span id="profile-position">01 / 06</span><button id="profile-next" aria-label="다음 파이터 프로필" data-label="profileNext"><span id="profile-next-name"></span> →</button></div>
+  </dialog>
+  <audio id="voice" preload="none"></audio><p class="sr-only" id="audio-status" role="status"></p>
+</body></html>

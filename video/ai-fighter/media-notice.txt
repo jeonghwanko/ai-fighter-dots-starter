@@ -1,0 +1,10 @@
+AI Fighter homepage gameplay highlight
+Video: original AI Fighter gameplay supplied by the project owner; 10.0167 seconds.
+Music: 夏はsummer!! by Keyta, from OpenTracks.
+Track: https://opentracks.com/bgm/detail/4599
+License: https://opentracks.com/help/articles/license/
+Creator terms: https://opentracks.com/creator/detail/176
+The existing licensed game music was trimmed, faded and mixed into the gameplay clip.
+Video SHA-256: 6fd5ffe340881d3a0896add8aeaf41b5e0dfc3197094b4c9a3d35c4269c70968
+Poster: frame extracted from that gameplay at 2 seconds.
+Character art and Korean voices: existing AI Fighter runtime assets, unchanged.

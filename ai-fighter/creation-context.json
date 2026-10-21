@@ -429,15 +429,15 @@
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "ffbbfac41195d27027bb93026d420655dfff9fd715db716840b54ff58548e436",
+  "revision": "a8c4d7ae88257087dbdd36156d759517494657866351246402b97349f117fde2",
   "provenance": {
-    "sourceCommit": "a91bfdadabc8a1f9976d9b05ae7a2185a1738376",
+    "sourceCommit": "3ad79b104600bdadc6e76482f5fbf924bd285944",
     "sourceDirty": false,
     "sourceFiles": {
       "tools/ai-fighter/creation-context.mjs": "4c282476b625026f10dc2c43fe14c1d054ab1ab7743f322cb9771b5176aada7d",
       "tools/ai-fighter/export-creation-context.mjs": "fcad318b37dae57a352b4c8ee509a1b03dd143a83f0518d726b06ff53df6d30d",
       "contracts/ai-fighter/v1/contract-source.mjs": "299e0db90e50396ec3bf68744ebb7d2c4d200decae9e9acef37d05e702de3484",
-      "src/world/native-city-combat.json": "bbde3495517417f0f15b8c42595a6ce063dbea309c8c740689c3ccaf072da12c",
+      "src/world/native-city-combat.json": "732312b383d4b44ab9927dd4e009ed1e5c17547251ca02a611dee36a5b8a87b5",
       "src/app/InputBindings.ts": "dfd88fc875a6a46b1817a49279031b8123b9dcc7e8e8c0b1657090a2a9f73404",
       "src/render/scenes/village/NativeCityFightInputController.ts": "cee92834a65065cba31231d0fcdeda1c26f31c4ccb366bd90729744cb3c94c65",
       "src/render/art/FighterFightSkin.ts": "558be04b7f971123ef8f37af38f673bd6eeaac7cee4d997ef2f09b9179098faf",
@@ -445,7 +445,7 @@
       "src/render/effects/CombatPresentation.ts": "ba46230f581f26d3c62c6498f4f5adf0700e70f18048228bc0391876565732ee",
       "src/sim/cityFight/NativeCityLupinSwing.ts": "52768ec343135aab088a200b33d32f4a23d997ee732b0d90cf99baeb683af21a",
       "src/sim/cityFight/NativeCityFight.ts": "45af2a7df7aafff71c7691741f88fcae2a0b659d804487eddae4dc1428d0393d",
-      "src/sim/cityFight/NativeCityFightContacts.ts": "92593cd02f444f0bf9e16636cbf11430dfbb68583abeaf01a2ecbea676a2767f",
+      "src/sim/cityFight/NativeCityFightContacts.ts": "f6bd19d451bbf9d3a3db1413e8f4cba69058ebb3c70e1ed6ce58aa716902d06f",
       "src/sim/cityFight/NativeCityFightDefend.ts": "e1b77a1ab4850096390bffe89740897de61eb6499f66a2306c5af0ac945b13ba"
     },
     "generated": true
