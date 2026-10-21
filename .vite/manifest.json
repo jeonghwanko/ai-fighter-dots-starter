@@ -221,18 +221,18 @@
     "file": "assets/fighterCreatorLocale-Bh29uOe8.js",
     "name": "fighterCreatorLocale"
   },
-  "_infoPage-BFI3oJJI.css": {
-    "file": "assets/infoPage-BFI3oJJI.css",
-    "src": "_infoPage-BFI3oJJI.css"
+  "_infoPage-Duu4z4Tj.css": {
+    "file": "assets/infoPage-Duu4z4Tj.css",
+    "src": "_infoPage-Duu4z4Tj.css"
   },
-  "_infoPage-DhG7yH3e.js": {
-    "file": "assets/infoPage-DhG7yH3e.js",
+  "_infoPage-nNbKAaj5.js": {
+    "file": "assets/infoPage-nNbKAaj5.js",
     "name": "infoPage",
     "imports": [
       "_fighterCreatorLocale-Bh29uOe8.js"
     ],
     "css": [
-      "assets/infoPage-BFI3oJJI.css"
+      "assets/infoPage-Duu4z4Tj.css"
     ]
   },
   "_modulepreload-polyfill-P2Xu9kJm.js": {
@@ -274,13 +274,13 @@
     "name": "three.core"
   },
   "about.html": {
-    "file": "assets/about-Cg0mdkhO.js",
+    "file": "assets/about-Buhq9tQd.js",
     "name": "about",
     "src": "about.html",
     "isEntry": true,
     "imports": [
       "_modulepreload-polyfill-P2Xu9kJm.js",
-      "_infoPage-DhG7yH3e.js"
+      "_infoPage-nNbKAaj5.js"
     ]
   },
   "admin.html": {
@@ -322,13 +322,13 @@
     ]
   },
   "docs.html": {
-    "file": "assets/docs-D604dZt2.js",
+    "file": "assets/docs-GXHZ1Q6a.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
     "imports": [
       "_modulepreload-polyfill-P2Xu9kJm.js",
-      "_infoPage-DhG7yH3e.js"
+      "_infoPage-nNbKAaj5.js"
     ]
   },
   "fighter.html": {
