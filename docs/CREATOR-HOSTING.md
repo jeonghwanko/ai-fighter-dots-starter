@@ -1,7 +1,12 @@
 # Independent AI Fighter hosting
 
 Public URL: https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html
+Homepage: https://jeonghwanko.github.io/ai-fighter-dots-starter/league.html
 Game URL: https://jeonghwanko.github.io/ai-fighter-dots-starter/fighter.html
+
+The site root opens the homepage. A root URL carrying anything beyond `?lang=`
+(a handoff hash or creator parameters) opens `creator.html` instead. The build
+replaces the game's public `404.html` with an AI Fighter page that links home.
 Validator health: https://ai-fighter-validator.onrender.com/health
 
 GitHub Pages serves the `codex/creator-pages` branch of this public repository.

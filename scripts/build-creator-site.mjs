@@ -52,11 +52,23 @@ for (const entry of await readdir(join(source, 'public'))) {
   await cp(join(source, 'public', entry), join(output, entry), { recursive: true, force: false, errorOnExist: true });
 }
 await writeFile(join(output, '.nojekyll'), '');
+// The site root is the public homepage. Anything beyond a language choice belongs to the creator page.
 await writeFile(join(output, 'index.html'), `<!doctype html>
 <html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>AI Fighter</title>
-<script>location.replace("./creator.html" + location.search + location.hash)</script>
-<a href="./creator.html">AI Fighter 열기</a></html>
+<script>
+const params = new URLSearchParams(location.search); params.delete("lang");
+location.replace(([...params].length || location.hash ? "./creator.html" : "./league.html") + location.search + location.hash);
+</script>
+<a href="./league.html">AI Fighter 열기 · Open AI Fighter</a></html>
+`);
+// The game's public 404 belongs to another site and links to the domain root, which is not ours.
+await writeFile(join(output, '404.html'), `<!doctype html>
+<html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex"><title>AI Fighter · 페이지를 찾을 수 없습니다</title>
+<style>html,body{height:100%;margin:0}body{display:grid;place-items:center;background:#14212d;color:#f5f2e9;font:16px/1.6 Arial,sans-serif;text-align:center}h1{font-size:28px;margin:0 0 12px}a{color:#e9f56a}</style>
+<main><h1>페이지를 찾을 수 없습니다 · Page not found</h1>
+<p><a href="${config.base}league.html">AI Fighter 홈으로 · Back to AI Fighter</a></p></main></html>
 `);
 const assets = await readdir(join(output, 'assets'));
 const js = (await Promise.all(assets.filter(f => f.endsWith('.js')).map(f => readFile(join(output, 'assets', f), 'utf8')))).join('\n');
