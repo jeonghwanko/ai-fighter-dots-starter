@@ -1,5 +1,8 @@
 <!doctype html>
 <html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="referrer" content="no-referrer"><title>AI Fighter</title>
-<script>location.replace("./creator.html" + location.search + location.hash)</script>
-<a href="./creator.html">AI Fighter 열기</a></html>
+<script>
+const params = new URLSearchParams(location.search); params.delete("lang");
+location.replace(([...params].length || location.hash ? "./creator.html" : "./league.html") + location.search + location.hash);
+</script>
+<a href="./league.html">AI Fighter 열기 · Open AI Fighter</a></html>
