@@ -221,6 +221,20 @@
     "file": "assets/fighterCreatorLocale-Bh29uOe8.js",
     "name": "fighterCreatorLocale"
   },
+  "_infoPage-BFI3oJJI.css": {
+    "file": "assets/infoPage-BFI3oJJI.css",
+    "src": "_infoPage-BFI3oJJI.css"
+  },
+  "_infoPage-DhG7yH3e.js": {
+    "file": "assets/infoPage-DhG7yH3e.js",
+    "name": "infoPage",
+    "imports": [
+      "_fighterCreatorLocale-Bh29uOe8.js"
+    ],
+    "css": [
+      "assets/infoPage-BFI3oJJI.css"
+    ]
+  },
   "_modulepreload-polyfill-P2Xu9kJm.js": {
     "file": "assets/modulepreload-polyfill-P2Xu9kJm.js",
     "name": "modulepreload-polyfill"
@@ -260,15 +274,13 @@
     "name": "three.core"
   },
   "about.html": {
-    "file": "assets/about-MARaMhKw.js",
+    "file": "assets/about-Cg0mdkhO.js",
     "name": "about",
     "src": "about.html",
     "isEntry": true,
     "imports": [
-      "_modulepreload-polyfill-P2Xu9kJm.js"
-    ],
-    "css": [
-      "assets/about-Dx8NOoSu.css"
+      "_modulepreload-polyfill-P2Xu9kJm.js",
+      "_infoPage-DhG7yH3e.js"
     ]
   },
   "admin.html": {
@@ -309,6 +321,16 @@
       "_palette-D5TCto_t.js"
     ]
   },
+  "docs.html": {
+    "file": "assets/docs-D604dZt2.js",
+    "name": "docs",
+    "src": "docs.html",
+    "isEntry": true,
+    "imports": [
+      "_modulepreload-polyfill-P2Xu9kJm.js",
+      "_infoPage-DhG7yH3e.js"
+    ]
+  },
   "fighter.html": {
     "file": "assets/fighter-D7EfBQ-x.js",
     "name": "fighter",
@@ -326,7 +348,7 @@
     ]
   },
   "league.html": {
-    "file": "assets/league-8jOsnEC2.js",
+    "file": "assets/league-DNxG-SVU.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
@@ -335,7 +357,7 @@
       "_fighterCreatorLocale-Bh29uOe8.js"
     ],
     "css": [
-      "assets/league-Dt2vowIq.css"
+      "assets/league-BLUGrMmm.css"
     ]
   },
   "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
