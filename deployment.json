@@ -1,11 +1,11 @@
 {
-  "buildId": "bd561eb9-a91a-461c-b21c-5d28e696aa69",
+  "buildId": "563bc39a-e2d3-4b35-9d08-1513ede3cf55",
   "siteUrl": "https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html",
-  "builtAt": "2026-10-21T12:02:19.603Z",
-  "sourceCommit": "c519ad3c9afce4379e17d16dfee56fdb11646c95",
+  "builtAt": "2026-10-21T12:17:05.424Z",
+  "sourceCommit": "142dc115f43b74b8977a457bcee75f9ef3e68eab",
   "hostingCommit": "4a1c91815b594cf1e64cf9b924dc6cdcfd1c2d07",
   "dirty": false,
-  "digest": "35fe9d0c9632e86347bf3c1cc19ea2a50ee4af522713200fe0dd6fc832b663cc",
+  "digest": "9e1ed475f37e2314aa951c854b61bd949fea500c4ca1db09c137a515f8e9fa1b",
   "files": 2396,
-  "bytes": 572888831
+  "bytes": 572890261
 }

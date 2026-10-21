@@ -105,13 +105,39 @@
         height: 100dvh;
         box-sizing: border-box;
         padding: env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left);
-        align-items: center;
-        justify-content: center;
+        flex-direction: column;
       }
+      .game-navigation {
+        display: flex;
+        align-items: center;
+        flex: 0 0 48px;
+        box-sizing: border-box;
+        padding: 0 16px;
+        background: #17243d;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.16);
+      }
+      .game-home {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        min-height: 44px;
+        box-sizing: border-box;
+        padding: 0 12px;
+        color: #fff;
+        font: 600 16px/1.4 "Pretendard", "Malgun Gothic", sans-serif;
+        text-decoration: none;
+        border-radius: 4px;
+      }
+      .game-home:hover { background: rgba(255, 255, 255, 0.09); }
+      .game-home:focus-visible { outline: 2px solid #f3c866; outline-offset: -2px; }
+      .game-home .home-en { display: none; }
+      html:lang(en) .game-home .home-ko { display: none; }
+      html:lang(en) .game-home .home-en { display: inline; }
       #game {
         position: relative;
         width: 100%;
-        height: 100%;
+        flex: 1;
+        min-height: 0;
       }
       #game canvas {
         display: block;
@@ -210,6 +236,12 @@
     <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/PrivacyLink-CMLwhvyG.js">
   </head>
   <body>
+    <nav class="game-navigation">
+      <a id="fighter-home" class="game-home" href="./league.html?lang=ko">
+        <span aria-hidden="true">←</span>
+        <span class="home-ko">홈페이지</span><span class="home-en">Home</span>
+      </a>
+    </nav>
     <div id="game">
       <div id="boot-loading" role="status" aria-live="polite">
         <span class="boot-loading-ring" aria-hidden="true"></span>
@@ -227,7 +259,11 @@
     <script>
       const bootParams = new URLSearchParams(location.search);
       document.documentElement.lang = bootParams.get("lang") === "en" ? "en" : "ko";
+      const homeLink = document.getElementById("fighter-home");
+      homeLink.href = "./league.html?lang=" + document.documentElement.lang;
+      // A focused page link uses native keyboard activation, not the game's confirm key.
+      for (const type of ["keydown", "keyup"]) homeLink.addEventListener(type, event => event.stopPropagation());
       if (bootParams.get("motion") === "reduce") document.documentElement.dataset.bootMotion = "reduce";
-    </script>
+    </script>
   </body>
 </html>
