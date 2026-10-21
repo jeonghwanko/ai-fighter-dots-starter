@@ -313,7 +313,7 @@
     "src": "assets/coop-campaign/animations/handsome-actions-v2-20261014.webp"
   },
   "creator.html": {
-    "file": "assets/creator-FD8POcvG.js",
+    "file": "assets/creator-DKN-hIOu.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -328,7 +328,11 @@
       "_palette-D5TCto_t.js"
     ],
     "css": [
-      "assets/creator-CgvHhO_r.css"
+      "assets/creator-ZB0Rf_-P.css"
+    ],
+    "assets": [
+      "assets/GoogleSans-Medium-CeUKoFDv.ttf",
+      "assets/g-logo-CpxN0HWb.png"
     ]
   },
   "docs.html": {
@@ -437,6 +441,14 @@
     "name": "native-city-yume-side-runtime",
     "src": "src/assets/native-city-yume-side-runtime.json",
     "isDynamicEntry": true
+  },
+  "src/creator/assets/google/GoogleSans-Medium.ttf": {
+    "file": "assets/GoogleSans-Medium-CeUKoFDv.ttf",
+    "src": "src/creator/assets/google/GoogleSans-Medium.ttf"
+  },
+  "src/creator/assets/google/g-logo.png": {
+    "file": "assets/g-logo-CpxN0HWb.png",
+    "src": "src/creator/assets/google/g-logo.png"
   },
   "src/platform/woniSample.ts": {
     "file": "assets/woniSample-DPI7xcZJ.js",
