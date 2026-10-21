@@ -104,6 +104,13 @@ The page uses existing arena character art as labelled examples. Cohort dates an
 the proposed match format are plans, not a live tournament or remaining-seat counter.
 The Pages builder includes the league entry alongside the creator page and game.
 
+The top banner on `league.html` links to `about.html`, a product introduction with
+Korean and English views (`?lang=ko` / `?lang=en`). It explains the game, character
+creation, and creator/viewer participation using existing character art and an
+actual practice-match screenshot. Broadcast formats are examples, not automated
+broadcasting or clip-generation features. The source lives beside `league.html`
+in `kaito_web`, and both the creator build and Pages build include the new entry.
+
 ## Repeatable deployment
 
 The private `jeonghwanko/crashbang-heroes` repository owns

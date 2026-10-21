@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
 export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'admin.html'];
+export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'about.html', 'admin.html'];
 
 function assertPublicContent(data, path) {
   if (!['sb_secret_', 'afw_', 'AI_FIGHTER_WAKE_TOKEN', 'PRIVATE KEY', 'api.render.com', 'eyJ'].some(value => data.includes(value))) return;
