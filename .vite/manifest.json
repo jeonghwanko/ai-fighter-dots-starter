@@ -255,7 +255,7 @@
     "name": "three.core"
   },
   "about.html": {
-    "file": "assets/about-CrBpY74s.js",
+    "file": "assets/about-DVn_6aqu.js",
     "name": "about",
     "src": "about.html",
     "isEntry": true,
@@ -263,7 +263,7 @@
       "_modulepreload-polyfill-P2Xu9kJm.js"
     ],
     "css": [
-      "assets/about-BfQQbmRq.css"
+      "assets/about-Dx8NOoSu.css"
     ]
   },
   "admin.html": {
