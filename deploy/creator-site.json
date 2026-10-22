@@ -1,8 +1,9 @@
 {
-  "siteUrl": "https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html",
-  "base": "/ai-fighter-dots-starter/",
+  "siteUrl": "https://oddbout.com/creator.html",
+  "base": "/",
   "apiBase": "https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter",
   "publishableKey": "sb_publishable_6UkV7tRAQ1P4qss5cTYSwQ_kVxSIv_V",
-  "gameUrl": "https://jeonghwanko.github.io/ai-fighter-dots-starter/fighter.html",
-  "branch": "codex/creator-pages"
+  "gameUrl": "https://oddbout.com/fighter.html",
+  "branch": "codex/creator-pages",
+  "customDomain": "oddbout.com"
 }

@@ -5,6 +5,10 @@ import { execFileSync } from 'node:child_process';
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
 export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
+// Rewrite only the previous public site base, retaining repository documentation links.
+export function publicSiteText(text) {
+  return text.replaceAll('https://jeonghwanko.github.io/ai-fighter-dots-starter/', new URL('.', hosting.siteUrl).href);
+}
 export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'about.html', 'docs.html', 'privacy.html', 'admin.html'];
 
 function assertPublicContent(data, path) {
@@ -54,6 +58,9 @@ export async function verifyArtifact(root, options) {
   for (const path of [...siteEntries, 'index.html', '.nojekyll', '.vite/manifest.json']) {
     if (!(await stat(join(root, path))).isFile()) throw new Error(`Missing site entry: ${path}`);
   }
+  if (hosting.customDomain && (await readFile(join(root, 'CNAME'), 'utf8')).trim() !== hosting.customDomain) {
+    throw new Error('Custom domain CNAME does not match the configured site');
+  }
   const release = JSON.parse(await readFile(join(root, 'deployment.json'), 'utf8'));
   if (release.siteUrl !== hosting.siteUrl || release.dirty !== false ||
       !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/.test(release.buildId ?? '') ||
@@ -71,7 +78,7 @@ export async function verifyArtifact(root, options) {
 /** Check the actual entry documents and manifest asset bytes, not just HTTP 200. */
 export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request = fetch } = {}) {
   const manifest = JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8'));
-  const files = new Set(['index.html', ...siteEntries]), visited = new Set();
+  const files = new Set(['index.html', ...siteEntries, ...(hosting.customDomain ? ['CNAME'] : [])]), visited = new Set();
   function visit(key) {
     if (visited.has(key)) return;
     visited.add(key);

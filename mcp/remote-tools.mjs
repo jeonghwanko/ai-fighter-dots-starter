@@ -74,7 +74,7 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
     }));
   }
   server.registerTool('open_creator_homepage', {
-    description: 'Make a one-use link that signs the current user into the AI Fighter creator homepage (https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html) with this account: their registered fighters, animations, statistics and downloads. Use when the user asks to see their fighters on the homepage. Give the link to the user as a clickable link; it opens in any browser on any device, works once and expires in 10 minutes. Do not open it yourself: opening it uses it up.',
+    description: 'Make a one-use link that signs the current user into the AI Fighter creator homepage (https://oddbout.com/creator.html) with this account: their registered fighters, animations, statistics and downloads. Use when the user asks to see their fighters on the homepage. Give the link to the user as a clickable link; it opens in any browser on any device, works once and expires in 10 minutes. Do not open it yourself: opening it uses it up.',
     inputSchema: {}, outputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, safe(async () => {
     const { loginUrl, expiresAt } = await creatorLink({ page: creatorPage, request: remote.request });

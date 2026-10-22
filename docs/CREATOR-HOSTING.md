@@ -1,8 +1,8 @@
 # Independent AI Fighter hosting
 
-Public URL: https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html
-Homepage: https://jeonghwanko.github.io/ai-fighter-dots-starter/league.html
-Game URL: https://jeonghwanko.github.io/ai-fighter-dots-starter/fighter.html
+Public URL: https://oddbout.com/creator.html
+Homepage: https://oddbout.com/league.html
+Game URL: https://oddbout.com/fighter.html
 
 The site root opens the homepage. A root URL carrying anything beyond `?lang=`
 (a handoff hash or creator parameters) opens `creator.html` instead. The build
@@ -230,3 +230,15 @@ or execute the administrator RPCs. Review versions reject stale decisions,
 and identical retries reuse the original audit record. Provision additional
 administrators only through a trusted server-side operation; there is no
 public role-management endpoint.
+
+## ODDBOUT domain configuration
+
+The custom domain is `oddbout.com`, with `www.oddbout.com` pointing to the same
+GitHub Pages site. The build uses base `/`, rewrites previous public-site
+metadata links, and includes `CNAME` in both its measured artifact and live
+verification. Every later deployment must retain that file.
+
+The Supabase API hostname, project, billing plan and database remain unchanged.
+Only Auth return URLs need to include the new creator page for Google login.
+Existing allowed return URLs remain available. Saved MCP homepage URLs on the
+previous GitHub Pages host are upgraded before issuing one-use links.

@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { fingerprint, buildRevision, assertSameRevision, siteEntries } from './hosting-lib.mjs';
+import { fingerprint, buildRevision, assertSameRevision, siteEntries, publicSiteText } from './hosting-lib.mjs';
 
 // Build the AI Fighter entries with explicit public settings, without loading source .env files.
 const [sourceArg, outputArg] = process.argv.slice(2);
@@ -29,8 +29,10 @@ await build({
   configFile: false, root: source, envDir: false, base: config.base,
   plugins: [creationContextPlugin(), {
     name: 'standalone-creator-origin',
+    transformIndexHtml: { order: 'pre', handler: publicSiteText },
     transform(code, id) {
-      if (!id.replaceAll('\\', '/').endsWith('/src/platform/fighterCreator.ts')) return;
+      code = publicSiteText(code);
+      if (!id.replaceAll('\\', '/').endsWith('/src/platform/fighterCreator.ts')) return code;
       const old = 'export const PUBLIC_CREATOR_ORIGIN = "https://rupin.pryzm.gg";';
       if (!code.includes(old)) throw new Error('Creator origin source changed; review the standalone build');
       return code.replace(old, `export const PUBLIC_CREATOR_ORIGIN = ${JSON.stringify(new URL(config.siteUrl).origin)};`);
@@ -50,10 +52,11 @@ await build({
 // The public tree is under Pages' 1 GB site limit and contains no environment or server files.
 for (const entry of await readdir(join(source, 'public'))) {
   // Standalone ODDBOUT pages take precedence over the shared game's legacy notices.
-  if (siteEntries.includes(entry)) continue;
+  if (siteEntries.includes(entry) || entry === 'CNAME') continue;
   await cp(join(source, 'public', entry), join(output, entry), { recursive: true, force: false, errorOnExist: true });
 }
 await writeFile(join(output, '.nojekyll'), '');
+if (config.customDomain) await writeFile(join(output, 'CNAME'), config.customDomain + '\n');
 // The site root is the public homepage. Anything beyond a language choice belongs to the creator page.
 await writeFile(join(output, 'index.html'), `<!doctype html>
 <html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
