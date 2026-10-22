@@ -283,3 +283,16 @@ The privacy page is updated during the same build to disclose Analytics and cook
 
 Analytics account data-sharing choices remain at their initial defaults unless
 the owner explicitly approves a later change. No existing ads-coffee property is used.
+
+## Google Search Console
+
+The domain property `sc-domain:oddbout.com` is verified for the site owner
+(`turbo08@gmail.com`) through a Google verification TXT record at Spaceship.
+Keep that DNS record to retain verification. Console:
+https://search.google.com/search-console?resource_id=sc-domain%3Aoddbout.com
+
+The normal build writes `/sitemap.xml` from the final public HTML canonical URLs
+and advertises it in `/robots.txt`. It omits the admin page, the legacy league URL,
+noindex pages and URL parameters. Public plugin policy pages are included. No
+last-modified dates are invented. Both files are required in the artifact and
+verified byte-for-byte after publication before submitting the sitemap to Google.
