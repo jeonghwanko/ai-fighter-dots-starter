@@ -1,1 +1,0 @@
-var e=`privacy-link`;function t(t=globalThis.document){let n=t.getElementById(e);return n===null?()=>void 0:(n.hidden=!1,()=>{n.hidden=!0})}export{t as n,e as t};

@@ -1,5 +1,7 @@
 <!doctype html>
-<!-- AI Fighter(2026-10-19): 주간 무투 토너먼트·연습 경기만 있는 별도 페이지. 본편 index.html 과 같은 빌드·같은 저장을 쓴다. -->
+<!-- AI Fighter(2026-10-19): 주간 무투 토너먼트·연습 경기만 있는 별도 페이지. 본편 index.html 과 같은 빌드·같은 저장을 쓴다.
+     2026-10-22: 홈(ODDBOUT league 페이지)의 포스터 톤 — 잉크 #071923 바탕, 애시드 라임 #eaff50 강조 하나, 흰 글자, 1px 선, 각진 모서리.
+     색 값은 src/render/art/palette.ts 의 PALETTE.oddboutInk·oddboutAcid 와 같다(HTML 은 그 SSOT 를 import 하지 못한다). -->
 <html lang="ko">
   <head>
     <meta charset="utf-8" />
@@ -97,7 +99,7 @@
         margin: 0;
         padding: 0;
         height: 100%;
-        background: #150d2a;
+        background: #071923;
         overflow: hidden;
       }
       body {
@@ -113,7 +115,7 @@
         flex: 0 0 48px;
         box-sizing: border-box;
         padding: 0 16px;
-        background: #17243d;
+        background: #071923;
         border-bottom: 1px solid rgba(255, 255, 255, 0.16);
       }
       .game-home {
@@ -124,15 +126,18 @@
         box-sizing: border-box;
         padding: 0 12px;
         color: #fff;
-        font: 600 16px/1.4 "Pretendard", "Malgun Gothic", sans-serif;
+        font: 700 16px/1.4 "Pretendard", "Malgun Gothic", sans-serif;
         text-decoration: none;
-        border-radius: 4px;
       }
       .game-home:hover { background: rgba(255, 255, 255, 0.09); }
-      .game-home:focus-visible { outline: 2px solid #f3c866; outline-offset: -2px; }
-      .game-home .home-en { display: none; }
-      html:lang(en) .game-home .home-ko { display: none; }
-      html:lang(en) .game-home .home-en { display: inline; }
+      .game-home:focus-visible { outline: 2px solid #eaff50; outline-offset: -2px; }
+      /* The ODDBOUT wordmark is drawn in ink for the homepage's paper: white here, on the ink bar. */
+      .game-logo {
+        display: block;
+        width: auto;
+        height: 26px;
+        filter: brightness(0) invert(1);
+      }
       #game {
         position: relative;
         width: 100%;
@@ -153,16 +158,16 @@
         justify-content: center;
         flex-direction: column;
         gap: 14px;
-        background: #150d2a;
-        color: #f1e4c3;
-        font: 600 16px system-ui, sans-serif;
+        background: #071923;
+        color: #fff;
+        font: 600 16px "Pretendard", system-ui, sans-serif;
         pointer-events: none;
       }
       .boot-loading-ring {
         width: 30px;
         height: 30px;
-        border: 3px solid rgba(241, 228, 195, 0.33);
-        border-top-color: #ffd447;
+        border: 3px solid rgba(255, 255, 255, 0.16);
+        border-top-color: #eaff50;
         border-radius: 50%;
         animation: boot-loading-spin 1s linear infinite;
       }
@@ -175,8 +180,8 @@
       }
       html[data-boot-motion="reduce"] .boot-loading-ring { animation: none; }
       /*
-       * 하단 고지(무투장 고르기 화면 동안 보인다, `showTitlePrivacyLink`). 본편 index.html 과 같은 모양 —
-       * 잉크색 스크림을 깔고 상아색 글자를 얹어 배경과 무관하게 읽히게 한다.
+       * 하단 고지(무투장 고르기 화면 동안 보인다, `showTitlePrivacyLink`). ODDBOUT 톤(2026-10-22): 잉크 스크림, Pretendard 12px 흰 글자,
+       * 라임 밑줄 링크, 각진 모서리. 캔버스의 버튼은 이 탭 높이(아래 44px)를 비운다(`ARENA_SELECT_BOTTOM_CLEAR`).
        */
       .title-footnote {
         position: fixed;
@@ -190,14 +195,11 @@
         gap: 0.5em;
         max-width: min(960px, 94vw);
         padding: 7px 18px 8px;
-        border-radius: 8px 8px 0 0;
-        background: rgba(20, 11, 38, 0.72);
-        color: #e6dcc4;
-        font:
-          12px/1.5 "MaruBuri",
-          "Noto Serif KR",
-          Georgia,
-          serif;
+        background: rgba(7, 25, 35, 0.86);
+        border: 1px solid rgba(255, 255, 255, 0.16);
+        border-bottom: 0;
+        color: rgba(255, 255, 255, 0.72);
+        font: 12px/1.5 "Pretendard", "Malgun Gothic", sans-serif;
         text-align: center;
       }
       /*
@@ -208,45 +210,46 @@
         display: none;
       }
       .title-footnote a {
-        color: #f3c866;
+        color: #fff;
         text-decoration: none;
-        border-bottom: 1px solid rgba(243, 200, 102, 0.45);
+        border-bottom: 1px solid #eaff50;
       }
       .title-footnote a:hover,
       .title-footnote a:focus-visible {
-        border-bottom-color: #f3c866;
+        color: #eaff50;
       }
       .title-footnote a:focus-visible {
-        outline: 2px solid #f3c866;
+        outline: 2px solid #eaff50;
         outline-offset: 2px;
       }
     </style>
-    <script type="module" crossorigin src="/ai-fighter-dots-starter/assets/fighter-BZkfUNB0.js"></script>
-    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/registeredFighters-BgWR6O9K.js">
+    <script type="module" crossorigin src="/ai-fighter-dots-starter/assets/fighter-C0qPYo4v.js"></script>
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/registeredFighters-BKh5CC28.js">
     <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/modulepreload-polyfill-P2Xu9kJm.js">
-    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/Locale-B1huZTE-.js">
-    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/storageKeys-B8aYJaFS.js">
-    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/rankedDuels-DpvcMFYH.js">
-    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/palette-D5TCto_t.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/storageKeys-DxZd3KBb.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/rankedDuels-BYeAlIE_.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/palette-CFMb8CFp.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/Locale-BoqNfY5_.js">
     <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/CityEnvironment-AhQf9g8O.js">
-    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/NativeCityOttoEncounter-Dp73Yo67.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/NativeCityOttoEncounter-CNAm8rnO.js">
     <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/AttackMoves-B-lq5s5T.js">
     <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/WebGl2Support-hZXjXmi-.js">
-    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/TournamentBracketScene-CSBqGJ2i.js">
-    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/PrivacyLink-CMLwhvyG.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/TournamentBracketScene-4wxUZDHZ.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/PrivacyLink-DRXYkAcA.js">
+    <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/leagueContent-BuP-l96P.js">
   </head>
   <body>
     <nav class="game-navigation">
       <a id="fighter-home" class="game-home" href="./league.html?lang=ko">
         <span aria-hidden="true">←</span>
-        <span class="home-ko">홈페이지</span><span class="home-en">Home</span>
+        <img class="game-logo" src="./art/ui/oddbout-logo.webp" alt="ODDBOUT" width="376" height="76" />
       </a>
     </nav>
     <div id="game">
       <div id="boot-loading" role="status" aria-live="polite">
         <span class="boot-loading-ring" aria-hidden="true"></span>
-        <span class="boot-loading-ko">AI Fighter를 준비하고 있어요</span>
-        <span class="boot-loading-en">Preparing AI Fighter</span>
+        <span class="boot-loading-ko">경기장을 준비하고 있어요</span>
+        <span class="boot-loading-en">Preparing the arena</span>
       </div>
     </div>
     <p class="title-footnote" id="privacy-link" hidden>
