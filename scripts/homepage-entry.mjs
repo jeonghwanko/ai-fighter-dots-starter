@@ -2,9 +2,10 @@
 const homepageRoute = `if (/\\/(?:index|league)\\.html$/.test(location.pathname)) {
   history.replaceState(null, "", "./" + location.search + location.hash);
 }
-const params = new URLSearchParams(location.search); params.delete("lang");
+const params = new URLSearchParams(location.search);
+const creatorParams = ["apply", "code", "error", "error_code", "error_description", "state"];
 const publicAnchors = ["#main", "#fighters", "#match", "#join"];
-if ([...params].length || (location.hash && !publicAnchors.includes(location.hash))) {
+if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAnchors.includes(location.hash))) {
   location.replace("./creator.html" + location.search + location.hash);
 }`;
 

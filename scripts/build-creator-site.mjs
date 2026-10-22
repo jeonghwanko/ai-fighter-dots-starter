@@ -3,6 +3,8 @@ import { resolve, join, relative, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { homepageEntries } from './homepage-entry.mjs';
 import { buildPluginPolicySite, sitePrivacyNotice } from './build-plugin-policy-site.mjs';
+
+import { googleAnalyticsPlugin } from './site-analytics.mjs';
 import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -29,7 +31,7 @@ const { build } = await import(pathToFileURL(join(source, 'node_modules/vite/dis
 const { creationContextPlugin } = await import(pathToFileURL(join(source, 'tools/ai-fighter/creation-context-plugin.mjs')).href);
 await build({
   configFile: false, root: source, envDir: false, base: config.base,
-  plugins: [creationContextPlugin(), {
+  plugins: [creationContextPlugin(), googleAnalyticsPlugin(config.analyticsMeasurementId, config.siteUrl), {
     name: 'standalone-creator-origin',
     transformIndexHtml: { order: 'pre', handler(html, context) {
       const text = publicSiteText(html);

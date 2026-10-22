@@ -17,6 +17,7 @@ test('homepage is served directly, with language and public anchors preserved', 
   const entries = homepageEntries('<html><head><title>ODDBOUT</title></head><body>' + body + '</body></html>');
   assert.ok(entries['index.html'].includes(body));
   assert.deepEqual(navigate(entries['index.html']), {});
+  assert.deepEqual(navigate(entries['index.html'], '?utm_source=instagram&utm_campaign=launch'), {});
   assert.deepEqual(navigate(entries['index.html'], '', '', '/index.html'), { address: './' });
   for (const hash of ['', '#main', '#fighters', '#match', '#join']) {
     assert.deepEqual(navigate(entries['index.html'], '?lang=ko', hash), {});

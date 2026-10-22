@@ -9,7 +9,7 @@ the browser address. Public navigation and canonical metadata use `/`. Existing
 `league.html` serves the same homepage and normalizes its address to `/` without
 a reload, preserving language and anchors even with a cached former root redirect. Legacy root
 creator parameters and handoff hashes still open `creator.html`; public homepage
-anchors (`#main`, `#fighters`, `#match`, `#join`) remain on the homepage. The build
+anchors (`#main`, `#fighters`, `#match`, `#join`) and campaign tags remain on the homepage. The build
 replaces the game's public `404.html` with an AI Fighter page that links home.
 Validator health: https://ai-fighter-validator.onrender.com/health
 
@@ -261,3 +261,25 @@ and adds links to plugin privacy, terms and support. The shared game checkout re
 unchanged. Unexpected privacy source structure fails the build for review.
 Artifact validation requires every policy file, and live verification compares their
 actual bytes as well as the main site's entry documents and Vite assets.
+
+## ODDBOUT Analytics
+
+The independent ODDBOUT Analytics account (412927960) and ODDBOUT property
+(560123237) belong to the site owner. Dashboard:
+https://analytics.google.com/analytics/web/#/a412927960p560123237/reports/intelligenthome
+The web stream is ODDBOUT Web (stream ID 16179726903), at https://oddbout.com.
+Reporting uses Asia/Seoul and KRW. The public measurement ID is G-XPZRDR2LQP,
+configured by analyticsMeasurementId in deploy/creator-site.json.
+
+The Pages builder adds scripts/site-analytics.mjs through the Vite module graph to
+the main Vite pages, so its hashed module is covered by artifact and live asset checks.
+The tag runs only on the configured HTTPS host, excludes the admin page and incoming
+sign-in secrets, sends one page view per document, and respects Global Privacy Control.
+It keeps standard campaign tags but drops other query parameters and fragments;
+referrers are reduced to origins. Account IDs, emails, and uploads are not event fields.
+Google signals and ad personalization are disabled in the tag. Enhanced measurement
+is off in the web stream to avoid automatic URL/history, form, and outbound-link collection.
+The privacy page is updated during the same build to disclose Analytics and cookies.
+
+Analytics account data-sharing choices remain at their initial defaults unless
+the owner explicitly approves a later change. No existing ads-coffee property is used.
