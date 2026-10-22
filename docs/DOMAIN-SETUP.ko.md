@@ -19,7 +19,7 @@ Spaceship DNS와 GitHub Pages를 연결하고 정책 페이지까지 공개하�
 | 웹 원본 | jeonghwanko/crashbang-heroes의 kaito_web |
 | 백엔드 | 기존 Supabase 프로젝트 유지<br>ztfxxhtmtrvxvuxlqmgz.supabase.co |
 
-확인 결과: 대표 주소·제작 페이지·게임·기존 개인정보 페이지는 HTTPS 200 응답이며, www.oddbout.com은 대표 주소로 이동합니다. 새 플러그인 정책 경로 /ai-fighter-creator/privacy.html은 아직 404로, 파일 배포가 남아 있습니다.
+확인 결과: 대표 주소·제작 페이지·게임·기존 개인정보 페이지는 HTTPS 200 응답이며, www.oddbout.com은 대표 주소로 이동합니다. 2026년 10월 22일 플러그인 정책 페이지 6개를 배포했고, /ai-fighter-creator/privacy.html 및 국문 페이지를 포함한 공개 파일이 검증된 빌드와 일치함을 확인했습니다.
 
 아래 순서는 공개 DNS, 저장소 설정 파일, 공식 문서를 바탕으로 작성했습니다. GitHub의 도메인 검증 배지와 HTTPS 강제 옵션, Supabase·Google 관리자 설정은 이번 문서 작업에서 재확인하거나 변경하지 않았습니다.
 
@@ -124,7 +124,7 @@ node scripts/publish-creator-site.mjs output/domain-release-new
 
 ## 4 정책 페이지와 심사 영상 연결
 
-이미 연결된 oddbout.com 아래에 새 디렉터리를 게시하면 됩니다. 아래 주소는 배포 목표이며, 이번 확인에서 플러그인 개인정보 페이지는 404였습니다. DNS를 수정해도 없는 HTML 파일이 생기지는 않습니다.
+이미 연결된 oddbout.com 아래에 새 디렉터리를 게시합니다. 아래 주소는 2026년 10월 22일 배포와 라이브 검증을 완료했습니다. 정책 변경 시 DNS는 그대로 두고 사이트 파일을 다시 빌드·배포합니다.
 
 | 제출 항목 | 배포할 공개 주소 |
 | --- | --- |
@@ -135,7 +135,7 @@ node scripts/publish-creator-site.mjs output/domain-release-new
 
 ### 파일을 정상 배포 흐름에 포함
 
-정책 원본은 website/ai-fighter-creator/content.mjs와 style.css이며, build-plugin-policy-site.mjs가 6개 정적 페이지를 만듭니다. 운영자명은 Lucas Foundation으로 통일되어 있습니다. 현재 생성 결과에는 공개 전 미리보기 표시가 있으므로 운영 내용·시행일·보유 및 처리 위치 정보를 확정한 뒤 공개용 문구로 바꿉니다.
+정책 원본은 website/ai-fighter-creator/content.mjs와 style.css이며, build-plugin-policy-site.mjs가 6개 정적 페이지를 만듭니다. 운영자명은 Lucas Foundation, 시행일은 2026-10-22입니다. 기본 단독 실행은 미리보기 표시가 있는 결과를 만들고 전체 사이트 빌드는 공개용 결과를 포함합니다. 보유·처리 위치 등 운영 방식이 바뀌면 정책 원본과 시행일을 함께 검토합니다.
 
 ```text
 node scripts/build-plugin-policy-site.mjs output/policy-pages/ai-fighter-creator

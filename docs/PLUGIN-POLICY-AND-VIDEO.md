@@ -7,7 +7,7 @@ The existing public support address is `turbo08@gmail.com`.
 
 - `website/ai-fighter-creator/content.mjs`: English and Korean privacy/terms, product overview and support copy.
 - `website/ai-fighter-creator/style.css`: responsive, dependency-free presentation. No analytics or remote fonts.
-- `scripts/build-plugin-policy-site.mjs`: renders six static pages. The preview banner and `noindex` are deliberate.
+- `scripts/build-plugin-policy-site.mjs`: renders six static pages. Local previews retain the banner and `noindex`; the site build uses publication mode with effective dates and canonical URLs.
 - `website/ai-fighter-creator/review.html`: video, captions, policy links and explicit coverage limits.
 - `scripts/run-plugin-review-demo.mjs`: runs actual stdio MCP calls against a supplied installed portable package in an isolated home/workspace. It neither generates nor signs in/uploads. It reads current public game context.
 - `scripts/render-plugin-review-video.mjs`: encodes actual captured browser frames with their capture timing and writes English/Korean captions and provenance.
@@ -15,7 +15,8 @@ The existing public support address is `turbo08@gmail.com`.
 
 Generated material is under ignored `output/plugin-review-20261022/`. The shareable archive contains only
 `site/`, provenance and the review README, never `private-run/`, first-attempt evidence, browser captures,
-the approval correspondence, or account files. No public URLs have been claimed as live.
+the approval correspondence, or account files. That archive preserves the original preparation preview;
+the policy publication described below is a separate site release.
 
 ## What the video proves
 
@@ -54,28 +55,41 @@ The copy describes the known behavior. Before public policy publication, the ope
 its actual retention schedule, configured processing countries and any jurisdiction-specific disclosures.
 The prepared copy is not a certification of legal compliance.
 
-## Publication handoff
+## Policy publication — 2026-10-22
 
-Intended locations, **not deployed or live-verified**:
+The six policy/product/support pages and their stylesheet/icon are deployed. The normal publisher
+verified the actual HTTPS bytes for those files, the root privacy notice and existing site assets.
+
+- Source/build commit: `8f758f73404aecb12e586616328f3c3b1a53f4b1`.
+- Pages commit: `9597054e14ee66ea15091b4da5c049b0d51ab4de`.
+- Live build: `11b3e3e2-2efe-4c41-b816-4ed2cc5035ec`.
+- Existing game source: `eb5ff1695c4a2f0269c68e0a5eace2770bf67d63`, unchanged.
+
+Verified public locations:
 
 - `https://oddbout.com/ai-fighter-creator/index.html`
 - `https://oddbout.com/ai-fighter-creator/privacy.html`
 - `https://oddbout.com/ai-fighter-creator/terms.html`
 - `https://oddbout.com/ai-fighter-creator/support.html`
-- A reviewer-accessible URL for the completed video.
+- `https://oddbout.com/ai-fighter-creator/privacy.ko.html`
+- `https://oddbout.com/ai-fighter-creator/terms.ko.html`
+
+The incomplete review video was not published. Its functional demonstration and the outstanding
+generation/revision/registration footage remain separate from policy publication.
 
 The new manifest source sets `developerName` to Lucas Foundation. The currently installed 0.2.0 package
 was not silently rewritten. Do not add pending URLs or this partial demo to submitted release metadata
 as though full review preparation were complete.
 
-The main ODDBOUT public privacy page still named Supervillain Labs when read. Synchronize that page's
-operator name and cross-links during the eventual site release. Its source belongs to the separate
-`crashbang-heroes/kaito_web` checkout; this task did not overwrite that checkout or deploy the live site.
+The main ODDBOUT public privacy page now names Lucas Foundation and links to the plugin policies.
+The standalone site build applies that change; the shared `crashbang-heroes/kaito_web` checkout was
+not overwritten. Compared with the prior live release, 2,689 existing files are byte-identical;
+only the root privacy document, deployment marker and eight new policy files changed.
 The normal site build requires clean committed source/build provenance. Do not bypass those checks,
 copy an unrelated old site release over production, or run CI just to publish these pages.
 
 Before submission: complete actual creation/revision/registration footage, execute the full conversational
-review cases, finish policy publication details, deploy and check the four HTTPS listing URLs/video,
+review cases, keep the published policy accurate as operational arrangements change, publish the completed video,
 obtain partner organization eligibility and provide review credentials securely if required.
 
 ## References
