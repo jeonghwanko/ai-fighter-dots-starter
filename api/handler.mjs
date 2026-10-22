@@ -97,15 +97,22 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
       if (parts[0] === 'roster' && (method === 'GET' || method === 'OPTIONS')) {
         const reply = (body, status = 200) => jsonResponse(body, status, ROSTER_CORS);
         if (method === 'OPTIONS') return reply({ ok: true });
-        let query = db.from('af_fighters').select('id,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha')
+        let query = db.from('af_fighters').select('id,created_at,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha')
           .eq('runtime_approved', true).eq('runtime_scope', 'arena-player-v1').eq('review_state', 'approved');
         if (parts.length === 1) {
-          const pageText = new URL(request.url).searchParams.get('page') ?? '0';
-          if (!/^(0|[1-9][0-9]{0,4})$/.test(pageText)) return reply({ ok: false, code: 'invalid-page' }, 400);
-          const page = Number(pageText);
+          const cursor = new URL(request.url).searchParams.get('after');
+          if (cursor !== null) {
+            // Strictly validate both parts before placing them in PostgREST filter syntax.
+            const parts = cursor.split('|'), [createdAt, id] = parts;
+            if (parts.length !== 2 || !/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,6})?(?:Z|\+00:00)$/.test(createdAt)
+              || !Number.isFinite(Date.parse(createdAt)) || !UUID.test(id)) return reply({ ok: false, code: 'invalid-cursor' }, 400);
+            query = query.or(`created_at.lt.${createdAt},and(created_at.eq.${createdAt},id.gt.${id})`);
+          }
           query = query.order('created_at', { ascending: false }).order('id');
-          const { data, error } = await (page === 0 ? query.limit(21) : query.range(page * 20, page * 20 + 20)); check(error);
-          return reply({ ok: true, hasMore: data.length > 20, fighters: data.slice(0, 20).filter(f => f.runtime_manifest_sha === f.manifest_sha)
+          const { data, error } = await query.limit(21); check(error);
+          const last = data[19], hasMore = data.length > 20;
+          return reply({ ok: true, hasMore, nextCursor: hasMore ? `${last.created_at}|${last.id}` : null,
+            fighters: data.slice(0, 20).filter(f => f.runtime_manifest_sha === f.manifest_sha)
             .map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, runtimeScope: f.runtime_scope,
               duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha })) });
         }
