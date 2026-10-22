@@ -2,7 +2,8 @@ import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { resolve, join, relative, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { homepageEntries } from './homepage-entry.mjs';
-import { buildPluginPolicySite, sitePrivacyNotice } from './build-plugin-policy-site.mjs';
+import { writeSiteDiscovery } from './site-discovery.mjs';
+import { buildPluginPolicySite, sitePrivacyNotice, policyFiles } from './build-plugin-policy-site.mjs';
 
 import { googleAnalyticsPlugin } from './site-analytics.mjs';
 import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
@@ -71,6 +72,7 @@ const homepage = await readFile(join(output, 'league.html'), 'utf8');
 for (const [path, html] of Object.entries(homepageEntries(homepage))) {
   await writeFile(join(output, path), html);
 }
+await writeSiteDiscovery(output, config.siteUrl, ['index.html', ...siteEntries, ...policyFiles]);
 // The game's public 404 belongs to another site and links to the domain root, which is not ours.
 await writeFile(join(output, '404.html'), `<!doctype html>
 <html lang="ko"><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">

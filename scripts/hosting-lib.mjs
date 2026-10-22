@@ -3,6 +3,7 @@ import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { policyFiles } from './build-plugin-policy-site.mjs';
+import { discoveryFiles } from './site-discovery.mjs';
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
 export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -60,7 +61,7 @@ export async function fingerprint(root, { gitCheckout = false } = {}) {
 }
 
 export async function verifyArtifact(root, options) {
-  for (const path of [...siteEntries, ...policyFiles, 'index.html', '.nojekyll', '.vite/manifest.json']) {
+  for (const path of [...siteEntries, ...policyFiles, ...discoveryFiles, 'index.html', '.nojekyll', '.vite/manifest.json']) {
     if (!(await stat(join(root, path))).isFile()) throw new Error(`Missing site entry: ${path}`);
   }
   if (hosting.customDomain && (await readFile(join(root, 'CNAME'), 'utf8')).trim() !== hosting.customDomain) {
@@ -83,7 +84,7 @@ export async function verifyArtifact(root, options) {
 /** Check the actual entry documents and manifest asset bytes, not just HTTP 200. */
 export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request = fetch } = {}) {
   const manifest = JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8'));
-  const files = new Set(['index.html', ...siteEntries, ...policyFiles, ...(hosting.customDomain ? ['CNAME'] : [])]), visited = new Set();
+  const files = new Set(['index.html', ...siteEntries, ...policyFiles, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]), visited = new Set();
   function visit(key) {
     if (visited.has(key)) return;
     visited.add(key);
@@ -102,7 +103,8 @@ export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request 
     if (response.status !== 200) throw new Error(`Published asset unavailable: ${file} (${response.status})`);
     const mime = file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css'
       : /\.(?:m?js)$/.test(file) ? /^(?:text|application)\/javascript$/
-      : file.endsWith('.wasm') ? 'application/wasm' : null;
+      : file.endsWith('.wasm') ? 'application/wasm'
+      : file.endsWith('.xml') ? /^(?:application|text)\/xml$/ : file.endsWith('.txt') ? 'text/plain' : null;
     const actualMime = (response.headers.get('content-type') ?? '').split(';')[0].trim().toLowerCase();
     if (mime && (typeof mime === 'string' ? actualMime !== mime : !mime.test(actualMime))) {
       throw new Error(`Incorrect published content type: ${file}`);

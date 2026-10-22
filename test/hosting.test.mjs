@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, writeFile, cp, rm, readFile } from 'node:fs/promises';
 import { policyFiles, buildPluginPolicySite, sitePrivacyNotice } from '../scripts/build-plugin-policy-site.mjs';
+import { discoveryFiles } from '../scripts/site-discovery.mjs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fingerprint, hosting, verifyArtifact, verifyLiveSite, siteEntries, buildRevision, assertSameRevision, git, waitForJson } from '../scripts/hosting-lib.mjs';
@@ -38,7 +39,7 @@ test('public artifacts reject changed bytes, private inputs and dirty source met
   try {
     await mkdir(join(root, '.vite'));
     await buildPluginPolicySite(join(root, 'ai-fighter-creator'), { publish: true });
-    for (const file of [...siteEntries, 'index.html', '.nojekyll', '.vite/manifest.json']) {
+    for (const file of [...siteEntries, ...discoveryFiles, 'index.html', '.nojekyll', '.vite/manifest.json']) {
       await writeFile(join(root, file), 'test');
     }
     if (hosting.customDomain) await writeFile(join(root, 'CNAME'), hosting.customDomain + '\n');
@@ -56,7 +57,7 @@ test('public artifacts reject changed bytes, private inputs and dirty source met
     await writeFile(join(root, 'deployment.json'), JSON.stringify(release));
     const clone = join(root, 'copy');
     await mkdir(clone);
-    for (const file of [...siteEntries, 'ai-fighter-creator', 'index.html', '.nojekyll', '.vite', 'deployment.json', ...(hosting.customDomain ? ['CNAME'] : [])]) {
+    for (const file of [...siteEntries, ...discoveryFiles, 'ai-fighter-creator', 'index.html', '.nojekyll', '.vite', 'deployment.json', ...(hosting.customDomain ? ['CNAME'] : [])]) {
       await cp(join(root, file), join(clone, file), { recursive: true });
     }
     await mkdir(join(clone, '.git'));
@@ -108,14 +109,14 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
     manifest.shared = { file: 'assets/shared.js', dynamicImports: ['lazy'] };
     manifest.lazy = { file: 'assets/lazy.js' };
     await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(manifest));
-    const content = new Map([...siteEntries, ...policyFiles, 'index.html', 'assets/main.js', 'assets/main.css', 'assets/shared.js', 'assets/lazy.js', ...(hosting.customDomain ? ['CNAME'] : [])].map(path => [path, `content for ${path}`]));
+    const content = new Map([...siteEntries, ...policyFiles, ...discoveryFiles, 'index.html', 'assets/main.js', 'assets/main.css', 'assets/shared.js', 'assets/lazy.js', ...(hosting.customDomain ? ['CNAME'] : [])].map(path => [path, `content for ${path}`]));
     for (const [path, value] of content) await writeFile(join(root, path), value);
     let broken = false, missing = false, staleHtml = false, wrongMime = false, stalePolicy = false;
     const request = async url => {
       const path = url.pathname.slice(new URL('.', hosting.siteUrl).pathname.length);
       if (missing && path === 'assets/lazy.js') return new Response('missing', { status: 404 });
       const wrong = (broken && path === 'assets/main.js') || (staleHtml && path === 'creator.html') || (stalePolicy && path === 'ai-fighter-creator/privacy.ko.html');
-      const mime = wrongMime ? 'text/plain' : path.endsWith('.html') ? 'text/html' : path.endsWith('.css') ? 'text/css' : 'text/javascript';
+      const mime = wrongMime ? 'text/plain' : path.endsWith('.html') ? 'text/html' : path.endsWith('.css') ? 'text/css' : path.endsWith('.xml') ? 'application/xml' : path.endsWith('.txt') ? 'text/plain' : 'text/javascript';
       return new Response(wrong ? '<html>wrong version</html>' : content.get(path), { status: 200, headers: { 'content-type': mime } });
     };
     await verifyLiveSite(root, { request });
