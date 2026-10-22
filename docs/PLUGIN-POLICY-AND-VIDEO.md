@@ -77,9 +77,10 @@ Verified public locations:
 The incomplete review video was not published. Its functional demonstration and the outstanding
 generation/revision/registration footage remain separate from policy publication.
 
-The new manifest source sets `developerName` to Lucas Foundation. The currently installed 0.2.0 package
-was not silently rewritten. Do not add pending URLs or this partial demo to submitted release metadata
-as though full review preparation were complete.
+The 0.2.1 manifest sets `developerName` to Lucas Foundation and includes the four published listing URLs
+in `extensions.com.openai.interface`; see `PLUGIN-DISTRIBUTION.md`. It is built as a new version rather
+than rewriting the 0.2.0 package. The original demo still documents 0.2.0. Do not add this partial demo
+to submitted release metadata as though full review preparation were complete.
 
 The main ODDBOUT public privacy page now names Lucas Foundation and links to the plugin policies.
 The standalone site build applies that change; the shared `crashbang-heroes/kaito_web` checkout was

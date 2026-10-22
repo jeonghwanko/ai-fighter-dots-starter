@@ -15,6 +15,9 @@ codex plugin add ai-fighter-creator@ai-fighter-local
 
 This uses the same marketplace identity as the checkout-linked development plugin, so changing
 the marketplace source upgrades the existing plugin rather than installing a second active namespace.
+When `ai-fighter-local` is already configured from a different build directory, remove its source with
+`codex plugin marketplace remove ai-fighter-local` before adding the new directory, then run
+`codex plugin add ai-fighter-creator@ai-fighter-local` to refresh the installed version.
 
 The builder uses the pinned clean sprite-gen tree, retains its Apache-2.0 LICENSE and NOTICE,
 and installs Node production dependencies from the lockfile with lifecycle scripts disabled.
@@ -37,6 +40,23 @@ do not run unreviewed commands or recipes from someone else's project.
 The build report and checksum describe only that build. The ZIP must be rebuilt after source changes.
 Other OS/CPU combinations are not yet validated; do not advertise them as supported.
 
+## Listing links in 0.2.1
+
+Version 0.2.1 sets the following published URLs in `extensions.com.openai.interface`:
+
+| Field | Public URL |
+| --- | --- |
+| `websiteURL` | https://oddbout.com/ai-fighter-creator/index.html |
+| `supportURL` | https://oddbout.com/ai-fighter-creator/support.html |
+| `privacyPolicyURL` | https://oddbout.com/ai-fighter-creator/privacy.html |
+| `termsOfServiceURL` | https://oddbout.com/ai-fighter-creator/terms.html |
+
+The English policies link to Korean translations. The publisher is Lucas Foundation and the policy
+effective date is 2026-10-22. Both the checkout-linked builder and portable builder copy this manifest;
+the portable build report includes the four URLs. Build a new 0.2.1 package instead of editing an
+installed 0.2.0 cache. Upload the new ZIP after organization allowlisting; changing local metadata
+does not create or update a Platform directory draft. Review footage remains outstanding.
+
 ## Public directory status and prerequisites
 
 The ZIP is a distribution candidate, **not an approved public app**. Installation from a local
@@ -50,9 +70,9 @@ Before public submission:
 - Obtain OpenAI's confirmation that the submitting organization is allowlisted.
 - Complete the developer/organization identity verification in the Platform portal. Use that identity
   for `extensions.com.openai.interface.developerName`; do not invent a verified publisher.
-- Publish product-specific privacy and terms pages, then set `privacyPolicyURL` and `termsOfServiceURL`.
-  Account data, local project files, provider uploads, registration storage and retention must be described
-  accurately. A source-code license alone is not the service's terms or privacy policy.
+- Keep the published privacy and terms pages and the four listing URLs above current. Account data,
+  local project files, provider uploads, registration storage and retention must be described accurately.
+  A source-code license alone is not the service's terms or privacy policy.
 - Run five positive and three negative reviewer cases against the actual release. Provide reviewer
   access separately in the secure portal if required, plus an accessible video of the real workflows.
   Automated tests do not prove successful media generation or registration.

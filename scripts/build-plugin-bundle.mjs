@@ -96,8 +96,10 @@ export async function buildPluginBundle(destination) {
   await run(python, [path.join(root, 'scripts', 'zip-plugin.py'), plugin, zip]);
   const report = { version: metadata.version, platform: `${process.platform}-${process.arch}`, plugin, marketplace: out,
     zip, sha256: sha(await readFile(zip)), runtimeFiles: Object.keys(hashes).length, spriteGenCommit: pinned,
+    listingURLs: Object.fromEntries(['websiteURL', 'supportURL', 'privacyPolicyURL', 'termsOfServiceURL']
+      .map(key => [key, metadata.extensions['com.openai'].interface[key]])),
     publicSubmissionReady: false, pending: ['OpenAI local MCP organization allowlisting', 'Verified developer identity',
-      'Published privacy policy and terms URLs', 'Reviewer access and executed review cases', 'Reviewer-accessible demo video'],
+      'Reviewer access and executed review cases', 'Reviewer-accessible demo video'],
     credentials: 'Only allowlisted source and clean npm production packages are bundled; no home, session, venv or output directories.',
     runtime: 'Node.js 22.12+ must be available. The Python sprite runtime is set up explicitly on each user computer.' };
   await writeFile(path.join(out, 'build-report.json'), JSON.stringify(report, null, 2) + '\n');

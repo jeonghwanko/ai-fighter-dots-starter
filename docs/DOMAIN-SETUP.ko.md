@@ -149,7 +149,7 @@ node scripts/build-plugin-policy-site.mjs output/policy-pages/ai-fighter-creator
 
 심사 영상은 로그인 없이 심사자가 접근할 수 있는 HTTPS 페이지 또는 영상 주소로 제공합니다. 현재 94초 영상은 실제 MCP 기능 검사만 담은 초안입니다. 실제 생성·수정·최종 등록 장면을 추가한 최종본을 공개하고, 브라우저에서 재생·자막·접근 권한을 확인합니다.
 
-공개 페이지가 모두 정상 응답한 뒤 plugin.json의 extensions.com.openai.interface에 websiteURL, supportURL, privacyPolicyURL, termsOfServiceURL을 넣습니다. 최종 영상은 review.demo_recording_url에 연결합니다. 설치된 0.2.0 파일을 덮어쓰지 말고 수정된 소스로 새 배포 버전을 만듭니다.
+공개 페이지 응답을 확인하고 0.2.1의 plugin.json에 있는 extensions.com.openai.interface에 websiteURL, supportURL, privacyPolicyURL, termsOfServiceURL을 반영했습니다. 정확한 주소와 배포 절차는 PLUGIN-DISTRIBUTION.md에 기록되어 있습니다. 조직 승인 후 새 ZIP을 올려야 공식 등록 화면에도 반영됩니다. 최종 영상이 준비되면 review.demo_recording_url에 연결합니다. 기존 0.2.0 파일을 덮어쓰지 않고 새 배포 버전으로 관리합니다.
 
 공개 자료에는 로그인 세션, 일회성 로그인 링크, 생성 제공자 인증정보, 지원 승인 메일 또는 비공개 실행 폴더를 포함하지 않습니다. 도메인 연결은 OpenAI 조직 승인과 별도이며, 도메인만으로 공식 등록 자격이 생기지는 않습니다.
 
