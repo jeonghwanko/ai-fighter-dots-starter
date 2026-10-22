@@ -100,8 +100,12 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
         let query = db.from('af_fighters').select('id,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha')
           .eq('runtime_approved', true).eq('runtime_scope', 'arena-player-v1').eq('review_state', 'approved');
         if (parts.length === 1) {
-          const { data, error } = await query.order('created_at').limit(20); check(error);
-          return reply({ ok: true, fighters: data.filter(f => f.runtime_manifest_sha === f.manifest_sha)
+          const pageText = new URL(request.url).searchParams.get('page') ?? '0';
+          if (!/^(0|[1-9][0-9]{0,4})$/.test(pageText)) return reply({ ok: false, code: 'invalid-page' }, 400);
+          const page = Number(pageText);
+          query = query.order('created_at', { ascending: false }).order('id');
+          const { data, error } = await (page === 0 ? query.limit(21) : query.range(page * 20, page * 20 + 20)); check(error);
+          return reply({ ok: true, hasMore: data.length > 20, fighters: data.slice(0, 20).filter(f => f.runtime_manifest_sha === f.manifest_sha)
             .map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, runtimeScope: f.runtime_scope,
               duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha })) });
         }
