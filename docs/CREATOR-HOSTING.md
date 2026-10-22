@@ -284,6 +284,46 @@ The privacy page is updated during the same build to disclose Analytics and cook
 Analytics account data-sharing choices remain at their initial defaults unless
 the owner explicitly approves a later change. No existing ads-coffee property is used.
 
+### GA4 milestones
+
+The four key events use once-per-event counting and no default monetary value:
+
+| Event | Trigger |
+| --- | --- |
+| game_start | First actual simulation step of a bout, or accepted legacy challenge; mode distinguishes play/watch/tournament. |
+| match_complete | Actual bout result or forfeit after a tracked start, once per bout object. |
+| creation_start | Successful clipboard copy of the website's creation request, as selected by the owner. |
+| character_registered | A new server-validated fighter registration, with an eligible prior browser Analytics context. |
+
+scripts/site-milestones.mjs adds exact, fail-fast source hooks at build time.
+The game simulation itself is unchanged. Browser events allow only the event
+name and enumerated mode/result/method fields; browser code cannot emit the
+registration event.
+
+After existing authenticated creator sign-in, the browser obtains real client_id
+and session_id values from the Google tag. It posts only those values to the
+configured same-project authenticated /analytics/context route. Backend account
+IDs stay in Supabase. An opt-out visit to the authenticated creator clears the
+saved link and cancels pending registration events. No generated identifier is
+used for local-only creators or visitors whose tag is blocked.
+
+20261022090007_oddbout_registration_analytics.sql creates service-only RLS tables
+and an atomic registration outbox. An insert into af_fighters snapshots an eligible
+context, with session attribution only for contexts updated within 24 hours.
+Hourly deletion after 29 days keeps storage below the approved 30-day maximum.
+The worker-finish API atomically claims a pending event, preventing concurrent
+or repeated receipts from duplicating it. Unknown network outcomes are recorded
+as unknown without automatic retries. Analytics failures do not fail registration.
+
+The Edge Function needs GA4_MEASUREMENT_ID and GA4_API_SECRET in Supabase secrets.
+The Measurement Protocol secret must never enter the public build or source.
+Only the real Analytics client ID, optional session ID, registration time and event
+name go to Google; emails, auth tokens, account/submission/fighter IDs and character
+files do not. Advertising consent is denied. A successful HTTP response does not
+prove event ingestion; use Google's debug validation endpoint for payload checks
+and Realtime/reports for actual collection. Full attribution after a long local
+creation session is not guaranteed.
+
 ## Google Search Console
 
 The domain property `sc-domain:oddbout.com` is verified for the site owner

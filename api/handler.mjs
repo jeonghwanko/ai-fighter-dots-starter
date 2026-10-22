@@ -40,7 +40,7 @@ function check(error) {
   if (error.message === 'byte-budget-mismatch') throw new Problem(422, error.message);
   throw new Problem(503, 'database-unavailable');
 }
-export function createHandler({ db, simulateDuel = null, engineVersion = null, creatorLink = null }) {
+export function createHandler({ db, simulateDuel = null, engineVersion = null, creatorLink = null, analytics = null }) {
   const duelHandler = createDuelHandler({db,simulateDuel,engineVersion});
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
@@ -128,8 +128,10 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
           runtimeScope: fighter.runtime_scope, duelApproved: fighter.duel_approved === true && fighter.duel_manifest_sha === fighter.manifest_sha,
           manifestText: row.manifest_text, files });
       }
+      if (parts.join('/') === 'analytics/context' && request.method === 'OPTIONS' && analytics) return analytics.preflight();
       const isWorker = parts[0] === 'worker';
       const owner = await authenticate(request, isWorker);
+      if (!isWorker && parts.join('/') === 'analytics/context' && analytics) return analytics.context(request, owner);
       if (method === 'POST' && parts.join('/') === 'submissions') {
         const key = requireId(request.headers.get('idempotency-key'));
         let text;
@@ -191,8 +193,10 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
         if (parts.join('/') === 'worker/finish') {
           requireId(body.submissionId); requireId(body.leaseToken);
           if (!/^[a-f0-9]{64}$/.test(body.manifestSha256 ?? '') || typeof body.passed !== 'boolean' || !body.result || Array.isArray(body.result)) throw new Problem(400, 'invalid-result');
-          return json(await present(await rpc('af_finish', { p_id: body.submissionId, p_lease: body.leaseToken,
-            p_sha: body.manifestSha256, p_passed: body.passed, p_result: body.result })));
+          const completed = await rpc('af_finish', { p_id: body.submissionId, p_lease: body.leaseToken,
+            p_sha: body.manifestSha256, p_passed: body.passed, p_result: body.result });
+          try { await analytics?.registered(completed); } catch { /* Analytics must never break registration. */ }
+          return json(await present(completed));
         }
       }
       throw new Problem(404, 'route-not-found');
