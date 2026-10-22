@@ -48,7 +48,7 @@ export function transformMilestones(code, id) {
   return `import { milestone, creationStart, bindIdentity } from '${milestoneVirtualId}';\n` + result;
 }
 export function milestonePlugin() {
-  return { name: 'oddbout-milestones',
+  return { name: 'oddbout-milestones', enforce: 'pre',
     resolveId(id) { if (id === milestoneVirtualId) return '\0oddbout-milestones'; },
     load(id) { if (id === '\0oddbout-milestones') return milestoneModule; },
     transform: transformMilestones };
