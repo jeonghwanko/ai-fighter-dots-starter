@@ -49,6 +49,8 @@ await build({
 // Keep original asset names, manifests and license notices, including lazily loaded character packs.
 // The public tree is under Pages' 1 GB site limit and contains no environment or server files.
 for (const entry of await readdir(join(source, 'public'))) {
+  // Standalone ODDBOUT pages take precedence over the shared game's legacy notices.
+  if (siteEntries.includes(entry)) continue;
   await cp(join(source, 'public', entry), join(output, entry), { recursive: true, force: false, errorOnExist: true });
 }
 await writeFile(join(output, '.nojekyll'), '');
