@@ -4,24 +4,27 @@ import { runInNewContext } from 'node:vm';
 import { homepageEntries } from '../scripts/homepage-entry.mjs';
 import { publicSiteText, hosting } from '../scripts/hosting-lib.mjs';
 
-function redirect(html, search = '', hash = '') {
-  let destination;
-  const location = { search, hash, replace: value => { destination = value; } };
-  runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], { location, URLSearchParams });
-  return destination;
+function navigate(html, search = '', hash = '', pathname = '/') {
+  const result = {};
+  const location = { pathname, search, hash, replace: value => { result.redirect = value; } };
+  const history = { replaceState: (_, __, value) => { result.address = value; } };
+  runInNewContext(html.match(/<script>([\s\S]*?)<\/script>/)[1], { location, history, URLSearchParams });
+  return result;
 }
 
 test('homepage is served directly, with language and public anchors preserved', () => {
   const body = '<main id="main"><h1>ODDBOUT</h1><a href="./fighter.html">PLAY</a></main>';
   const entries = homepageEntries('<html><head><title>ODDBOUT</title></head><body>' + body + '</body></html>');
   assert.ok(entries['index.html'].includes(body));
-  assert.equal(redirect(entries['index.html']), undefined);
+  assert.deepEqual(navigate(entries['index.html']), {});
+  assert.deepEqual(navigate(entries['index.html'], '', '', '/index.html'), { address: './' });
   for (const hash of ['', '#main', '#fighters', '#match', '#join']) {
-    assert.equal(redirect(entries['index.html'], '?lang=ko', hash), undefined);
-    assert.equal(redirect(entries['league.html'], '?lang=ko', hash), './?lang=ko' + hash);
+    assert.deepEqual(navigate(entries['index.html'], '?lang=ko', hash), {});
+    assert.deepEqual(navigate(entries['league.html'], '?lang=ko', hash, '/league.html'), { address: './?lang=ko' + hash });
+    assert.ok(entries['league.html'].includes(body));
   }
   for (const [search, hash] of [['', '#handoff=token'], ['', '#dot=code&port=1234'], ['', '#view=rankings'], ['?lang=en&apply=founding-league', ''], ['?code=oauth', '']]) {
-    assert.equal(redirect(entries['index.html'], search, hash), './creator.html' + search + hash);
+    assert.equal(navigate(entries['index.html'], search, hash).redirect, './creator.html' + search + hash);
   }
 });
 

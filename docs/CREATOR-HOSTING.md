@@ -6,7 +6,8 @@ Game URL: https://oddbout.com/fighter.html
 
 The site root serves the homepage directly from `index.html`, without changing
 the browser address. Public navigation and canonical metadata use `/`. Existing
-`league.html` links redirect to `/`, preserving language and anchors. Legacy root
+`league.html` serves the same homepage and normalizes its address to `/` without
+a reload, preserving language and anchors even with a cached former root redirect. Legacy root
 creator parameters and handoff hashes still open `creator.html`; public homepage
 anchors (`#main`, `#fighters`, `#match`, `#join`) remain on the homepage. The build
 replaces the game's public `404.html` with an AI Fighter page that links home.
