@@ -336,3 +336,22 @@ and advertises it in `/robots.txt`. It omits the admin page, the legacy league U
 noindex pages and URL parameters. Public plugin policy pages are included. No
 last-modified dates are invented. Both files are required in the artifact and
 verified byte-for-byte after publication before submitting the sitemap to Google.
+
+## Official YouTube channel
+
+The existing AI Fighter channel owned by the site owner is rebranded as ODDBOUT.
+Channel ID: UCSWoSnUD0B4xEw32GVbLpsw. Public handle: https://www.youtube.com/@oddbout.
+deploy/creator-site.json owns youtubeChannelUrl. The Vite social plugin adds it
+to the shared public footer, with a static homepage fallback. It does not add
+an embedded player or change the existing site's Analytics privacy choices.
+
+The first channel profile link points to:
+https://oddbout.com/?utm_source=youtube&utm_medium=organic_video&utm_campaign=oddbout_channel&utm_content=profile
+
+For ordinary video descriptions, use the same source, medium and campaign with
+utm_content set to the public video ID. For Shorts, direct viewers to the profile
+link; ordinary Shorts description/comment URLs are not clickable. GA4 Traffic
+acquisition can report source/medium youtube / organic_video and the existing
+game/creation key events. Standard report processing may lag Realtime. Browser
+blocking and the existing registration context limits still apply. No Google Ads
+connection, audience sharing or ad campaign is part of this setup.

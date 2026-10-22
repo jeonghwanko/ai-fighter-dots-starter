@@ -5,6 +5,7 @@ import { homepageEntries } from './homepage-entry.mjs';
 import { writeSiteDiscovery } from './site-discovery.mjs';
 import { buildPluginPolicySite, sitePrivacyNotice, policyFiles } from './build-plugin-policy-site.mjs';
 
+import { youtubeChannelPlugin } from './site-social.mjs';
 import { milestonePlugin } from './site-milestones.mjs';
 import { googleAnalyticsPlugin } from './site-analytics.mjs';
 import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
@@ -33,7 +34,7 @@ const { build } = await import(pathToFileURL(join(source, 'node_modules/vite/dis
 const { creationContextPlugin } = await import(pathToFileURL(join(source, 'tools/ai-fighter/creation-context-plugin.mjs')).href);
 await build({
   configFile: false, root: source, envDir: false, base: config.base,
-  plugins: [creationContextPlugin(), milestonePlugin(), googleAnalyticsPlugin(config.analyticsMeasurementId, config.siteUrl, config.apiBase), {
+  plugins: [creationContextPlugin(), milestonePlugin(), youtubeChannelPlugin(config.youtubeChannelUrl), googleAnalyticsPlugin(config.analyticsMeasurementId, config.siteUrl, config.apiBase), {
     name: 'standalone-creator-origin',
     transformIndexHtml: { order: 'pre', handler(html, context) {
       const text = publicSiteText(html);
