@@ -118,6 +118,15 @@ npm run login -- --url https://YOUR_PROJECT_REF.supabase.co --key YOUR_PROJECT_P
 
 ## MCP 도구 목록
 
+### Codex 로컬 플러그인
+
+`npm run plugin:build`로 이 컴퓨터의 체크아웃을 연결하는 **AI Fighter Creator** 플러그인을 만듭니다.
+출력된 마켓플레이스를 Codex에 추가하고 설치하면 제작 스킬과 MCP를 함께 사용할 수 있습니다.
+버전별 원본 보존, 묶음별 피드백 기록, 중단 작업 조회와 동일 작업 재실행 방지를 지원합니다.
+설치와 사용법은 [로컬 플러그인 안내](docs/LOCAL-PLUGIN.md)를 참고하세요.
+독립 실행용 Windows ZIP과 공식 등록 요건은 [플러그인 배포 안내](docs/PLUGIN-DISTRIBUTION.md)에 있습니다.
+도메인·HTTPS·로그인 복귀 주소와 정책 페이지 배포는 [도메인 설정 안내](docs/DOMAIN-SETUP.ko.md)를 참고하세요.
+
 | 도구 | 입력 | 결과 |
 | --- | --- | --- |
 | `get_fighter_spec` | `section`: context/overview/creation/guide/schema/example, 선택 `group` 또는 `motion` | 현재 게임 데이터, 제작 흐름, 규격, 예제 |

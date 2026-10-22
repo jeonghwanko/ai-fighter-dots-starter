@@ -9,6 +9,7 @@ import { makePackageValidator } from './package-access.mjs';
 import { registerRemoteTools } from './remote-tools.mjs';
 import { fetchCreationContext, reviewCreationProgress } from './creation-context.mjs';
 import { spriteStatus } from '../scripts/sprite-gen.mjs';
+import { registerCreatorTools } from './creator-tools.mjs';
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const MOTIONS = /** @type {[string, ...string[]]} */ (Object.keys(spec.motions));
@@ -97,6 +98,7 @@ export function createServer({ root, remote, creatorPage, contextRequest } = {})
   });
   // One validator for all file tools, so validate and submit share the single serial decoder.
   const validatePackage = root ? makePackageValidator(root) : undefined;
+  if (root) registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage });
   if (validatePackage) {
     server.registerTool('validate_fighter_package', {
       description: 'Local-only: fully decode and check WebP files under the configured workspace. Pass a relative path such as output/my-fighter/fighter.json. Serial worker, 20-second timeout; never uploads or approves.',

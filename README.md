@@ -8,6 +8,11 @@ This kit is MIT-licensed; the bundled sprite-gen submodule is Apache-2.0. Genera
 
 ## 1. Start a local chat
 
+For an installable local Codex plugin, run `npm run plugin:build`. **AI Fighter Creator** bundles the
+creation skill and MCP connection, with preserved versions, group feedback and resumable job records.
+See [local plugin setup](docs/LOCAL-PLUGIN.md). Each user builds the local connection on their own computer.
+For a standalone Windows desktop ZIP and public submission requirements, see [plugin distribution](docs/PLUGIN-DISTRIBUTION.md).
+
 Send the [start link with the current game specification](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md) to a new Dot chat. It starts by asking what character you want to make. You can also give this repository URL to Dot, Codex, or Claude in an environment that can run local commands and access files.
 
 For example:
