@@ -1,1 +1,0 @@
-import"./modulepreload-polyfill-P2Xu9kJm.js";import{r as e}from"./siteChrome-meI9f5pf.js";e(`en`,`privacy`);

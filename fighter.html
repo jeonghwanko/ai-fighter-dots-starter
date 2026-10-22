@@ -240,7 +240,7 @@
   </head>
   <body>
     <nav class="game-navigation">
-      <a id="fighter-home" class="game-home" href="./league.html?lang=ko">
+      <a id="fighter-home" class="game-home" href="./?lang=ko">
         <span aria-hidden="true">←</span>
         <img class="game-logo" src="./art/ui/oddbout-logo.webp" alt="ODDBOUT" width="376" height="76" />
       </a>
@@ -263,7 +263,7 @@
       const bootParams = new URLSearchParams(location.search);
       document.documentElement.lang = bootParams.get("lang") === "en" ? "en" : "ko";
       const homeLink = document.getElementById("fighter-home");
-      homeLink.href = "./league.html?lang=" + document.documentElement.lang;
+      homeLink.href = "./?lang=" + document.documentElement.lang;
       // A focused page link uses native keyboard activation, not the game's confirm key.
       for (const type of ["keydown", "keyup"]) homeLink.addEventListener(type, event => event.stopPropagation());
       if (bootParams.get("motion") === "reduce") document.documentElement.dataset.bootMotion = "reduce";

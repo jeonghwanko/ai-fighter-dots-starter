@@ -1,4 +1,4 @@
-import"./modulepreload-polyfill-P2Xu9kJm.js";import{t as e}from"./infoPage-NgPUyn5K.js";e({metadata:{en:{title:`About the club · ODDBOUT`,description:`Absurd matchups. Serious fights. A fight club for the characters in your head.`},ko:{title:`클럽 소개 · ODDBOUT`,description:`말도 안 되는 대진. 진심인 한 판. 상상한 캐릭터들이 만나는 파이터스 클럽.`}},korean:`<section class="about-intro content-wrap">
+import"./modulepreload-polyfill-P2Xu9kJm.js";import{t as e}from"./infoPage-CE8ZtQI-.js";e({metadata:{en:{title:`About the club · ODDBOUT`,description:`Absurd matchups. Serious fights. A fight club for the characters in your head.`},ko:{title:`클럽 소개 · ODDBOUT`,description:`말도 안 되는 대진. 진심인 한 판. 상상한 캐릭터들이 만나는 파이터스 클럽.`}},korean:`<section class="about-intro content-wrap">
     <h1>말도 안 되는 대진.<br><em>진심인 한 판.</em></h1>
     <p class="lead">머릿속 캐릭터들이 만나는 파이터스 클럽. 나의 선수를 데려와 뜻밖의 상대와 한 판 붙어보세요.</p>
     <a class="button dark" href="./creator.html" data-destination="creator.html">선수 만들기 <span aria-hidden="true">→</span></a>
@@ -10,7 +10,7 @@ import"./modulepreload-polyfill-P2Xu9kJm.js";import{t as e}from"./infoPage-NgPUy
   <section class="about-ways content-wrap" aria-label="즐기는 방법">
     <article><span class="eyebrow">01</span><h2>만들고.</h2><p>한 줄의 설명이나 참고 이미지. 작은 아이디어로 나만의 선수를 만드세요.</p><a class="text-link" href="./docs.html" data-destination="docs.html">제작 가이드 →</a></article>
     <article><span class="eyebrow">02</span><h2>싸우고.</h2><p>선수를 고르고 타이밍을 익히세요. 다음 한 수는 직접 결정하세요.</p><a class="text-link" href="./fighter.html" data-destination="fighter.html">경기장 입장 →</a></article>
-    <article><span class="eyebrow">03</span><h2>응원하고.</h2><p>자동 조종을 켜고 좋아하는 선수를 응원하세요. 예상 밖의 순간이 기다립니다.</p><a class="text-link" href="./league.html#match" data-destination="league.html" data-anchor="match">플레이 영상 →</a></article>
+    <article><span class="eyebrow">03</span><h2>응원하고.</h2><p>자동 조종을 켜고 좋아하는 선수를 응원하세요. 예상 밖의 순간이 기다립니다.</p><a class="text-link" href="./#match" data-destination="" data-anchor="match">플레이 영상 →</a></article>
   </section>
   <section class="about-faq content-wrap"><h2>링에 오르기 전에.</h2><div class="faq-list">
     <details><summary>선수를 만들기 전에 체험할 수 있나요?</summary><p>네. 기존 선수로 먼저 플레이할 수 있습니다. 만들고 싶은 캐릭터가 떠오르면 제작을 시작하세요.</p></details>
