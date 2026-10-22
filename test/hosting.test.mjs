@@ -1,15 +1,43 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, mkdir, writeFile, cp, rm } from 'node:fs/promises';
+import { mkdtemp, mkdir, writeFile, cp, rm, readFile } from 'node:fs/promises';
+import { policyFiles, buildPluginPolicySite, sitePrivacyNotice } from '../scripts/build-plugin-policy-site.mjs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fingerprint, hosting, verifyArtifact, verifyLiveSite, siteEntries, buildRevision, assertSameRevision, git, waitForJson } from '../scripts/hosting-lib.mjs';
 import { createServer } from 'node:http';
 
+test('published policies have effective dates and working local links, while previews remain marked', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fighter-policy-test-'));
+  try {
+    const destination = join(root, 'ai-fighter-creator');
+    await buildPluginPolicySite(destination);
+    assert.match(await readFile(join(destination, 'terms.html'), 'utf8'), /POLICY PREVIEW/);
+    await buildPluginPolicySite(destination, { publish: true });
+    for (const file of policyFiles.filter(file => file.endsWith('.html'))) {
+      const html = await readFile(join(root, file), 'utf8');
+      assert.match(html, /Lucas Foundation/);
+      assert.match(html, /Effective: 22 October 2026|시행일: 2026-10-22/);
+      assert.match(html, /rel="canonical"/);
+      assert.doesNotMatch(html, /POLICY PREVIEW|publication pending|공개 준비본|name="robots" content="noindex"|Supervillain Labs/);
+      for (const match of html.matchAll(/(?:href|src)="\.\/([^"#]+)(?:#[^"]*)?"/g)) {
+        await readFile(join(destination, match[1]));
+      }
+    }
+    const source = '<section id="scope"><p>The service is operated by Supervillain Labs.</p></section><section id="data">Preserve data practices</section>';
+    const updated = sitePrivacyNotice(source);
+    assert.match(updated, /operated by Lucas Foundation/);
+    assert.match(updated, /href="\/ai-fighter-creator\/privacy.ko.html"/);
+    assert.match(updated, /<section id="data">Preserve data practices<\/section>/);
+    assert.throws(() => sitePrivacyNotice('<main>Unexpected privacy source</main>'), /Privacy source changed/);
+  } finally { await rm(root, { recursive: true }); }
+});
+
 test('public artifacts reject changed bytes, private inputs and dirty source metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fighter-artifact-test-'));
   try {
     await mkdir(join(root, '.vite'));
+    await buildPluginPolicySite(join(root, 'ai-fighter-creator'), { publish: true });
     for (const file of [...siteEntries, 'index.html', '.nojekyll', '.vite/manifest.json']) {
       await writeFile(join(root, file), 'test');
     }
@@ -28,7 +56,7 @@ test('public artifacts reject changed bytes, private inputs and dirty source met
     await writeFile(join(root, 'deployment.json'), JSON.stringify(release));
     const clone = join(root, 'copy');
     await mkdir(clone);
-    for (const file of [...siteEntries, 'index.html', '.nojekyll', '.vite', 'deployment.json', ...(hosting.customDomain ? ['CNAME'] : [])]) {
+    for (const file of [...siteEntries, 'ai-fighter-creator', 'index.html', '.nojekyll', '.vite', 'deployment.json', ...(hosting.customDomain ? ['CNAME'] : [])]) {
       await cp(join(root, file), join(clone, file), { recursive: true });
     }
     await mkdir(join(clone, '.git'));
@@ -36,6 +64,9 @@ test('public artifacts reject changed bytes, private inputs and dirty source met
     await writeFile(join(clone, 'creator.html'), 'changed during copy');
     await assert.rejects(verifyArtifact(clone, { gitCheckout: true }), /changed after build/);
     await rm(clone, { recursive: true });
+    await rm(join(root, 'ai-fighter-creator/terms.html'));
+    await assert.rejects(verifyArtifact(root), /ENOENT/);
+    await buildPluginPolicySite(join(root, 'ai-fighter-creator'), { publish: true });
     await writeFile(join(root, 'fighter.html'), 'changed');
     await assert.rejects(verifyArtifact(root), /changed after build/);
     await writeFile(join(root, '.env.production'), 'private');
@@ -72,17 +103,18 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
   try {
     await mkdir(join(root, '.vite'));
     await mkdir(join(root, 'assets'));
+    await mkdir(join(root, 'ai-fighter-creator'));
     const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js', imports: ['shared'], css: ['assets/main.css'] }]));
     manifest.shared = { file: 'assets/shared.js', dynamicImports: ['lazy'] };
     manifest.lazy = { file: 'assets/lazy.js' };
     await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(manifest));
-    const content = new Map([...siteEntries, 'index.html', 'assets/main.js', 'assets/main.css', 'assets/shared.js', 'assets/lazy.js', ...(hosting.customDomain ? ['CNAME'] : [])].map(path => [path, `content for ${path}`]));
+    const content = new Map([...siteEntries, ...policyFiles, 'index.html', 'assets/main.js', 'assets/main.css', 'assets/shared.js', 'assets/lazy.js', ...(hosting.customDomain ? ['CNAME'] : [])].map(path => [path, `content for ${path}`]));
     for (const [path, value] of content) await writeFile(join(root, path), value);
-    let broken = false, missing = false, staleHtml = false, wrongMime = false;
+    let broken = false, missing = false, staleHtml = false, wrongMime = false, stalePolicy = false;
     const request = async url => {
       const path = url.pathname.slice(new URL('.', hosting.siteUrl).pathname.length);
       if (missing && path === 'assets/lazy.js') return new Response('missing', { status: 404 });
-      const wrong = (broken && path === 'assets/main.js') || (staleHtml && path === 'creator.html');
+      const wrong = (broken && path === 'assets/main.js') || (staleHtml && path === 'creator.html') || (stalePolicy && path === 'ai-fighter-creator/privacy.ko.html');
       const mime = wrongMime ? 'text/plain' : path.endsWith('.html') ? 'text/html' : path.endsWith('.css') ? 'text/css' : 'text/javascript';
       return new Response(wrong ? '<html>wrong version</html>' : content.get(path), { status: 200, headers: { 'content-type': mime } });
     };
@@ -93,7 +125,9 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
     await assert.rejects(verifyLiveSite(root, { request }), /unavailable/);
     missing = false; staleHtml = true;
     await assert.rejects(verifyLiveSite(root, { request }), /differs from build/);
-    staleHtml = false; wrongMime = true;
+    staleHtml = false; stalePolicy = true;
+    await assert.rejects(verifyLiveSite(root, { request }), /differs from build/);
+    stalePolicy = false; wrongMime = true;
     await assert.rejects(verifyLiveSite(root, { request }), /content type/);
   } finally { await rm(root, { recursive: true }); }
 });

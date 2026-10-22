@@ -141,9 +141,9 @@ node scripts/publish-creator-site.mjs output/domain-release-new
 node scripts/build-plugin-policy-site.mjs output/policy-pages/ai-fighter-creator
 ```
 
-현재 전체 사이트 빌더는 이 정책 디렉터리를 자동으로 포함하지 않습니다. 배포 전에 빌더에 정책 생성·복사 단계를 추가해 사이트 결과물의 ai-fighter-creator/에 넣어야 합니다. 이 단계는 fingerprint(output)와 deployment.json 생성보다 앞에 있어야 합니다.
+전체 사이트 빌더는 정책 페이지를 공개용으로 생성해 사이트 결과물의 ai-fighter-creator/에 포함합니다. 이 단계는 fingerprint(output)와 deployment.json 생성보다 앞에 실행되므로 정책 파일도 배포 해시와 라이브 검증의 대상입니다. 위 개별 생성 명령은 로컬 미리보기이며, --publish를 추가하면 공개용 문구와 날짜로 렌더링합니다. 파일 렌더링 자체는 사이트 배포가 아닙니다.
 
-빌드가 끝난 뒤 파일을 수동으로 덧붙이면 기록한 해시와 달라져 배포 검사가 실패합니다. 빌더 수정을 검토·커밋한 다음 전체 사이트를 새로 빌드하고, 앞 페이지의 dry-run과 공개 절차를 따릅니다. 기존 운영 개인정보 페이지의 운영자명과 정책 링크도 같은 릴리스에서 맞춥니다.
+빌드가 끝난 뒤 파일을 수동으로 덧붙이면 기록한 해시와 달라져 배포 검사가 실패합니다. 정책 변경을 검토·커밋한 다음 전체 사이트를 새로 빌드하고, 앞 페이지의 dry-run과 공개 절차를 따릅니다. 빌더는 기존 운영 개인정보 페이지의 운영자명을 Lucas Foundation으로 맞추고 새 정책 링크를 추가합니다.
 
 ### 영상과 플러그인 목록 연결
 

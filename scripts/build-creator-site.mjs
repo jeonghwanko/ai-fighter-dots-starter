@@ -2,6 +2,7 @@ import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { resolve, join, relative, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { homepageEntries } from './homepage-entry.mjs';
+import { buildPluginPolicySite, sitePrivacyNotice } from './build-plugin-policy-site.mjs';
 import { PUBLIC_CREATOR_PAGE } from '../mcp/creator-handoff.mjs';
 import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
@@ -30,7 +31,10 @@ await build({
   configFile: false, root: source, envDir: false, base: config.base,
   plugins: [creationContextPlugin(), {
     name: 'standalone-creator-origin',
-    transformIndexHtml: { order: 'pre', handler: publicSiteText },
+    transformIndexHtml: { order: 'pre', handler(html, context) {
+      const text = publicSiteText(html);
+      return context.filename.replaceAll('\\', '/').endsWith('/privacy.html') ? sitePrivacyNotice(text) : text;
+    } },
     transform(code, id) {
       code = publicSiteText(code);
       if (!id.replaceAll('\\', '/').endsWith('/src/platform/fighterCreator.ts')) return code;
@@ -58,6 +62,8 @@ for (const entry of await readdir(join(source, 'public'))) {
 }
 await writeFile(join(output, '.nojekyll'), '');
 if (config.customDomain) await writeFile(join(output, 'CNAME'), config.customDomain + '\n');
+// Policy files must exist before the artifact fingerprint is measured.
+await buildPluginPolicySite(join(output, 'ai-fighter-creator'), { publish: true });
 // Serve the actual homepage at /; retain the old filename as a compatible redirect.
 const homepage = await readFile(join(output, 'league.html'), 'utf8');
 for (const [path, html] of Object.entries(homepageEntries(homepage))) {

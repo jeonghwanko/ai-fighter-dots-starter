@@ -246,3 +246,18 @@ The Supabase API hostname, project, billing plan and database remain unchanged.
 Only Auth return URLs need to include the new creator page for Google login.
 Existing allowed return URLs remain available. Saved MCP homepage URLs on the
 previous GitHub Pages host are upgraded before issuing one-use links.
+
+## Plugin policies
+
+The normal build includes the six static pages under `/ai-fighter-creator/`,
+plus their local stylesheet and icon, before measuring `deployment.json`.
+`build-plugin-policy-site.mjs` owns the renderer; `website/ai-fighter-creator/content.mjs`
+owns the English/Korean copy and effective date. Standalone rendering defaults
+to a marked, noindex preview. `--publish` renders effective-date metadata and
+canonical URLs locally; only `publish-creator-site.mjs` publishes the site.
+
+The standalone build updates the root privacy notice's operator to Lucas Foundation
+and adds links to plugin privacy, terms and support. The shared game checkout remains
+unchanged. Unexpected privacy source structure fails the build for review.
+Artifact validation requires every policy file, and live verification compares their
+actual bytes as well as the main site's entry documents and Vite assets.

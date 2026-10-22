@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { execFileSync } from 'node:child_process';
+import { policyFiles } from './build-plugin-policy-site.mjs';
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
 export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
@@ -59,7 +60,7 @@ export async function fingerprint(root, { gitCheckout = false } = {}) {
 }
 
 export async function verifyArtifact(root, options) {
-  for (const path of [...siteEntries, 'index.html', '.nojekyll', '.vite/manifest.json']) {
+  for (const path of [...siteEntries, ...policyFiles, 'index.html', '.nojekyll', '.vite/manifest.json']) {
     if (!(await stat(join(root, path))).isFile()) throw new Error(`Missing site entry: ${path}`);
   }
   if (hosting.customDomain && (await readFile(join(root, 'CNAME'), 'utf8')).trim() !== hosting.customDomain) {
@@ -82,7 +83,7 @@ export async function verifyArtifact(root, options) {
 /** Check the actual entry documents and manifest asset bytes, not just HTTP 200. */
 export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request = fetch } = {}) {
   const manifest = JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8'));
-  const files = new Set(['index.html', ...siteEntries, ...(hosting.customDomain ? ['CNAME'] : [])]), visited = new Set();
+  const files = new Set(['index.html', ...siteEntries, ...policyFiles, ...(hosting.customDomain ? ['CNAME'] : [])]), visited = new Set();
   function visit(key) {
     if (visited.has(key)) return;
     visited.add(key);
