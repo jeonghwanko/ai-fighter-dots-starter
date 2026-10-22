@@ -5,9 +5,13 @@ import { execFileSync } from 'node:child_process';
 
 export const hosting = JSON.parse(await readFile(new URL('../deploy/creator-site.json', import.meta.url), 'utf8'));
 export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim();
-// Rewrite only the previous public site base, retaining repository documentation links.
+// Rewrite public site and homepage links while retaining repository documentation links.
 export function publicSiteText(text) {
-  return text.replaceAll('https://jeonghwanko.github.io/ai-fighter-dots-starter/', new URL('.', hosting.siteUrl).href);
+  const base = new URL('.', hosting.siteUrl).href;
+  return text.replaceAll('https://jeonghwanko.github.io/ai-fighter-dots-starter/', base)
+    .replaceAll(base + 'league.html', base)
+    .replaceAll('./league.html', './')
+    .replace(/((?:\\)?["'])league\.html(?=(?:\\)?["'])/g, '$1');
 }
 export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'about.html', 'docs.html', 'privacy.html', 'admin.html'];
 

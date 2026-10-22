@@ -1,11 +1,14 @@
 # Independent AI Fighter hosting
 
 Public URL: https://oddbout.com/creator.html
-Homepage: https://oddbout.com/league.html
+Homepage: https://oddbout.com/
 Game URL: https://oddbout.com/fighter.html
 
-The site root opens the homepage. A root URL carrying anything beyond `?lang=`
-(a handoff hash or creator parameters) opens `creator.html` instead. The build
+The site root serves the homepage directly from `index.html`, without changing
+the browser address. Public navigation and canonical metadata use `/`. Existing
+`league.html` links redirect to `/`, preserving language and anchors. Legacy root
+creator parameters and handoff hashes still open `creator.html`; public homepage
+anchors (`#main`, `#fighters`, `#match`, `#join`) remain on the homepage. The build
 replaces the game's public `404.html` with an AI Fighter page that links home.
 Validator health: https://ai-fighter-validator.onrender.com/health
 
