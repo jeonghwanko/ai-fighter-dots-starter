@@ -1,6 +1,138 @@
 <!doctype html>
-<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="referrer" content="no-referrer"><title>ODDBOUT</title>
-<link rel="canonical" href="./">
-<script>location.replace("./" + location.search + location.hash);</script></head>
-<body><a href="./">ODDBOUT 홈으로 · Open ODDBOUT</a></body></html>
+<html lang="ko">
+<head>
+<meta name="referrer" content="no-referrer">
+<script>if (/\/(?:index|league)\.html$/.test(location.pathname)) {
+  history.replaceState(null, "", "./" + location.search + location.hash);
+}
+const params = new URLSearchParams(location.search); params.delete("lang");
+const publicAnchors = ["#main", "#fighters", "#match", "#join"];
+if ([...params].length || (location.hash && !publicAnchors.includes(location.hash))) {
+  location.replace("./creator.html" + location.search + location.hash);
+}</script>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#14212d">
+  <meta name="referrer" content="no-referrer">
+  <meta name="description" content="상상한 캐릭터를 만들고, ODDBOUT의 링에서 함께 만나세요. 나의 선수를 만들고 링에 오르세요.">
+  <meta property="og:title" content="ODDBOUT · 다음 도전자, 당신입니다">
+  <meta property="og:description" content="상상한 캐릭터를 만들고, ODDBOUT의 링에서 함께 만나세요.">
+  <meta property="og:type" content="website">
+  <meta property="og:image" content="https://oddbout.com/art/ui/oddbout-logo.webp">
+  <meta property="og:url" content="https://oddbout.com/">
+  <meta name="twitter:card" content="summary_large_image">
+  <link rel="canonical" href="https://oddbout.com/">
+  <link rel="icon" href="/art/ui/oddbout-logo.webp" type="image/webp">
+  <title>ODDBOUT · 다음 도전자, 당신입니다</title>
+  <script>
+    // New visitors start in English (fighterCreatorLocale.ts). Hide the Korean source copy until league.ts replaces it.
+    try {
+      const requested = new URLSearchParams(location.search).get("lang"), saved = localStorage.getItem("ai-fighter.creator.locale.v1");
+      const valid = value => value === "en" || value === "ko";
+      if ((valid(requested) ? requested : valid(saved) ? saved : "en") === "en") {
+        document.documentElement.classList.add("translating");
+        setTimeout(() => document.documentElement.classList.remove("translating"), 3000);
+      }
+    } catch {}
+  </script>
+  <script type="module" crossorigin src="/assets/league-B1tBhwfz.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/registeredFighters-BKh5CC28.js">
+  <link rel="modulepreload" crossorigin href="/assets/modulepreload-polyfill-P2Xu9kJm.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteChrome-DoOPtL3V.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterCreatorLocale-Bh29uOe8.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueContent-BuP-l96P.js">
+  <link rel="stylesheet" crossorigin href="/assets/siteChrome-H9AosXvK.css">
+  <link rel="stylesheet" crossorigin href="/assets/league-Dj0qb6YJ.css">
+</head>
+<body>
+  <a class="skip" href="#main"><span data-copy="skip">본문으로 건너뛰기</span></a>
+  <header class="club-header" data-club-header><a class="club-brand" href="./?lang=en" aria-label="ODDBOUT home"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a><nav class="club-nav" aria-label="Main navigation"><a href="./?lang=en#fighters">Fighters</a><a href="./creator.html?lang=en#view=rankings">Rank</a><a href="./docs.html?lang=en">Docs</a><a class="club-create" href="./creator.html?lang=en">Create your fighter</a></nav><div class="club-languages" aria-label="Language"><a href="?lang=ko" lang="ko">한국어</a><a href="?lang=en" lang="en">EN</a></div></header>
+  <main id="main">
+    <section class="hero" aria-labelledby="hero-title">
+      <div class="hero-top">
+        <div class="hero-stage">
+          <div class="hero-banner">
+            <div class="hero-copy">
+              <span class="bout-heading" id="bout-heading" data-copy="mainEvent">메인 매치</span>
+              <h1 id="hero-title"><span data-copy="heroFirst">다음 도전자,</span><br> <span data-copy="heroLast">당신입니다.</span></h1>
+              <p class="hero-invite"><span data-copy="invite">상상한 캐릭터를 만들고,<br> 이 무대에 함께 서세요.</span></p>
+              <a class="button primary hero-play" id="hero-play" href="./fighter.html?lang=ko&amp;play=1&amp;fighter=tyson&amp;opponent=elon"><span>PLAY</span><span aria-hidden="true">▶</span></a>
+            </div>
+            <div class="featured-bout" aria-labelledby="bout-heading bout-names">
+              <div class="bout-art" aria-hidden="true">
+                <img src="/art/ui/oddbout-roster-v1/typhoon.webp" alt="" width="1024" height="1536" fetchpriority="high">
+                <span class="versus">VS</span>
+                <img src="/art/ui/oddbout-roster-v1/elong-muscat.webp" alt="" width="1024" height="1536" fetchpriority="high">
+              </div>
+              <div class="bout-names" id="bout-names"><span data-copy="boutLeft">타이푼</span><span data-copy="boutRight">엘롱 머스캣</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="showcase" id="fighters" role="region" aria-label="파이터 쇼케이스" data-label="showcase">
+        <div class="showcase-top wrap">
+          <h2><span data-copy="fightersTitle">선수들</span> <span class="roster-count">(<span id="fighter-count">13</span>)</span></h2>
+          <div class="roster-voice"><button class="sound-button" id="sound" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="m17 9 5 6m0-6-5 6" class="sound-off"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" class="sound-on"/></svg><span>목소리 켜기</span></button><div class="speech"><span class="speech-name" id="speaker">타이푼</span><p id="quote">“셋까지 셀게. 그 전에 끝나면 미안하고.”</p><span class="equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div></div>
+          <div class="showcase-tools"><div class="carousel-controls"><button id="autoplay" aria-label="자동 넘김 일시정지" aria-pressed="true">Ⅱ</button><span class="slide-count"><b id="current">01</b> / <span id="total">13</span></span><button id="prev" aria-label="이전 페이지" data-label="prev">←</button><button id="next" aria-label="다음 페이지" data-label="next">→</button></div></div>
+        </div>
+        <div class="roster-layout">
+          <div class="roster" id="roster" tabindex="0" aria-label="좌우로 넘겨 파이터 선택" data-label="roster">
+            <button class="fighter-card selected tyson" data-fighter="tyson" aria-label="타이푼 선택"><div class="fighter-art"><img src="/art/ui/oddbout-roster-v1/typhoon.webp" alt="검은 글러브와 반바지를 입고 가드를 올린 타이푼" width="1024" height="1536"></div><span class="fighter-name">타이푼</span></button>
+            <button class="fighter-card bing" data-fighter="bing" aria-label="미스터 빙 선택"><div class="fighter-art"><img src="/art/ui/oddbout-roster-v1/bing.webp" alt="갈색 트위드 재킷을 입고 테디베어를 안은 미스터 빙" width="966" height="1628" loading="lazy"></div><span class="fighter-name">미스터 빙</span></button>
+            <button class="fighter-card dolseok" data-fighter="dolseok" aria-label="마돌석 형사 선택"><div class="fighter-art"><img src="/art/ui/oddbout-roster-v1/dolseok.webp" alt="검은 티셔츠와 회색 바지 차림에 배지와 수갑을 찬 마돌석 형사" width="966" height="1628" loading="lazy"></div><span class="fighter-name">마돌석 형사</span></button>
+            <button class="fighter-card zuck" data-fighter="zuck" aria-label="마크 주커베리 선택"><div class="fighter-art"><img src="/art/ui/oddbout-roster-v1/zuck.webp" alt="검은 래시가드와 반바지를 입고 주짓수 자세를 잡은 마크 주커베리" width="1024" height="1536" loading="lazy"></div><span class="fighter-name">마크 주커베리</span></button>
+            <button class="fighter-card cinnamon" data-fighter="cinnamon" aria-label="존 시나몬 선택"><div class="fighter-art"><img src="/art/ui/oddbout-roster-v1/cinnamon.webp" alt="카키 카고 반바지와 검은 보호대를 착용하고 경례하는 존 시나몬" width="943" height="1667" loading="lazy"></div><span class="fighter-name">존 시나몬</span></button>
+            <button class="fighter-card singha" data-fighter="singha" aria-label="킥하형 선택"><div class="fighter-art"><img src="/art/ui/oddbout-roster-v1/kick-bro.webp" alt="검은 줄무늬의 노란 일체형 트레이닝복을 입은 킥하형" width="1024" height="1536"></div><span class="fighter-name">킥하형</span></button>
+            <button class="fighter-card malfoy" data-fighter="malfoy" aria-label="여자 말포이 선택"><div class="fighter-art"><img src="/art/ui/oddbout-roster-v1/miss-malfoy-wand.webp" alt="초록 안감의 검은 로브를 입고 마법서와 나무 지팡이를 든 여자 말포이" width="1024" height="1536"></div><span class="fighter-name">여자 말포이</span></button>
+            <button class="fighter-card elon" data-fighter="elon" aria-label="엘롱 머스캣 선택"><div class="fighter-art"><img src="/art/ui/oddbout-roster-v1/elong-muscat.webp" alt="검은 재킷과 티셔츠 차림으로 스마트폰 통화 중인 엘롱 머스캣" width="1024" height="1536"></div><span class="fighter-name">엘롱 머스캣</span></button>
+            <button class="fighter-card kuma" data-fighter="kuma" aria-label="쿠마 선택"><div class="fighter-art"><img src="/art/arena/concept/kuma.webp" alt="조끼와 나비넥타이를 입은 곰 탈의 쿠마" width="343" height="600" fetchpriority="high"></div><span class="fighter-name">쿠마</span></button>
+            <button class="fighter-card yume" data-fighter="yume" aria-label="유메 선택"><div class="fighter-art"><img src="/art/arena/concept/yume.webp" alt="보라색 무술복을 입은 유메" width="256" height="600"></div><span class="fighter-name">유메</span></button>
+            <button class="fighter-card lupin" data-fighter="lupin-male" aria-label="루팡 선택"><div class="fighter-art"><img src="/art/arena/concept/lupin-male.webp" alt="검은 정장을 입은 루팡" width="202" height="600"></div><span class="fighter-name">루팡</span></button>
+            <button class="fighter-card female" data-fighter="lupin-female" aria-label="여성 루팡 선택"><div class="fighter-art"><img src="/art/arena/concept/lupin-female.webp" alt="검은 재킷과 선글라스를 착용한 여성 루팡" width="267" height="600"></div><span class="fighter-name">여성 루팡</span></button>
+            <button class="fighter-card pink" data-fighter="pink" aria-label="핑크형님 선택"><div class="fighter-art"><img src="/art/arena/concept/pink.webp" alt="핑크색 의상의 핑크형님" width="235" height="600"></div><span class="fighter-name">핑크형님</span></button>
+          </div>
+          <a class="your-slot" href="./creator.html?lang=ko" data-destination="creator.html"><span class="slot-symbol" aria-hidden="true">＋</span><div><span class="slot-title" data-copy="slotTitle">나의 선수.</span><span class="slot-link" data-copy="slotLink">선수 만들기 →</span></div></a>
+        </div>
+      </div>
+    </section>
+    <section class="match-section wrap" id="match" aria-labelledby="match-title">
+      <div class="section-head"><h2 id="match-title"><span data-copy="matchTitle">경기장</span></h2><p><span data-copy="matchIntro">직접 싸우거나, 함께 응원하세요.</span></p></div>
+      <div class="match-grid">
+        <div class="video-panel"><video id="match-video" controls playsinline preload="none" aria-label="루팡과 쿠마의 대결 영상" data-label="video" poster="/video/ai-fighter/match-poster.webp"><source src="/video/ai-fighter/match.mp4" type="video/mp4"></video><div class="video-caption"><span><span data-copy="matchNames">루팡 vs 쿠마</span></span><span><span data-copy="matchCaption">플레이 영상 · 10초</span></span></div></div>
+        <div class="play-paths">
+          <div class="play-path">
+            <h3><span data-copy="playTitle">직접 참전</span></h3>
+            <p><span data-copy="playBody">선수를 골라 한 판 시작하세요.</span></p>
+            <a href="./fighter.html?lang=ko" data-destination="fighter.html" class="path-link"><span data-copy="playAction">플레이하기</span><span aria-hidden="true">→</span></a>
+          </div>
+          <div class="watch-path">
+            <h3><span data-copy="watchTitle">경기 관람</span></h3>
+            <p><span data-copy="watchBody">선수들의 대결을 확인하세요.</span></p>
+            <button id="watch" class="path-link"><span data-copy="watch">영상 보기</span><span aria-hidden="true">▷</span></button>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="join-section" id="join" aria-labelledby="join-title"><div class="wrap">
+      <div class="section-head"><h2 id="join-title"><span data-copy="joinTitle">클럽 참여</span></h2><p><span data-copy="joinIntro">한 줄의 설명이나 이미지로 시작하세요.</span></p></div>
+      <ol class="creation-steps"><li><span>01</span><h3><span data-copy="step1Title">상상하고</span></h3><p><span data-copy="step1Body">선수를 설명하고 외형을 정하세요.</span></p></li><li><span>02</span><h3><span data-copy="step2Title">움직이고</span></h3><p><span data-copy="step2Body">어울리는 동작을 고르세요.</span></p></li><li><span>03</span><h3><span data-copy="step3Title">참전하고</span></h3><p><span data-copy="step3Body">선수를 등록하고 링에 오르세요.</span></p></li></ol>
+      <div class="join-bottom"><div><h3><span data-copy="requirementsTitle">데뷔할 준비가 됐나요?</span></h3><p><span data-copy="requirementsBody">PC에서 시작하세요.</span></p></div><a href="./creator.html?lang=ko" data-destination="creator.html" class="button dark"><span data-copy="create">선수 만들기</span></a></div>
+    </div></section>
+  </main>
+  <footer class="club-footer" data-club-footer><a class="club-brand" href="./?lang=en"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a><p>Your fighter. Your fight.</p><nav aria-label="Footer"><a href="./about.html?lang=en">About</a><a href="./docs.html?lang=en">Docs</a><a href="mailto:turbo08@gmail.com">Contact</a><a href="./privacy.html?lang=en">Privacy</a></nav></footer>
+  <dialog class="profile-dialog" id="profile" aria-labelledby="profile-name" aria-describedby="profile-bio">
+    <button class="profile-close" id="profile-close" aria-label="프로필 닫기" data-label="close" autofocus>×</button>
+    <div class="profile-layout">
+      <div class="profile-portrait"><span class="portrait-ring" aria-hidden="true"></span><img id="profile-image" alt=""><span class="portrait-word" id="profile-word" aria-hidden="true">KUMA</span></div>
+      <div class="profile-copy">
+        <p class="profile-intro" id="profile-title"></p>
+        <h2 id="profile-name"></h2>
+        <p class="profile-bio" id="profile-bio"></p>
+        <ul class="profile-tags" id="profile-tags" aria-label="캐릭터 특징" data-label="tags"></ul>
+        <div class="profile-voice"><blockquote id="profile-quote"></blockquote><button id="profile-listen" class="profile-listen" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span>목소리 듣기</span><span class="profile-wave" aria-hidden="true">▂ ▅ ▃ ▆</span></button></div>
+        <div class="profile-actions"><span id="profile-status" class="profile-status" hidden></span><a id="profile-arena" class="button dark" href="./fighter.html?lang=ko" data-destination="fighter.html"><span data-copy="profileArena">경기장 입장</span></a><a id="profile-join" href="#join"><span data-copy="profileCreate">선수 만들기 →</span></a></div>
+      </div>
+    </div>
+    <div class="profile-footer"><button id="profile-prev" aria-label="이전 파이터 프로필" data-label="profilePrev">← <span id="profile-prev-name"></span></button><span id="profile-position">01 / 09</span><button id="profile-next" aria-label="다음 파이터 프로필" data-label="profileNext"><span id="profile-next-name"></span> →</button></div>
+  </dialog>
+  <audio id="voice" preload="none"></audio><p class="sr-only" id="audio-status" role="status"></p>
+</body></html>

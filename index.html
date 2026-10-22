@@ -2,7 +2,10 @@
 <html lang="ko">
 <head>
 <meta name="referrer" content="no-referrer">
-<script>const params = new URLSearchParams(location.search); params.delete("lang");
+<script>if (/\/(?:index|league)\.html$/.test(location.pathname)) {
+  history.replaceState(null, "", "./" + location.search + location.hash);
+}
+const params = new URLSearchParams(location.search); params.delete("lang");
 const publicAnchors = ["#main", "#fighters", "#match", "#join"];
 if ([...params].length || (location.hash && !publicAnchors.includes(location.hash))) {
   location.replace("./creator.html" + location.search + location.hash);
