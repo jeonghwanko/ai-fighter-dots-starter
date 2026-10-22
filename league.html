@@ -25,11 +25,11 @@
       }
     } catch {}
   </script>
-  <script type="module" crossorigin src="/ai-fighter-dots-starter/assets/league-0kba65QI.js"></script>
+  <script type="module" crossorigin src="/ai-fighter-dots-starter/assets/league-0wZa_LCk.js"></script>
   <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/modulepreload-polyfill-P2Xu9kJm.js">
   <link rel="modulepreload" crossorigin href="/ai-fighter-dots-starter/assets/fighterCreatorLocale-Dk6RFzzb.js">
   <link rel="stylesheet" crossorigin href="/ai-fighter-dots-starter/assets/fighterCreatorLocale-H9AosXvK.css">
-  <link rel="stylesheet" crossorigin href="/ai-fighter-dots-starter/assets/league-nLkA54oY.css">
+  <link rel="stylesheet" crossorigin href="/ai-fighter-dots-starter/assets/league-zhw8p1W0.css">
 </head>
 <body>
   <a class="skip" href="#main"><span data-copy="skip">본문으로 건너뛰기</span></a>
@@ -62,7 +62,8 @@
       <div class="showcase" id="fighters" role="region" aria-label="파이터 쇼케이스" data-label="showcase">
         <div class="showcase-top wrap">
           <h2><span data-copy="fightersTitle">선수들</span> <span class="roster-count">(<span id="fighter-count">13</span>)</span></h2>
-          <div class="showcase-tools"><a class="roster-create" href="./creator.html?lang=ko" data-destination="creator.html"><span data-copy="create">선수 만들기</span> <span aria-hidden="true">＋</span></a><div class="carousel-controls"><button id="autoplay" aria-label="자동 넘김 일시정지" aria-pressed="true">Ⅱ</button><span class="slide-count"><b id="current">01</b> / <span id="total">13</span></span><button id="prev" aria-label="이전 페이지" data-label="prev">←</button><button id="next" aria-label="다음 페이지" data-label="next">→</button></div></div>
+          <div class="roster-voice"><button class="sound-button" id="sound" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="m17 9 5 6m0-6-5 6" class="sound-off"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" class="sound-on"/></svg><span>목소리 켜기</span></button><div class="speech"><span class="speech-name" id="speaker">타이푼</span><p id="quote">“셋까지 셀게. 그 전에 끝나면 미안하고.”</p><span class="equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div></div>
+          <div class="showcase-tools"><div class="carousel-controls"><button id="autoplay" aria-label="자동 넘김 일시정지" aria-pressed="true">Ⅱ</button><span class="slide-count"><b id="current">01</b> / <span id="total">13</span></span><button id="prev" aria-label="이전 페이지" data-label="prev">←</button><button id="next" aria-label="다음 페이지" data-label="next">→</button></div></div>
         </div>
         <div class="roster-layout">
           <div class="roster" id="roster" tabindex="0" aria-label="좌우로 넘겨 파이터 선택" data-label="roster">
@@ -80,8 +81,8 @@
             <button class="fighter-card female" data-fighter="lupin-female" aria-label="여성 루팡 선택"><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/arena/concept/lupin-female.webp" alt="검은 재킷과 선글라스를 착용한 여성 루팡" width="267" height="600"></div><span class="fighter-name">여성 루팡</span></button>
             <button class="fighter-card pink" data-fighter="pink" aria-label="핑크형님 선택"><div class="fighter-art"><img src="/ai-fighter-dots-starter/art/arena/concept/pink.webp" alt="핑크색 의상의 핑크형님" width="235" height="600"></div><span class="fighter-name">핑크형님</span></button>
           </div>
+          <a class="your-slot" href="./creator.html?lang=ko" data-destination="creator.html"><span class="slot-symbol" aria-hidden="true">＋</span><div><span class="slot-title" data-copy="slotTitle">나의 선수.</span><span class="slot-link" data-copy="slotLink">선수 만들기 →</span></div></a>
         </div>
-        <div class="showcase-bottom wrap"><div class="roster-voice"><button class="sound-button" id="sound" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="m17 9 5 6m0-6-5 6" class="sound-off"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14" class="sound-on"/></svg><span>목소리 켜기</span></button><div class="speech"><span class="speech-name" id="speaker">타이푼</span><p id="quote">“셋까지 셀게. 그 전에 끝나면 미안하고.”</p><span class="equalizer" aria-hidden="true"><i></i><i></i><i></i><i></i></span></div></div><p class="sr-only"><span data-copy="hint">선수를 골라보세요.</span></p><a class="roster-link" href="./fighter.html?lang=ko" data-destination="fighter.html"><span data-copy="arena">경기장 입장 →</span></a></div>
       </div>
     </section>
     <section class="match-section wrap" id="match" aria-labelledby="match-title">
