@@ -1,4 +1,4 @@
-import"./modulepreload-polyfill-P2Xu9kJm.js";import{t as e}from"./infoPage-KL7kjgzh.js";e({metadata:{en:{title:`About the club · ODDBOUT`,description:`Absurd matchups. Serious fights. A fight club for the characters in your head.`},ko:{title:`클럽 소개 · ODDBOUT`,description:`말도 안 되는 대진. 진심인 한 판. 상상한 캐릭터들이 만나는 파이터스 클럽.`}},korean:`<section class="about-intro content-wrap">
+import"./modulepreload-polyfill-P2Xu9kJm.js";import{t as e}from"./infoPage-NgPUyn5K.js";e({metadata:{en:{title:`About the club · ODDBOUT`,description:`Absurd matchups. Serious fights. A fight club for the characters in your head.`},ko:{title:`클럽 소개 · ODDBOUT`,description:`말도 안 되는 대진. 진심인 한 판. 상상한 캐릭터들이 만나는 파이터스 클럽.`}},korean:`<section class="about-intro content-wrap">
     <h1>말도 안 되는 대진.<br><em>진심인 한 판.</em></h1>
     <p class="lead">머릿속 캐릭터들이 만나는 파이터스 클럽. 나의 선수를 데려와 뜻밖의 상대와 한 판 붙어보세요.</p>
     <a class="button dark" href="./creator.html" data-destination="creator.html">선수 만들기 <span aria-hidden="true">→</span></a>
