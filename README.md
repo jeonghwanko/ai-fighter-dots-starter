@@ -1,180 +1,162 @@
 # AI Fighter × Dot starter
 
-**처음이라면 [게임 규격이 포함된 시작 링크](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md)만 새 Dot 대화에 보내세요. 원하는 캐릭터를 묻는 대화부터 시작합니다.**
+**English** | [한국어](README.ko.md)
 
-실제 생성 없이 대화만 확인하려면 [대화 시험 링크](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/DIALOGUE-ONLY.md)를 사용하세요. 두 문서 모두 게임이 현재 구조 데이터와 함께 생성합니다.
+Create your own fighter with Dot, then register it and play in AI Fighter. Start with a short description, reference images, or both. Dot runs the bundled **sprite-gen** locally, shows you the artwork and animations, applies your feedback, and builds and submits the fighter package when you request registration.
 
-캐릭터는 한두 문장의 설명, 참고 이미지, 또는 둘의 조합으로 시작할 수 있습니다.
-입력 안내와 제작 과정의 품질 평가 기준은 [제작 UX 규격](docs/CREATION-UX.md)에 정리했습니다.
+This kit is MIT-licensed; the bundled sprite-gen submodule is Apache-2.0. Generation uses **your own accounts and subscriptions**. You do not need an AI Fighter account to begin creating locally. Google sign-in is required to upload and register; no invitation or manual approval is required.
 
-Dot 사용자가 AI Fighter의 제작 규격을 읽고, **함께 포함된 sprite-gen으로 자기 캐릭터의 원화·애니메이션과 JSON을 만든 뒤 AI Fighter에 제출·등록**하는 로컬 MCP 제작 키트입니다.
-MIT 오픈소스입니다. 포함된 sprite-gen 서브모듈은 별도의 Apache-2.0입니다. Node 22.12 이상이 필요합니다.
+## 1. Start a local chat
 
-sprite-gen 소스는 `vendor/sprite-gen` Git 서브모듈에 포함됩니다. 각 사용자의 Dot이 이를 로컬에서 실행하고,
-각자의 생성 계정과 구독을 사용합니다. 운영자의 생성 계정이나 API 키를 공유하지 않습니다.
-[Dot 제작 흐름](docs/DOT-CREATION.md)에 설치부터 생성·검수·등록까지 설명합니다.
+Send the [start link with the current game specification](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md) to a new Dot chat. It starts by asking what character you want to make. You can also give this repository URL to Dot, Codex, or Claude in an environment that can run local commands and access files.
 
-**대화하면서 만듭니다.** 외형 → 대기·이동 → 공격 → 방어·피격 → 최종 확인으로 나눕니다.
-각 묶음은 함께 만들고 보여준 뒤 피드백을 반영합니다. 동작마다 진행 허락을 묻지 않으며, 위임한 묶음은 이어서 처리합니다.
-로컬 제작을 시작하는 데 홈페이지 방문이나 AI Fighter 가입은 필요하지 않습니다. 서버 등록 시 본인 계정으로 로그인합니다.
+For example:
 
-이 저장소 주소와 함께 Dot·Codex·Claude에 다음처럼 요청하세요. 로컬 파일과 제작 도구를 실행할 수 있는 환경이 필요합니다.
+> Create a cat boxer in blue armor for AI Fighter using this repository.
+> Show me one concept image first and revise it with my feedback.
+> Once I choose the appearance, show me locomotion, attacks, and defense/reactions as separate groups.
+> After I select the final result, validate the package, register it with my account, and confirm that it is available in the game.
 
-> 이 저장소로 내 캐릭터를 만들자. 우선 원화 한 장만 보여줘.
-> 나와 대화하면서 수정하고, 외형이 정해지면 대기·이동, 공격, 방어·피격 묶음으로 함께 확인하자.
+The agent handles setup, generation, extraction, measurement, packaging, and validation. You decide how the character looks and moves. The [dialogue-only link](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/DIALOGUE-ONLY.md) is available separately for checking the conversation without generating assets or registering a fighter.
 
-[보행 설계·검수](docs/GAIT-REVIEW.md)는 공통 좌표·배율, 지지발 계획, 양발의 접지 측정과 등록 전 미리보기를 연결합니다.
-`npm run fighter:gait -- init output/my-walk`로 시작합니다. `fighter:pack`은 기본적으로 현재 walk/run과 일치하는 검수 결과를 요구합니다.
-sprite-gen 설치·파일 검사 성공만으로 시각 품질이 자동 승인되지는 않습니다.
+## 2. Prepare the local tools
 
-**현재 가능:** 규격 조회, JSON·WebP 검사, 인증된 업로드, 서버 재검증, 중복 없는 선수 등록과 조회, 자동 검사된 패키지의 게임 전달, 서버 경기 결과·전적·랭킹 API.
-Google 로그인은 홈페이지와 제작 도구에서 같은 계정으로 진행합니다. 신규 그림은 동작 품질을 검수한 뒤 등록합니다.
-아래 기본 실행은 로컬 검사입니다. 실제 제출에는 본인의 Google 로그인과 서버 검증 작업자가 필요합니다. 사전 승인은 없습니다.
-2026-10-19 실제 Free 프로젝트에서 MCP 제출→저장 파일 재검증→선수 1명 등록을 확인했습니다.
-현재 이용 조건은 [공개 이용 안내](docs/OPEN-REGISTRATION.md), 과거 시험 기록은 [이전 베타 운영 기록](docs/SUPABASE-BETA.md)에 있습니다.
-Sparring Bot과 Challenger Bot은 서버·형식 검사용 기하학 견본입니다. 생성 캐릭터가 아니며 공개 선수 목록에서 제외했습니다.
-게임에서는 직접 조종과 공통 AI의 자동 조종을 선택할 수 있습니다. 선수 JSON에 실행 코드를 넣지 않습니다.
-자동 검사를 통과한 등록 선수끼리는 같은 AI 규칙으로 싸울 수 있습니다. 서버가 경기를 계산해 Supabase에 저장하고 게임이 같은 경기를 재생합니다.
-승패·랭킹은 다른 브라우저에서도 유지됩니다. 실제 Sparring Bot 대 Challenger Bot 경기, 동시 재시도 4회와 새 브라우저 조회를 검증했습니다.
-대결 실행에는 운영 게임에서 만든 엔진 번들이 필요합니다. 이 샘플의 빈 엔진 어댑터는 경기 생성을 503으로 막습니다.
-게임 본체는 이 샘플에 포함하지 않습니다. 새 등록은 파일 검사 후 바로 이용할 수 있습니다. 부적절한 선수는 사후에 내릴 수 있습니다.
-
-## 3분 실행
+Requirements: Git, Node.js **22.12+**, Python **3.11+**, and a host that can run local commands. The agent can perform these setup steps for you:
 
 ```sh
 git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
-npm run validate -- examples/sparring-bot/fighter.json
-npm run mcp:smoke
-```
-
-홈페이지와 연결할 제작 도구는 `codex/creator-hosting` 브랜치를 사용합니다.
-이 브랜치의 `deploy/creator-site.json`에 공개 로그인 연결 설정이 있습니다. 기본 `main`으로 대체하지 않습니다.
-
-`mcp:smoke`는 공식 SDK 클라이언트로 서버를 띄워 `initialize → tools/list → tools/call`을 실제 호출합니다.
-성공 결과에도 `pending: ["runtime-preview", "visual-review", "server-registration"]`이 남습니다.
-새 테스트 패키지는 `npm run example`로 `output/sparring-bot/`에 생성할 수 있습니다. 기존 폴더는 덮어쓰지 않습니다.
-게임 원본 그림은 포함하지 않았습니다. 로봇 그림과 생성 코드는 이 샘플의 독자적인 형식 시험 자료입니다.
-
-실제 새 선수 제작에는 Git과 Python 3.11+도 필요합니다.
-
-```sh
 npm run sprite:setup
 npm run sprite:status
 npm run sprite -- workflow --kind sprite
 ```
 
-`sprite:setup`은 sprite-gen 고정 커밋을 얕게(약 100 MB) 받고 전용 venv에만 설치합니다. 검사만 할 때는 필요 없습니다.
-`sprite:status`는 로그인이나 구독 확인을 대신하지 않습니다.
-이후 Dot이 `vendor/sprite-gen/SKILL.md`를 읽고 사용자에게 필요한 선택만 확인한 뒤 생성합니다.
-생성 결과는 `sprite-gen game-pack`으로 모은 뒤 `npm run fighter:pack -- plan.json`으로 AI Fighter 패키지를 만듭니다.
-시트·해시·기준점·접지를 실제 픽셀에서 재고 계약 검사까지 실행합니다. [Dot 제작 흐름](docs/DOT-CREATION.md#패키지-만들기-game-pack--fighterpack)을 따릅니다.
-GitHub ZIP에는 서브모듈 내용이 없으므로 Git clone을 사용합니다.
+Use `codex/creator-hosting`, which contains the public service configuration in `deploy/creator-site.json`. `sprite:setup` fetches the pinned sprite-gen revision (about 100 MB) and installs it in this checkout's dedicated virtual environment. Use Git clone: a GitHub ZIP does not include the submodule contents. An existing installation can be reused after checking its version and preserving local changes.
 
-## 현재 데스크톱 Dot/Codex에서 사용
+The agent reads `AGENTS.md`, the [creation workflow](docs/DOT-CREATION.md), the [authoring guide](docs/AUTHORING.md), and `vendor/sprite-gen/SKILL.md`. It checks your current generation access and asks only for missing choices. `sprite:status` alone does not confirm login or subscription access.
 
-로컬 작업을 실행하는 데스크톱 호스트에서는 MCP stdio 서버를 연결합니다.
-[공식 MCP 안내](https://developers.openai.com/codex/mcp)에 따르면 데스크톱 앱·Codex CLI·IDE는 같은 호스트의 MCP 설정을 공유합니다.
+The default recommendation is **GPT artwork + Grok motion** when both are available, all Grok when only Grok is available, or all GPT when only GPT is available. Your explicit choice takes priority. Image and video access are checked separately; switching providers or using a paid API requires your choice.
 
-설정 명령을 출력합니다. 이 단계는 설정 파일을 바꾸지 않습니다.
+## 3. Connect the AI Fighter tools
+
+For desktop Codex, print the MCP installation command:
 
 ```sh
 node scripts/print-install.mjs
 ```
 
-출력된 `codex mcp add ai-fighter --env ... -- ...` 한 줄을 터미널에서 실행합니다.
-절대 Node 경로, 서버 경로, 검사할 폴더 `AI_FIGHTER_ROOT`가 포함됩니다.
-`codex mcp list`로 확인하고 앱에서 새 로컬 대화를 엽니다. 도구가 보이지 않으면 앱을 다시 시작합니다.
-설치 후 폴더를 이동했다면 명령을 새 경로에서 다시 출력하여 등록합니다.
+Run the printed `codex mcp add ai-fighter --env ... -- ...` command. It includes the absolute Node and server paths and the trusted workspace, `AI_FIGHTER_ROOT`. Confirm the connection with `codex mcp list`, then open a new local chat. Restart the app if the tools do not appear. If you move the checkout, print and run the command again from its new location. Other local hosts must connect `mcp/stdio.mjs` as a stdio MCP server with the same workspace setting.
 
-Dot에 다음처럼 요청합니다.
+The agent reads `get_fighter_spec` sections `context`, `overview`, `creation`, `guide`, and the required `schema`. The game owns the current motions, frame requirements, controls, and timing. Refresh `context` at each review group and before packaging; the agent keeps your selections tied to the relevant versions. See [game-provided creation context](docs/GAME-CREATION-CONTEXT.md).
 
-> ai-fighter의 get_fighter_spec으로 overview와 creation, guide를 먼저 읽어줘.
-> examples/sparring-bot/fighter.json을 validate_fighter_package로 검사하고,
-> 통과한 단계와 아직 남은 단계를 구분해서 알려줘.
+Local creation can begin before MCP is connected. A browser-only chat that cannot execute local processes needs a local host to perform generation and packaging.
 
-제출하려면 로그인합니다. Google 계정으로 브라우저에서 로그인하면 세션 파일 `~/.ai-fighter/client.json`이 생깁니다.
-MCP는 이 파일을 자동으로 찾습니다. 이미 실행 중인 앱은 다시 시작합니다. 서비스 키와 작업자 키는 쓰지 않습니다.
+## 4. Create and review the fighter
+
+The agent completes each agreed group, shows its actual previews together, and waits for your feedback before the next group. Accepting a group advances the work. A revision changes the affected assets while preserving your other selections. You can explicitly delegate later groups; each motion does not need a separate permission question.
+
+| Group | What you see and choose |
+| --- | --- |
+| Appearance | One full-body concept, the `idle` reference pose, and a face close-up from the same artwork |
+| Locomotion | `fightIdle`, 16-frame `walk`, and 12-frame `run`, played at a consistent scale |
+| Attacks | `combo`, `slam`, and `dash`, including preparation, contact, and recovery |
+| Defense and reactions | `block`, `hit`, `groggy`, `fall`, and get-up poses |
+| Final review | All 11 required motions played from the final package, plus the name, description, and portrait |
+
+The agent checks character identity, actual movement, alternating feet, ground contact, and attack timing. Walk/run reviews use the final pixels and playback durations. Passing JSON or image decoding checks alone does not establish animation quality. See [gait review](docs/GAIT-REVIEW.md) and the [creation UX rules](docs/CREATION-UX.md).
+
+The agent prepares the game-pack request and packaging plan, then runs:
+
+```sh
+npm run sprite -- game-pack --request game.json --out-dir pack
+npm run fighter:pack -- plan.json
+npm run validate -- output/my-fighter/fighter.json
+```
+
+Request, plan, and output paths belong to the current fighter's working folder. The tools measure dimensions, origins, ground contacts, and hashes from the actual files. The result contains `fighter.json` and static WebP sheets under `output/my-fighter/`. The agent corrects validation errors and shows the final package before registration. See [packaging instructions](docs/DOT-CREATION.md#패키지-만들기-game-pack--fighterpack).
+
+## 5. Sign in and register
+
+When you request registration, the agent reads `deploy/creator-site.json` and starts Google sign-in using the **origin of `apiBase`** as the project URL and `publishableKey` as the public key. You use the existing service; you do not need to create a Supabase project or obtain a service key. The equivalent command, with those public values substituted, is:
 
 ```sh
 npm run login -- --url https://YOUR_PROJECT_REF.supabase.co --key YOUR_PROJECT_PUBLISHABLE_KEY
 ```
 
-Google로 로그인하면 초대나 사전 승인 없이 제출할 수 있습니다. [현재 이용·사후 조치 정책](docs/OPEN-REGISTRATION.md)을 따릅니다.
-Google 로그인은 2026-10-21 운영 서버에 반영되었습니다. 상태는 [베타 운영 안내](docs/SUPABASE-BETA.md#google-로그인)를 봅니다.
-운영자가 준비한 세션 파일을 쓰는 기존 방식도 `AI_FIGHTER_CLIENT_CONFIG`로 계속 쓸 수 있습니다.
+Choose the same Google account you will use on the creator homepage. Login saves your session to `~/.ai-fighter/client.json`, which MCP loads automatically. Restart the desktop app if it was already running. `AI_FIGHTER_CLIENT_CONFIG` can select another session-file location. Keep session tokens private.
 
-연결 확인 후 실제 제작·제출 요청 예시:
+The agent then completes these steps:
 
-> AI Fighter에 쓸 파란 갑옷의 고양이 복서를 만들어줘.
-> ai-fighter 규격·creation 안내·스키마를 읽고, 포함된 sprite-gen으로 우선 새 원화 한 장만 보여줘.
-> 내 생성 계정의 사용 가능 여부를 확인하고, 형식 시험용 로봇을 새 선수로 대신 사용하지 마.
-> 원화를 나와 대화하며 수정한 뒤 대기·이동, 공격, 방어·피격을 묶음별로 보여주고 내 피드백을 반영해.
-> output/blue-cat/에 정적 WebP와 fighter.json을 저장하고 실제 파일에서 해시와 크기를 계산해.
-> 최종 동작이 정해지면 JSON과 패키지를 검사하고 오류를 수정해. 제출 후 등록 결과를 이 대화에서 알려줘.
-> 하나의 패키지에는 같은 idempotencyKey를 사용해. 실제 등록 완료와 이용 가능 여부를 확인해줘.
+1. Run `validate_fighter_manifest` and `validate_fighter_package` on the selected final files and fix any errors.
+2. Call `submit_fighter_package` with the relative manifest path and a UUID `idempotencyKey`. Reuse that key for retries of the identical package; use a new key if the package bytes change.
+3. Read `get_fighter_submission` until it returns a final result. An uploaded or queued package is still awaiting automatic server file validation.
+4. Confirm `stage: "registered"`, a real `fighterId`, and `runtimeApproved: true` before reporting that the fighter is registered and available. Use `get_registered_fighter` to read the saved profile.
 
-애셋 생성은 Dot이 이 저장소의 sprite-gen을 실행해 수행합니다. 이 MCP 자체에는 생성 모델이나 생성 API 요금이 없습니다.
-호스트의 이미지 생성 도구 지원 여부와 이용 한도는 별도입니다.
+The server checks the stored files again and makes successful registrations available automatically. A sleeping validation worker can delay processing; this is an automatic queue, not a manual approval queue. A rejected package includes validation errors to correct before resubmission. An unknown upload or generation outcome must be checked before retrying to avoid duplicate work.
 
-| 도구 | 입력 | 결과 |
+Current service limits are one fighter per account, up to five submissions, 10 MB per package, and 100 MB of total reserved storage. Inappropriate fighters can be removed after registration. See the [current access and removal policy](docs/OPEN-REGISTRATION.md).
+
+## 6. Open your fighter and play
+
+Open the [creator homepage](https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html?lang=en), sign in with the same Google account, and check your registered fighter and animations. You can also ask Dot:
+
+> Open the AI Fighter homepage with the account that owns my registered fighter.
+
+`open_creator_homepage` returns a one-use sign-in link that works in a browser on any device and expires after ten minutes. Open it yourself and keep it private. Ask for a new link if it has expired or has already been used.
+
+The game supports direct control and common-AI control. Registered fighters use the same game rules; fighter JSON contains no executable code. The server computes matches and stores results and rankings so they remain available across browsers.
+
+## If something fails
+
+**Creation, sign-in, upload, registration, and gameplay are supported workflows. A failure in the documented flow with valid inputs is a bug to reproduce and fix.** Record the failing step and error; do not dismiss it as an experiment or mark an incomplete result as complete.
+
+- If the artwork or motion is wrong, revise the affected version and repeat its review.
+- If validation rejects a file, correct the reported path or field and validate again. Keep the quality checks in place.
+- If generation or submission times out, inspect its existing request, status, and files before starting another attempt.
+- If a tool, login, server, or game step fails unexpectedly, report it in the [repository issue tracker](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues) with reproduction steps, expected and actual behavior, the error code, and the relevant tool version or commit. Exclude credentials and private files.
+
+## MCP tool reference
+
+| Tool | Input | Result |
 | --- | --- | --- |
-| `get_fighter_spec` | `section`: overview/creation/guide/schema/example, 선택 `motion` | 버전·한도·sprite-gen 제작 흐름·스키마·예제. `motion`이 있으면 그 동작의 스키마·예제만 |
-| `validate_fighter_manifest` | `manifestJson`: 원문 문자열 | 구조·참조·예산 검사 |
-| `validate_fighter_package` | `manifestPath`: 작업 폴더 기준 상대 경로 | 파일·해시·전체 디코딩 검사 |
-| `submit_fighter_package` | 상대 경로, `idempotencyKey`: UUID | 인증된 업로드 후 서버 검증 대기 |
-| `get_fighter_submission` | `submissionId` | 검증·등록·반려 상태 |
-| `get_registered_fighter` | `fighterId` | 서버에 등록된 프로필 |
-| `open_creator_homepage` | 없음 | [제작자 홈페이지](https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html)에 이 베타 계정으로 로그인하는 일회용 링크(10분, 어느 기기의 브라우저에서나) |
+| `get_fighter_spec` | `section`: context/overview/creation/guide/schema/example; optional `group` or `motion` | Current game context, creation workflow, contract, and examples |
+| `review_creation_progress` | `stateJson` | Remaining group blockers and whether the group can advance |
+| `validate_fighter_manifest` | Raw `manifestJson` string | Structure, references, and budget checks |
+| `validate_fighter_package` | Relative `manifestPath` | Actual files, hashes, and full WebP decoding checks |
+| `submit_fighter_package` | Relative `manifestPath`, UUID `idempotencyKey` | Authenticated upload and queued server validation |
+| `get_fighter_submission` | `submissionId` | Validation, registration, or rejection status |
+| `get_registered_fighter` | `fighterId` | Persisted fighter profile |
+| `open_creator_homepage` | None | One-use sign-in link for the current account |
 
-`AI_FIGHTER_ROOT`를 지정하지 않으면 파일 검사 도구는 노출되지 않습니다.
-클라이언트 설정이 없으면 앞의 로컬 도구 3개만 노출됩니다. 등록 도구는 사용자 세션을 사용하며 Supabase 서비스 키를 받지 않습니다.
+File tools require `AI_FIGHTER_ROOT`. Remote tools require a valid user session. Remove the Codex connection with `codex mcp remove ai-fighter`.
 
-내 선수를 홈페이지에서 보려면 Dot에 "AI Fighter 홈페이지를 내 등록 계정으로 열어줘"라고 요청합니다. `open_creator_homepage`가
-서버에 이 계정 전용 일회용 로그인 토큰을 요청하고, 그 해시를 붙인 홈페이지 링크를 돌려줍니다.
-링크는 폰·다른 컴퓨터 등 어느 브라우저에서 열어도 됩니다. 페이지에서 [내 선수 보기]를 누르면 연결됩니다.
-한 번 쓰거나 10분이 지나면 만료되며, 그때는 Dot에 새 링크를 요청합니다. 세션 파일의 토큰은 링크에 들어가지 않습니다.
-링크는 로그인 수단이므로 다른 사람에게 보내지 않습니다. 로컬 개발 페이지는 `AI_FIGHTER_CREATOR_URL`(루프백 `creator.html`)로 지정합니다.
-연결 제거: `codex mcp remove ai-fighter`.
+This MCP supplies the contract, validation, and registration tools. Generation runs through the bundled sprite-gen using your account; model access and usage limits depend on your provider. The stdio setup above runs on a local host. A web-only ChatGPT connection requires a separately hosted HTTPS MCP endpoint with per-user authentication.
 
-## ChatGPT 웹과 공개 플러그인
+## Development and reference
 
-위 명령은 로컬 데스크톱 호스트용입니다. 웹 ChatGPT에서 로컬 stdio 프로세스를 직접 실행할 수는 없습니다.
-웹 배포에는 공개 HTTPS Streamable HTTP MCP와 플러그인 연결 절차가 필요합니다.
-사용자별 업로드·등록에는 OAuth와 요청마다 소유권 검사가 필요합니다.
-GitHub 공개는 플러그인 디렉터리 등록이나 서버 배포를 뜻하지 않습니다.
-절차는 [공식 연결 안내](https://developers.openai.com/plugins/deploy/connect-chatgpt)와
-[인증 안내](https://developers.openai.com/plugins/build/auth)를 따릅니다.
-
-## 개발과 검증
+Local contract and MCP checks:
 
 ```sh
 npm run spec:check
 npm test
-npm run validate -- output/my-fighter/fighter.json --metadata-only
-npm run fighter:pack -- output/my-fighter-work/plan.json
+npm run validate -- examples/sparring-bot/fighter.json
+npm run mcp:smoke
 ```
 
-검증 코드는 허용 목록, 중복 JSON 키, 경로 탈출, 용량·픽셀 예산, 실제 인코딩, 빈 프레임과 crop을 확인합니다.
-MCP 파일 검사는 한 번에 한 개의 자식 프로세스로 실행하며 20초가 지나면 종료합니다.
-제작 폴더를 외부 공격자가 동시에 바꾸는 경우는 지원하지 않습니다.
-서버 작업자는 새 다운로드 폴더와 불변 파일을 사용하며, 불특정 다수 공개 전 OS 자원 격리가 추가로 필요합니다.
-자동 GitHub Actions는 포함하지 않았습니다.
+`examples/sparring-bot`, `npm run example`, and Challenger Bot are geometric fixtures for format and service checks. They are not generated character deliverables. A successful smoke check still reports `pending: ["runtime-preview", "visual-review", "server-registration"]`; it does not create or register your fighter.
 
-- [제작 안내](docs/AUTHORING.md)
-- [Dot과 포함된 sprite-gen으로 내 선수 만들기](docs/DOT-CREATION.md)
-- [적대적 리뷰와 남은 출시 조건](docs/ADVERSARIAL-REVIEW.md)
-- [Supabase 무료 베타 배포·인증·작업자 운영](docs/SUPABASE-BETA.md)
-- [제작자 홈페이지 무료 호스팅·재배포](docs/CREATOR-HOSTING.md)
-- [보안 경계](SECURITY.md)
+The game source is maintained separately. Running matches on a self-hosted service requires the production game engine bundle; this kit's empty engine adapter returns HTTP 503 for match creation. See the hosting instructions for deployment requirements.
 
-규격 원천은 `contracts/ai-fighter/v1/contract-source.mjs`입니다.
-이 저장소에는 게임 제작 계약의 v1 스냅샷을 포함합니다. 원본 저장소를 내려받을 필요가 없습니다.
-검사기와 패키지 검사 파일은 게임 저장소 파일의 바이트 복사본이며 [SOURCE.json](contracts/ai-fighter/SOURCE.json)이 해시를 고정합니다.
-게임이 계약을 바꾸면 `npm run contract:vendored -- --compare <게임의 kaito_web 폴더>`로 차이를 확인하고 다시 복사합니다.
-한도나 필수 필드를 호환되지 않게 바꾸면 새 규격 버전으로 배포해야 합니다.
+The vendored v1 contract lives in `contracts/ai-fighter/v1/contract-source.mjs`. [SOURCE.json](contracts/ai-fighter/SOURCE.json) pins the copied validator files by hash. Compare an updated game contract with `npm run contract:vendored -- --compare <game-kaito_web-directory>`; incompatible field or limit changes require a new specification version.
 
-검증 범위: 공식 MCP SDK와 실제 stdio 프로세스, 실제 Supabase 업로드·등록, 다른 계정 접근 차단과 중복 방지.
-게임 전달 API는 [가입 후 바로 이용하기](docs/OPEN-REGISTRATION.md)을 따릅니다.
-개별 사용자의 Dot UI에서 도구가 노출되는 과정과 생성 모델의 제작 품질은 자동 시험하지 않았습니다.
+Further documentation (some guides are in Korean):
+
+- [Creation workflow](docs/DOT-CREATION.md)
+- [Authoring and package contract](docs/AUTHORING.md)
+- [Creation UX and review rules](docs/CREATION-UX.md)
+- [Game-provided creation context](docs/GAME-CREATION-CONTEXT.md)
+- [Gait planning and review](docs/GAIT-REVIEW.md)
+- [Current access and removal policy](docs/OPEN-REGISTRATION.md)
+- [Hosting and deployment](docs/CREATOR-HOSTING.md)
+- [Security boundary](SECURITY.md)
