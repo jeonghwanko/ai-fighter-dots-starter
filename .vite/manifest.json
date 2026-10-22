@@ -1,4 +1,12 @@
 {
+  "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
+    "file": "assets/basis_transcoder-o4Hde_L7.js",
+    "src": "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.js"
+  },
+  "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm": {
+    "file": "assets/basis_transcoder-VXdx5NbI.wasm",
+    "src": "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
+  },
   "_AttackMoves-B-lq5s5T.js": {
     "file": "assets/AttackMoves-B-lq5s5T.js",
     "name": "AttackMoves"
@@ -241,19 +249,19 @@
     "file": "assets/fighterCreatorLocale-Bh29uOe8.js",
     "name": "fighterCreatorLocale"
   },
-  "_infoPage-Ch8tSbnN.css": {
-    "file": "assets/infoPage-Ch8tSbnN.css",
-    "src": "_infoPage-Ch8tSbnN.css"
+  "_infoPage-3AVXp6ft.css": {
+    "file": "assets/infoPage-3AVXp6ft.css",
+    "src": "_infoPage-3AVXp6ft.css"
   },
-  "_infoPage-DHpzraIJ.js": {
-    "file": "assets/infoPage-DHpzraIJ.js",
+  "_infoPage-BQP6-emr.js": {
+    "file": "assets/infoPage-BQP6-emr.js",
     "name": "infoPage",
     "imports": [
       "_siteChrome-Bz48REf0.js",
       "_fighterCreatorLocale-Bh29uOe8.js"
     ],
     "css": [
-      "assets/infoPage-Ch8tSbnN.css"
+      "assets/infoPage-3AVXp6ft.css"
     ]
   },
   "_leagueContent-BUx1Y5qm.js": {
@@ -303,13 +311,13 @@
     "name": "three.core"
   },
   "about.html": {
-    "file": "assets/about-C9zeY_pE.js",
+    "file": "assets/about-XxNC27Be.js",
     "name": "about",
     "src": "about.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CVMKP0F5.js",
-      "_infoPage-DHpzraIJ.js"
+      "_infoPage-BQP6-emr.js"
     ]
   },
   "admin.html": {
@@ -360,13 +368,13 @@
     ]
   },
   "docs.html": {
-    "file": "assets/docs-CSWV4S6F.js",
+    "file": "assets/docs-CV8eN186.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CVMKP0F5.js",
-      "_infoPage-DHpzraIJ.js"
+      "_infoPage-BQP6-emr.js"
     ]
   },
   "fighter.html": {
@@ -402,16 +410,8 @@
       "assets/league-BEOm7r-2.css"
     ]
   },
-  "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
-    "file": "assets/basis_transcoder-o4Hde_L7.js",
-    "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js"
-  },
-  "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm": {
-    "file": "assets/basis_transcoder-VXdx5NbI.wasm",
-    "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
-  },
   "privacy.html": {
-    "file": "assets/privacy-BntLXjhP.js",
+    "file": "assets/privacy-DiItmvgn.js",
     "name": "privacy",
     "src": "privacy.html",
     "isEntry": true,
@@ -420,7 +420,7 @@
       "_siteChrome-Bz48REf0.js"
     ],
     "css": [
-      "assets/privacy-BIMdk80T.css"
+      "assets/privacy-CqLiglDx.css"
     ]
   },
   "src/assets/native-city-bing-side-runtime.json": {
