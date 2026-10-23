@@ -85,7 +85,7 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 `combat.stats`는 등급 배분일 뿐이다. 서버가 등급을 자체 수치로 바꾸고, 등록 선수끼리의 AI 대결에만 쓴다.
 성격·소개·컨셉·기술 이름은 표시용 데이터다. 새 동작을 만들거나 AI나 게임에 실행을 지시하는 문장이 아니다.
 새 필드는 서버의 `/spec` `features`에 `profile-extras-1`·`combat-stats-1`이 있을 때만 제출한다. 없으면 제출 도구가 업로드 전에 멈춘다.
-계정당 선수는 하나다. 나중에 컨셉·기술 이름·능력치·원화를 바꾸려면 다시 패키징해 같은 선수의 `fighterId`로 제출한다(`submit_fighter_package`의 `fighterId`). 선수 ID와 전적은 유지되고, 지난 경기는 당시 패키지 기준 기록으로 남는다.
+계정당 선수는 최대 3명이다. 새 선수 등록 시 `fighterId`를 생략하고, 기존 선수를 수정할 때만 해당 ID를 지정한다. 나중에 컨셉·기술 이름·능력치·원화를 바꾸려면 다시 패키징해 같은 선수의 `fighterId`로 제출한다(`submit_fighter_package`의 `fighterId`). 선수 ID와 전적은 유지되고, 지난 경기는 당시 패키지 기준 기록으로 남는다.
 `standard-duel`을 선택해도 경쟁 규칙의 통합이나 서버 연결이 완료되지는 않는다.
 
 ## 좌표와 프레임

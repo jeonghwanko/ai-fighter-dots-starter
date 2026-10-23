@@ -10,6 +10,7 @@ async function migratedDatabase() {
   await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
     create schema auth; create table auth.users(id uuid primary key,email text);
     create function auth.uid() returns uuid language sql as 'select nullif(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';
+    create function auth.jwt() returns jsonb language sql as 'select coalesce(nullif(current_setting(''request.jwt.claims'',true),''''),''{}'')::jsonb';
     grant usage on schema auth to authenticated,service_role;
     create schema storage;
     create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
@@ -49,7 +50,9 @@ test('Postgres enforces open registration, immutability, queue, leases, unique r
     assert.equal((await finish(claim.lease_token)).fighter_id, registered.fighter_id);
     assert.equal((await db.query('select count(*)::int as n from public.af_fighters')).rows[0].n, 1);
     assert.equal((await create(owner, key)).fighter_id, registered.fighter_id);
-    await assert.rejects(create(owner, crypto.randomUUID()), /fighter-quota/);
+    const next = await create(owner, crypto.randomUUID());
+    assert.equal(next.status, 'uploading');
+    await db.query("update public.af_submissions set status='rejected' where id=$1", [next.id]);
     const admitted=(await db.query('select * from af_fighters where id=$1',[registered.fighter_id])).rows[0];
     assert.equal(admitted.runtime_approved,true); assert.equal(admitted.duel_approved,true);
     assert.equal(admitted.runtime_manifest_sha,sha); assert.equal(admitted.review_evidence.authorization,'open-registration');
@@ -71,6 +74,47 @@ test('Postgres enforces open registration, immutability, queue, leases, unique r
     assert.equal((await db.query('select status from public.af_submissions where id=$1', [retry.id])).rows[0].status, 'rejected');
     await db.exec('update public.af_settings set max_reserved_bytes=1');
     await assert.rejects(create(other, crypto.randomUUID()), /storage-budget-full/);
+  } finally { await db.close(); }
+});
+
+test('three fighters share an account; a fourth is refused and updates preserve the other fighters', async () => {
+  const db = await migratedDatabase();
+  try {
+    const owner = crypto.randomUUID(), bytes = example.assets.reduce((sum, a) => sum + a.bytes, 0);
+    await db.query('insert into auth.users values($1)', [owner]);
+    await db.query('insert into public.af_creators(owner_id) values($1)', [owner]);
+    const text = JSON.stringify(example), sha = await sha256(new TextEncoder().encode(text));
+    const create = async (key = crypto.randomUUID(), target = null, body = text) => (await db.query(
+      'select to_jsonb(public.af_create_submission($1,$2,$3,$4,$5,$6)) as value',
+      [owner, key, body, await sha256(new TextEncoder().encode(body)), bytes, target])).rows[0].value;
+    const finish = async row => {
+      for (const a of example.assets) await db.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta', `${owner}/${row.id}/${a.id}.webp`, { size: a.bytes }]);
+      await db.query('select public.af_submit($1,$2)', [owner, row.id]);
+      const claim = (await db.query('select to_jsonb(public.af_claim($1)) as value', [row.id])).rows[0].value;
+      return (await db.query('select to_jsonb(public.af_finish($1,$2,$3,true,$4)) as value',
+        [row.id, claim.lease_token, row.manifest_sha, { validatorVersion: VALIDATOR_VERSION, stage: 'bytes-hashes-and-full-decode', errors: [] }])).rows[0].value;
+    };
+    const rows = [];
+    for (let i = 0; i < 3; i++) rows.push(await finish(await create()));
+    assert.equal(new Set(rows.map(row => row.fighter_id)).size, 3);
+    assert.deepEqual((await db.query('select account_slot from af_fighters where owner_id=$1 order by account_slot', [owner])).rows.map(row => row.account_slot), [1, 2, 3]);
+    await assert.rejects(create(), /fighter-quota/);
+    assert.equal((await create(rows[0].idempotency_key)).fighter_id, rows[0].fighter_id);
+    // The database bound also applies outside the submission entry point.
+    await assert.rejects(db.query("insert into af_fighters(submission_id,owner_id,manifest_sha,profile) values(gen_random_uuid(),$1,$2,'{}')", [owner, sha]), /fighter-quota/);
+    await assert.rejects(db.query('update af_fighters set account_slot=4 where id=$1', [rows[0].fighter_id]), /af_fighters_account_slot_check/);
+    await assert.rejects(db.query('update af_fighters set account_slot=2 where id=$1', [rows[0].fighter_id]), /af_fighters_owner_slot_key/);
+    const before = (await db.query('select * from af_fighters where owner_id=$1 order by account_slot', [owner])).rows;
+    const changed = JSON.stringify({ ...example, profile: { ...example.profile, concept: 'Updated first fighter' } });
+    const updated = await finish(await create(crypto.randomUUID(), rows[0].fighter_id, changed));
+    assert.equal(updated.fighter_id, rows[0].fighter_id);
+    const after = (await db.query('select * from af_fighters where owner_id=$1 order by account_slot', [owner])).rows;
+    assert.equal(after.length, 3); assert.equal(after[0].account_slot, 1);
+    assert.equal(after[0].created_at.getTime(), before[0].created_at.getTime());
+    assert.deepEqual(after.slice(1), before.slice(1));
+    // Moderation cannot be used to free slots and evade the per-account bound.
+    await db.query("update af_fighters set review_state='rejected',runtime_approved=false,runtime_scope=null,runtime_manifest_sha=null,duel_approved=false,duel_manifest_sha=null where id=$1", [rows[2].fighter_id]);
+    await assert.rejects(create(), /fighter-quota/);
   } finally { await db.close(); }
 });
 
