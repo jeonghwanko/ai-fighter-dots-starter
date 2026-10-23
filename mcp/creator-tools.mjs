@@ -35,7 +35,10 @@ export function registerCreatorTools(server, { root, contextRequest, respond, ou
       : Promise.all((await jobs.list(sessionId)).map(job => jobs.inspect(sessionId, job.jobId))));
   register('cancel_creation_job', 'Cancel an unstarted reservation, for example after changing its inputs. Does not stop a running provider request or erase its evidence.',
     job, { ...write, idempotentHint: true }, ({ sessionId, jobId }) => jobs.cancel(sessionId, jobId));
+  // Readiness reads the same records to tell whether a character is already in progress.
+  const stores = { store, jobs };
   register('resolve_creation_job', 'Resolve an unknown outcome only after inspecting provider records and outputs. Record evidence; duplicate-risk-accepted requires the user’s explicit choice acknowledging possible duplicate usage. Resolution never reexecutes a job or approves art.',
     { ...job, outcome: z.enum(['recovered', 'not-started', 'duplicate-risk-accepted']), evidence: z.array(z.string()).min(1).max(32), note: z.string().min(1).max(4000) }, write,
     ({ sessionId, jobId, ...resolution }) => jobs.resolve(sessionId, jobId, resolution));
+  return stores;
 }

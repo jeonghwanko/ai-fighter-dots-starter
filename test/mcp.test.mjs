@@ -27,7 +27,7 @@ test('real stdio initialize, tools/list and tools/call cover authoring end to en
     const catalog = await client.listTools();
     assert.deepEqual(catalog.tools.map(t => t.name).sort(), ['get_fighter_spec', 'review_creation_progress', 'validate_fighter_manifest', 'validate_fighter_package',
       'list_creation_sessions', 'create_creation_session', 'get_creation_session', 'update_creation_session',
-      'prepare_creation_job', 'get_creation_job', 'cancel_creation_job', 'resolve_creation_job'].sort());
+      'prepare_creation_job', 'get_creation_job', 'cancel_creation_job', 'resolve_creation_job', 'check_creation_readiness'].sort());
     assert.ok(catalog.tools.every(t => t.outputSchema));
     assert.ok(catalog.tools.filter(t => t.name.startsWith('validate_')).every(t => t.annotations.readOnlyHint));
     for (const section of ['overview', 'creation', 'schema', 'example', 'guide']) {
@@ -63,7 +63,7 @@ test('real stdio initialize, tools/list and tools/call cover authoring end to en
 });
 test('no configured root means no filesystem tool', async () => {
   const client = await connect(false);
-  try { assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), ['get_fighter_spec', 'review_creation_progress', 'validate_fighter_manifest']); }
+  try { assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), ['check_creation_readiness', 'get_fighter_spec', 'review_creation_progress', 'validate_fighter_manifest']); }
   finally { await client.close(); }
 });
 test('local paths reject traversal, Windows devices, URLs and absolute paths', async () => {

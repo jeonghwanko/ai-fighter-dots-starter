@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { login, logout, projectSettings, waitForCallback } from '../scripts/login.mjs';
+import { finishPasteLogin, login, logout, parsePastedCallback, pendingLoginPath, projectSettings, startPasteLogin, waitForCallback } from '../scripts/login.mjs';
 
 const URL_ = 'https://abcdefghijklmnopqrst.supabase.co', KEY = 'sb_publishable_fixtureFixtureFixture01';
 const jwt = payload => `e30.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`;
@@ -153,3 +153,60 @@ test('the callback rejects a denied login, a bad code, a busy port, a timeout an
   finally { await new Promise(resolve => blocker.close(resolve)); }
   await assert.rejects(waitForCallback({ port, state, timeoutMs: 50 }), /login-timeout/);
 });
+
+/** A fake PKCE client: sign-in stores a verifier in the given storage; exchange requires that same verifier. */
+function fakePaste({ user = 'user-1', calls = {} } = {}) {
+  const createAuthClient = (url, key, options) => ({ auth: {
+    signInWithOAuth: async args => { calls.oauth = args; options.auth.storage.setItem('sb-fixture-auth-token-code-verifier', 'verifier-xyz');
+      return { data: { url: 'https://accounts.example/authorize?x=1&y=2' } }; },
+    exchangeCodeForSession: async code => { calls.code = code; calls.verifier = options.auth.storage.getItem('sb-fixture-auth-token-code-verifier');
+      if (calls.verifier !== 'verifier-xyz') return { error: { message: 'missing verifier' } };
+      return { data: { session: { access_token: jwt({ sub: user, exp: 9999999999 }), refresh_token: `refresh-${user}`, user: { id: user, email: 'player@example.com' } } } }; },
+  } });
+  return { createAuthClient, request: async () => ({ ok: true, account: { invited: true } }) };
+}
+
+test('paste login keeps the PKCE verifier on this host and completes from the pasted loopback address', async () => {
+  const sessionPath = path.join(directory, 'paste', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  const calls = {}, logs = [], fake = fakePaste({ calls });
+  const started = await startPasteLogin({ argv: ['--url', URL_, '--key', KEY], log: line => logs.push(line), createAuthClient: fake.createAuthClient });
+  assert.equal(started.authorizationUrl, 'https://accounts.example/authorize?x=1&y=2');
+  const pending = await saved(pendingLoginPath(sessionPath));
+  assert.equal(pending.storage['sb-fixture-auth-token-code-verifier'], 'verifier-xyz');
+  assert.match(calls.oauth.options.redirectTo, new RegExp(`^http://127\.0\.0\.1:47821/callback/${pending.state}$`));
+  if (process.platform !== 'win32') assert.equal((await import('node:fs/promises').then(f => f.stat(pendingLoginPath(sessionPath)))).mode & 0o777, 0o600);
+  // The user is warned that the address holds a one-time code; the instructions never call it safe to share.
+  assert.ok(logs.some(line => line.includes('한 번만 쓰이는 로그인 코드')) && !logs.some(line => /안전/.test(line)));
+  // A wrong address keeps the pending login for a correct paste; nothing is exchanged.
+  await assert.rejects(finishPasteLogin({ pasted: 'no address here', ...fake }), /pasted-address-invalid/);
+  await assert.rejects(finishPasteLogin({ pasted: `http://127.0.0.1:47821/callback/${'b'.repeat(32)}?code=fixture-code-123`, ...fake }), /pasted-address-mismatch/);
+  await assert.rejects(finishPasteLogin({ pasted: `http://127.0.0.1:1234/callback/${pending.state}?code=fixture-code-123`, ...fake }), /pasted-address-mismatch/);
+  assert.equal(calls.code, undefined);
+  const result = await finishPasteLogin({ pasted: `붙여넣기: "http://127.0.0.1:47821/callback/${pending.state}?code=fixture-code-123" 입니다`, log: () => {}, ...fake });
+  assert.equal(calls.code, 'fixture-code-123');
+  assert.equal(calls.verifier, 'verifier-xyz');
+  assert.equal(result.userId, 'user-1');
+  assert.equal((await saved(sessionPath)).refreshToken, 'refresh-user-1');
+  await assert.rejects(saved(pendingLoginPath(sessionPath)), /ENOENT/);
+  await assert.rejects(finishPasteLogin({ pasted: 'anything', ...fake }), /pending-login-missing/);
+});
+
+test('paste login refuses --link, an expired start, a denied login and a different user without --replace', async () => {
+  const sessionPath = path.join(directory, 'paste-2', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  await assert.rejects(startPasteLogin({ argv: ['--url', URL_, '--key', KEY, '--link'], log: () => {}, ...fakePaste() }), /paste-link-unsupported/);
+  await startPasteLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, ...fakePaste() });
+  let state = (await saved(pendingLoginPath(sessionPath))).state;
+  await assert.rejects(finishPasteLogin({ pasted: `http://127.0.0.1:47821/callback/${state}?code=fixture-code-123`, now: () => Date.now() + 11 * 60 * 1000, ...fakePaste() }), /pending-login-expired/);
+  await assert.rejects(saved(pendingLoginPath(sessionPath)), /ENOENT/);
+  assert.throws(() => parsePastedCallback(`http://127.0.0.1:47821/callback/${state}?error=access_denied`, { port: 47821, state }), /oauth-denied/);
+  assert.throws(() => parsePastedCallback('fixture-code-123', { port: 47821, state }), /pasted-address-invalid/);
+  await writeFile(sessionPath, JSON.stringify({ url: URL_, publishableKey: KEY, accessToken: jwt({ sub: 'someone-else', exp: 9999999999 }), refreshToken: 'r' }));
+  await startPasteLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, ...fakePaste() });
+  state = (await saved(pendingLoginPath(sessionPath))).state;
+  await assert.rejects(finishPasteLogin({ pasted: `http://127.0.0.1:47821/callback/${state}?code=fixture-code-123`, log: () => {}, ...fakePaste() }), /session-user-differs/);
+  assert.equal(jwtSub(await saved(sessionPath)), 'someone-else');
+  await assert.rejects(saved(pendingLoginPath(sessionPath)), /ENOENT/); // the code is spent either way
+});
+const jwtSub = file => JSON.parse(Buffer.from(file.accessToken.split('.')[1], 'base64url').toString()).sub;

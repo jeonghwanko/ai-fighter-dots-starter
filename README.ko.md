@@ -84,6 +84,13 @@ npm run validate -- output/my-fighter/fighter.json
 npm run login -- --url https://YOUR_PROJECT_REF.supabase.co --key YOUR_PROJECT_PUBLISHABLE_KEY
 ```
 
+에이전트가 봇 서비스의 VM에서 작업하면 사용자 브라우저가 그 VM의 `127.0.0.1` 콜백에 닿지 않습니다. 이때는 두 단계 붙여넣기 방식을 씁니다.
+1. 에이전트가 `npm run login -- --paste`(같은 `--url`/`--key`)로 Google 링크를 보여줍니다.
+2. 로그인하면 브라우저가 연결할 수 없는 `http://127.0.0.1:47821/callback/…` 페이지에서 멈춥니다.
+3. 그 주소를 제작 대화에 붙여 넣으면 에이전트가 `npm run login -- --finish "<주소>"`로 마칩니다.
+
+이 주소에는 한 번만 쓰이는 로그인 코드가 들어 있고 대화 기록에 남을 수 있습니다. 그 작업 공간에만 있는 값과 함께 10분 안에 한 번만 쓸 수 있지만, 다른 곳에는 공유하지 마세요. 홈페이지에서 승인하는 기기 연결 로그인으로 바꿀 예정입니다.
+
 제작자 홈페이지에서 사용할 계정과 같은 Google 계정을 선택합니다. 로그인하면 `~/.ai-fighter/client.json`에 본인의 세션이 저장되고 MCP가 자동으로 읽습니다. 데스크톱 앱이 이미 실행 중이었다면 다시 시작합니다. 다른 세션 파일 위치는 `AI_FIGHTER_CLIENT_CONFIG`로 지정할 수 있습니다. 세션 토큰은 공개하지 않습니다.
 
 이후 에이전트가 다음 순서로 처리합니다.

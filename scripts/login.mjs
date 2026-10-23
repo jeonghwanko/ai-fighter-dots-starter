@@ -1,7 +1,10 @@
 // Google sign-in for Dot. Creates this user's own Supabase session file; nothing is shared with the browser.
 // Usage: npm run login | npm run login -- --link | npm run login -- --replace | npm run logout
+//        npm run login -- --paste [--replace]  then  npm run login -- --finish "<address the browser landed on>"
 // --link adds Google to the existing account in the session file (beta accounts made before Google sign-in).
 // --replace allows a login to overwrite a session file that belongs to a different user.
+// --paste is for a workspace whose loopback the user's browser cannot reach (a bot service VM): the browser ends
+// on an unreachable 127.0.0.1 page, and the user pastes that address back. The PKCE verifier never leaves this host.
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { realpathSync } from 'node:fs';
@@ -15,7 +18,10 @@ import { apiRequest, validProjectUrl, withSessionLock, writeSessionFile } from '
 
 export const DEFAULT_LOGIN_PORT = 47821;
 export const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+// A chat round trip is slower than a local browser redirect; the authorization code itself is still single-use.
+export const PASTE_LOGIN_TTL_MS = 10 * 60 * 1000;
 export const defaultSessionPath = () => process.env.AI_FIGHTER_CLIENT_CONFIG || path.join(homedir(), '.ai-fighter', 'client.json');
+export const pendingLoginPath = sessionPath => path.join(path.dirname(sessionPath), 'pending-login.json');
 
 /** Decoded JWT payload, or null. Used only to read `role`, `sub` and `exp`; the server verifies every token. */
 export function jwtPayload(token) {
@@ -41,9 +47,10 @@ export async function projectSettings({ argv = [], env = process.env, sessionPat
   return { url, publishableKey, port };
 }
 
-function memoryStorage() {
-  const items = new Map();
-  return { getItem: key => items.get(key) ?? null, setItem: (key, value) => { items.set(key, value); }, removeItem: key => { items.delete(key); } };
+function memoryStorage(initial = {}) {
+  const items = new Map(Object.entries(initial));
+  return { getItem: key => items.get(key) ?? null, setItem: (key, value) => { items.set(key, value); }, removeItem: key => { items.delete(key); },
+    snapshot: () => Object.fromEntries(items) };
 }
 
 const page = (title, body) => `<!doctype html><meta charset="utf-8"><title>${title}</title>
@@ -124,6 +131,11 @@ export async function login({ argv = process.argv.slice(2), log = console.error,
     log(`브라우저가 열리지 않으면 이 주소를 여세요:\n${data.url}`);
     open(data.url);
   } });
+  return completeSignIn({ auth, code, link, linkedUser, replace, previousUser, sessionPath, url, publishableKey, log, request });
+}
+
+/** Exchange the code, refuse a different user unless asked, write the session file, and report account status. */
+async function completeSignIn({ auth, code, link = false, linkedUser = null, replace, previousUser, sessionPath, url, publishableKey, log, request }) {
   const exchanged = await auth.auth.exchangeCodeForSession(code);
   const session = exchanged.data?.session;
   if (exchanged.error || !session?.access_token || !session.refresh_token || !session.user?.id) throw new Error('oauth-exchange-failed');
@@ -145,6 +157,68 @@ export async function login({ argv = process.argv.slice(2), log = console.error,
   }
   log('Dot 앱이 이미 실행 중이었다면 앱을 다시 시작하세요.');
   return { sessionPath, userId: session.user.id };
+}
+
+/**
+ * Step 1 of a pasted-address login. Starts PKCE with the same allow-listed loopback redirect, saves the verifier and
+ * state to a 0600 file beside the session file, prints the Google address, and exits without waiting.
+ */
+export async function startPasteLogin({ argv = [], log = console.error, createAuthClient = createClient } = {}) {
+  if (argv.includes('--link')) throw new Error('paste-link-unsupported');
+  const sessionPath = defaultSessionPath(), pendingPath = pendingLoginPath(sessionPath);
+  const { url, publishableKey, port } = await projectSettings({ argv, sessionPath });
+  const state = randomBytes(16).toString('hex'), redirectTo = `http://127.0.0.1:${port}/callback/${state}`;
+  const storage = memoryStorage();
+  const auth = createAuthClient(url, publishableKey, { auth: { flowType: 'pkce', storage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
+  const { data, error } = await auth.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } } });
+  if (error || !data?.url) throw new Error('oauth-start-failed');
+  await mkdir(path.dirname(pendingPath), { recursive: true, mode: 0o700 });
+  // A new start replaces an older pending login; its code could no longer be exchanged anyway.
+  await writeSessionFile(pendingPath, { version: 1, url, publishableKey, port, state, replace: argv.includes('--replace'),
+    createdAt: new Date().toISOString(), storage: storage.snapshot() });
+  log('1. 아래 주소를 휴대폰이나 PC 브라우저에서 열고 Google 계정을 고르세요. 홈페이지에서 쓸 계정과 같은 계정이어야 합니다.');
+  log(data.url);
+  log(`2. 로그인 뒤 브라우저가 "연결할 수 없음" 같은 페이지(http://127.0.0.1:${port}/callback/…)로 갑니다. 정상입니다.`);
+  log('3. 그 페이지의 주소창 주소 전체를 복사해 이 제작 대화에 붙여 넣으세요. 10분 안에 해야 합니다.');
+  log('   주의: 이 주소에는 한 번만 쓰이는 로그인 코드가 들어 있고, 대화 기록에 남을 수 있습니다. 다른 곳에는 공유하지 마세요.');
+  log('   코드는 이 작업 공간에만 있는 별도 값이 있어야 쓸 수 있고, 로그인이 끝나면 다시 쓸 수 없습니다.');
+  return { pendingPath, authorizationUrl: data.url, redirectPrefix: `http://127.0.0.1:${port}/callback/`, expiresInMs: PASTE_LOGIN_TTL_MS };
+}
+
+/** The loopback callback address inside pasted text, bound to the pending state and port; never a bare code. */
+export function parsePastedCallback(text, { port, state }) {
+  const found = String(text ?? '').match(/https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/callback\/[^\s"'<>]*/);
+  if (!found) throw new Error('pasted-address-invalid');
+  let address;
+  try { address = new URL(found[0]); } catch { throw new Error('pasted-address-invalid'); }
+  if (Number(address.port) !== port || address.pathname !== `/callback/${state}`) throw new Error('pasted-address-mismatch');
+  const code = address.searchParams.get('code'), problem = address.searchParams.get('error_code') ?? address.searchParams.get('error');
+  if (problem) throw new Error(problem === 'identity_already_exists' ? 'identity-already-linked' : 'oauth-denied');
+  if (!code || !/^[A-Za-z0-9._~-]{8,512}$/.test(code)) throw new Error('pasted-address-invalid');
+  return code;
+}
+
+/** Step 2: exchange the pasted address with the saved verifier, then write the session exactly as a normal login. */
+export async function finishPasteLogin({ pasted, log = console.error, createAuthClient = createClient, request = apiRequest, now = Date.now } = {}) {
+  const sessionPath = defaultSessionPath(), pendingPath = pendingLoginPath(sessionPath);
+  const pending = await readSession(pendingPath);
+  if (!pending || pending.version !== 1 || typeof pending.state !== 'string' || typeof pending.storage !== 'object') throw new Error('pending-login-missing');
+  if (now() - Date.parse(pending.createdAt) > PASTE_LOGIN_TTL_MS) {
+    await rm(pendingPath, { force: true });
+    throw new Error('pending-login-expired');
+  }
+  if (!validProjectUrl(pending.url) || !isPublishableKey(pending.publishableKey)) throw new Error('pending-login-missing');
+  // A wrong paste keeps the pending login so the user can paste the right address.
+  const code = parsePastedCallback(pasted, pending);
+  const auth = createAuthClient(pending.url, pending.publishableKey, { auth: { flowType: 'pkce', storage: memoryStorage(pending.storage),
+    persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
+  const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
+  try {
+    return await completeSignIn({ auth, code, replace: pending.replace, previousUser, sessionPath,
+      url: pending.url, publishableKey: pending.publishableKey, log, request });
+  } finally {
+    await rm(pendingPath, { force: true }); // the code is spent either way
+  }
 }
 
 /**
@@ -193,6 +267,11 @@ const messages = {
   'manual-linking-disabled': 'Supabase Auth에서 수동 계정 연결(manual linking)이 꺼져 있습니다. 운영자가 켠 뒤 다시 실행하세요.',
   'identity-already-linked': '이 Google 계정은 이미 다른 사용자에 연결되어 있습니다. 그 Google 계정으로 먼저 로그인해 생긴 사용자를 운영자가 정리해야 합니다.',
   'link-user-mismatch': '연결 결과가 기존 사용자와 다릅니다. 세션 파일을 바꾸지 않았습니다.',
+  'paste-link-unsupported': '--paste 는 --link 와 함께 쓸 수 없습니다. 기존 베타 계정 연결은 브라우저가 있는 PC에서 실행하세요.',
+  'pending-login-missing': '진행 중인 로그인이 없습니다. npm run login -- --paste 부터 다시 실행하세요.',
+  'pending-login-expired': '로그인 시작 후 10분이 지났습니다. npm run login -- --paste 부터 다시 실행하세요.',
+  'pasted-address-invalid': '붙여 넣은 내용에서 로그인 주소(http://127.0.0.1:…/callback/…?code=…)를 찾지 못했습니다. 주소창 주소 전체를 다시 붙여 넣으세요.',
+  'pasted-address-mismatch': '붙여 넣은 주소가 이번 로그인과 맞지 않습니다. 가장 최근에 받은 링크로 로그인한 뒤의 주소를 붙여 넣으세요.',
 };
 
 /** True when this file is the entry script, also when it is run through a symlink or junction. */
@@ -200,6 +279,9 @@ function isEntry() {
   try { return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); } catch { return false; }
 }
 if (isEntry()) {
-  const run = process.argv[2] === 'logout' ? logout() : login({ argv: process.argv.slice(2) });
+  const argv = process.argv.slice(2), finish = argv.indexOf('--finish');
+  const run = argv[0] === 'logout' ? logout()
+    : finish >= 0 ? finishPasteLogin({ pasted: argv.slice(finish + 1).join(' ') })
+    : argv.includes('--paste') ? startPasteLogin({ argv }) : login({ argv });
   run.catch(error => { console.error(messages[error.message] ?? `로그인 실패: ${error.message}`); process.exitCode = 1; });
 }

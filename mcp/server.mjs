@@ -10,6 +10,8 @@ import { registerRemoteTools } from './remote-tools.mjs';
 import { fetchCreationContext, reviewCreationProgress } from './creation-context.mjs';
 import { spriteStatus } from '../scripts/sprite-gen.mjs';
 import { registerCreatorTools } from './creator-tools.mjs';
+import { checkReadiness } from './creation-readiness.mjs';
+import { identifier } from './creation-store.mjs';
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const MOTIONS = /** @type {[string, ...string[]]} */ (Object.keys(spec.motions));
@@ -98,7 +100,23 @@ export function createServer({ root, remote, creatorPage, contextRequest } = {})
   });
   // One validator for all file tools, so validate and submit share the single serial decoder.
   const validatePackage = root ? makePackageValidator(root) : undefined;
-  if (root) registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage });
+  const records = root ? registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) : {};
+  server.registerTool('check_creation_readiness', {
+    description: 'Call before the first generation of a character, after a workspace restart, and before registration. Reports three items with fixed options: '
+      + '(1) kit: before any version/job exists it fast-forwards this checkout on codex/creator-hosting and applies the hash-bound sprite-gen motion patch; run every nextCommands entry and restart the host when restartRequired; while a character is in progress it changes nothing. '
+      + '(2) account: pass account only when the user actually stated it; otherwise the host may show a choice form, else present options as numbered choices. Never infer, switch provider or use a paid API. Access and preview display stay unverified until an actual result is shown in this conversation; creation:delivery checks records only. '
+      + '(3) login: ODDBOUT sign-in. Use sameDevice when the user\'s browser runs on this workspace. For a bot VM, use the paste commands only after telling the user the pasted address holds a one-time code that may stay in chat history; never echo the code.',
+    inputSchema: { sessionId: identifier.optional(), account: z.enum(['gpt', 'grok', 'stop']).optional(), checkRemote: z.boolean().default(true) },
+    outputSchema, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
+  }, async ({ sessionId, account, checkRemote }) => {
+    try {
+      return respond({ ok: true, stage: 'creation-readiness', data: await checkReadiness({ ...records, sessionId, account,
+        remoteActive: Boolean(remote), lowLevelServer: server.server, kit: { fetchRemote: checkRemote } }) });
+    } catch (error) {
+      return respond({ ok: false, stage: 'creation-readiness', code: /^[a-z][a-z0-9-]+$/.test(error.message) ? error.message
+        : error.code === 'ENOENT' ? 'record-or-file-not-found' : 'readiness-check-failed' });
+    }
+  });
   if (validatePackage) {
     server.registerTool('validate_fighter_package', {
       description: 'Local-only: fully decode and check WebP files under the configured workspace. Pass a relative path such as output/my-fighter/fighter.json. Serial worker, 20-second timeout; never uploads or approves.',

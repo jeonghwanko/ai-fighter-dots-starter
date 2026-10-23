@@ -49,6 +49,10 @@ This repository lets each user create their own fighter through Dot. Read
 - Run creation in a workspace per `docs/EXECUTION-HOST.md` (bot service VM or the user's PC): one user per
   workspace, the user's own login only, no service API keys in the environment, work folders and attempt
   records preserved across sessions, and no pulls of this repository while a character is in progress.
+  Call MCP `check_creation_readiness` before a character's first generation, after a workspace restart and before
+  registration. Run its kit `nextCommands` (restart when told), pass `account` only as the user stated it (else let
+  the host form or numbered options ask), and use its login commands. Before the bot-VM paste login, tell the user
+  the pasted address holds a one-time code that may stay in chat history; never call it safe or echo the code.
 - Design the default customer flow for one already-owned generation subscription.
   Separate actual image/video/editor capabilities from subscription names and API billing.
   Do not make a second subscription or self-hosted VACE/ComfyUI GPU server a hidden requirement.

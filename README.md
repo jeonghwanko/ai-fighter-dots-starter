@@ -91,6 +91,8 @@ When you request registration, the agent reads `deploy/creator-site.json` and st
 npm run login -- --url https://YOUR_PROJECT_REF.supabase.co --key YOUR_PROJECT_PUBLISHABLE_KEY
 ```
 
+If the agent works in a bot service's VM, your browser cannot reach that VM's `127.0.0.1` callback. The agent then uses the two-step paste mode: `npm run login -- --paste` (same `--url`/`--key`) prints the Google link; after you sign in, your browser stops on an unreachable `http://127.0.0.1:47821/callback/…` page; you paste that address into the creation chat and the agent runs `npm run login -- --finish "<address>"`. The address contains a one-time login code that may stay in the chat history. It works only with a value kept in that workspace, only once, and within 10 minutes, but do not share it anywhere else. A device-approval sign-in on the homepage is the planned replacement.
+
 Choose the same Google account you will use on the creator homepage. Login saves your session to `~/.ai-fighter/client.json`, which MCP loads automatically. Restart the desktop app if it was already running. `AI_FIGHTER_CLIENT_CONFIG` can select another session-file location. Keep session tokens private.
 
 The agent then completes these steps:
