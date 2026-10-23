@@ -176,8 +176,10 @@ test('paste login keeps the PKCE verifier on this host and completes from the pa
   assert.equal(pending.storage['sb-fixture-auth-token-code-verifier'], 'verifier-xyz');
   assert.match(calls.oauth.options.redirectTo, new RegExp(`^http://127\.0\.0\.1:47821/callback/${pending.state}$`));
   if (process.platform !== 'win32') assert.equal((await import('node:fs/promises').then(f => f.stat(pendingLoginPath(sessionPath)))).mode & 0o777, 0o600);
-  // The user is warned that the address holds a one-time code; the instructions never call it safe to share.
-  assert.ok(logs.some(line => line.includes('한 번만 쓰이는 로그인 코드')) && !logs.some(line => /안전/.test(line)));
+  // The address carries an authorization code: entry goes only through this workspace's own terminal, never chat.
+  assert.ok(logs.some(line => line.includes('대화·메시지·일반 로그에 붙여 넣지 마세요')));
+  assert.ok(logs.some(line => line.includes('로그인이 막혔다고 알리세요')));
+  assert.ok(!logs.some(line => /대화에 붙여 넣으세요|안전/.test(line)));
   // A wrong address keeps the pending login for a correct paste; nothing is exchanged.
   await assert.rejects(finishPasteLogin({ pasted: 'no address here', ...fake }), /pasted-address-invalid/);
   await assert.rejects(finishPasteLogin({ pasted: `http://127.0.0.1:47821/callback/${'b'.repeat(32)}?code=fixture-code-123`, ...fake }), /pasted-address-mismatch/);

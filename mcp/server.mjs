@@ -105,7 +105,8 @@ export function createServer({ root, remote, creatorPage, contextRequest } = {})
     description: 'Call before the first generation of a character, after a workspace restart, and before registration. Reports three items with fixed options: '
       + '(1) kit: before any version/job exists it fast-forwards this checkout on codex/creator-hosting and applies the hash-bound sprite-gen motion patch; run every nextCommands entry and restart the host when restartRequired; while a character is in progress it changes nothing. '
       + '(2) account: pass account only when the user actually stated it; otherwise the host may show a choice form, else present options as numbered choices. Never infer, switch provider or use a paid API. Access and preview display stay unverified until an actual result is shown in this conversation; creation:delivery checks records only. '
-      + '(3) login: ODDBOUT sign-in. Use sameDevice when the user\'s browser runs on this workspace. For a bot VM, use the paste commands only after telling the user the pasted address holds a one-time code that may stay in chat history; never echo the code.',
+      + '(3) login: ODDBOUT sign-in. Use routes.sameDevice only when the user\'s browser runs on this workspace. For a browser on another device (a bot VM) no secure route exists yet: '
+      + 'report the sign-in blocker; never ask the user to paste a callback address into chat or call that safe, and do not work around it.',
     inputSchema: { sessionId: identifier.optional(), account: z.enum(['gpt', 'grok', 'stop']).optional(), checkRemote: z.boolean().default(true) },
     outputSchema, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async ({ sessionId, account, checkRemote }) => {

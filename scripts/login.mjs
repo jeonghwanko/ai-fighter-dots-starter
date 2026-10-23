@@ -1,16 +1,18 @@
 // Google sign-in for Dot. Creates this user's own Supabase session file; nothing is shared with the browser.
 // Usage: npm run login | npm run login -- --link | npm run login -- --replace | npm run logout
-//        npm run login -- --paste [--replace]  then  npm run login -- --finish "<address the browser landed on>"
+//        npm run login -- --paste [--replace]  then  npm run login -- --finish   (address read from this terminal)
 // --link adds Google to the existing account in the session file (beta accounts made before Google sign-in).
 // --replace allows a login to overwrite a session file that belongs to a different user.
-// --paste is for a workspace whose loopback the user's browser cannot reach (a bot service VM): the browser ends
-// on an unreachable 127.0.0.1 page, and the user pastes that address back. The PKCE verifier never leaves this host.
+// --paste / --finish is a manual callback exchange, not a secure delivery channel. The callback address carries an
+// authorization code: it must reach --finish only through input the user controls on this workspace (its own
+// terminal), never through chat or ordinary logs. Without such input, report the sign-in blocker instead.
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { createInterface } from 'node:readline';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
@@ -179,9 +181,9 @@ export async function startPasteLogin({ argv = [], log = console.error, createAu
   log('1. 아래 주소를 휴대폰이나 PC 브라우저에서 열고 Google 계정을 고르세요. 홈페이지에서 쓸 계정과 같은 계정이어야 합니다.');
   log(data.url);
   log(`2. 로그인 뒤 브라우저가 "연결할 수 없음" 같은 페이지(http://127.0.0.1:${port}/callback/…)로 갑니다. 정상입니다.`);
-  log('3. 그 페이지의 주소창 주소 전체를 복사해 이 제작 대화에 붙여 넣으세요. 10분 안에 해야 합니다.');
-  log('   주의: 이 주소에는 한 번만 쓰이는 로그인 코드가 들어 있고, 대화 기록에 남을 수 있습니다. 다른 곳에는 공유하지 마세요.');
-  log('   코드는 이 작업 공간에만 있는 별도 값이 있어야 쓸 수 있고, 로그인이 끝나면 다시 쓸 수 없습니다.');
+  log('3. 그 주소창 주소에는 인증 코드가 들어 있습니다. 대화·메시지·일반 로그에 붙여 넣지 마세요.');
+  log('   이 작업 공간의 터미널에서 직접 npm run login -- --finish 를 실행하고, 주소를 입력하세요. 10분 안에 해야 합니다.');
+  log('   이 작업 공간의 터미널에 직접 입력할 수 없다면 이 방식은 쓸 수 없습니다. 로그인이 막혔다고 알리세요.');
   return { pendingPath, authorizationUrl: data.url, redirectPrefix: `http://127.0.0.1:${port}/callback/`, expiresInMs: PASTE_LOGIN_TTL_MS };
 }
 
@@ -270,9 +272,17 @@ const messages = {
   'paste-link-unsupported': '--paste 는 --link 와 함께 쓸 수 없습니다. 기존 베타 계정 연결은 브라우저가 있는 PC에서 실행하세요.',
   'pending-login-missing': '진행 중인 로그인이 없습니다. npm run login -- --paste 부터 다시 실행하세요.',
   'pending-login-expired': '로그인 시작 후 10분이 지났습니다. npm run login -- --paste 부터 다시 실행하세요.',
-  'pasted-address-invalid': '붙여 넣은 내용에서 로그인 주소(http://127.0.0.1:…/callback/…?code=…)를 찾지 못했습니다. 주소창 주소 전체를 다시 붙여 넣으세요.',
-  'pasted-address-mismatch': '붙여 넣은 주소가 이번 로그인과 맞지 않습니다. 가장 최근에 받은 링크로 로그인한 뒤의 주소를 붙여 넣으세요.',
+  'pasted-address-invalid': '입력한 내용에서 로그인 주소(http://127.0.0.1:…/callback/…)를 찾지 못했습니다. 이 터미널에서 주소창 주소 전체를 다시 입력하세요.',
+  'pasted-address-mismatch': '입력한 주소가 이번 로그인과 맞지 않습니다. 가장 최근에 받은 링크로 로그인한 뒤의 주소를 이 터미널에서 입력하세요.',
 };
+
+/** One line typed into this process's own terminal, so the address stays out of argv and shell history. */
+function readTerminalLine(prompt) {
+  return new Promise(resolve => {
+    const lines = createInterface({ input: process.stdin, output: process.stderr });
+    lines.question(prompt, answer => { lines.close(); resolve(answer); });
+  });
+}
 
 /** True when this file is the entry script, also when it is run through a symlink or junction. */
 function isEntry() {
@@ -281,7 +291,8 @@ function isEntry() {
 if (isEntry()) {
   const argv = process.argv.slice(2), finish = argv.indexOf('--finish');
   const run = argv[0] === 'logout' ? logout()
-    : finish >= 0 ? finishPasteLogin({ pasted: argv.slice(finish + 1).join(' ') })
+    : finish >= 0 ? (argv.length > finish + 1 ? Promise.resolve(argv.slice(finish + 1).join(' ')) : readTerminalLine('로그인 후 주소창 주소: '))
+      .then(pasted => finishPasteLogin({ pasted }))
     : argv.includes('--paste') ? startPasteLogin({ argv }) : login({ argv });
   run.catch(error => { console.error(messages[error.message] ?? `로그인 실패: ${error.message}`); process.exitCode = 1; });
 }

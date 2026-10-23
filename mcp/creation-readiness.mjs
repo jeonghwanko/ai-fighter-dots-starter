@@ -6,7 +6,7 @@ import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureSpritePatch, inspectSpritePatch } from '../scripts/sprite-patch.mjs';
-import { defaultSessionPath, jwtPayload, pendingLoginPath, PASTE_LOGIN_TTL_MS } from '../scripts/login.mjs';
+import { defaultSessionPath, jwtPayload } from '../scripts/login.mjs';
 
 export const KIT_BRANCH = 'codex/creator-hosting';
 const kitRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -111,30 +111,36 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
   return { ...result, reason: result.remoteChecked ? null : 'remote-unreachable-current-unknown' };
 }
 
-/** Public project values for sign-in commands, from the published site configuration. */
-async function signInCommands(root) {
+/** The loopback sign-in command with public project values from the published site configuration. */
+async function sameDeviceCommand(root) {
   try {
     const site = JSON.parse(await readFile(path.join(root, 'deploy', 'creator-site.json'), 'utf8'));
-    const flags = `--url ${new URL(site.apiBase).origin} --key ${site.publishableKey}`;
-    return { sameDevice: `npm run login -- ${flags}`, pasteStart: `npm run login -- --paste ${flags}`, pasteFinish: 'npm run login -- --finish "<붙여 넣은 주소>"' };
-  } catch { return { sameDevice: 'npm run login', pasteStart: 'npm run login -- --paste', pasteFinish: 'npm run login -- --finish "<붙여 넣은 주소>"' }; }
+    return `npm run login -- --url ${new URL(site.apiBase).origin} --key ${site.publishableKey}`;
+  } catch { return 'npm run login'; }
 }
 
-/** ODDBOUT sign-in state. Reads the session file only for presence, user id and expiry; never returns tokens. */
-export async function checkLogin({ remoteActive, sessionPath = defaultSessionPath(), root = kitRoot, now = Date.now } = {}) {
+/**
+ * ODDBOUT sign-in state. Reads the session file only for presence, user id and expiry; never returns tokens.
+ * Only the loopback login is offered, for a browser on this same machine. A browser on another device (a bot VM)
+ * has no supported secure route yet: callback addresses carry authorization codes, so they are never routed through
+ * chat. That case is reported as a blocker, not worked around.
+ */
+export async function checkLogin({ remoteActive, sessionPath = defaultSessionPath(), root = kitRoot } = {}) {
   const read = async file => { try { return JSON.parse(await readFile(file, 'utf8')); } catch { return null; } };
-  const saved = await read(sessionPath), pending = await read(pendingLoginPath(sessionPath));
+  const saved = await read(sessionPath);
   const signedIn = Boolean(saved && typeof saved.accessToken === 'string' && typeof saved.refreshToken === 'string');
-  const pendingActive = Boolean(pending && now() - Date.parse(pending.createdAt) <= PASTE_LOGIN_TTL_MS);
-  const commands = await signInCommands(root);
-  const status = signedIn ? (remoteActive ? 'signed-in' : 'restart-required') : pendingActive ? 'pending-paste' : 'sign-in-required';
-  return { status, userId: signedIn ? jwtPayload(saved.accessToken)?.sub ?? null : null, remoteToolsActive: Boolean(remoteActive),
-    commands: signedIn ? {} : commands,
-    note: status === 'restart-required' ? '세션 파일은 있지만 이 MCP 프로세스는 로그인 전에 시작됐습니다. 호스트를 다시 시작해야 등록 도구가 열립니다.'
-      : signedIn ? null
-      : '사용자 브라우저가 이 작업 공간과 같은 기기면 sameDevice를 쓴다. 봇 VM이면 pasteStart로 시작하고, 사용자가 붙여 넣은 주소로 pasteFinish를 실행한다.'
-        + ' 붙여 넣는 주소에는 일회용 로그인 코드가 들어 있고 대화 기록에 남을 수 있으므로, 이 방식은 사용자에게 그 점을 알린 뒤에만 쓴다.'
-        + ' 코드를 다시 출력하거나 다른 곳에 기록하지 않는다.' };
+  if (signedIn) return { status: remoteActive ? 'signed-in' : 'restart-required', userId: jwtPayload(saved.accessToken)?.sub ?? null,
+    remoteToolsActive: Boolean(remoteActive), note: remoteActive ? '세션 파일이 있다. 유효한 서버 세션이나 현재 대화와 같은 계정임은 등록 도구 응답으로만 확인된다.'
+      : '세션 파일은 있지만 이 MCP 프로세스는 로그인 전에 시작됐다. 호스트를 다시 시작해야 등록 도구가 열린다.' };
+  return { status: 'sign-in-required', userId: null, remoteToolsActive: Boolean(remoteActive),
+    routes: {
+      sameDevice: { status: 'available', command: await sameDeviceCommand(root),
+        when: '사용자 브라우저가 이 작업 공간과 같은 기기에서 실행될 때만. 로그인 콜백이 이 기기의 127.0.0.1로 돌아온다.' },
+      otherDevice: { status: 'blocked-no-secure-route', secureRoute: null,
+        when: '봇 VM처럼 사용자 브라우저가 다른 기기에 있을 때. 지원되는 secure handoff·기기 연결이 아직 없다.' },
+    },
+    note: '다른 기기 브라우저라면 로그인을 시작하지 말고 인증 연결이 막혔다고 사용자에게 알린다. 콜백 주소에는 인증 코드·토큰이 들어갈 수 있으므로'
+      + ' 대화에 붙여 넣도록 요청하지 않고, 안전하다고 안내하지 않는다. 기기 연결 로그인은 예정된 대체안이며 아직 지원되지 않는다.' };
 }
 
 /** The generation-account choice: options to show; the user's stated or elicited answer only. Never inferred. */
