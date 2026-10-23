@@ -76,6 +76,7 @@ GPT만 사용 가능하면 둘 다 GPT로 제안한다. 사용자가 지정한 �
    버전과 작업 중 변경을 확인하고, 이 대화 흐름이 있는 버전을 사용한다. 기본 `main`으로 바꾸지 않는다.
 2. Git·Node 22.12+·Python 3.11+와 로컬 실행 기능을 확인한다. 필요한 설치는 에이전트가 처리한다.
    로컬 실행이 없는 환경이면 그 제한을 먼저 알리고, 실행하지 않은 설치·생성을 완료했다고 말하지 않는다.
+   작업 공간(봇 서비스의 작업 VM 또는 사용자 PC)의 계정·격리·보존·보안·장애 대응은 [실행 환경 운영 지침](EXECUTION-HOST.md)을 따른다.
 3. `npm ci --ignore-scripts`, `npm run sprite:setup`으로 이 저장소의 고정된 sprite-gen을 준비한다.
    `vendor/sprite-gen/SKILL.md`와 참조 문서, `npm run sprite -- workflow --kind sprite`의 안내를 따른다.
    이미 준비된 환경은 다시 설치하지 않는다. 생성 계정·구독·API 과금 선택은 본인 것만 사용한다.

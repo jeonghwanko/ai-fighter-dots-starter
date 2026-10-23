@@ -96,6 +96,7 @@ AI Fighter 회원가입이나 홈페이지 방문을 선행 조건으로 두지 
 
 터미널과 로컬 파일을 사용할 수 있는 Dot/Codex 호스트에서 실행한다. 로컬 실행 기능이 없는 웹 호스트에는
 이 설치 명령을 실행했다고 말하지 않는다. 호스트 지원 여부를 먼저 확인한다.
+봇 서비스의 작업 VM으로 운영할 때의 계정·격리·보존 규칙은 [실행 환경 운영 지침](EXECUTION-HOST.md)에 있다.
 
 ```sh
 git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git

@@ -26,7 +26,7 @@ The agent handles setup, generation, extraction, measurement, packaging, and val
 
 ## 2. Prepare the local tools
 
-Requirements: Git, Node.js **22.12+**, Python **3.11+**, and a host that can run local commands. The agent can perform these setup steps for you:
+Requirements: Git, Node.js **22.12+**, Python **3.11+**, and a host that can run local commands. The host can be a bot service's per-user workspace VM or your own PC; see the [execution host guidelines](docs/EXECUTION-HOST.md) for accounts, isolation, persistence and security. The agent can perform these setup steps for you:
 
 ```sh
 git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git

@@ -17,6 +17,7 @@ const runtimeFiles = [
   'tools/ai-fighter/gait.mjs', 'tools/ai-fighter/contact_evidence.py', 'tools/ai-fighter/validate-package.mjs',
   'docs/DOT-CREATION.md', 'docs/AUTHORING.md', 'docs/CREATION-UX.md', 'docs/GAIT-REVIEW.md',
   'docs/FOOT-EVIDENCE.md', 'docs/LOCAL-PLUGIN.md', 'docs/GAME-CREATION-CONTEXT.md', 'docs/OPEN-REGISTRATION.md',
+  'docs/EXECUTION-HOST.md',
 ];
 const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
   'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:run'];

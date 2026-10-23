@@ -21,7 +21,7 @@ Dot과 함께 나만의 선수를 만들고, AI Fighter에 등록해 게임에�
 
 ## 2. 로컬 제작 도구 준비
 
-Git, Node.js **22.12+**, Python **3.11+**, 로컬 명령을 실행할 수 있는 호스트가 필요합니다. 다음 준비는 에이전트가 대신 처리할 수 있습니다.
+Git, Node.js **22.12+**, Python **3.11+**, 로컬 명령을 실행할 수 있는 호스트가 필요합니다. 호스트는 봇 서비스가 사용자별로 배정한 작업 VM이어도 되고 본인 PC여도 됩니다. 계정·격리·보존·보안 규칙은 [실행 환경 운영 지침](docs/EXECUTION-HOST.md)에 있습니다. 다음 준비는 에이전트가 대신 처리할 수 있습니다.
 
 ```sh
 git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git

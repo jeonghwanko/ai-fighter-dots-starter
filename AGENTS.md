@@ -36,6 +36,9 @@ This repository lets each user create their own fighter through Dot. Read
   installs this checkout's source in its own venv. `npm run sprite -- <command>` runs that environment.
 - Use the current user's generation account. Never copy the maintainer's credentials, home paths,
   subscription confirmations, or saved choices to another user. Preserve upstream provider selection and billing rules.
+- Run creation in a workspace per `docs/EXECUTION-HOST.md` (bot service VM or the user's PC): one user per
+  workspace, the user's own login only, no service API keys in the environment, work folders and attempt
+  records preserved across sessions, and no pulls of this repository while a character is in progress.
 - Design the default customer flow for one already-owned generation subscription.
   Separate actual image/video/editor capabilities from subscription names and API billing.
   Do not make a second subscription or self-hosted VACE/ComfyUI GPU server a hidden requirement.
