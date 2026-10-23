@@ -1,6 +1,6 @@
 {
   "name": "ai-fighter-dots-starter",
-  "version": "0.2.1",
+  "version": "0.3.0",
   "description": "Local Dot/Codex MCP starter for AI Fighter authoring and package validation",
   "private": true,
   "type": "module",
