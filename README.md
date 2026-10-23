@@ -91,7 +91,7 @@ When you request registration, the agent reads `deploy/creator-site.json` and st
 npm run login -- --url https://YOUR_PROJECT_REF.supabase.co --key YOUR_PROJECT_PUBLISHABLE_KEY
 ```
 
-If the agent works in a bot service's VM, your browser cannot reach that VM's `127.0.0.1` callback. The agent then uses the two-step paste mode: `npm run login -- --paste` (same `--url`/`--key`) prints the Google link; after you sign in, your browser stops on an unreachable `http://127.0.0.1:47821/callback/…` page; you paste that address into the creation chat and the agent runs `npm run login -- --finish "<address>"`. The address contains a one-time login code that may stay in the chat history. It works only with a value kept in that workspace, only once, and within 10 minutes, but do not share it anywhere else. A device-approval sign-in on the homepage is the planned replacement.
+If the agent works in a bot service's VM, your browser is on a different machine from its `127.0.0.1` callback. Use an officially supported secure handoff or device connection; if none is available, the agent reports that sign-in is blocked. Callback addresses can contain login codes or tokens: do not paste them into the creation chat. The CLI's existing `--paste` / `--finish` options do not themselves provide a secure transport, even with PKCE and expiry. Homepage device approval is planned, not implemented. See the [execution host instructions](docs/EXECUTION-HOST.md#7-등록).
 
 Choose the same Google account you will use on the creator homepage. Login saves your session to `~/.ai-fighter/client.json`, which MCP loads automatically. Restart the desktop app if it was already running. `AI_FIGHTER_CLIENT_CONFIG` can select another session-file location. Keep session tokens private.
 
@@ -140,7 +140,7 @@ The game supports direct control and common-AI control. Registered fighters use 
 
 File tools require `AI_FIGHTER_ROOT`. Remote tools require a valid user session. Remove the Codex connection with `codex mcp remove ai-fighter`.
 
-This MCP supplies the contract, validation, and registration tools. Generation runs through the bundled sprite-gen using your account; model access and usage limits depend on your provider. The stdio setup above runs on a local host. A web-only ChatGPT connection requires a separately hosted HTTPS MCP endpoint with per-user authentication.
+This MCP supplies the contract, validation, and registration tools. Local generation uses the bundled sprite-gen with your account; supported appearance previews can use the host's direct image tool after the [delivery preflight](docs/DELIVERY.md). The conversation model, CLI worker model and image backend are separate; login or a requested model name does not verify generation support. The stdio setup above runs on a local host. A web-only ChatGPT connection requires a separately hosted HTTPS MCP endpoint with per-user authentication.
 
 ## Development and reference
 

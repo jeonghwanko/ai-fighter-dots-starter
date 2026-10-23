@@ -4,7 +4,8 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const text = value => typeof value === 'string' && value.trim().length > 0;
-const limitation = 'Checks agent-recorded evidence, not live tool availability, pixels, account access or user feedback truth.';
+const limitation = 'Checks record consistency only; does not authenticate evidence references or verify live generation, model support, account identity, display, pixels or user feedback.';
+const scope = { evidenceScope: 'record-only', limitation };
 
 export function checkCreationDelivery(record, { phase, conversationId }) {
   if (!['preflight', 'review'].includes(phase) || !text(conversationId)) throw Error('Phase and current conversation ID are required');
@@ -25,10 +26,18 @@ export function checkCreationDelivery(record, { phase, conversationId }) {
       blockers.push('previous-generation-unchecked');
     if (['pending', 'unknown'].includes(previous?.status)) blockers.push('inspect-existing-generation');
     if (['completed', 'failed'].includes(previous?.status) && !text(record?.newGenerationRequest)) blockers.push('recover-existing-before-generation');
-    return { check: 'offline-delivery-preflight', ready: blockers.length === 0, blockers, limitation };
+    return { check: 'offline-delivery-preflight', ready: blockers.length === 0, blockers, ...scope };
   }
   const result = record?.result;
-  if (result?.generation !== 'completed' || !text(result?.version) || !text(result?.generationEvidence)) blockers.push('generation-incomplete');
+  if (result?.generation !== 'completed' || !text(result?.version)) blockers.push('generation-incomplete');
+  // Requested CLI models, login records and tool listings are not completed image calls.
+  // These are references for human/agent inspection, not a live capability certificate.
+  const evidence = result?.generationEvidence;
+  if (evidence?.status !== 'completed' ||
+      !['tool', 'invocationRef', 'completionRef', 'outputRef'].every(key => text(evidence?.[key])))
+    blockers.push('generation:missing-call-evidence');
+  if (!text(evidence?.environment) || evidence.environment !== record?.environment ||
+      !text(evidence?.version) || evidence.version !== result?.version) blockers.push('generation:evidence-scope-mismatch');
   for (const key of ['fullBody', 'faceCrop']) {
     const preview = result?.previews?.[key];
     if (preview?.status !== 'displayed' || preview?.conversationId !== conversationId ||
@@ -38,7 +47,7 @@ export function checkCreationDelivery(record, { phase, conversationId }) {
   if (result?.review !== 'passed') blockers.push('appearance-unchecked');
   if (!text(result?.version) || result?.selection?.version !== result.version || !text(result?.selection?.feedback)) blockers.push('appearance-unselected');
   return { check: 'offline-delivery-review', canRequestFeedback, canAdvanceAppearance: blockers.length === 0,
-    blockers, limitation };
+    blockers, ...scope };
 }
 
 export async function main(args) {

@@ -57,11 +57,51 @@ test('capacity failure stays blocked even when delivery works', () => {
 function completed() {
   const r = record();
   const preview = () => ({ status: 'displayed', conversationId: 'chat-a', version: 'v1', evidence: 'Synthetic inline image result' });
-  r.result = { version: 'v1', generation: 'completed', generationEvidence: 'Synthetic completed call',
+  r.result = { version: 'v1', generation: 'completed', generationEvidence: {
+    status: 'completed', tool: 'synthetic-image-tool', invocationRef: 'test-trace#call-1',
+    completionRef: 'test-trace#result-1', outputRef: '/test/image.png', environment: 'test-host', version: 'v1' },
     localSave: { status: 'saved', path: '/test/image.png' }, librarySave: { status: 'unavailable', fileId: null },
     attachment: { status: 'not-used' }, previews: { fullBody: preview(), faceCrop: preview() }, review: 'passed', selection: null };
   return r;
 }
+
+test('login, requested worker model and a tool listing cannot stand in for completed image evidence', () => {
+  for (const evidence of ['Logged in with ChatGPT; --model gpt-6-astra; image_gen available',
+    { status: 'completed', model: 'gpt-6-astra', auth_source: 'chatgpt', tools: ['image_gen'] }]) {
+    const r = completed(); r.result.generationEvidence = evidence;
+    assert.ok(check(r, 'review').blockers.includes('generation:missing-call-evidence'));
+    assert.equal(check(r, 'review').canRequestFeedback, false);
+  }
+});
+
+test('image evidence needs invocation, completion and output references for this environment and version', () => {
+  for (const key of ['tool', 'invocationRef', 'completionRef', 'outputRef']) {
+    const r = completed(); delete r.result.generationEvidence[key];
+    assert.ok(check(r, 'review').blockers.includes('generation:missing-call-evidence'));
+  }
+  for (const status of ['queued', 'pending', 'unknown', 'failed']) {
+    const r = completed(); r.result.generationEvidence.status = status;
+    assert.equal(check(r, 'review').canRequestFeedback, false);
+  }
+  for (const [key, value] of [['environment', 'other-pc'], ['version', 'v0']]) {
+    const r = completed(); r.result.generationEvidence[key] = value;
+    assert.ok(check(r, 'review').blockers.includes('generation:evidence-scope-mismatch'));
+  }
+});
+
+test('record checks do not certify live capability or infer an image backend from the worker model', () => {
+  const r = completed(); r.generation.model = 'user-selected-worker';
+  r.result.generationEvidence.imageBackend = 'unknown';
+  for (const phase of ['preflight', 'review']) {
+    const result = check(r, phase);
+    assert.equal(result.evidenceScope, 'record-only');
+    assert.match(result.limitation, /does not authenticate evidence references/);
+    assert.equal(result.imageBackend, undefined);
+    assert.equal(result.verified, undefined);
+  }
+  assert.equal(check(r).ready, true);
+  assert.equal(check(r, 'review').canRequestFeedback, true);
+});
 
 test('local and Library saves, queued panels and text do not prove display', () => {
   for (const status of ['queued', 'text-only', 'unknown', 'failed']) {

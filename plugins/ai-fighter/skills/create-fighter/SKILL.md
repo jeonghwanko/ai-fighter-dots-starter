@@ -6,7 +6,9 @@ description: Create, revise, resume, validate or register an AI Fighter characte
 # AI Fighter creator
 
 Use the bundled `ai-fighter-creator` MCP tools to keep the project and selected versions across chats.
-Generation uses the installed creator kit's sprite-gen; it does not use a plugin owner's account.
+Local generation uses the installed creator kit's sprite-gen and the user's account.
+For supported direct conversation appearance generation/display, check that route first under `docs/DELIVERY.md`;
+do not require a PC or leave the user's chosen VM scope. Packaging still uses the creator kit.
 
 ## Start or resume
 
@@ -26,6 +28,12 @@ Generation uses the installed creator kit's sprite-gen; it does not use a plugin
    Prefer GPT base + Grok motion when both are available, or the available provider for both.
    An explicit user choice wins. Read the upstream workflow and obtain `ready` before generating.
    Preserve a stop-on-failure choice; never silently switch provider or billing route.
+4. Read `docs/DELIVERY.md` in the returned kit root before generation. Check generation and parent-conversation
+   delivery routes separately. Dots conversation model, CLI `--model` worker and image tool/backend are distinct;
+   a copied report model, login or tool listing does not verify generation. Require actual call/completion/output
+   evidence, keep unknown backend/account identity unknown, and treat `creation:delivery` as a record check only.
+   Local/Library saves and child-only or queued previews do not prove parent display. Recover existing results
+   before retries; delivery failures do not authorize regeneration.
 
 ## Work in review groups
 

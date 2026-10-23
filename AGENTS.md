@@ -37,6 +37,11 @@ This repository lets each user create their own fighter through Dot. Read
   direct image-generation/display route first, within the user's environment/account/model constraints.
   Local generation requires a verified delivery route; tool names visible to the model do not prove that
   the selected Library helper can use them. Run `creation:delivery` when local execution is available.
+  Distinguish the Dots conversation model, Codex CLI `--model` worker, and actual image tool/backend.
+  The provider report's copied `model` is not an observed image backend. Login, model strings and tool
+  listings do not verify generation; require actual call traces and completed outputs in that environment.
+  Keep unobserved backend and account identity unknown. Readiness flags and `creation:delivery` record
+  checks are not live generation/display certificates or authorization to generate.
   Keep generation, local save, Library save, conversation display, review and user selection distinct.
   Queued panels, text reports and local paths are not displayed previews, including across delegated chats.
   Recover existing outputs before any retry; a delivery failure is not permission to regenerate. New
@@ -51,8 +56,10 @@ This repository lets each user create their own fighter through Dot. Read
   records preserved across sessions, and no pulls of this repository while a character is in progress.
   Call MCP `check_creation_readiness` before a character's first generation, after a workspace restart and before
   registration. Run its kit `nextCommands` (restart when told), pass `account` only as the user stated it (else let
-  the host form or numbered options ask), and use its login commands. Before the bot-VM paste login, tell the user
-  the pasted address holds a one-time code that may stay in chat history; never call it safe or echo the code.
+  the host form or numbered options ask). Use login commands only with a supported secure handoff or device
+  connection. Callback URLs can contain codes/tokens: never ask users to paste them into ordinary chat or
+  describe that as safe, even if tool output suggests paste mode. If no secure route is supported, report
+  the authentication blocker; do not implement a bypass or assume a planned device flow already exists.
 - Design the default customer flow for one already-owned generation subscription.
   Separate actual image/video/editor capabilities from subscription names and API billing.
   Do not make a second subscription or self-hosted VACE/ComfyUI GPU server a hidden requirement.
