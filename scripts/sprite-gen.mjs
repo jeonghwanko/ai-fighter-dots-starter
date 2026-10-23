@@ -2,6 +2,7 @@ import { access, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { ensureSpritePatch, inspectSpritePatch } from './sprite-patch.mjs';
 
 export const kitRoot = fileURLToPath(new URL('../', import.meta.url));
 export const spriteRoot = path.join(kitRoot, 'vendor', 'sprite-gen');
@@ -11,13 +12,16 @@ const exists = async file => { try { await access(file); return true; } catch { 
 export async function spriteStatus() {
   const sourcePresent = await exists(path.join(spriteRoot, 'SKILL.md'));
   const metadata = sourcePresent ? await readFile(path.join(spriteRoot, 'pyproject.toml'), 'utf8').catch(() => '') : '';
+  const motionPatch = sourcePresent ? await inspectSpritePatch(spriteRoot).then(state => ({ id: state.manifest.id, applied: state.applied }), error => ({ applied: false, error: error.message })) : { applied: false };
   return {
-    sourcePresent, version: metadata.match(/^version = "([^"]+)"/m)?.[1] ?? null,
+    sourcePresent, version: metadata.match(/^version = "([^"]+)"/m)?.[1] ?? null, motionPatch,
     environmentPresent: await exists(spritePython), repositoryRoot: kitRoot, sourceRoot: spriteRoot,
     skillPath: path.join(spriteRoot, 'SKILL.md'), pythonPath: spritePython,
     setupCommand: 'npm run sprite:setup', runCommand: 'npm run sprite --', packCommand: 'npm run fighter:pack -- <plan.json>',
     gaitCommand: 'npm run fighter:gait -- review <gait-plan.json> <review-directory> [annotations.json]',
     gaitGuidePath: path.join(kitRoot, 'docs', 'GAIT-REVIEW.md'),
+    poseCommand: 'npm run sprite -- gen-motion --plan <pose-plan.json> --run-dir <new-run> --frame <pose-id>',
+    poseGuidePath: path.join(spriteRoot, 'docs', 'pose-motion.md'),
     authentication: 'Each creator uses their own generation account. Presence of a venv does not verify login, quota, or generation quality.',
   };
 }
@@ -42,6 +46,7 @@ export async function main(args) {
       if (result) return result;
     }
     if (!(await exists(path.join(spriteRoot, 'SKILL.md')))) throw new Error('sprite-gen source missing. Clone AI Fighter with --recurse-submodules. GitHub ZIP archives do not include submodules.');
+    await ensureSpritePatch(spriteRoot);
     if (!(await exists(spritePython))) {
       // A global Python is used only to create this repository's isolated environment.
       const candidates = process.env.AI_FIGHTER_BOOTSTRAP_PYTHON ? [[process.env.AI_FIGHTER_BOOTSTRAP_PYTHON, []]]
@@ -64,9 +69,44 @@ export async function main(args) {
   }
   if (!args.length) throw new Error('Pass a sprite-gen command, for example: npm run sprite -- workflow --kind sprite');
   if (!(await exists(spritePython))) throw new Error('Run npm run sprite:setup first. No fallback to a global sprite-gen installation.');
+  await ensureSpritePatch(spriteRoot);
+  await requireMotionContract(args, process.env.INIT_CWD || process.cwd());
   // Use only the bundled source and its venv. Preserve upstream arguments and exit codes (2: questions, 75: choice needed).
   // Relative paths resolve from where the user ran npm, not from inside the submodule.
   return run(spritePython, ['-m', 'sprite_gen.cli', ...args], { cwd: process.env.INIT_CWD || process.cwd() });
+}
+
+export async function requireMotionContract(args, cwd) {
+  if (!['gen-set', 'gen-motion'].includes(args[0])) return;
+  const option = key => {
+    const matches = args.flatMap((value, index) => value === key || value.startsWith(key + '=') ? [index] : []);
+    if (matches.length > 1) throw Error(`Duplicate option: ${key}`);
+    const index = matches[0] ?? -1;
+    return index < 0 ? undefined : args[index].includes('=') ? args[index].slice(key.length + 1) : args[index + 1];
+  };
+  if (args[0] === 'gen-motion') {
+    if (!option('--plan')) return; // the engine owns CLI errors/help
+    const plan = JSON.parse(await readFile(path.resolve(cwd, option('--plan')), 'utf8'));
+    const expected = plan.motion === 'walk' ? 16 : plan.motion === 'run' ? 12 : null;
+    if (expected === null || plan.frames?.length !== expected)
+      throw Error(`AI Fighter pose plan needs ${expected ?? '16 walk / 12 run'} frames; diagnostic poses belong to that full plan`);
+    if (option('--frame') && !args.includes('--reconcile') && plan.version !== 2)
+      throw Error('POSE_BODY_CALIBRATION_REQUIRED: v5 generation needs a version 2 plan with observed original body landmarks; legacy runs remain available for inspection/reconciliation/export, not repeated uncalibrated generation');
+    return;
+  }
+  if (!option('--run-dir')) return; // the engine owns CLI errors
+  const request = JSON.parse(await readFile(path.resolve(cwd, option('--run-dir'), 'sprite-request.json'), 'utf8'));
+  const selected = option('--states')?.split(',').map(value => value.trim()).filter(Boolean) ?? [];
+  for (const [state, entry] of Object.entries(request.states ?? {})) {
+    if (selected.length && !selected.includes(state)) continue;
+    const locomotion = state.match(/(^|[-_])(walk|walking|run|running)($|[-_])/);
+    if (locomotion && !entry.motion)
+      throw Error(`MOTION_CONTRACT_REQUIRED: ${state}; use fighter:gait init and review key poses before a full GPT sequence`);
+    if (locomotion && entry.motion.kind !== (locomotion[2].startsWith('walk') ? 'walk' : 'run'))
+      throw Error(`Motion kind does not match state: ${state}`);
+    if (entry.motion?.stage === 'sequence' && entry.frames !== (entry.motion.kind === 'walk' ? 16 : 12))
+      throw Error(`AI Fighter full sequence needs ${entry.motion.kind === 'walk' ? 16 : 12} frames: ${state}`);
+  }
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

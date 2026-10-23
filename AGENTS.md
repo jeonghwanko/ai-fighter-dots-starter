@@ -36,6 +36,12 @@ This repository lets each user create their own fighter through Dot. Read
   installs this checkout's source in its own venv. `npm run sprite -- <command>` runs that environment.
 - Use the current user's generation account. Never copy the maintainer's credentials, home paths,
   subscription confirmations, or saved choices to another user. Preserve upstream provider selection and billing rules.
+- Design the default customer flow for one already-owned generation subscription.
+  Separate actual image/video/editor capabilities from subscription names and API billing.
+  Do not make a second subscription or self-hosted VACE/ComfyUI GPU server a hidden requirement.
+  Remote experiments are research evidence unless explicitly selected as the product path.
+  Read `docs/research/MOCHA-LOCOMOTION-HANDOFF.md` before resuming Mocha locomotion research;
+  further VACE generation is currently paused for the requested architecture review.
 - `examples/sparring-bot` and `npm run example` are geometric test fixtures. They do not satisfy a request
   for a generated character. Do not rename or restyle that fixture and call it sprite-gen output.
 - The v1 contract requires all 11 motions, including 16 walk frames and 12 run frames. Validate actual
@@ -45,12 +51,47 @@ This repository lets each user create their own fighter through Dot. Read
   Missing or uncertain observations stay unverified. Bind gait reviews to the final game-pack pixels and durations.
   Split heel/forefoot contacts may use docs/FOOT-EVIDENCE.md only with fresh per-frame outlines of both feet.
   This is an explicit AI Fighter extension; retain the upstream report and every other rejection. Never fabricate foot identity.
+- For a requested generation-free gait experiment, use `gait-guide` (docs/GAIT-REVIEW.md).
+  Render and review the authored phase/IK/foot-lock proxy before any new generation.
+  Proxy joints, depth and contacts are design ground truth, never observations of generated artwork.
+  Show actual normal/slow previews and keep visible part masks distinct from X-ray joints.
+- GPT locomotion uses this kit's hash-bound sprite-gen motion patch. Run through `npm run sprite --`.
+  If the user chooses authored joint pose guidance, use the v5 measured `gen-motion` route documented in
+  `docs/GAIT-REVIEW.md` and `vendor/sprite-gen/docs/pose-motion.md`: one whole-body pose per call,
+  target guide + immutable appearance-only identity + reviewed anchors, 16/12-frame plans, then pose and cycle review.
+  Review the actual prepared original/guide pairing in input-review.json before generation; a coordinate plan
+  is not proof of anatomical fit. Inspect image_tool_trace for actual dispatch evidence. Structural canvas
+  errors and unknown timeout outcomes must not consume another generation; reconcile existing results.
+  New generation requires a version-2 plan with visible original body-landmark calibration.
+  Measure actual body points and fresh physical-foot outlines/sole points before visual approval.
+  `--measure` and explicit `--register` never generate: registration permits only a bounded uniform
+  whole-body scale/translation inferred from body points, with independent foot/flight checks.
+  It is not bottom alignment: feet never drive the transform, wrong anatomy is not repaired, raw
+  pixels remain immutable and corrected pixels require fresh review. Geometry failures block retry
+  in contract 3/4 runs. New gait-motion runs are contract 5: semantic pose prompts, diagnostic guide
+  geometry, declared hidden points (`unverified_hidden`, never pass), and export gated by sequence review
+  plus per-stance-interval `contact-coverage.json` (docs/GAIT-REVIEW.md).
+  This explicit route exports `sprite-gen-asset` directly and does not use row extraction or bind-keyposes.
+  The following init/bind steps apply to the existing row route.
+  Use `fighter:gait init` for separate key-pose and full-sequence requests. Review both physical legs,
+  hip attachments, contacts and whole-body continuity before `fighter:gait bind-keyposes`; missing/failed
+  observations remain unverified. The full sequence must carry the actual phase guide and reviewed key-pose image.
+  Preserve painted-row source Y with `fit.ground_frames: false`; do not erase flight by bottom-aligning each frame.
+  A generic skeleton guide is phase vocabulary, not a measurement of this character's proportions.
+  Do not splice a frozen torso onto separate legs, duplicate poses, or label a plan as observed gait.
+  `gen-set` success is generation only. Stop after repeated failure of the same anatomy/contact requirement,
+  preserve versions and explain the limitation instead of continuing unbounded generation or compositing.
 - Build the package with `npm run sprite -- game-pack` and then `npm run fighter:pack -- <plan.json>`
   (see `docs/DOT-CREATION.md`). It measures scale, frames, origins, contacts and hashes from the pixels.
   Do not hand-assemble sheets or type those values. The plan holds contact steps, landmarks and gait review paths.
   Normal authoring uses the default reviewPolicy required; format-only is for format fixtures, not visual approval.
   Separate get-up art uses fall.getUpAnimation (docs/DOT-CREATION.md); keep auxiliary cells out of fall playback.
 - Never invent hashes, origins, contact timing, successful generation, or registration results.
+- A numerical flight flag is not visible flight. Check final projection and exact sample times
+  with `screen_audit`, then inspect raster foot contours and occlusion separately. Keep per-foot
+  projected ground references; never substitute guide labels for output observations.
+  Save video latents before decoding when supported. Isolate temporal decoding artifacts on
+  the same latent; do not resample diffusion or silently reduce tile size to diagnose decoding.
 - Creation is local. Any signed-in user may upload without an invitation or manual approval.
   Submit only within the user's request, reuse the same idempotency key for retries, and distinguish
   validation failures from post-publication moderation. Validated registrations become usable automatically.
@@ -59,3 +100,5 @@ This repository lets each user create their own fighter through Dot. Read
 
 The sprite-gen gitlink pins the upstream revision. Keep its Apache-2.0 LICENSE and NOTICE.
 Do not update the pin or modify vendor code as part of ordinary character creation.
+The reviewed `patches/sprite-gen-gpt-motion.json` is applied by the kit at setup/run time and included in plugin builds.
+Its hashes must match; never overwrite an unknown upstream/local change to force the patch to apply.

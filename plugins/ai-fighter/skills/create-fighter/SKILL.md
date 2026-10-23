@@ -83,6 +83,12 @@ record their actual outputs as versions/evidence; do not claim they received man
 
 Follow `docs/GAIT-REVIEW.md`: one coordinate/scale reference, phase plan before generation,
 both same-foot stance ROIs, final game-pack pixels/durations, actual previews and verified contacts.
+For GPT walk/run, use the kit CLI and its hash-bound motion patch. Generate diagnostic key poses first;
+review both physical legs, their hip attachments, contacts and body continuity before binding that image.
+Full sequences require the actual phase guide and reviewed key-pose reference, not only a layout guide.
+Use painted extraction with `ground_frames: false` to retain source flight height. Generation OK is not
+motion approval. Do not repair failed gait by pasting a frozen torso over separate legs, and stop after
+two consecutive failures of the same anatomy/contact requirement. Preserve unknown attempts without retrying.
 Use upstream `game-pack`, then `fighter:pack` with `reviewPolicy: required`. Never hand-assemble sheets
 or invent measurements. A format fixture is never a generated character.
 

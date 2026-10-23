@@ -4,6 +4,7 @@ import { cp, lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { localPath } from '../mcp/creation-store.mjs';
+import { ensureSpritePatch, patchFile } from './sprite-patch.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -11,6 +12,7 @@ const runtimeFiles = [
   'LICENSE', 'package-lock.json', 'api/client.mjs', 'server/ai-fighter-package.mjs',
   'deploy/creation-context-source.json', 'deploy/creator-site.json',
   'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/run-creation-job.mjs',
+  'scripts/sprite-patch.mjs', 'patches/sprite-gen-gpt-motion.json', 'patches/README.md',
   'scripts/login.mjs', 'scripts/gait.mjs', 'scripts/contact.mjs', 'scripts/creation-context.mjs',
   'tools/ai-fighter/gait.mjs', 'tools/ai-fighter/contact_evidence.py', 'tools/ai-fighter/validate-package.mjs',
   'docs/DOT-CREATION.md', 'docs/AUTHORING.md', 'docs/CREATION-UX.md', 'docs/GAIT-REVIEW.md',
@@ -56,10 +58,14 @@ export async function buildPluginBundle(destination) {
   // Read the pinned tree; never include the checkout venv, credentials, caches or untracked outputs.
   const pinned = (await run('git', ['ls-tree', 'HEAD', 'vendor/sprite-gen'], { capture: true })).match(/^160000 commit ([a-f0-9]{40})\s/)[1];
   const vendor = path.join(root, 'vendor', 'sprite-gen');
-  if ((await run('git', ['rev-parse', 'HEAD'], { cwd: vendor, capture: true })).trim() !== pinned ||
-      (await run('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: vendor, capture: true })).trim())
-    throw Error('Use the clean pinned sprite-gen source before bundling.');
+  const patch = await ensureSpritePatch(vendor);
+  const spriteGenPatch = { id: patch.manifest.id, sha256: sha(await readFile(patchFile)) };
+  if ((await run('git', ['rev-parse', 'HEAD'], { cwd: vendor, capture: true })).trim() !== pinned || pinned !== patch.manifest.baseCommit)
+    throw Error('Use the pinned sprite-gen commit with the reviewed AI Fighter patch before bundling.');
+  const changes = (await run('git', ['diff', 'HEAD', '--name-only', '--no-ext-diff'], { cwd: vendor, capture: true })).trim().split('\n').filter(Boolean);
+  if (changes.some(file => !patch.files.some(entry => entry.path === file.trim()))) throw Error('Unrelated sprite-gen edits cannot be bundled.');
   const vendorFiles = (await run('git', ['ls-files', '-z'], { cwd: vendor, capture: true })).split('\0').filter(Boolean);
+  for (const entry of patch.files) if (!vendorFiles.includes(entry.path)) vendorFiles.push(entry.path);
   if (!vendorFiles.includes('LICENSE') || !vendorFiles.includes('NOTICE')) throw Error('Missing upstream license or notice');
   const plugin = path.join(out, 'plugins', 'ai-fighter');
   await mkdir(path.dirname(plugin), { recursive: true });
@@ -79,7 +85,7 @@ export async function buildPluginBundle(destination) {
   const hashes = {};
   for (const file of await files(runtime)) hashes[file] = sha(await readFile(path.join(runtime, file)));
   await writeFile(path.join(plugin, 'runtime-manifest.json'), JSON.stringify({ schemaVersion: 1,
-    platform: process.platform, arch: process.arch, spriteGenCommit: pinned, files: hashes }, null, 2) + '\n');
+    platform: process.platform, arch: process.arch, spriteGenCommit: pinned, spriteGenPatch, files: hashes }, null, 2) + '\n');
   await writeFile(path.join(plugin, 'mcp.json'), JSON.stringify({
     $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json', mcpServers: {
       'ai-fighter-creator': { type: 'stdio', command: 'node', args: ['${PLUGIN_ROOT}/launcher.mjs'], cwd: '${PLUGIN_ROOT}' },
@@ -95,7 +101,7 @@ export async function buildPluginBundle(destination) {
   const python = process.env.AI_FIGHTER_BOOTSTRAP_PYTHON || 'python';
   await run(python, [path.join(root, 'scripts', 'zip-plugin.py'), plugin, zip]);
   const report = { version: metadata.version, platform: `${process.platform}-${process.arch}`, plugin, marketplace: out,
-    zip, sha256: sha(await readFile(zip)), runtimeFiles: Object.keys(hashes).length, spriteGenCommit: pinned,
+    zip, sha256: sha(await readFile(zip)), runtimeFiles: Object.keys(hashes).length, spriteGenCommit: pinned, spriteGenPatch,
     listingURLs: Object.fromEntries(['websiteURL', 'supportURL', 'privacyPolicyURL', 'termsOfServiceURL']
       .map(key => [key, metadata.extensions['com.openai'].interface[key]])),
     publicSubmissionReady: false, pending: ['OpenAI local MCP organization allowlisting', 'Verified developer identity',

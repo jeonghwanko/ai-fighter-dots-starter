@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import sharp from 'sharp';
-import { walkPlan, loadSequence, combineReview, commonGameRequest, validatePlan } from '../tools/ai-fighter/gait.mjs';
+import { walkPlan, loadSequence, combineReview, commonGameRequest, validatePlan, digest } from '../tools/ai-fighter/gait.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const json = file => readFile(file, 'utf8').then(JSON.parse);
@@ -27,10 +27,11 @@ export function phaseGuide(plan) {
     };
     return `<g transform="translate(-8 8) scale(${scale})"><path d="M90,460H420" stroke="#6c798a" stroke-width="2"/>${limb(leg(index, 8), '#9a6cdd')}${limb(leg(index, 0), '#db641b')}<path d="M256,${hip.y}V${top}" stroke="#344154" stroke-width="12"/><ellipse cx="264" cy="${top - 57}" rx="36" ry="48" fill="none" stroke="#344154" stroke-width="8"/><path d="M295,${top - 55}l15,5l-15,7" fill="#344154"/></g>`;
   };
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w * 8}" height="${h * 2}" viewBox="0 0 ${w * 8} ${h * 2}"><rect width="100%" height="100%" fill="#f5f7fb"/>${plan.phases.map((p, i) => `<g transform="translate(${i % 8 * w},${Math.floor(i / 8) * h})"><text x="12" y="20" font-family="sans-serif" font-size="16">${i}: ${escape(p.pose)}</text>${pose(i)}<text x="12" y="272" font-family="sans-serif" font-size="12">Orange: NEAR / Purple: FAR</text></g>`).join('')}</svg>`;
+  const columns = Math.min(8, plan.phases.length), rows = Math.ceil(plan.phases.length / columns);
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w * columns}" height="${h * rows}" viewBox="0 0 ${w * columns} ${h * rows}"><rect width="100%" height="100%" fill="#f5f7fb"/>${plan.phases.map((p, i) => `<g transform="translate(${i % columns * w},${Math.floor(i / columns) * h})"><text x="12" y="20" font-family="sans-serif" font-size="16">${i}: ${escape(p.pose)}</text>${pose(p.index)}<text x="12" y="272" font-family="sans-serif" font-size="12">Orange: NEAR / Purple: FAR</text></g>`).join('')}</svg>`;
 }
 
-async function init(out) {
+export async function init(out) {
   await mkdir(out, { recursive: false });
   const plan = walkPlan();
   const geometry = plan.geometry;
@@ -40,13 +41,36 @@ async function init(out) {
     + ' During stance the planted foot travels backward relative to the torso; the other knee bends and its foot swings forward above ground. '
     + 'The half-cycle at frame 8 exchanges the actual legs. Counter-swing the arms. Fixed camera and body proportions, no camera movement or zoom. '
     + 'Keep deliberate small pelvis bob; never enlarge a bent pose to fill its slot. Final frame flows into frame zero.';
-  await save(path.join(out, 'sprite-request.json'), { version: 1,
+  const guideFile = path.resolve(out, 'phase-guide.png'), keysFile = path.resolve(out, 'keyposes-guide.png');
+  const keyPhases = [0, 4, 8, 12].map(i => plan.phases[i]);
+  await sharp(Buffer.from(phaseGuide(plan))).png().toFile(guideFile);
+  await sharp(Buffer.from(phaseGuide({ ...plan, phases: keyPhases }))).png().toFile(keysFile);
+  const motion = async (stage, phases, file) => ({ kind: 'walk', stage, phases: phases.map(({ pose, support }) => ({ pose, support })),
+    references: [{ role: 'phase-guide', file, sha256: digest(await readFile(file)) }] });
+  const request = { version: 1,
     cell: { width: geometry.width, height: geometry.height, safe_margin_x: geometry.safeMarginX, safe_margin_y: geometry.safeMarginY },
     style: 'Copy the accepted character identity, palette, line style, clothing, head size and limb lengths. Right-facing orthographic side view, camera elevation 16 degrees. No text, guides, shadows, effects or background scene.',
-    fit: { resample: 'lanczos', align_x: 'centroid', align_y: 'bottom', ground_frames: true, pixel_unfake: false },
-    states: { walk: { frames: plan.phases.length, fps: 12, loop: true, action } } });
-  await sharp(Buffer.from(phaseGuide(plan))).png().toFile(path.join(out, 'phase-guide.png'));
-  return { ok: true, out, note: 'The phase guide is a drawing instruction, not measurement evidence. Generate via bundled sprite-gen, then review actual frames.' };
+    fit: { resample: 'lanczos', align_x: 'centroid', align_y: 'bottom', ground_frames: false, pixel_unfake: false },
+    states: { walk: { frames: plan.phases.length, fps: 12, loop: true, action, motion: await motion('sequence', plan.phases, guideFile) } } };
+  await save(path.join(out, 'sprite-request.json'), request);
+  await save(path.join(out, 'keyposes-request.json'), { ...request, states: { walk: { frames: 4, fps: 4, loop: false,
+    action: 'Four full-body diagnostic key poses: near contact, near support/far passing, far contact, far support/near passing. Maintain the accepted anatomy; no torso/leg collage.',
+    motion: await motion('keyposes', keyPhases, keysFile) } } });
+  await save(path.join(out, 'keyposes-review.json'), { identity: 'unverified', anatomy: 'unverified', alternation: 'unverified', contacts: 'unverified', bodyContinuity: 'unverified', notes: '' });
+  return { ok: true, out, note: 'Generate and inspect keyposes-request first. Bind the actually reviewed image before sequence generation. The generic walk guide is a phase instruction; adapt proportions to the accepted character.' };
+}
+
+export async function bindKeyposes(requestFile, imageFile, reviewFile) {
+  const request = await json(requestFile), review = await json(reviewFile);
+  if (!['identity', 'anatomy', 'alternation', 'contacts', 'bodyContinuity'].every(key => review[key] === 'pass') || !review.notes?.trim())
+    throw Error('Inspect both physical legs, hips and whole-body contacts before binding key poses. Unverified/failing reviews cannot advance.');
+  const file = path.resolve(imageFile), bytes = await readFile(file);
+  await sharp(bytes).metadata();
+  const states = Object.values(request.states ?? {}).filter(state => state.motion?.stage === 'sequence');
+  if (states.length !== 1) throw Error('Bind one motion request at a time');
+  states[0].motion.references = [...states[0].motion.references.filter(ref => ref.role !== 'keyposes'), { role: 'keyposes', file, sha256: digest(bytes), review }];
+  await save(requestFile, request);
+  return { ok: true, requestFile, note: 'Reference bound to these image bytes. Full sequence motion quality remains unverified.' };
 }
 
 async function measure(sequence, plan, stance, out, annotationsBase) {
@@ -117,6 +141,7 @@ async function review(planFile, out, annotationsFile) {
 async function main(args) {
   const [command, first, second, third] = args;
   if (command === 'init' && first) return init(first);
+  if (command === 'bind-keyposes' && first && second && third) return bindKeyposes(first, second, third);
   if (command === 'review' && first && second) return review(first, second, third);
   if (command === 'game-request' && first && second) {
     const result = await commonGameRequest(await json(first), path.dirname(path.resolve(first)));
@@ -125,7 +150,7 @@ async function main(args) {
     await save(second, result.request); await save(second + '.scale.json', { ...result, request: undefined });
     return { ok: true, out: second, referenceBodyHeight: result.referenceBodyHeight };
   }
-  throw Error('Usage: npm run fighter:gait -- init <new-directory> | review <plan.json> <out-directory> [annotations.json] | game-request <config.json> <game.json>');
+  throw Error('Usage: npm run fighter:gait -- init <new-directory> | bind-keyposes <request.json> <image.png> <review.json> | review <plan.json> <out-directory> [annotations.json] | game-request <config.json> <game.json>');
 }
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   main(process.argv.slice(2)).then(result => { console.log(JSON.stringify(result, null, 2)); if (result.ok === false) process.exitCode = 2; })

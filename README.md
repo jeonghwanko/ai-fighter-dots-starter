@@ -41,6 +41,8 @@ Use `codex/creator-hosting`, which contains the public service configuration in 
 
 The agent reads `AGENTS.md`, the [creation workflow](docs/DOT-CREATION.md), the [authoring guide](docs/AUTHORING.md), and `vendor/sprite-gen/SKILL.md`. It checks your current generation access and asks only for missing choices. `sprite:status` alone does not confirm login or subscription access.
 
+The kit applies a [hash-bound GPT motion patch](patches/README.md) to its pinned sprite-gen source. It retains source flight height in painted-row extraction and passes reviewed motion references to GPT. Unknown local edits are preserved and block patching. A completed generation still requires the [gait review](docs/GAIT-REVIEW.md).
+
 The default recommendation is **GPT artwork + Grok motion** when both are available, all Grok when only Grok is available, or all GPT when only GPT is available. Your explicit choice takes priority. Image and video access are checked separately; switching providers or using a paid API requires your choice.
 
 ## 3. Connect the AI Fighter tools
