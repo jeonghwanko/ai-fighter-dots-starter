@@ -105,14 +105,15 @@ export function createServer({ root, remote, creatorPage, contextRequest } = {})
     description: 'Call before the first generation of a character, after a workspace restart, and before registration. Reports three items with fixed options: '
       + '(1) kit: before any version/job exists it fast-forwards this checkout on codex/creator-hosting and applies the hash-bound sprite-gen motion patch; run every nextCommands entry and restart the host when restartRequired; while a character is in progress it changes nothing. '
       + '(2) account: pass account only when the user actually stated it; otherwise the host may show a choice form, else present options as numbered choices. Never infer, switch provider or use a paid API. Access and preview display stay unverified until an actual result is shown in this conversation; creation:delivery checks records only. '
-      + '(3) login: ODDBOUT sign-in. Use routes.sameDevice only when the user\'s browser runs on this workspace. For a browser on another device (a bot VM) no secure route exists yet: '
-      + 'report the sign-in blocker; never ask the user to paste a callback address into chat or call that safe, and do not work around it.',
+      + '(3) login: ODDBOUT sign-in. Use routes.sameDevice only when the user\'s browser runs on this workspace. For a browser on another device (a bot VM), '
+      + 'use routes.otherDevice only when its status is available: run start, give the user the link and pairing code (not secrets), and run wait after they approve on the homepage. '
+      + 'If it is blocked, report the sign-in blocker. Never ask the user to paste a callback address or token into chat, never call that safe, and do not work around a block.',
     inputSchema: { sessionId: identifier.optional(), account: z.enum(['gpt', 'grok', 'stop']).optional(), checkRemote: z.boolean().default(true) },
     outputSchema, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async ({ sessionId, account, checkRemote }) => {
     try {
       return respond({ ok: true, stage: 'creation-readiness', data: await checkReadiness({ ...records, sessionId, account,
-        remoteActive: Boolean(remote), lowLevelServer: server.server, kit: { fetchRemote: checkRemote } }) });
+        remoteActive: Boolean(remote), lowLevelServer: server.server, kit: { fetchRemote: checkRemote }, login: { checkServer: checkRemote } }) });
     } catch (error) {
       return respond({ ok: false, stage: 'creation-readiness', code: /^[a-z][a-z0-9-]+$/.test(error.message) ? error.message
         : error.code === 'ENOENT' ? 'record-or-file-not-found' : 'readiness-check-failed' });

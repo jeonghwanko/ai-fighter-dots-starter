@@ -1,6 +1,9 @@
 // Google sign-in for Dot. Creates this user's own Supabase session file; nothing is shared with the browser.
 // Usage: npm run login | npm run login -- --link | npm run login -- --replace | npm run logout
+//        npm run login -- --device [--replace]  then  npm run login -- --device-wait [--timeout <seconds>]
 //        npm run login -- --paste [--replace]  then  npm run login -- --finish   (address read from this terminal)
+// --device is for a workspace the user's browser cannot reach (a bot VM): the user approves a public pairing code on
+// the homepage while signed in, and this workspace redeems a one-use token. Nothing secret passes through chat.
 // --link adds Google to the existing account in the session file (beta accounts made before Google sign-in).
 // --replace allows a login to overwrite a session file that belongs to a different user.
 // --paste / --finish is a manual callback exchange, not a secure delivery channel. The callback address carries an
@@ -17,6 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { apiRequest, validProjectUrl, withSessionLock, writeSessionFile } from '../api/client.mjs';
+import { PUBLIC_CREATOR_PAGE, creatorPage } from '../mcp/creator-handoff.mjs';
 
 export const DEFAULT_LOGIN_PORT = 47821;
 export const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
@@ -137,10 +141,15 @@ export async function login({ argv = process.argv.slice(2), log = console.error,
 }
 
 /** Exchange the code, refuse a different user unless asked, write the session file, and report account status. */
-async function completeSignIn({ auth, code, link = false, linkedUser = null, replace, previousUser, sessionPath, url, publishableKey, log, request }) {
+async function completeSignIn({ auth, code, ...rest }) {
   const exchanged = await auth.auth.exchangeCodeForSession(code);
   const session = exchanged.data?.session;
   if (exchanged.error || !session?.access_token || !session.refresh_token || !session.user?.id) throw new Error('oauth-exchange-failed');
+  return saveSignIn({ session, ...rest });
+}
+
+/** Refuse a different user unless asked, write the session file, and report account status. */
+async function saveSignIn({ session, link = false, linkedUser = null, replace, previousUser, sessionPath, url, publishableKey, log, request }) {
   // Linking must keep the same user, or the fighters it owns would no longer be this session's.
   if (link && session.user.id !== linkedUser) throw new Error('link-user-mismatch');
   if (!link && !replace && previousUser && previousUser !== session.user.id) throw new Error('session-user-differs');
@@ -185,6 +194,80 @@ export async function startPasteLogin({ argv = [], log = console.error, createAu
   log('   이 작업 공간의 터미널에서 직접 npm run login -- --finish 를 실행하고, 주소를 입력하세요. 10분 안에 해야 합니다.');
   log('   이 작업 공간의 터미널에 직접 입력할 수 없다면 이 방식은 쓸 수 없습니다. 로그인이 막혔다고 알리세요.');
   return { pendingPath, authorizationUrl: data.url, redirectPrefix: `http://127.0.0.1:${port}/callback/`, expiresInMs: PASTE_LOGIN_TTL_MS };
+}
+
+export const pendingDeviceLoginPath = sessionPath => path.join(path.dirname(sessionPath), 'pending-device-login.json');
+const DEVICE_CODE = /^afd_[a-f0-9]{64}$/, USER_CODE = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/;
+
+/** An unauthenticated JSON POST to the AI Fighter API (device routes only; no user token exists yet). */
+const devicePost = (url, publishableKey, route, body) => apiRequest(url, publishableKey, route,
+  { method: 'POST', body: JSON.stringify(body ?? {}), headers: { apikey: publishableKey, 'content-type': 'application/json' } });
+
+/**
+ * Device-connection sign-in, step 1: for a workspace whose 127.0.0.1 callback the user's browser cannot reach.
+ * The secret device code stays in a 0600 file here; the printed link carries only the public pairing code.
+ */
+export async function startDeviceLogin({ argv = [], log = console.error, post = devicePost, page = PUBLIC_CREATOR_PAGE } = {}) {
+  if (argv.includes('--link')) throw new Error('device-link-unsupported');
+  const sessionPath = defaultSessionPath(), pendingPath = pendingDeviceLoginPath(sessionPath);
+  const { url, publishableKey } = await projectSettings({ argv, sessionPath });
+  let started;
+  try { started = await post(url, publishableKey, 'device-logins'); }
+  catch (error) {
+    // A server without the route predates device login: report it, never fall back to pasting a callback.
+    if (error.status === 404 || ['not-found', 'route-not-found'].includes(error.message)) throw new Error('device-login-unavailable');
+    throw new Error(error.message === 'rate-limit' ? 'device-login-rate-limit' : 'device-login-start-failed');
+  }
+  if (!DEVICE_CODE.test(started?.deviceCode ?? '') || !USER_CODE.test(started?.userCode ?? '') || !Number.isFinite(Date.parse(started?.expiresAt))
+    || !Number.isInteger(started?.interval) || started.interval < 1 || started.interval > 60) throw new Error('invalid-api-response');
+  await mkdir(path.dirname(pendingPath), { recursive: true, mode: 0o700 });
+  await writeSessionFile(pendingPath, { version: 1, url, publishableKey, deviceCode: started.deviceCode, userCode: started.userCode,
+    expiresAt: started.expiresAt, interval: started.interval, replace: argv.includes('--replace') });
+  const verificationUrl = `${creatorPage(page).href}#device=${started.userCode}`;
+  log('아래 링크를 휴대폰이나 PC 브라우저에서 열고, 홈페이지에서 쓸 Google 계정으로 로그인하세요.');
+  log(verificationUrl);
+  log(`화면에 표시된 코드가 ${started.userCode} 와 같은지 확인한 뒤 승인하세요. 10분 안에 해야 합니다.`);
+  log('이 링크와 코드는 비밀번호가 아닙니다. 승인에는 본인의 Google 로그인이 필요합니다. 본인이 시작하지 않은 요청이면 승인하지 마세요.');
+  log('승인한 뒤에는 이 작업 공간에서 npm run login -- --device-wait 를 실행합니다.');
+  return { userCode: started.userCode, verificationUrl, expiresAt: started.expiresAt };
+}
+
+/**
+ * Step 2: poll until the user approves, then redeem the one-use magic-link token into a normal session file.
+ * Stops at `timeoutSeconds` while still pending (the request stays open for another wait), or at expiry.
+ */
+export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.error, post = devicePost, request = apiRequest,
+  createAuthClient = createClient, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  const sessionPath = defaultSessionPath(), pendingPath = pendingDeviceLoginPath(sessionPath);
+  const pending = await readSession(pendingPath);
+  if (!pending || pending.version !== 1 || !DEVICE_CODE.test(pending.deviceCode ?? '') || !validProjectUrl(pending.url)
+    || !isPublishableKey(pending.publishableKey)) throw new Error('pending-device-login-missing');
+  const close = () => rm(pendingPath, { force: true });
+  const expiry = Date.parse(pending.expiresAt), deadline = Math.min(expiry, now() + timeoutSeconds * 1000);
+  let interval = pending.interval * 1000, answer = null;
+  while (!answer) {
+    if (now() >= expiry) { await close(); throw new Error('device-login-expired'); }
+    try {
+      const reply = await post(pending.url, pending.publishableKey, 'device-logins/token', { deviceCode: pending.deviceCode });
+      if (reply?.status === 'approved') answer = reply;
+      else if (reply?.status !== 'pending') throw new Error('invalid-api-response');
+    } catch (error) {
+      if (['device-login-expired', 'device-login-consumed', 'device-login-not-found'].includes(error.message)) { await close(); throw new Error(error.message); }
+      if (error.message === 'slow-down') interval += 5000;
+      else if (error.message !== 'api-unreachable') throw error;
+    }
+    if (answer) break;
+    if (now() + interval > deadline) throw new Error(now() + interval > expiry ? 'device-login-expired' : 'device-login-pending');
+    await sleep(interval);
+  }
+  await close(); // the approval is spent on the server either way
+  if (typeof answer.tokenHash !== 'string' || !/^[a-f0-9]{40,128}$/.test(answer.tokenHash)) throw new Error('invalid-api-response');
+  const auth = createAuthClient(pending.url, pending.publishableKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+  const verified = await auth.auth.verifyOtp({ type: 'email', token_hash: answer.tokenHash });
+  const session = verified.data?.session;
+  if (verified.error || !session?.access_token || !session.refresh_token || !session.user?.id) throw new Error('device-login-redeem-failed');
+  const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
+  return saveSignIn({ session, replace: pending.replace, previousUser, sessionPath, url: pending.url, publishableKey: pending.publishableKey, log, request });
 }
 
 /** The loopback callback address inside pasted text, bound to the pending state and port; never a bare code. */
@@ -270,6 +353,17 @@ const messages = {
   'identity-already-linked': '이 Google 계정은 이미 다른 사용자에 연결되어 있습니다. 그 Google 계정으로 먼저 로그인해 생긴 사용자를 운영자가 정리해야 합니다.',
   'link-user-mismatch': '연결 결과가 기존 사용자와 다릅니다. 세션 파일을 바꾸지 않았습니다.',
   'paste-link-unsupported': '--paste 는 --link 와 함께 쓸 수 없습니다. 기존 베타 계정 연결은 브라우저가 있는 PC에서 실행하세요.',
+  'device-link-unsupported': '--device 는 --link 와 함께 쓸 수 없습니다. 기존 베타 계정 연결은 브라우저가 있는 PC에서 실행하세요.',
+  'device-login-unavailable': '서버가 기기 연결 로그인을 아직 지원하지 않습니다. 로그인이 막혔다고 알리세요. 콜백 주소를 대화로 옮기는 방식으로 대신하지 않습니다.',
+  'device-login-rate-limit': '기기 연결 요청이 너무 많습니다. 몇 분 뒤 다시 시작하세요.',
+  'device-login-start-failed': '기기 연결 로그인을 시작하지 못했습니다. 잠시 후 다시 실행하세요.',
+  'pending-device-login-missing': '진행 중인 기기 연결 로그인이 없습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'device-login-pending': '아직 승인되지 않았습니다. 사용자가 승인한 뒤 npm run login -- --device-wait 를 다시 실행하세요.',
+  'device-login-expired': '기기 연결 요청이 만료되었습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'device-login-consumed': '이 기기 연결 요청은 이미 사용되었습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'device-login-not-found': '서버에서 이 기기 연결 요청을 찾지 못했습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'device-login-redeem-failed': '승인된 로그인을 세션으로 바꾸지 못했습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'invalid-api-response': '서버 응답을 이해하지 못했습니다. 잠시 후 다시 실행하세요.',
   'pending-login-missing': '진행 중인 로그인이 없습니다. npm run login -- --paste 부터 다시 실행하세요.',
   'pending-login-expired': '로그인 시작 후 10분이 지났습니다. npm run login -- --paste 부터 다시 실행하세요.',
   'pasted-address-invalid': '입력한 내용에서 로그인 주소(http://127.0.0.1:…/callback/…)를 찾지 못했습니다. 이 터미널에서 주소창 주소 전체를 다시 입력하세요.',
@@ -290,7 +384,10 @@ function isEntry() {
 }
 if (isEntry()) {
   const argv = process.argv.slice(2), finish = argv.indexOf('--finish');
+  const timeout = argv.indexOf('--timeout');
   const run = argv[0] === 'logout' ? logout()
+    : argv.includes('--device-wait') ? waitDeviceLogin({ timeoutSeconds: timeout >= 0 ? Number(argv[timeout + 1]) || 600 : 600 })
+    : argv.includes('--device') ? startDeviceLogin({ argv })
     : finish >= 0 ? (argv.length > finish + 1 ? Promise.resolve(argv.slice(finish + 1).join(' ')) : readTerminalLine('로그인 후 주소창 주소: '))
       .then(pasted => finishPasteLogin({ pasted }))
     : argv.includes('--paste') ? startPasteLogin({ argv }) : login({ argv });

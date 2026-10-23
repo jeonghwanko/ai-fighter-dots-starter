@@ -111,36 +111,55 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
   return { ...result, reason: result.remoteChecked ? null : 'remote-unreachable-current-unknown' };
 }
 
-/** The loopback sign-in command with public project values from the published site configuration. */
-async function sameDeviceCommand(root) {
+/** Public project values (`--url`/`--key` flags) from the published site configuration, or null. */
+async function projectFlags(root) {
   try {
     const site = JSON.parse(await readFile(path.join(root, 'deploy', 'creator-site.json'), 'utf8'));
-    return `npm run login -- --url ${new URL(site.apiBase).origin} --key ${site.publishableKey}`;
-  } catch { return 'npm run login'; }
+    return { origin: new URL(site.apiBase).origin, flags: `--url ${new URL(site.apiBase).origin} --key ${site.publishableKey}` };
+  } catch { return null; }
+}
+
+/** Whether the deployed API advertises device login in its public spec: true, false, or null when unreachable. */
+export async function probeDeviceLogin(origin, { fetchImpl = fetch } = {}) {
+  try {
+    const response = await fetchImpl(`${origin}/functions/v1/ai-fighter/spec`, { redirect: 'error', signal: AbortSignal.timeout(8000) });
+    if (!response.ok) return null;
+    return (await response.json())?.data?.registration?.deviceLogin === 'v1';
+  } catch { return null; }
 }
 
 /**
  * ODDBOUT sign-in state. Reads the session file only for presence, user id and expiry; never returns tokens.
- * Only the loopback login is offered, for a browser on this same machine. A browser on another device (a bot VM)
- * has no supported secure route yet: callback addresses carry authorization codes, so they are never routed through
- * chat. That case is reported as a blocker, not worked around.
+ * Same-device browsers use the loopback login. Another device (a bot VM) gets the device-connection login only when
+ * the deployed server advertises it; otherwise that route is a reported blocker. Callback addresses carry
+ * authorization codes, so no route ever sends them through chat.
  */
-export async function checkLogin({ remoteActive, sessionPath = defaultSessionPath(), root = kitRoot } = {}) {
+export async function checkLogin({ remoteActive, sessionPath = defaultSessionPath(), root = kitRoot, probe = probeDeviceLogin, checkServer = true } = {}) {
   const read = async file => { try { return JSON.parse(await readFile(file, 'utf8')); } catch { return null; } };
   const saved = await read(sessionPath);
   const signedIn = Boolean(saved && typeof saved.accessToken === 'string' && typeof saved.refreshToken === 'string');
   if (signedIn) return { status: remoteActive ? 'signed-in' : 'restart-required', userId: jwtPayload(saved.accessToken)?.sub ?? null,
     remoteToolsActive: Boolean(remoteActive), note: remoteActive ? '세션 파일이 있다. 유효한 서버 세션이나 현재 대화와 같은 계정임은 등록 도구 응답으로만 확인된다.'
       : '세션 파일은 있지만 이 MCP 프로세스는 로그인 전에 시작됐다. 호스트를 다시 시작해야 등록 도구가 열린다.' };
+  const project = await projectFlags(root), flags = project ? ` ${project.flags}` : '';
+  const supported = checkServer && project ? await probe(project.origin) : null;
+  const otherDevice = supported === true
+    ? { status: 'available', secureRoute: 'device-connection', start: `npm run login -- --device${flags}`, wait: 'npm run login -- --device-wait',
+        when: '봇 VM처럼 사용자 브라우저가 다른 기기에 있을 때. start가 보여주는 링크와 공개 확인 코드를 사용자에게 전하고,'
+          + ' 사용자가 홈페이지에서 본인 Google 로그인 후 코드가 같은지 확인해 승인하면 wait를 실행한다.' }
+    : { status: 'blocked-no-secure-route', secureRoute: null,
+        reason: supported === false ? 'server-without-device-login' : checkServer ? 'server-support-unknown' : 'server-not-checked',
+        when: '봇 VM처럼 사용자 브라우저가 다른 기기에 있을 때. 배포된 서버가 기기 연결 로그인을 알리지 않으면 이 경로는 막혀 있다.' };
   return { status: 'sign-in-required', userId: null, remoteToolsActive: Boolean(remoteActive),
     routes: {
-      sameDevice: { status: 'available', command: await sameDeviceCommand(root),
+      sameDevice: { status: 'available', command: `npm run login${flags ? ` --${flags}` : ''}`,
         when: '사용자 브라우저가 이 작업 공간과 같은 기기에서 실행될 때만. 로그인 콜백이 이 기기의 127.0.0.1로 돌아온다.' },
-      otherDevice: { status: 'blocked-no-secure-route', secureRoute: null,
-        when: '봇 VM처럼 사용자 브라우저가 다른 기기에 있을 때. 지원되는 secure handoff·기기 연결이 아직 없다.' },
+      otherDevice,
     },
-    note: '다른 기기 브라우저라면 로그인을 시작하지 말고 인증 연결이 막혔다고 사용자에게 알린다. 콜백 주소에는 인증 코드·토큰이 들어갈 수 있으므로'
-      + ' 대화에 붙여 넣도록 요청하지 않고, 안전하다고 안내하지 않는다. 기기 연결 로그인은 예정된 대체안이며 아직 지원되지 않는다.' };
+    note: otherDevice.status === 'available'
+      ? '기기 연결 링크와 확인 코드는 비밀이 아니다. 승인은 사용자가 홈페이지에서 직접 한다. 콜백 주소나 토큰은 대화로 옮기지 않는다.'
+      : '다른 기기 브라우저라면 로그인을 시작하지 말고 인증 연결이 막혔다고 사용자에게 알린다. 콜백 주소에는 인증 코드·토큰이 들어갈 수 있으므로'
+        + ' 대화에 붙여 넣도록 요청하지 않고, 안전하다고 안내하지 않는다.' };
 }
 
 /** The generation-account choice: options to show; the user's stated or elicited answer only. Never inferred. */

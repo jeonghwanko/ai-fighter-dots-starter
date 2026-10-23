@@ -110,19 +110,30 @@ test('the account item offers fixed options, never infers, and does not claim di
     { method: 'unsupported', choice: null });
 });
 
-test('login offers only the same-device route and reports another device as blocked; never returns tokens', async t => {
+test('login offers device connection only when the server advertises it; otherwise another device is blocked', async t => {
   const dir = await mkdtemp(path.join(tmpdir(), 'fighter-readiness-')); t.after(() => rm(dir, { recursive: true, force: true }));
   const sessionPath = path.join(dir, 'client.json');
-  const none = await checkLogin({ remoteActive: false, sessionPath });
+  const probed = [];
+  const probe = answer => async origin => { probed.push(origin); return answer; };
+  const none = await checkLogin({ remoteActive: false, sessionPath, probe: probe(false) });
   assert.equal(none.status, 'sign-in-required');
   assert.match(none.routes.sameDevice.command, /^npm run login -- --url https:\/\/[a-z0-9]+\.supabase\.co --key sb_publishable_/);
-  assert.deepEqual([none.routes.otherDevice.status, none.routes.otherDevice.secureRoute], ['blocked-no-secure-route', null]);
+  assert.deepEqual([none.routes.otherDevice.status, none.routes.otherDevice.secureRoute, none.routes.otherDevice.reason],
+    ['blocked-no-secure-route', null, 'server-without-device-login']);
+  assert.match(probed[0], /^https:\/\/[a-z0-9]+\.supabase\.co$/);
   // No paste or finish command is offered anywhere, and nothing calls a pasted callback safe.
   assert.ok(!/--paste|--finish/.test(JSON.stringify(none)));
   assert.match(none.note, /대화에 붙여 넣도록 요청하지 않고/);
+  for (const [options, reason] of [[{ probe: probe(null) }, 'server-support-unknown'], [{ checkServer: false, probe: probe(true) }, 'server-not-checked']])
+    assert.equal((await checkLogin({ remoteActive: false, sessionPath, ...options })).routes.otherDevice.reason, reason);
+  const device = await checkLogin({ remoteActive: false, sessionPath, probe: probe(true) });
+  assert.deepEqual([device.routes.otherDevice.status, device.routes.otherDevice.secureRoute], ['available', 'device-connection']);
+  assert.match(device.routes.otherDevice.start, /^npm run login -- --device --url https:\/\/[a-z0-9]+\.supabase\.co --key /);
+  assert.equal(device.routes.otherDevice.wait, 'npm run login -- --device-wait');
+  assert.ok(!/--paste|--finish/.test(JSON.stringify(device)));
   // A leftover manual exchange file does not turn into a chat route.
   await writeFile(pendingLoginPath(sessionPath), JSON.stringify({ version: 1, createdAt: new Date().toISOString() }));
-  assert.equal((await checkLogin({ remoteActive: false, sessionPath })).status, 'sign-in-required');
+  assert.equal((await checkLogin({ remoteActive: false, sessionPath, probe: probe(false) })).status, 'sign-in-required');
   await writeFile(sessionPath, JSON.stringify({ accessToken: jwt({ sub: 'user-9' }), refreshToken: 'refresh-secret' }));
   const restart = await checkLogin({ remoteActive: false, sessionPath });
   assert.deepEqual([restart.status, restart.userId], ['restart-required', 'user-9']);

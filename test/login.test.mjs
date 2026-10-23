@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { finishPasteLogin, login, logout, parsePastedCallback, pendingLoginPath, projectSettings, startPasteLogin, waitForCallback } from '../scripts/login.mjs';
+import { finishPasteLogin, login, logout, parsePastedCallback, pendingDeviceLoginPath, pendingLoginPath, projectSettings, startDeviceLogin, startPasteLogin, waitDeviceLogin, waitForCallback } from '../scripts/login.mjs';
 
 const URL_ = 'https://abcdefghijklmnopqrst.supabase.co', KEY = 'sb_publishable_fixtureFixtureFixture01';
 const jwt = payload => `e30.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`;
@@ -212,3 +212,56 @@ test('paste login refuses --link, an expired start, a denied login and a differe
   await assert.rejects(saved(pendingLoginPath(sessionPath)), /ENOENT/); // the code is spent either way
 });
 const jwtSub = file => JSON.parse(Buffer.from(file.accessToken.split('.')[1], 'base64url').toString()).sub;
+
+const DEVICE = 'afd_' + 'c'.repeat(64), HASH = 'f'.repeat(56);
+/** A scripted device API: start, then the given poll answers in order (an Error is thrown as the API would). */
+function deviceApi(answers, calls = []) {
+  return async (url, key, route, body) => {
+    calls.push({ url, key, route, body });
+    if (route === 'device-logins') return { ok: true, deviceCode: DEVICE, userCode: 'BCDF-GHJK', expiresAt: new Date(Date.now() + 600000).toISOString(), interval: 5 };
+    const answer = answers.shift();
+    if (answer instanceof Error) throw answer;
+    return answer;
+  };
+}
+
+test('device login keeps the secret here, prints only a public pairing link, and redeems one approval', async () => {
+  const sessionPath = path.join(directory, 'device', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  const calls = [], logs = [];
+  const started = await startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: line => logs.push(line), post: deviceApi([], calls) });
+  assert.equal(started.verificationUrl, 'https://oddbout.com/creator.html#device=BCDF-GHJK');
+  assert.equal((await saved(pendingDeviceLoginPath(sessionPath))).deviceCode, DEVICE);
+  // The chat-facing output carries the link and pairing code, never the device secret.
+  assert.ok(logs.some(line => line.includes('#device=BCDF-GHJK')) && !logs.some(line => line.includes(DEVICE)));
+  assert.ok(logs.some(line => line.includes('본인이 시작하지 않은 요청이면 승인하지 마세요')));
+  const slow = Object.assign(new Error('slow-down'), { status: 429 }), slept = [], verified = [];
+  const createAuthClient = () => ({ auth: { verifyOtp: async args => { verified.push(args);
+    return { data: { session: { access_token: jwt({ sub: 'user-7', exp: 9999999999 }), refresh_token: 'refresh-user-7', user: { id: 'user-7', email: 'p@example.com' } } } }; } } });
+  const result = await waitDeviceLogin({ post: deviceApi([{ ok: true, status: 'pending' }, slow, { ok: true, status: 'approved', tokenHash: HASH }], calls),
+    createAuthClient, request: async () => ({ ok: true, account: { invited: true } }), sleep: async ms => { slept.push(ms); }, log: () => {} });
+  assert.equal(result.userId, 'user-7');
+  assert.deepEqual(slept, [5000, 10000]); // slow-down widens the interval
+  assert.deepEqual(verified, [{ type: 'email', token_hash: HASH }]);
+  assert.ok(calls.filter(c => c.route === 'device-logins/token').every(c => c.body.deviceCode === DEVICE));
+  assert.equal((await saved(sessionPath)).refreshToken, 'refresh-user-7');
+  await assert.rejects(saved(pendingDeviceLoginPath(sessionPath)), /ENOENT/);
+  await assert.rejects(waitDeviceLogin({ post: deviceApi([]) }), /pending-device-login-missing/);
+});
+
+test('device login stops while pending without losing the request, and ends on expiry or an old server', async () => {
+  const sessionPath = path.join(directory, 'device-2', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  await startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: deviceApi([]) });
+  let clock = Date.now();
+  const tick = { now: () => clock, sleep: async ms => { clock += ms; } };
+  await assert.rejects(waitDeviceLogin({ timeoutSeconds: 7, post: deviceApi([{ status: 'pending' }, { status: 'pending' }]), ...tick }), /device-login-pending/);
+  assert.equal((await saved(pendingDeviceLoginPath(sessionPath))).deviceCode, DEVICE);
+  const gone = Object.assign(new Error('device-login-expired'), { status: 410 });
+  await assert.rejects(waitDeviceLogin({ post: deviceApi([gone]), ...tick }), /device-login-expired/);
+  await assert.rejects(saved(pendingDeviceLoginPath(sessionPath)), /ENOENT/);
+  // A server without the route is reported as unavailable; nothing falls back to a pasted callback.
+  const old = async () => { throw Object.assign(new Error('route-not-found'), { status: 404 }); };
+  await assert.rejects(startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: old }), /device-login-unavailable/);
+  await assert.rejects(startDeviceLogin({ argv: ['--url', URL_, '--key', KEY, '--link'], log: () => {}, post: deviceApi([]) }), /device-link-unsupported/);
+});

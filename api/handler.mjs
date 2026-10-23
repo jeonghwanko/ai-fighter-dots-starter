@@ -1,6 +1,7 @@
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { createAccountHandler } from './account.mjs';
+import { createDeviceLoginHandler } from './device-login.mjs';
 import { createAdminHandler } from './admin.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
@@ -44,6 +45,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
   const duelHandler = createDuelHandler({db,simulateDuel,engineVersion});
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
+  const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink });
   const adminHandler = createAdminHandler({ db });
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
   async function present(row) {
@@ -88,11 +90,13 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
       if (parts[0] === 'admin') return adminHandler(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
+      // Device-connection sign-in: start and poll are unauthenticated; approve verifies the user itself.
+      if (parts[0] === 'device-logins') return deviceLoginHandler(request, parts);
       // Account and sign-in handoff routes work for every verified account.
       if (parts.length === 1 && ['me', 'access-requests', 'creator-handoffs'].includes(parts[0])) return accountHandler(request, parts);
       if (method === 'GET' && parts.join('/') === 'spec') return json({ ok: true, stage: 'public-contract', data: { ...spec,
         registration: { available: true, mode: 'open', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary',
-          approvalRequired: false, publication: 'automatic-after-file-validation', moderation: 'post-publication' } } });
+          approvalRequired: false, publication: 'automatic-after-file-validation', moderation: 'post-publication', deviceLogin: 'v1' } } });
       // Validated, active packages are public; uploads and removed packages remain private.
       if (parts[0] === 'roster' && (method === 'GET' || method === 'OPTIONS')) {
         const reply = (body, status = 200) => jsonResponse(body, status, ROSTER_CORS);

@@ -58,8 +58,11 @@ This repository lets each user create their own fighter through Dot. Read
   registration. Run its kit `nextCommands` (restart when told), pass `account` only as the user stated it (else let
   the host form or numbered options ask). Use login commands only with a supported secure handoff or device
   connection. Callback URLs can contain codes/tokens: never ask users to paste them into ordinary chat or
-  describe that as safe, even if tool output suggests paste mode. If no secure route is supported, report
-  the authentication blocker; do not implement a bypass or assume a planned device flow already exists.
+  describe that as safe, even if tool output suggests paste mode. For a browser on another device, use the
+  device connection (`--device` then `--device-wait`) only when readiness reports routes.otherDevice available,
+  which requires the deployed server to advertise registration.deviceLogin "v1". The link and pairing code are
+  public; tell the user to approve only a request they started and whose code matches. If no secure route is
+  supported, report the authentication blocker; do not implement a bypass or assume a planned flow already exists.
 - Design the default customer flow for one already-owned generation subscription.
   Separate actual image/video/editor capabilities from subscription names and API billing.
   Do not make a second subscription or self-hosted VACE/ComfyUI GPU server a hidden requirement.
