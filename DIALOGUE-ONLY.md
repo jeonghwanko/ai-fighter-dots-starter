@@ -4,7 +4,7 @@
 이 문서에는 게임이 직접 생성한 현재 규격이 아래 JSON으로 포함되어 있습니다.
 다른 안내만 읽고 규격을 읽었다고 간주하지 마세요. 첫 응답 전에 아래 JSON의
 revision, workflow, contract, controls, timing을 읽고 이번 대화의 기준으로 저장하세요.
-첫 응답에는 “게임 규격 8f4f50fbe20a 기준”이라고 출처를 짧게 밝히고,
+첫 응답에는 “게임 규격 5f2345620b4a 기준”이라고 출처를 짧게 밝히고,
 캐릭터 설명이나 참고 이미지를 요청하세요. 사용자에게 기술 수치를 고르라고 하지 마세요.
 
 ## 이번 대화의 범위
@@ -32,7 +32,7 @@ review_creation_progress가 연결되어 있으면 선택 상태를 검사하고
 
 ## 자료 갱신
 
-이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: 8f4f50fbe20af1b18fd3babc41cf8cc3ad0f42747a01bd16d05812406de5ce01
+이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: 5f2345620b4a4dd9acc1808298b4242997ec3a76f4a6156bcf29fa88e35f4303
 새 묶음·재개·패키징 전에 [현재 게임 JSON](https://raw.githubusercontent.com/jeonghwanko/ai-fighter-dots-starter/refs/heads/codex/game-context/creation-context.json)을 다시 읽고 revision을 비교하세요.
 바뀌면 이전 자료·선택을 보관하고 영향을 받은 항목만 설명·재검토하세요. 가져오지 못하면 그 사실을 말하고,
 외형 상담만 계속할 수 있습니다. 규격에 의존하는 묶음으로 진행하거나 수치를 추정하지 마세요.
@@ -312,7 +312,7 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
       },
       "statsStep": "In final, ask for the grade allocation: power = damage dealt, toughness = damage taken cut, speed = shorter rest between attacks. Every grade min..max, the sum exactly budget; skipped = every grade default. Only AI duels between registered fighters use them.",
       "language": "Record the language the user wrote the concept and move names in (profile.language).",
-      "update": "An account has one fighter. To change its concept, move names, stats or art later, repack and submit with its fighterId: it keeps its ID and duel record."
+      "update": "An account can register up to three fighters. Omit fighterId for a new fighter. To change an existing fighter's concept, move names, stats or art, repack and submit with its fighterId: it keeps its ID and duel record without using another slot."
     },
     "state": {
       "fields": [
@@ -506,12 +506,12 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "8f4f50fbe20af1b18fd3babc41cf8cc3ad0f42747a01bd16d05812406de5ce01",
+  "revision": "5f2345620b4a4dd9acc1808298b4242997ec3a76f4a6156bcf29fa88e35f4303",
   "provenance": {
-    "sourceCommit": "350a26047698dacde576703b09a874bca6af8791",
+    "sourceCommit": "0e389f08ad869e16bd81bce71fd01e865a377b9b",
     "sourceDirty": false,
     "sourceFiles": {
-      "tools/ai-fighter/creation-context.mjs": "3aecbfcae1c7047a4904d3070ed6e6ff7679f48d7ad70ac64c2838847ae655c8",
+      "tools/ai-fighter/creation-context.mjs": "3327e989a2fed79ce421d803b34dcbb6e78312090d8f35cd2fdd10fc2f47547f",
       "tools/ai-fighter/export-creation-context.mjs": "76688c3976f500b3b71fc2eccd7552eefc52b6eb44e6a687c9f2b58edbc0b252",
       "contracts/ai-fighter/v1/contract-source.mjs": "e340e3911884ca77404e80a1b07d6c9bd8e5bb2765a1bda9b678ece019c09d24",
       "src/world/native-city-combat.json": "0eb2dea149253f08ddc7067b0f3388f9f10dfe3cae9c8485d2e13a9aefa632be",
