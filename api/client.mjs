@@ -1,5 +1,6 @@
 import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createClient } from '@supabase/supabase-js';
+import { transportCode } from './connection-errors.mjs';
 
 export function validProjectUrl(url) {
   return typeof url === 'string' && /^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(url);
@@ -11,9 +12,12 @@ const bodyBytes = body => body == null ? 0 : typeof body === 'string' ? Buffer.b
 export async function apiRequest(url, token, route, { method = 'GET', body, headers = {}, timeoutMs = transferTimeoutMs(bodyBytes(body)) } = {}) {
   let response;
   try { response = await fetch(`${url}/functions/v1/ai-fighter/${route}`, { method, body, headers: { authorization: `Bearer ${token}`, ...headers }, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) }); }
-  catch { throw new Error('api-unreachable'); }
+  catch (error) { throw new Error(transportCode(error)); }
   let result;
-  try { result = await response.json(); } catch { throw new Error('invalid-api-response'); }
+  try { result = await response.json(); } catch {
+    const error = new Error(response.ok ? 'invalid-api-response' : `api-http-${response.status}`);
+    error.status = response.status; throw error;
+  }
   if (!response.ok) { const error = new Error(result?.code ?? `api-http-${response.status}`); error.status = response.status; throw error; }
   if (!result || typeof result !== 'object') throw new Error('invalid-api-response');
   return result;
@@ -93,7 +97,13 @@ export async function createRemoteClient(configPath, { createAuthClient = create
         await adoptSaved(); // Another process may have refreshed while this one waited.
         if (fresh()) return config.accessToken;
         const { data, error } = await auth.auth.refreshSession({ refresh_token: config.refreshToken });
-        if (error || !data.session) throw new Error('client-sign-in-required');
+        if (error || !data.session) {
+          // A network failure during refresh is not evidence of a revoked account.
+          const code = transportCode(error);
+          if (code !== 'api-unreachable' || ['AuthRetryableFetchError', 'TypeError'].includes(error?.name) || error?.status >= 500)
+            throw new Error(code);
+          throw new Error('client-sign-in-required');
+        }
         config.accessToken = data.session.access_token; config.refreshToken = data.session.refresh_token;
         await writeSessionFile(configPath, config); // The old refresh token is now spent.
         return config.accessToken;

@@ -9,7 +9,7 @@ import { ensureSpritePatch, patchFile } from './sprite-patch.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
 const runtimeFiles = [
-  'LICENSE', 'package-lock.json', 'api/client.mjs', 'server/ai-fighter-package.mjs',
+  'LICENSE', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'server/ai-fighter-package.mjs',
   'deploy/creation-context-source.json', 'deploy/creator-site.json',
   'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/run-creation-job.mjs',
   'scripts/sprite-patch.mjs', 'patches/sprite-gen-gpt-motion.json', 'patches/README.md',
@@ -18,7 +18,7 @@ const runtimeFiles = [
   'tools/ai-fighter/gait.mjs', 'tools/ai-fighter/contact_evidence.py', 'tools/ai-fighter/validate-package.mjs',
   'docs/DOT-CREATION.md', 'docs/AUTHORING.md', 'docs/CREATION-UX.md', 'docs/GAIT-REVIEW.md',
   'docs/FOOT-EVIDENCE.md', 'docs/LOCAL-PLUGIN.md', 'docs/GAME-CREATION-CONTEXT.md', 'docs/OPEN-REGISTRATION.md',
-  'docs/EXECUTION-HOST.md',
+  'docs/EXECUTION-HOST.md', 'docs/CONNECTION-READINESS.md',
 ];
 const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
   'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:run'];

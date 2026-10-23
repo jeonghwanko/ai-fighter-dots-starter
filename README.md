@@ -85,6 +85,12 @@ Request, plan, and output paths belong to the current fighter's working folder. 
 
 ## 5. Sign in and register
 
+The creator flow is **Connect ODDBOUT → sign in with Google → confirm the public pairing code and approve**.
+The kit reports registration API/account access, generation access and parent-conversation delivery separately.
+VM host permissions and Republish belong to the initial environment preparer; creators reuse the prepared workspace.
+The kit does not install a Dots-native button or change VM network policy. Hosts can render the connection action
+as a button, or use a choice and official link. See [connection readiness and recovery](docs/CONNECTION-READINESS.md).
+
 When you request registration, the agent reads `deploy/creator-site.json` and starts Google sign-in using the **origin of `apiBase`** as the project URL and `publishableKey` as the public key. You use the existing service; you do not need to create a Supabase project or obtain a service key. The equivalent command, with those public values substituted, is:
 
 ```sh

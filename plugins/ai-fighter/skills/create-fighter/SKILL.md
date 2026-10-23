@@ -34,6 +34,12 @@ do not require a PC or leave the user's chosen VM scope. Packaging still uses th
    evidence, keep unknown backend/account identity unknown, and treat `creation:delivery` as a record check only.
    Local/Library saves and child-only or queued previews do not prove parent display. Recover existing results
    before retries; delivery failures do not authorize regeneration.
+5. Use `check_creation_readiness` and `docs/CONNECTION-READINESS.md` for the ODDBOUT connection action.
+   Keep authenticated registration API access, generation access and parent delivery separate. A saved session
+   is unverified until GET /me succeeds. Environment-preparer actions (VM host allowlist/Republish) are initial
+   workspace setup, not repeated creator steps; the kit cannot perform those settings changes.
+   Reuse pending device approval and preserved sessions/jobs after recovery. Do not claim a Dots-native button
+   was installed: hosts may render the action as a button, choice or official link.
 
 ## Work in review groups
 

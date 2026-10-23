@@ -20,6 +20,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { apiRequest, validProjectUrl, withSessionLock, writeSessionFile } from '../api/client.mjs';
+import { isTransportCode, connectionAction } from '../api/connection-errors.mjs';
 import { PUBLIC_CREATOR_PAGE, creatorPage } from '../mcp/creator-handoff.mjs';
 
 export const DEFAULT_LOGIN_PORT = 47821;
@@ -210,12 +211,21 @@ const devicePost = (url, publishableKey, route, body) => apiRequest(url, publish
 export async function startDeviceLogin({ argv = [], log = console.error, post = devicePost, page = PUBLIC_CREATOR_PAGE } = {}) {
   if (argv.includes('--link')) throw new Error('device-link-unsupported');
   const sessionPath = defaultSessionPath(), pendingPath = pendingDeviceLoginPath(sessionPath);
+  // A second start must not replace the only copy of a request that may already be approved.
+  let existing;
+  try { existing = JSON.parse(await readFile(pendingPath, 'utf8')); }
+  catch (error) { if (error.code !== 'ENOENT') throw new Error('pending-device-login-invalid'); }
+  if (existing !== undefined) {
+    if (existing?.version !== 1 || !Number.isFinite(Date.parse(existing.expiresAt))) throw new Error('pending-device-login-invalid');
+    if (Date.parse(existing.expiresAt) > Date.now()) throw new Error('device-login-already-pending');
+  }
   const { url, publishableKey } = await projectSettings({ argv, sessionPath });
   let started;
   try { started = await post(url, publishableKey, 'device-logins'); }
   catch (error) {
     // A server without the route predates device login: report it, never fall back to pasting a callback.
     if (error.status === 404 || ['not-found', 'route-not-found'].includes(error.message)) throw new Error('device-login-unavailable');
+    if (isTransportCode(error.message)) throw error;
     throw new Error(error.message === 'rate-limit' ? 'device-login-rate-limit' : 'device-login-start-failed');
   }
   if (!DEVICE_CODE.test(started?.deviceCode ?? '') || !USER_CODE.test(started?.userCode ?? '') || !Number.isFinite(Date.parse(started?.expiresAt))
@@ -254,7 +264,7 @@ export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.erro
     } catch (error) {
       if (['device-login-expired', 'device-login-consumed', 'device-login-not-found'].includes(error.message)) { await close(); throw new Error(error.message); }
       if (error.message === 'slow-down') interval += 5000;
-      else if (error.message !== 'api-unreachable') throw error;
+      else throw error; // Keep the pending file; connectivity recovery resumes this request, never a new login.
     }
     if (answer) break;
     if (now() + interval > deadline) throw new Error(now() + interval > expiry ? 'device-login-expired' : 'device-login-pending');
@@ -357,6 +367,8 @@ const messages = {
   'device-login-unavailable': '서버가 기기 연결 로그인을 아직 지원하지 않습니다. 로그인이 막혔다고 알리세요. 콜백 주소를 대화로 옮기는 방식으로 대신하지 않습니다.',
   'device-login-rate-limit': '기기 연결 요청이 너무 많습니다. 몇 분 뒤 다시 시작하세요.',
   'device-login-start-failed': '기기 연결 로그인을 시작하지 못했습니다. 잠시 후 다시 실행하세요.',
+  'device-login-already-pending': '기존 기기 연결 요청이 남아 있습니다. 새 요청을 만들지 말고 사용자가 승인한 뒤 npm run login -- --device-wait 로 이어가세요.',
+  'pending-device-login-invalid': '기존 기기 연결 기록을 판독할 수 없어 보존했습니다. 기록과 서버 상태를 확인하기 전에는 새 로그인 요청을 만들지 않습니다.',
   'pending-device-login-missing': '진행 중인 기기 연결 로그인이 없습니다. npm run login -- --device 부터 다시 실행하세요.',
   'device-login-pending': '아직 승인되지 않았습니다. 사용자가 승인한 뒤 npm run login -- --device-wait 를 다시 실행하세요.',
   'device-login-expired': '기기 연결 요청이 만료되었습니다. npm run login -- --device 부터 다시 실행하세요.',
@@ -391,5 +403,6 @@ if (isEntry()) {
     : finish >= 0 ? (argv.length > finish + 1 ? Promise.resolve(argv.slice(finish + 1).join(' ')) : readTerminalLine('로그인 후 주소창 주소: '))
       .then(pasted => finishPasteLogin({ pasted }))
     : argv.includes('--paste') ? startPasteLogin({ argv }) : login({ argv });
-  run.catch(error => { console.error(messages[error.message] ?? `로그인 실패: ${error.message}`); process.exitCode = 1; });
+  run.catch(error => { console.error(isTransportCode(error.message) ? connectionAction(error.message).message
+    : messages[error.message] ?? `로그인 실패: ${error.message}`); process.exitCode = 1; });
 }
