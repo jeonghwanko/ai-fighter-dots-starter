@@ -35,15 +35,15 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
       }
     } catch {}
   </script>
-  <script type="module" crossorigin src="/assets/league-Ci57gUpt.js"></script>
+  <script type="module" crossorigin src="/assets/league--Y8fE6A4.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/registeredFighters-Ch6twNMc.js">
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CVMKP0F5.js">
   <link rel="modulepreload" crossorigin href="/assets/siteChrome-Bz48REf0.js">
-  <link rel="modulepreload" crossorigin href="/assets/fighterSheet-De8wYbIQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterSheet-BUeIUmvc.js">
   <link rel="modulepreload" crossorigin href="/assets/fighterCreatorLocale-Bh29uOe8.js">
   <link rel="modulepreload" crossorigin href="/assets/leagueContent-CpjltF06.js">
   <link rel="stylesheet" crossorigin href="/assets/siteChrome-H9AosXvK.css">
-  <link rel="stylesheet" crossorigin href="/assets/fighterSheet-CUss-_0D.css">
+  <link rel="stylesheet" crossorigin href="/assets/fighterSheet-D2QngLAO.css">
   <link rel="stylesheet" crossorigin href="/assets/league-BEOm7r-2.css">
 </head>
 <body>
@@ -80,6 +80,13 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
         <div class="roster-layout">
           <div class="roster" id="roster" tabindex="0" aria-label="좌우로 넘겨 파이터 선택" data-label="roster">
             <button class="fighter-card selected tyson" data-fighter="tyson" aria-label="타이푼 선택"><div class="fighter-art"><img src="/art/ui/oddbout-roster-v1/typhoon.webp" alt="검은 글러브와 반바지를 입고 가드를 올린 타이푼" width="1024" height="1536"></div><span class="fighter-name">타이푼</span></button>
+            <button class="fighter-card bravow" data-fighter="bravow" aria-label="브라보우 선택"><div class="fighter-art"><img src="/art/arena/concept/bravow.webp" alt="별 선글라스를 올려 쓰고 금메달을 건 시바견 브라보우" width="326" height="600"></div><span class="fighter-name">브라보우</span></button>
+            <button class="fighter-card beotim" data-fighter="beotim" aria-label="버팀 선택"><div class="fighter-art"><img src="/art/arena/concept/beotim.webp" alt="파란 줄무늬 목도리를 두른 통통한 강아지 버팀" width="342" height="600"></div><span class="fighter-name">버팀</span></button>
+            <button class="fighter-card quickcat" data-fighter="quickcat" aria-label="퀵캣 선택"><div class="fighter-art"><img src="/art/arena/concept/quickcat.webp" alt="분홍 마카롱 몸통에 회색 고양이 얼굴을 한 퀵캣" width="1116" height="600"></div><span class="fighter-name">퀵캣</span></button>
+            <button class="fighter-card kungjjak" data-fighter="kungjjak" aria-label="쿵짝 선택"><div class="fighter-art"><img src="/art/arena/concept/kungjjak.webp" alt="동그란 선글라스를 쓰고 흰 건반을 멘 고양이 쿵짝" width="526" height="600"></div><span class="fighter-name">쿵짝</span></button>
+            <button class="fighter-card sikeundung" data-fighter="sikeundung" aria-label="시큰둥 선택"><div class="fighter-art"><img src="/art/arena/concept/sikeundung.webp" alt="팔짱을 낀 채 시큰둥한 얼굴의 고양이 시큰둥" width="361" height="600"></div><span class="fighter-name">시큰둥</span></button>
+            <button class="fighter-card duldul" data-fighter="duldul" aria-label="둘둘 선택"><div class="fighter-art"><img src="/art/arena/concept/duldul.webp" alt="머리에 새싹을 단 연두색 낙서 파이터 둘둘" width="281" height="600"></div><span class="fighter-name">둘둘</span></button>
+            <button class="fighter-card eoridung" data-fighter="eoridung" aria-label="어리둥 선택"><div class="fighter-art"><img src="/art/arena/concept/eoridung.webp" alt="눈을 동그랗게 뜨고 놀란 흰 고양이 어리둥" width="361" height="600"></div><span class="fighter-name">어리둥</span></button>
             <button class="fighter-card mascot bingpanjang" data-fighter="bingpanjang" aria-label="빙판장 선택"><div class="fighter-art"><img src="/art/arena/concept/bingpanjang.webp" alt="날개를 주먹처럼 쥐고 가드를 올린 펭귄 빙판장" width="470" height="600" loading="lazy"></div><span class="fighter-name">빙판장</span></button>
             <button class="fighter-card mascot ttakbujang" data-fighter="ttakbujang" aria-label="딱부장 선택"><div class="fighter-art"><img src="/art/arena/concept/ttakbujang.webp" alt="주황색 등딱지에 큰 집게 두 개를 든 게 딱부장" width="962" height="600" loading="lazy"></div><span class="fighter-name">딱부장</span></button>
             <button class="fighter-card mascot guldaejang" data-fighter="guldaejang" aria-label="굴대장 선택"><div class="fighter-art"><img src="/art/arena/concept/guldaejang.webp" alt="큰 눈과 앞니를 드러내고 주먹을 쥔 파란 굴대장" width="418" height="600" loading="lazy"></div><span class="fighter-name">굴대장</span></button>
@@ -133,9 +140,9 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
         <p class="profile-intro" id="profile-title"></p>
         <h2 id="profile-name"></h2>
         <p class="profile-bio" id="profile-bio"></p>
+        <div class="profile-concept" id="profile-concept" hidden></div>
         <ul class="profile-tags" id="profile-tags" aria-label="캐릭터 특징" data-label="tags"></ul>
-<p class="profile-credit" id="profile-credit" hidden></p>
-        <div class="profile-sheet" id="profile-sheet"></div>
+<p class="profile-credit" id="profile-credit" hidden></p>
         <div class="profile-voice"><blockquote id="profile-quote"></blockquote><button id="profile-listen" class="profile-listen" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span>목소리 듣기</span><span class="profile-wave" aria-hidden="true">▂ ▅ ▃ ▆</span></button></div>
         <div class="profile-actions"><span id="profile-status" class="profile-status" hidden></span><a id="profile-arena" class="button dark" href="./fighter.html?lang=ko" data-destination="fighter.html"><span data-copy="profileArena">경기장 입장</span></a><a id="profile-join" href="#join"><span data-copy="profileCreate">선수 만들기 →</span></a></div>
       </div>
