@@ -45,10 +45,10 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
   const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: /^[a-z0-9-]+$/.test(error.message) ? error.message : 'remote-operation-failed' }); } };
   if (validatePackage) {
     server.registerTool('submit_fighter_package', {
-      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically.',
-      inputSchema: { manifestPath: z.string().min(1).max(512), idempotencyKey: z.string().uuid() }, outputSchema,
+      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically. Each account has one fighter: to change it later (concept, move names, stats or art), pass its fighterId — the package is replaced in place and the fighter keeps its ID and duel record. Omit fighterId only for the first registration.',
+      inputSchema: { manifestPath: z.string().min(1).max(512), idempotencyKey: z.string().uuid(), fighterId: z.string().uuid().optional() }, outputSchema,
       annotations: { ...read, readOnlyHint: false },
-    }, safe(async ({ manifestPath, idempotencyKey }) => {
+    }, safe(async ({ manifestPath, idempotencyKey, fighterId }) => {
       // Upload exactly what the validator saw: the manifest must not change while the child process checks it,
       // and every uploaded asset must match the hash in that manifest.
       const before = await readManifest(root, manifestPath);
@@ -71,7 +71,7 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
         const missing = used.filter(feature => !features.includes(feature));
         if (missing.length) return { ok: false, stage: 'remote-spec', code: 'server-feature-missing', errors: missing };
       }
-      const created = await remote.request('submissions', { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey }, body: manifestText });
+      const created = await remote.request(fighterId ? `submissions?fighter=${fighterId}` : 'submissions', { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey }, body: manifestText });
       if (created.stage !== 'uploading' || created.code === 'upload-expired') return created;
       for (const asset of parsed.data.assets) {
         const bytes = await readDeclaredFile(path.join(directory, asset.path), asset.bytes);

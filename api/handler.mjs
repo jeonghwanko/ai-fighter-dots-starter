@@ -29,11 +29,11 @@ function unstorableTextPath(value, at = '') {
   for (const [key, item] of Object.entries(value)) { const found = unstorableTextPath(item, `${at}/${key}`); if (found !== null) return found; }
   return null;
 }
-const conflictCodes = ['idempotency-conflict','fighter-quota','open-submission-exists','submission-quota','storage-budget-full','assets-incomplete','upload-expired','stale-validation','submissions-paused','beta-capacity'];
+const conflictCodes = ['idempotency-conflict','fighter-quota','fighter-removed','fighter-unchanged','open-submission-exists','submission-quota','storage-budget-full','assets-incomplete','upload-expired','stale-validation','submissions-paused','beta-capacity'];
 function check(error) {
   if (!error) return;
   if (conflictCodes.includes(error.message)) throw new Problem(409, error.message);
-  if (error.message === 'not-found') throw new Problem(404, 'not-found');
+  if (error.message === 'not-found' || error.message === 'fighter-not-found') throw new Problem(404, error.message);
   if (error.message === 'rate-limit') throw new Problem(429, 'rate-limit');
   if (error.message === 'account-disabled') throw new Problem(403, 'account-disabled');
   if (['validator-version','validation-incomplete','validation-result-limit'].includes(error.message)) throw new Problem(400, error.message);
@@ -134,6 +134,9 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
       if (!isWorker && parts.join('/') === 'analytics/context' && analytics) return analytics.context(request, owner);
       if (method === 'POST' && parts.join('/') === 'submissions') {
         const key = requireId(request.headers.get('idempotency-key'));
+        // ?fighter=<id> replaces the package of the caller's own fighter in place (2026-10-23); absent, it is a first registration.
+        const target = new URL(request.url).searchParams.get('fighter');
+        if (target !== null && !UUID.test(target)) throw new Problem(422, 'invalid-fighter');
         let text;
         try { text = new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, spec.limits.jsonBytes)); }
         catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-utf8'); }
@@ -146,7 +149,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
         if (unstorable !== null) throw new Problem(422, 'invalid-manifest', [{ code: 'UNSUPPORTED_TEXT', path: unstorable,
           expected: 'text without U+0000 or unpaired surrogates', actual: 'unsupported character' }]);
         const sha = await sha256(new TextEncoder().encode(text));
-        const row = await rpc('af_create_submission', { p_owner: owner, p_key: key, p_text: text, p_sha: sha, p_bytes: result.assetBytes });
+        const row = await rpc('af_create_submission', { p_owner: owner, p_key: key, p_text: text, p_sha: sha, p_bytes: result.assetBytes, p_fighter: target });
         return json(await present(row), 200);
       }
       if (parts[0] === 'submissions' && parts.length >= 2) {

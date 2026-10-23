@@ -11,7 +11,7 @@ async function duelFixture() {
   await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
     create schema auth; create table auth.users(id uuid primary key,email text);
     create function auth.uid() returns uuid language sql as 'select null::uuid';
-    grant usage on schema auth to authenticated,service_role; create schema storage;
+    grant usage on schema auth to authenticated,service_role; create schema storage; create schema cron; create function cron.schedule(text,text,text) returns bigint language sql as 'select 1::bigint';
     create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
     create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
     grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);

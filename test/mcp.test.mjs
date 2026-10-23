@@ -91,7 +91,7 @@ function recordingRemote(features = ['profile-extras-1', 'combat-stats-1']) {
   return { requests, remote: { request: async (route, options = {}) => {
     requests.push({ route, method: options.method ?? 'GET', body: options.body });
     if (route === 'spec') return { ok: true, stage: 'public-contract', data: { features } };
-    if (route === 'submissions') return { ok: true, stage: 'uploading', submissionId };
+    if (route === 'submissions' || route.startsWith('submissions?')) return { ok: true, stage: 'uploading', submissionId };
     if (route.endsWith('/submit')) return { ok: true, stage: 'queued', submissionId, pending: ['server-validation', 'registration'] };
     return { ok: true, stage: 'uploaded' };
   } } };
@@ -107,6 +107,14 @@ test('submit uploads exactly the validated manifest and asset bytes', async () =
     assert.deepEqual(uploads.map(r => r.route.split('/').at(-1)), example.assets.map(a => a.id));
     for (const [index, upload] of uploads.entries())
       assert.equal(createHash('sha256').update(upload.body).digest('hex'), example.assets[index].sha256);
+  } finally { await client.close(); }
+});
+test('a fighterId replaces that fighter in place; without one it is a first registration', async () => {
+  const { requests, remote } = recordingRemote(), client = await connectInProcess({ remote }), fighterId = crypto.randomUUID();
+  try {
+    const result = await client.callTool({ name: 'submit_fighter_package', arguments: { manifestPath: 'examples/sparring-bot/fighter.json', idempotencyKey: crypto.randomUUID(), fighterId } });
+    assert.equal(result.structuredContent.stage, 'queued', JSON.stringify(result.structuredContent));
+    assert.ok(requests.some(r => r.method === 'POST' && r.route === `submissions?fighter=${fighterId}`));
   } finally { await client.close(); }
 });
 test('a package with concept, move names or grades is not uploaded to a server that predates them', async () => {
