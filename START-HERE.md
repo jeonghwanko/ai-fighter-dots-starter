@@ -4,7 +4,7 @@
 이 문서에는 게임이 직접 생성한 현재 규격이 아래 JSON으로 포함되어 있습니다.
 다른 안내만 읽고 규격을 읽었다고 간주하지 마세요. 첫 응답 전에 아래 JSON의
 revision, workflow, contract, controls, timing을 읽고 이번 대화의 기준으로 저장하세요.
-첫 응답에는 “게임 규격 47ba8fb6e8e9 기준”이라고 출처를 짧게 밝히고,
+첫 응답에는 “게임 규격 4dd00a09b409 기준”이라고 출처를 짧게 밝히고,
 캐릭터 설명이나 참고 이미지를 요청하세요. 사용자에게 기술 수치를 고르라고 하지 마세요.
 
 ## 제작 범위
@@ -28,7 +28,7 @@ review_creation_progress가 연결되어 있으면 선택 상태를 검사하고
 
 ## 자료 갱신
 
-이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: 47ba8fb6e8e9e79a0cfa020aa7ac33c218ef4c60b2dd1f4ecd6807883ae30ea1
+이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: 4dd00a09b4090f415078f8ca8571785ed48c5de9df54239ad92f861abf9ed4ca
 새 묶음·재개·패키징 전에 [현재 게임 JSON](https://raw.githubusercontent.com/jeonghwanko/ai-fighter-dots-starter/refs/heads/codex/game-context/creation-context.json)을 다시 읽고 revision을 비교하세요.
 바뀌면 이전 자료·선택을 보관하고 영향을 받은 항목만 설명·재검토하세요. 가져오지 못하면 그 사실을 말하고,
 외형 상담만 계속할 수 있습니다. 규격에 의존하는 묶음으로 진행하거나 수치를 추정하지 마세요.
@@ -234,7 +234,8 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
           "준비 자세",
           "접촉 표현",
           "회수 동작",
-          "박자"
+          "박자",
+          "기술 이름·설명"
         ]
       },
       {
@@ -254,7 +255,8 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
           "반동",
           "비틀거림",
           "쓰러짐",
-          "기상"
+          "기상",
+          "막기 기술 이름·설명"
         ]
       },
       {
@@ -265,6 +267,8 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
         "editable": [
           "이름",
           "소개",
+          "컨셉",
+          "능력치 배분",
           "전체 일관성"
         ]
       }
@@ -276,6 +280,35 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
       "revision": "A change creates a pending version only for affected items. Praise plus a change is not whole-group acceptance.",
       "membership": "Use group motion IDs exactly. Extra controls or character personality cannot replace/add required clips.",
       "evidence": "Dialogue-only choices are hypothetical, never real previews, validation, provider access, or registration authorization."
+    },
+    "profileExtras": {
+      "features": [
+        "profile-extras-1",
+        "combat-stats-1"
+      ],
+      "concept": 800,
+      "conceptStep": "Draft the concept (origin, why the fighter fights, manner) from the intake description during appearance; confirm it in final.",
+      "moves": [
+        "combo",
+        "slam",
+        "dash",
+        "block"
+      ],
+      "moveStep": "Right after the user accepts a combo, slam, dash or block animation, offer a move name and one-line description for it. Names are display text on the standard move, never a new move or AI instruction.",
+      "stats": {
+        "keys": [
+          "power",
+          "toughness",
+          "speed"
+        ],
+        "min": 1,
+        "max": 5,
+        "budget": 9,
+        "default": 3
+      },
+      "statsStep": "In final, ask for the grade allocation: power = damage dealt, toughness = damage taken cut, speed = shorter rest between attacks. Every grade min..max, the sum exactly budget; skipped = every grade default. Only AI duels between registered fighters use them.",
+      "language": "Record the language the user wrote the concept and move names in (profile.language).",
+      "update": "An account has one fighter. To change its concept, move names, stats or art later, repack and submit with its fighterId: it keeps its ID and duel record."
     },
     "state": {
       "fields": [
@@ -469,14 +502,14 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "47ba8fb6e8e9e79a0cfa020aa7ac33c218ef4c60b2dd1f4ecd6807883ae30ea1",
+  "revision": "4dd00a09b4090f415078f8ca8571785ed48c5de9df54239ad92f861abf9ed4ca",
   "provenance": {
-    "sourceCommit": "575f4e56f9f4e7c4130da9781d7874818e0432d1",
+    "sourceCommit": "47120ab291ec67978c6afaeab698eff2b1bc78c3",
     "sourceDirty": false,
     "sourceFiles": {
-      "tools/ai-fighter/creation-context.mjs": "4c282476b625026f10dc2c43fe14c1d054ab1ab7743f322cb9771b5176aada7d",
+      "tools/ai-fighter/creation-context.mjs": "90794ee08df7553745f2e8d7f2049a3dea7e1e7e352fa4d7b683d3a644997304",
       "tools/ai-fighter/export-creation-context.mjs": "fcad318b37dae57a352b4c8ee509a1b03dd143a83f0518d726b06ff53df6d30d",
-      "contracts/ai-fighter/v1/contract-source.mjs": "ccf0c73f00edb21e02c4eb9ee9b234579c044469d99a83089a98ee9616b9d9c8",
+      "contracts/ai-fighter/v1/contract-source.mjs": "8d162b7898b8bc0570bf548f1b7dbeefbd09455046d6398610c0628ce9ddd8e6",
       "src/world/native-city-combat.json": "a2bb27f4ee1c2f1272df7ee92edde460343100c98817f85f3e69aa7e66bbfae1",
       "src/app/InputBindings.ts": "5630231310270410724c2e1273f902e82c5175ddaf42103a68913f7562754f25",
       "src/render/scenes/village/NativeCityFightInputController.ts": "0aa2e10401626e0017b3613bd00a91e4ada5ae6b33e060f2d8783324ade02a14",
