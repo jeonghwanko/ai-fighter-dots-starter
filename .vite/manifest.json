@@ -15,8 +15,8 @@
     "file": "assets/CityEnvironment-AhQf9g8O.js",
     "name": "CityEnvironment"
   },
-  "_CityTournamentBoardController-DRpu04qi.js": {
-    "file": "assets/CityTournamentBoardController-DRpu04qi.js",
+  "_CityTournamentBoardController-Dri0ifX3.js": {
+    "file": "assets/CityTournamentBoardController-Dri0ifX3.js",
     "name": "CityTournamentBoardController",
     "imports": [
       "_registeredFighters-Ch6twNMc.js",
@@ -26,7 +26,7 @@
       "_NativeCityOrthoPack-CJ_mbBmg.js",
       "_palette-B6MFynYc.js",
       "_NativeCityOttoEncounter-BpSusNA2.js",
-      "_TournamentBracketScene-DYaJp0pm.js",
+      "_TournamentBracketScene-j9mJvKuC.js",
       "_AttackMoves-B-lq5s5T.js",
       "_CityEnvironment-AhQf9g8O.js",
       "_WebGl2Support-hZXjXmi-.js",
@@ -196,16 +196,16 @@
       "_AttackMoves-B-lq5s5T.js"
     ]
   },
-  "_PrivacyLink-doGPMUvL.js": {
-    "file": "assets/PrivacyLink-doGPMUvL.js",
+  "_PrivacyLink-Dfun7YcL.js": {
+    "file": "assets/PrivacyLink-Dfun7YcL.js",
     "name": "PrivacyLink",
     "imports": [
       "_NativeCityOttoEncounter-BpSusNA2.js",
-      "_TournamentBracketScene-DYaJp0pm.js"
+      "_TournamentBracketScene-j9mJvKuC.js"
     ]
   },
-  "_TournamentBracketScene-DYaJp0pm.js": {
-    "file": "assets/TournamentBracketScene-DYaJp0pm.js",
+  "_TournamentBracketScene-j9mJvKuC.js": {
+    "file": "assets/TournamentBracketScene-j9mJvKuC.js",
     "name": "TournamentBracketScene",
     "imports": [
       "_registeredFighters-Ch6twNMc.js",
@@ -372,7 +372,7 @@
     "src": "assets/coop-campaign/animations/handsome-actions-v2-20261014.webp"
   },
   "creator.html": {
-    "file": "assets/creator-Hk1PtQOs.js",
+    "file": "assets/creator-C-UToj74.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -409,7 +409,7 @@
     ]
   },
   "fighter.html": {
-    "file": "assets/fighter-Dtbkh5Zf.js",
+    "file": "assets/fighter-DugeaUx-.js",
     "name": "fighter",
     "src": "fighter.html",
     "isEntry": true,
@@ -420,8 +420,8 @@
       "_rankedDuels-ClwRnQoP.js",
       "_palette-B6MFynYc.js",
       "_NativeCityOttoEncounter-BpSusNA2.js",
-      "_TournamentBracketScene-DYaJp0pm.js",
-      "_PrivacyLink-doGPMUvL.js",
+      "_TournamentBracketScene-j9mJvKuC.js",
+      "_PrivacyLink-Dfun7YcL.js",
       "_leagueContent-CpjltF06.js"
     ]
   },
@@ -618,7 +618,7 @@
     ]
   },
   "src/render/scenes/arena/ArenaModule.ts": {
-    "file": "assets/ArenaModule-2BNH4MFq.js",
+    "file": "assets/ArenaModule-CZP94g_i.js",
     "name": "ArenaModule",
     "src": "src/render/scenes/arena/ArenaModule.ts",
     "isDynamicEntry": true,
@@ -629,12 +629,12 @@
       "_rankedDuels-ClwRnQoP.js",
       "_palette-B6MFynYc.js",
       "_NativeCityOttoEncounter-BpSusNA2.js",
-      "_TournamentBracketScene-DYaJp0pm.js",
-      "_CityTournamentBoardController-DRpu04qi.js"
+      "_TournamentBracketScene-j9mJvKuC.js",
+      "_CityTournamentBoardController-Dri0ifX3.js"
     ]
   },
   "src/render/scenes/village/NativeCityModule.ts": {
-    "file": "assets/NativeCityModule-DaiBHroj.js",
+    "file": "assets/NativeCityModule-BbdaAiZk.js",
     "name": "NativeCityModule",
     "src": "src/render/scenes/village/NativeCityModule.ts",
     "isDynamicEntry": true,
@@ -646,10 +646,10 @@
       "_NativeCityOrthoPack-CJ_mbBmg.js",
       "_palette-B6MFynYc.js",
       "_NativeCityOttoEncounter-BpSusNA2.js",
-      "_TournamentBracketScene-DYaJp0pm.js",
+      "_TournamentBracketScene-j9mJvKuC.js",
       "_AttackMoves-B-lq5s5T.js",
-      "_CityTournamentBoardController-DRpu04qi.js",
-      "_PrivacyLink-doGPMUvL.js",
+      "_CityTournamentBoardController-Dri0ifX3.js",
+      "_PrivacyLink-Dfun7YcL.js",
       "_WebGl2Support-hZXjXmi-.js",
       "_PlayerLook-Bb3gqXoy.js",
       "_NativeCityTreeShadow-BmTBhg-P.js",

@@ -268,7 +268,7 @@
       },
       "statsStep": "In final, ask for the grade allocation: power = damage dealt, toughness = damage taken cut, speed = shorter rest between attacks. Every grade min..max, the sum exactly budget; skipped = every grade default. Only AI duels between registered fighters use them.",
       "language": "Record the language the user wrote the concept and move names in (profile.language).",
-      "update": "An account has one fighter. To change its concept, move names, stats or art later, repack and submit with its fighterId: it keeps its ID and duel record."
+      "update": "An account can register up to three fighters. Omit fighterId for a new fighter. To change an existing fighter's concept, move names, stats or art, repack and submit with its fighterId: it keeps its ID and duel record without using another slot."
     },
     "state": {
       "fields": [
@@ -462,12 +462,12 @@
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "8f4f50fbe20af1b18fd3babc41cf8cc3ad0f42747a01bd16d05812406de5ce01",
+  "revision": "5f2345620b4a4dd9acc1808298b4242997ec3a76f4a6156bcf29fa88e35f4303",
   "provenance": {
-    "sourceCommit": "350a26047698dacde576703b09a874bca6af8791",
+    "sourceCommit": "0e389f08ad869e16bd81bce71fd01e865a377b9b",
     "sourceDirty": false,
     "sourceFiles": {
-      "tools/ai-fighter/creation-context.mjs": "3aecbfcae1c7047a4904d3070ed6e6ff7679f48d7ad70ac64c2838847ae655c8",
+      "tools/ai-fighter/creation-context.mjs": "3327e989a2fed79ce421d803b34dcbb6e78312090d8f35cd2fdd10fc2f47547f",
       "tools/ai-fighter/export-creation-context.mjs": "76688c3976f500b3b71fc2eccd7552eefc52b6eb44e6a687c9f2b58edbc0b252",
       "contracts/ai-fighter/v1/contract-source.mjs": "e340e3911884ca77404e80a1b07d6c9bd8e5bb2765a1bda9b678ece019c09d24",
       "src/world/native-city-combat.json": "0eb2dea149253f08ddc7067b0f3388f9f10dfe3cae9c8485d2e13a9aefa632be",
