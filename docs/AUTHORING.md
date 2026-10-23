@@ -67,13 +67,17 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 | `schemaVersion`, `specVersion` | JSON 구조와 제작 계약 버전 |
 | `localId` | 로컬 작업 식별자. 서버 선수 ID가 아니다 |
 | `profile` | 이름, 소개, 초상·미리보기의 애셋 ID와 crop |
+| `profile.language`, `profile.concept`, `profile.moves` | 선택. 작성 언어(`ko`·`en`), 컨셉(세계관, 800자), 표준 동작 `combo`·`slam`·`dash`·`block` 네 개의 기술 이름(24자)·설명(160자). 넣을 때는 네 개 모두 넣는다 |
 | `combat.kitId` | `standard-duel`. 서버가 관리할 규칙의 예약 ID |
+| `combat.stats` | 선택. 능력치 등급 `power`·`toughness`·`speed`, 각 1–5, 합은 정확히 9. 없으면 모두 3이다 |
 | `appearance` | 정사영, 16도, 오른쪽 원본, 왼쪽 반전, 몸높이 400, 배율 1 |
 | `assets` | 실제 파일의 ID, 경로, MIME, SHA-256, 바이트, 너비·높이 |
 | `clips` | 필수 동작의 시트, 프레임, 기준점, 시간, 접촉 표식 |
 
 허용하지 않은 필드는 거절한다. 소유자 ID, 선수 ID, 승인 상태, HP, 피해, 사거리, 실행 코드는 서버가 소유한다.
-성격이나 소개는 표시용 데이터다. AI나 게임에 실행을 지시하는 문장이 아니다.
+`combat.stats`는 등급 배분일 뿐이다. 서버가 등급을 자체 수치로 바꾸고, 등록 선수끼리의 AI 대결에만 쓴다.
+성격·소개·컨셉·기술 이름은 표시용 데이터다. 새 동작을 만들거나 AI나 게임에 실행을 지시하는 문장이 아니다.
+새 필드는 서버의 `/spec` `features`에 `profile-extras-1`·`combat-stats-1`이 있을 때만 제출한다. 없으면 제출 도구가 업로드 전에 멈춘다.
 `standard-duel`을 선택해도 경쟁 규칙의 통합이나 서버 연결이 완료되지는 않는다.
 
 ## 좌표와 프레임

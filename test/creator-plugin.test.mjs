@@ -203,13 +203,18 @@ test('final package tracks every asset and metadata-only edits preserve animatio
   const dir = `output/${sessionId}-work/artifacts/final/v1`;
   await cp(path.join(kitRoot, 'examples', 'sparring-bot'), path.join(f.root, dir), { recursive: true });
   const manifestPath = `${dir}/fighter.json`, manifest = JSON.parse(await readFile(path.join(f.root, manifestPath), 'utf8'));
-  await f.change({ type: 'profile', name: manifest.profile.name, description: manifest.profile.description, feedback: 'Fixture profile' });
+  const { name, description, language, concept, moves } = manifest.profile, extras = { language, concept, moves, stats: manifest.combat.stats };
+  // The recorded profile must carry the package's concept, move names and grades too.
+  await f.change({ type: 'profile', name, description, feedback: 'Profile without the extras' });
+  await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Extras missing' }), /profile-mismatch/);
+  await assert.rejects(f.change({ type: 'profile', name, description, ...extras, stats: { power: 5, toughness: 5, speed: 5 }, feedback: 'Over budget' }));
+  await f.change({ type: 'profile', name, description, ...extras, feedback: 'Fixture profile' });
   await f.change({ type: 'package', files: [manifestPath], note: 'Geometric format fixture; not generated art' });
   assert.equal((await f.store.read(sessionId)).package.files.length, manifest.assets.length + 1);
   const evidence = await f.put('final-review.txt', 'Synthetic review fixture');
   await f.change({ type: 'package-review', verdict: 'passed', evidence: [evidence], feedback: 'Synthetic acceptance' });
   assert.equal((await f.store.inspect(sessionId)).decision.canAdvance, true);
-  await f.change({ type: 'profile', name: 'Renamed', description: manifest.profile.description, feedback: 'Change only the name' });
+  await f.change({ type: 'profile', name: 'Renamed', description, ...extras, feedback: 'Change only the name' });
   let inspected = await f.store.inspect(sessionId);
   assert.ok(inspected.decision.blockers.includes('package-unchecked'));
   assert.ok(Object.values(inspected.effectiveItems).every(item => item.selectedVersion === 'v1'));

@@ -63,6 +63,14 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
       if (!parsed.ok || !validateFighter(parsed.data).ok) throw new Error(CHANGED);
       const directory = path.dirname(after.location);
       if ((await lstat(path.join(directory, 'assets'))).isSymbolicLink()) throw new Error(CHANGED);
+      // A server older than this kit's contract rejects the optional profile extras and duel grades; say so before uploading.
+      const { profile, combat } = parsed.data, used = [
+        ...(['language', 'concept', 'moves'].some(key => key in profile) ? ['profile-extras-1'] : []), ...('stats' in combat ? ['combat-stats-1'] : [])];
+      if (used.length) {
+        const features = (await remote.request('spec'))?.data?.features ?? [];
+        const missing = used.filter(feature => !features.includes(feature));
+        if (missing.length) return { ok: false, stage: 'remote-spec', code: 'server-feature-missing', errors: missing };
+      }
       const created = await remote.request('submissions', { method: 'POST', headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey }, body: manifestText });
       if (created.stage !== 'uploading' || created.code === 'upload-expired') return created;
       for (const asset of parsed.data.assets) {

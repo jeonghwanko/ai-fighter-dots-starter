@@ -118,8 +118,19 @@ export function validateFighter(data) {
     }
   }
   for (const [index, asset] of data.assets.entries()) if (!used.has(asset.id)) add('UNUSED_ASSET', `/assets/${index}/id`, 'referenced asset', asset.id);
+  // The schema bounds each grade; only a sum check keeps every allocation on one budget.
+  if (data.combat.stats) {
+    const total = spec.combatStats.keys.reduce((sum, key) => sum + data.combat.stats[key], 0);
+    if (total !== spec.combatStats.budget) add('STATS_BUDGET', '/combat/stats', spec.combatStats.budget, total);
+  }
   return { ok: errors.length === 0, stage: 'references-and-geometry', errors, assetBytes: bytes, decodedPixels: pixels,
     pending: ['bytes-hashes-and-full-decode', 'runtime-preview', 'visual-review', 'server-registration'] };
+}
+
+/** The duel grades a valid manifest fights with: its `combat.stats`, or every grade at the default (the engine before stats). */
+export function toDuelStats(data) {
+  const stats = data?.combat?.stats;
+  return Object.fromEntries(spec.combatStats.keys.map(key => [key, stats ? stats[key] : spec.combatStats.default]));
 }
 
 /** A side-only preview adapter for the existing left/right consumers; not a registered world pack. */

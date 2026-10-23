@@ -6,6 +6,7 @@ import path from 'node:path';
 import { z } from 'zod';
 import { fetchCreationContext, reviewCreationProgress } from './creation-context.mjs';
 import { makePackageValidator } from './package-access.mjs';
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
 export const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const versionId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/);
@@ -19,7 +20,15 @@ export const changeSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('restore'), item: versionId, version: versionId, feedback: note }).strict(),
   z.object({ type: z.literal('revision'), item: versionId, feedback: note }).strict(),
   z.object({ type: z.literal('delegate'), groups: z.array(z.string()).max(5), feedback: note }).strict(),
-  z.object({ type: z.literal('profile'), name: z.string().min(1).max(100), description: z.string().max(2000), feedback: note }).strict(),
+  // Concept, move names and duel grades are optional; their limits are the contract's (spec.json profileExtras / combatStats).
+  z.object({ type: z.literal('profile'), name: z.string().min(1).max(100), description: z.string().max(2000),
+    language: z.enum(spec.profileExtras.languages).optional(), concept: z.string().trim().min(1).max(spec.profileExtras.conceptMaxLength).optional(),
+    moves: z.object(Object.fromEntries(spec.profileExtras.namedMoves.map(move => [move, z.object({
+      name: z.string().trim().min(1).max(spec.profileExtras.moveNameMaxLength),
+      description: z.string().trim().min(1).max(spec.profileExtras.moveDescriptionMaxLength) }).strict()]))).strict().optional(),
+    stats: z.object(Object.fromEntries(spec.combatStats.keys.map(key => [key, z.number().int().min(spec.combatStats.min).max(spec.combatStats.max)]))).strict()
+      .refine(stats => Object.values(stats).reduce((sum, grade) => sum + grade, 0) === spec.combatStats.budget, 'stats-budget').optional(),
+    feedback: note }).strict(),
   z.object({ type: z.literal('package'), files, note }).strict(),
   z.object({ type: z.literal('package-review'), verdict: z.enum(['passed', 'failed']), evidence: files, feedback: note }).strict(),
   z.object({ type: z.literal('advance') }).strict(),
@@ -241,14 +250,20 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
         if (event.groups.some(g => !context.workflow.groups.some(group => group.id === g))) fail('unknown-group');
         state.delegatedGroups = [...new Set(event.groups)];
       } else if (event.type === 'profile') {
-        state.profile = { name: event.name, description: event.description, selected: true };
+        const { type, feedback, ...profile } = event;
+        state.profile = { ...profile, selected: true };
       } else if (event.type === 'package') {
         const manifests = event.files.filter(p => p.endsWith('/fighter.json'));
         if (manifests.length !== 1) fail('package-manifest-required');
         const validation = await validatePackage(manifests[0]);
         if (!validation.ok) fail('package-file-validation-failed');
         const manifest = await readJson(await localPath(root, manifests[0]));
-        if (manifest.profile.name !== state.profile.name || manifest.profile.description !== state.profile.description) fail('package-profile-mismatch');
+        // The package carries exactly the recorded profile: an extra absent from one side is a mismatch too.
+        const canonical = value => JSON.stringify(value ?? null, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
+          ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v);
+        const same = (a, b) => canonical(a) === canonical(b);
+        if (['name', 'description', 'language', 'concept', 'moves'].some(key => !same(manifest.profile[key], state.profile[key]))
+          || !same(manifest.combat.stats, state.profile.stats)) fail('package-profile-mismatch');
         const base = path.posix.dirname(manifests[0]);
         const allFiles = [...event.files, ...manifest.assets.map(asset => `${base}/${asset.path}`)];
         state.package = { files: await snapshots(allFiles), basisHash: packageBasis(state), contextRevision: state.contextRevision,

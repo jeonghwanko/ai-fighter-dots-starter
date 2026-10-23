@@ -107,10 +107,42 @@
       "purpose": "넘어짐·착지·누움. 일어서기 프레임도 명시."
     }
   },
+  "features": [
+    "profile-extras-1",
+    "combat-stats-1"
+  ],
+  "profileExtras": {
+    "languages": [
+      "ko",
+      "en"
+    ],
+    "conceptMaxLength": 800,
+    "namedMoves": [
+      "combo",
+      "slam",
+      "dash",
+      "block"
+    ],
+    "moveNameMaxLength": 24,
+    "moveDescriptionMaxLength": 160,
+    "note": "컨셉과 기술 이름·설명은 표시용 소개 텍스트다. 기술 이름은 표준 키트의 고정 동작에 붙는다. 새 동작이나 AI 지시가 아니다."
+  },
+  "combatStats": {
+    "keys": [
+      "power",
+      "toughness",
+      "speed"
+    ],
+    "min": 1,
+    "max": 5,
+    "budget": 9,
+    "default": 3,
+    "note": "제작자는 등급 배분만 제출한다. 모든 등급의 합은 budget과 같아야 한다. 없으면 모두 default다. 서버가 등급을 자체 수치로 바꾼다."
+  },
   "combatKits": [
     {
       "id": "standard-duel",
-      "description": "서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다.",
+      "description": "서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다. 능력치 등급 배분(combat.stats)만 고른다.",
       "integration": "pending-game-integration",
       "currentConsumers": {
         "player": "FighterFightSkin / Lupin rules",

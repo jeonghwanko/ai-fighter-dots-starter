@@ -86,10 +86,11 @@ async function connectInProcess({ root: packageRoot = root, remote }) {
   const client = new Client({ name: 'submission-test', version: '1.0.0' });
   await client.connect(clientSide); return client;
 }
-function recordingRemote() {
+function recordingRemote(features = ['profile-extras-1', 'combat-stats-1']) {
   const requests = [], submissionId = crypto.randomUUID();
   return { requests, remote: { request: async (route, options = {}) => {
     requests.push({ route, method: options.method ?? 'GET', body: options.body });
+    if (route === 'spec') return { ok: true, stage: 'public-contract', data: { features } };
     if (route === 'submissions') return { ok: true, stage: 'uploading', submissionId };
     if (route.endsWith('/submit')) return { ok: true, stage: 'queued', submissionId, pending: ['server-validation', 'registration'] };
     return { ok: true, stage: 'uploaded' };
@@ -101,11 +102,19 @@ test('submit uploads exactly the validated manifest and asset bytes', async () =
     const result = await client.callTool({ name: 'submit_fighter_package', arguments: { manifestPath: 'examples/sparring-bot/fighter.json', idempotencyKey: crypto.randomUUID() } });
     assert.equal(result.structuredContent.stage, 'queued', JSON.stringify(result.structuredContent));
     const manifestText = await readFile(new URL('../examples/sparring-bot/fighter.json', import.meta.url), 'utf8');
-    assert.equal(requests[0].body, manifestText);
+    assert.equal(requests.find(r => r.route === 'submissions').body, manifestText);
     const uploads = requests.filter(r => r.method === 'PUT');
     assert.deepEqual(uploads.map(r => r.route.split('/').at(-1)), example.assets.map(a => a.id));
     for (const [index, upload] of uploads.entries())
       assert.equal(createHash('sha256').update(upload.body).digest('hex'), example.assets[index].sha256);
+  } finally { await client.close(); }
+});
+test('a package with concept, move names or grades is not uploaded to a server that predates them', async () => {
+  const { requests, remote } = recordingRemote([]), client = await connectInProcess({ remote });
+  try {
+    const result = await client.callTool({ name: 'submit_fighter_package', arguments: { manifestPath: 'examples/sparring-bot/fighter.json', idempotencyKey: crypto.randomUUID() } });
+    assert.equal(result.structuredContent.code, 'server-feature-missing', JSON.stringify(result.structuredContent));
+    assert.deepEqual(requests.map(r => r.route), ['spec']);
   } finally { await client.close(); }
 });
 test('validate and submit share one serial decoder; a busy or invalid package is never uploaded', async () => {
