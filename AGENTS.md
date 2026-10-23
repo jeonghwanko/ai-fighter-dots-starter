@@ -32,7 +32,17 @@ This repository lets each user create their own fighter through Dot. Read
   measurement and validation within the agreed step without making the user approve each command.
   Show actual images/animation, not only progress text. Preserve selected versions and revise affected
   assets only. Follow the feedback and work-note rules in `docs/DOT-CREATION.md`.
-- Use the bundled `vendor/sprite-gen/SKILL.md` and its referenced workflow. `npm run sprite:setup`
+- Before generation, follow `docs/DELIVERY.md`: verify generation access and actual image/file delivery to the
+  current user conversation separately. For appearance previews that do not require a PC, check the host
+  direct image-generation/display route first, within the user's environment/account/model constraints.
+  Local generation requires a verified delivery route; tool names visible to the model do not prove that
+  the selected Library helper can use them. Run `creation:delivery` when local execution is available.
+  Keep generation, local save, Library save, conversation display, review and user selection distinct.
+  Queued panels, text reports and local paths are not displayed previews, including across delegated chats.
+  Recover existing outputs before any retry; a delivery failure is not permission to regenerate. New
+  generation needs an explicit new-generation/edit request. Respect capacity stop conditions and the
+  selected model; no automatic model/provider switch or helper/security-rule bypass.
+- For local generation, use the bundled `vendor/sprite-gen/SKILL.md` and its referenced workflow. `npm run sprite:setup`
   installs this checkout's source in its own venv. `npm run sprite -- <command>` runs that environment.
 - Use the current user's generation account. Never copy the maintainer's credentials, home paths,
   subscription confirmations, or saved choices to another user. Preserve upstream provider selection and billing rules.
@@ -95,7 +105,8 @@ This repository lets each user create their own fighter through Dot. Read
   projected ground references; never substitute guide labels for output observations.
   Save video latents before decoding when supported. Isolate temporal decoding artifacts on
   the same latent; do not resample diffusion or silently reduce tile size to diagnose decoding.
-- Creation is local. Any signed-in user may upload without an invitation or manual approval.
+- Packaging and registration use local files; supported appearance previews may be generated and displayed
+  directly in the current conversation. Any signed-in user may upload without an invitation or manual approval.
   Submit only within the user's request, reuse the same idempotency key for retries, and distinguish
   validation failures from post-publication moderation. Validated registrations become usable automatically.
   Never overwrite a registered immutable package.
