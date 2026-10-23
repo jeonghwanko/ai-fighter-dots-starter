@@ -118,6 +118,54 @@ test('three fighters share an account; a fourth is refused and updates preserve 
   } finally { await db.close(); }
 });
 
+test('profiles use account slots, expose only public fields and promote through validated packages with the same world link', async () => {
+  const db = await migratedDatabase();
+  try {
+    const owner = crypto.randomUUID(), other = crypto.randomUUID(), key = crypto.randomUUID();
+    await db.query('insert into auth.users values($1),($2)', [owner, other]);
+    const profile = { name: 'Profile character', description: 'Introduction', portrait: '/art/character-profiles/test-v1.webp', color: '#ffeebb' };
+    const create = async (k = crypto.randomUUID(), p = profile) => (await db.query('select to_jsonb(af_register_character_profile($1,$2,$3,$4)) as value', [owner,k,p,'kkumssi'])).rows[0].value;
+    const first = await create(key);
+    assert.equal(first.status, 'profile'); assert.equal(first.submission_id, null); assert.equal(first.manifest_sha, null);
+    assert.equal(first.runtime_approved, false); assert.equal(first.duel_approved, false);
+    assert.equal((await create(key)).id, first.id);
+    await assert.rejects(create(key,{...profile,name:'Changed'}), /idempotency-conflict/);
+    await assert.rejects(create(crypto.randomUUID(),{...profile,portrait:'https://other.test/image.webp'}), /invalid-profile/);
+    const second = await create(), third = await create();
+    await assert.rejects(create(), /fighter-quota/);
+    await assert.rejects(db.query('update af_fighters set runtime_approved=true where id=$1',[first.id]), /af_fighters/);
+    assert.equal((await db.query('select count(*)::int as n from af_analytics_outbox')).rows[0].n,0);
+    await db.exec('set role anon');
+    assert.equal((await db.query('select id,profile from af_public_character_profiles')).rows.length,3);
+    await assert.rejects(db.query('select owner_id from af_fighters'), /permission denied/);
+    await assert.rejects(db.query('select * from af_submissions'), /permission denied/);
+    await assert.rejects(create(), /permission denied/);
+    await db.exec(`reset role; set role authenticated; set request.jwt.claim.sub='${other}';`);
+    assert.equal((await db.query('select id from af_fighters')).rows.length,0);
+    await assert.rejects(create(), /permission denied/);
+    await db.exec('reset role');
+    // Complete a real validated package transition at capacity, without another slot or ID.
+    const text = JSON.stringify(example), hash = await sha256(new TextEncoder().encode(text));
+    const submission = (await db.query('select to_jsonb(af_create_submission($1,$2,$3,$4,$5,$6)) as value', [owner,crypto.randomUUID(),text,hash,example.assets.reduce((n,a)=>n+a.bytes,0),first.id])).rows[0].value;
+    for (const a of example.assets) await db.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta',`${owner}/${submission.id}/${a.id}.webp`,{size:a.bytes}]);
+    await db.query('select af_submit($1,$2)',[owner,submission.id]);
+    const claim = (await db.query('select to_jsonb(af_claim($1)) as value',[submission.id])).rows[0].value;
+    await db.query('select af_finish($1,$2,$3,true,$4)',[submission.id,claim.lease_token,hash,{validatorVersion:VALIDATOR_VERSION,stage:'bytes-hashes-and-full-decode',errors:[]}]);
+    const promoted = (await db.query('select status,account_slot,runtime_approved from af_fighters where id=$1',[first.id])).rows[0];
+    assert.deepEqual(promoted,{status:'registered',account_slot:first.account_slot,runtime_approved:true});
+    assert.equal((await db.query('select world_id from af_world_fighters where fighter_id=$1',[first.id])).rows[0].world_id,'kkumssi');
+    await db.query('insert into af_admins(owner_id) values($1)',[owner]);
+    assert.equal((await db.query("select af_admin_fighters($1,'active')->>'total' as total",[owner])).rows[0].total,'3');
+    await db.query("select af_moderate_fighter($1,$2,0,'remove','test')",[owner,second.id]);
+    await db.exec('set role anon');
+    assert.deepEqual((await db.query('select id from af_public_character_profiles')).rows.map(row=>row.id),[third.id]);
+    await db.exec('reset role');
+    await db.query("select af_moderate_fighter($1,$2,1,'restore','test')",[owner,second.id]);
+    const restored = (await db.query('select status,runtime_approved,duel_approved from af_fighters where id=$1',[second.id])).rows[0];
+    assert.deepEqual(restored,{status:'profile',runtime_approved:false,duel_approved:false});
+  } finally { await db.close(); }
+});
+
 test('an expired upload closes instead of blocking the creator; integers written as 5258.0 are accepted', async () => {
   const db = await migratedDatabase();
   try {
