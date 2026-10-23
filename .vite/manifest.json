@@ -1,4 +1,12 @@
 {
+  "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
+    "file": "assets/basis_transcoder-o4Hde_L7.js",
+    "src": "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.js"
+  },
+  "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm": {
+    "file": "assets/basis_transcoder-VXdx5NbI.wasm",
+    "src": "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
+  },
   "_AttackMoves-B-lq5s5T.js": {
     "file": "assets/AttackMoves-B-lq5s5T.js",
     "name": "AttackMoves"
@@ -228,8 +236,8 @@
     "file": "assets/dist-CH8CalSN.js",
     "name": "dist"
   },
-  "_fighterCreator-D3RY1od0.js": {
-    "file": "assets/fighterCreator-D3RY1od0.js",
+  "_fighterCreator-DCFjqNyQ.js": {
+    "file": "assets/fighterCreator-DCFjqNyQ.js",
     "name": "fighterCreator",
     "imports": [
       "_registeredFighters-Ch6twNMc.js",
@@ -331,13 +339,13 @@
     ]
   },
   "admin.html": {
-    "file": "assets/admin-Cn2x7NMT.js",
+    "file": "assets/admin-oCoBJnHL.js",
     "name": "admin",
     "src": "admin.html",
     "isEntry": true,
     "imports": [
       "__oddbout-analytics-CVMKP0F5.js",
-      "_fighterCreator-D3RY1od0.js",
+      "_fighterCreator-DCFjqNyQ.js",
       "_palette-BZO3s971.js"
     ],
     "css": [
@@ -353,7 +361,7 @@
     "src": "assets/coop-campaign/animations/handsome-actions-v2-20261014.webp"
   },
   "creator.html": {
-    "file": "assets/creator-BsJIA6um.js",
+    "file": "assets/creator-CKM4dyiX.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -362,7 +370,7 @@
       "__oddbout-analytics-CVMKP0F5.js",
       "__oddbout-milestones-ZGuRIpfF.js",
       "_siteChrome-Bz48REf0.js",
-      "_fighterCreator-D3RY1od0.js",
+      "_fighterCreator-DCFjqNyQ.js",
       "_NativeCityOrthoPack-CJ_mbBmg.js",
       "_fighterSheet-De8wYbIQ.js",
       "_rankedDuels-CB3XRYQ1.js",
@@ -421,14 +429,6 @@
     "css": [
       "assets/league-BEOm7r-2.css"
     ]
-  },
-  "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
-    "file": "assets/basis_transcoder-o4Hde_L7.js",
-    "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js"
-  },
-  "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm": {
-    "file": "assets/basis_transcoder-VXdx5NbI.wasm",
-    "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
   },
   "privacy.html": {
     "file": "assets/privacy-DiItmvgn.js",
