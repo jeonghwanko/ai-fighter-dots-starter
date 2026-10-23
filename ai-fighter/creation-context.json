@@ -464,7 +464,7 @@
   },
   "revision": "5f2345620b4a4dd9acc1808298b4242997ec3a76f4a6156bcf29fa88e35f4303",
   "provenance": {
-    "sourceCommit": "0e389f08ad869e16bd81bce71fd01e865a377b9b",
+    "sourceCommit": "ef66528b7f3febc10d9e0b1e29e9b439bdc82491",
     "sourceDirty": false,
     "sourceFiles": {
       "tools/ai-fighter/creation-context.mjs": "3327e989a2fed79ce421d803b34dcbb6e78312090d8f35cd2fdd10fc2f47547f",
