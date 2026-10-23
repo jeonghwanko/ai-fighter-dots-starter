@@ -15,7 +15,7 @@ export function publicSiteText(text) {
     .replaceAll('./league.html', './')
     .replace(/((?:\\)?["'])league\.html(?=(?:\\)?["'])/g, '$1');
 }
-export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'about.html', 'docs.html', 'privacy.html', 'admin.html'];
+export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'about.html', 'docs.html', 'privacy.html', 'admin.html', 'world.html'];
 
 function assertPublicContent(data, path) {
   if (!['sb_secret_', 'afw_', 'AI_FIGHTER_WAKE_TOKEN', 'PRIVATE KEY', 'api.render.com', 'eyJ'].some(value => data.includes(value))) return;
