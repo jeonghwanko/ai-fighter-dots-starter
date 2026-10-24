@@ -18,6 +18,7 @@ export const copy = {
     permissionNote:'생성 구독이나 결제 권한은 포함되지 않습니다.', approve:'연결 승인', cancel:'취소', loginNote:'PC 설치 없이 연결됩니다.',
     privacy:'개인정보', help:'도움말', returnDots:'Dots로 돌아가기', loading:'연결 요청을 확인하고 있습니다.',
     login:'캐릭터를 소유할 계정으로 로그인하세요.', consent:'Dots에서 시작한 요청인지 확인해 주세요.',
+    accountChoice:'이 계정으로 연결할까요?', continueAccount:'이 계정으로 계속', switchAccount:'다른 계정 사용', switchingAccount:'다른 계정으로 로그인할 준비를 하고 있습니다.',
     noRequest:'Dots의 ODDBOUT 플러그인에서 연결을 시작해 주세요.', failed:'요청이 만료되었거나 연결할 수 없습니다. Dots에서 다시 시도해 주세요.',
     unsafe:'지원하는 연결 요청이 아닙니다. 권한을 승인하지 않았습니다.', googleAccount:'ODDBOUT 계정', connecting:'Google 로그인으로 이동합니다.', approving:'연결을 마무리하고 있습니다.',
     emailOption:'이메일 계정으로 로그인', emailLabel:'이메일', passwordLabel:'비밀번호', emailSignIn:'로그인', emailConnecting:'로그인하고 있습니다.', emailFailed:'이메일 또는 비밀번호를 확인해 주세요.'
@@ -30,12 +31,15 @@ export const copy = {
     permissionNote:'No access to generation subscriptions or payments.', approve:'Approve connection', cancel:'Cancel', loginNote:'No PC setup required.',
     privacy:'Privacy', help:'Help', returnDots:'Return to Dots', loading:'Checking your connection request.',
     login:'Use the account that will own your fighter.', consent:'Confirm that you started this request in Dots.',
+    accountChoice:'Connect with this account?', continueAccount:'Continue with this account', switchAccount:'Use another account', switchingAccount:'Preparing sign-in with another account.',
     noRequest:'Start the connection from the ODDBOUT plugin in Dots.', failed:'This request expired or could not be completed. Start again from Dots.',
     unsafe:'This connection request is not supported. No access was approved.', googleAccount:'ODDBOUT account', connecting:'Opening Google sign-in.', approving:'Completing your connection.',
     emailOption:'Sign in with an email account', emailLabel:'Email', passwordLabel:'Password', emailSignIn:'Sign in', emailConnecting:'Signing in.', emailFailed:'Check your email and password and try again.'
   }
 };
-async function start() {
+export async function start({ document = globalThis.document, location = globalThis.location,
+  sessionStorage = globalThis.sessionStorage, navigator = globalThis.navigator,
+  history = globalThis.history, supabase = globalThis.supabase } = {}) {
   const byId = id => document.getElementById(id);
   let savedLanguage;
   try { savedLanguage = sessionStorage.getItem('oddbout-connect-language'); } catch {}
@@ -52,8 +56,10 @@ async function start() {
     byId('status').textContent = words[statusKey];
     byId('step-number').textContent = mode === 'consent' ? '02' : '01';
     byId('step-label').textContent = words[mode === 'consent' ? 'stepConsent' : 'stepConnect'];
-    byId('panel-title').textContent = words[mode === 'consent' ? 'consentTitle' : mode === 'error' ? 'errorTitle' : 'panelTitle'];
+    byId('panel-title').textContent = words[mode === 'consent' ? 'consentTitle' : mode === 'account' ? 'accountChoice' : mode === 'error' ? 'errorTitle' : 'panelTitle'];
     byId('login').hidden = mode !== 'login'; byId('consent').hidden = mode !== 'consent';
+    byId('account-choice').hidden = mode !== 'account';
+    byId('existing-account').textContent = accountEmail || '';
     byId('email-login').hidden = mode !== 'login';
     byId('login-note').hidden = mode !== 'login'; byId('retry-link').hidden = mode !== 'error';
     byId('account').textContent = accountEmail || words.googleAccount; byId('client').textContent = clientLabel;
@@ -73,7 +79,7 @@ async function start() {
   const key = 'oddbout-authorization-id', id = authorizationId(location.search, sessionStorage.getItem(key));
   if (!id) { state('error', 'noRequest'); return; }
   sessionStorage.setItem(key, id);
-  const auth = globalThis.supabase.createClient('https://ztfxxhtmtrvxvuxlqmgz.supabase.co',
+  const auth = supabase.createClient('https://ztfxxhtmtrvxvuxlqmgz.supabase.co',
     'sb_publishable_6UkV7tRAQ1P4qss5cTYSwQ_kVxSIv_V', { auth: { flowType: 'pkce', storage: sessionStorage,
       storageKey: 'oddbout-cloud-consent', detectSessionInUrl: true, persistSession: true } }).auth;
   const go = value => {
@@ -84,8 +90,6 @@ async function start() {
   const { data: { session }, error } = await auth.getSession();
   history.replaceState(null, '', '/connect.html?authorization_id=' + encodeURIComponent(id) + '&lang=' + language);
   if (error) { fail(); return; }
-  if (!session || session.user.is_anonymous) {
-    state('login', 'login');
     byId('login').onclick = async () => {
       byId('login').disabled = true; statusKey = 'connecting'; render();
       const { error } = await auth.signInWithOAuth({ provider: 'google', options: {
@@ -104,9 +108,30 @@ async function start() {
       } catch { state('login', 'emailFailed'); }
       finally { byId('email-password').value = ''; byId('email-submit').disabled = byId('login').disabled = false; }
     };
-    return;
-  }
-  await showConsent(session);
+  byId('switch-account').onclick = async () => {
+    byId('switch-account').disabled = byId('continue-account').disabled = true;
+    statusKey = 'switchingAccount'; render();
+    try {
+      const result = await auth.signOut({ scope: 'local' });
+      if (result.error) { fail(); return; }
+      accountEmail = null; clientLabel = '';
+      byId('email-address').value = byId('email-password').value = '';
+      byId('email-login').open = false;
+      state('login', 'login');
+    } catch { fail(); }
+    finally { byId('switch-account').disabled = byId('continue-account').disabled = false; }
+  };
+  if (!session || session.user.is_anonymous) { state('login', 'login'); return; }
+  // An existing grant may immediately return a callback from getAuthorizationDetails.
+  // Ask which account to use before that call, so "connect another account" never silently reuses it.
+  accountEmail = session.user.email;
+  state('account', 'login');
+  byId('continue-account').onclick = async () => {
+    byId('switch-account').disabled = byId('continue-account').disabled = true;
+    try { await showConsent(session); }
+    catch { fail(); }
+    finally { byId('switch-account').disabled = byId('continue-account').disabled = false; }
+  };
   async function showConsent(session) {
   const details = await auth.oauth.getAuthorizationDetails(id);
   if (details.error || !details.data) { fail(); return; }

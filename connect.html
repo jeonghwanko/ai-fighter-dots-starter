@@ -4,8 +4,8 @@
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; connect-src https://ztfxxhtmtrvxvuxlqmgz.supabase.co; img-src 'self'; base-uri 'none'; form-action 'none'">
 <title>ODDBOUT · Dots 연결</title><link rel="icon" href="/art/ui/oddbout-logo.webp" type="image/webp">
 <link rel="preload" href="/fonts/Pretendard-Bold.woff2" as="font" type="font/woff2" crossorigin>
-<link rel="stylesheet" href="/cloud-connect/connect.css?v=e1791b4f67af">
-<script defer src="/cloud-connect/supabase.js"></script><script type="module" src="/cloud-connect/connect.mjs?v=65aa34fde994"></script></head>
+<link rel="stylesheet" href="/cloud-connect/connect.css?v=6d71874ad293">
+<script defer src="/cloud-connect/supabase.js"></script><script type="module" src="/cloud-connect/connect.mjs?v=89e01c3a6063"></script></head>
 <body>
 <header class="site-header"><a class="brand" href="/"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a>
 <nav class="languages" aria-label="Language"><button type="button" data-lang="en" lang="en">EN</button><span aria-hidden="true">/</span><button type="button" data-lang="ko" lang="ko">KR</button></nav></header>
@@ -17,6 +17,9 @@
 <section class="connection" aria-label="Account connection"><div class="step"><span id="step-number">01</span><span id="step-label" data-copy="stepConnect">계정 연결</span></div>
 <h2 id="panel-title" data-copy="panelTitle">계정을 선택하세요</h2>
 <p id="status" role="status" aria-live="polite">연결 요청을 확인하고 있습니다.</p>
+<section id="account-choice" hidden><div class="account-row"><span class="account-icon" aria-hidden="true">↗</span><p id="existing-account"></p></div>
+<button id="continue-account" class="primary" data-copy="continueAccount">이 계정으로 계속</button>
+<button id="switch-account" class="text-button" data-copy="switchAccount">다른 계정 사용</button></section>
 <button id="login" class="primary google" hidden><svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path fill="#4285F4" d="M21.6 12.23c0-.71-.06-1.39-.18-2.05H12v3.88h5.38a4.6 4.6 0 0 1-2 3.02v2.52h3.24c1.9-1.75 2.98-4.33 2.98-7.37Z"/><path fill="#34A853" d="M12 22c2.7 0 4.96-.9 6.62-2.4l-3.24-2.52c-.9.6-2.05.97-3.38.97-2.6 0-4.8-1.76-5.59-4.13H3.07v2.6A10 10 0 0 0 12 22Z"/><path fill="#FBBC05" d="M6.41 13.92a6 6 0 0 1 0-3.84v-2.6H3.07a10 10 0 0 0 0 9.04l3.34-2.6Z"/><path fill="#EA4335" d="M12 5.95c1.47 0 2.79.5 3.82 1.5l2.87-2.86A9.6 9.6 0 0 0 12 2a10 10 0 0 0-8.93 5.48l3.34 2.6A5.98 5.98 0 0 1 12 5.95Z"/></svg><span data-copy="google">Google로 계속하기</span><span class="arrow" aria-hidden="true">↗</span></button>
 <details id="email-login" class="email-login" hidden><summary data-copy="emailOption">이메일 계정으로 로그인</summary>
 <form id="email-form"><label for="email-address" data-copy="emailLabel">이메일</label><input id="email-address" type="email" name="email" autocomplete="username" required>
