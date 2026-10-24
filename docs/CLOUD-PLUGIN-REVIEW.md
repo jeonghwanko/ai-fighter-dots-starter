@@ -1,13 +1,15 @@
 # ODDBOUT cloud plugin review
 
-Status on 2026-10-24: **submitted; portal shows 1.0.2 · In review**.
+Status verified on 2026-10-24 at 11:54 UTC: **1.0.3 · In review**.
 Publication is still **Not published**; submission is not approval.
 This remote MCP submission is independent of the local MCP eligibility case.
 
 ## Final draft and public addresses
 
 - Portal: https://platform.openai.com/plugins/manage/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af
-- Version: `appsub_6adc695de1ec8191a9e9734d647cef44`, package `oddbout-dots` 1.0.2.
+- Current version: `appsub_c4f81422604c81919f02f879be61a50f`, package `oddbout-dots` 1.0.3.
+- Previous version: `appsub_6adc695de1ec8191a9e9734d647cef44`, package 1.0.2;
+  its pending review was withdrawn to submit the deletion-enabled revision.
 - Source: `plugins/oddbout-cloud/`. Publisher: verified individual **정환 고**.
 - Public MCP: https://mcp.oddbout.com/mcp
 - Google/email consent UI: https://oddbout.com/connect.html
@@ -34,10 +36,11 @@ OAuth client, live session, consent and revocation. The original Supabase URL,
 legacy Render URL and branded URL are explicitly accepted audiences of one
 service; ordinary database/storage access remains unavailable to OAuth tokens.
 
-Edge Function version 6 and the branded-audience migration are deployed.
+MCP Edge Function version 8, registration API version 30, the branded-audience
+migration and the owner-confirmed deletion migration are deployed.
 Render deployment `dep-dbe6lqjncjis73d6mmkg` serves gateway commit
 `4d745e42df6663f7e7384e6dac36d610ae029358`. Live checks verified the exact commit,
-branded resource metadata, hostname-specific challenge, nine tools and a branded
+branded resource metadata, hostname-specific challenge, eleven tools and a branded
 HTTP 401 authentication challenge. The portal verified the domain and completed
 OAuth with the dedicated reviewer. Its MCP scan reported no findings.
 The free Render instance can
@@ -62,7 +65,7 @@ Desktop and 390px layouts were inspected. The real reviewer email login and
 consent screen were verified. Existing game-site updates were fast-forwarded
 and preserved before publishing the connection and policy pages.
 
-## Submitted evidence and outcome
+## Initial 1.0.2 evidence and outcome
 
 - Five live non-publishing MCP cases passed on the dedicated review account:
   profile, registration readiness, overview contract, empty owned fighter list,
@@ -87,8 +90,8 @@ and preserved before publishing the connection and policy pages.
 - A non-blocking category finding remained: the scanner could not confirm
   Productivity. There were no blocking findings at submission.
 
-Await the external review decision. Do not submit the earlier drafts or claim
-that ordinary users can install this listing from the directory before approval.
+Do not submit the earlier hostname drafts or claim that ordinary users can
+install this listing from the directory before approval and publication.
 
 At initial submission no fighter was generated or published. The five recorded
 account checks and initial video did not exercise successful registration; that
@@ -109,4 +112,52 @@ No new artwork was generated. See [the registration record](CLOUD-MCP.md#실제-
 MCP function v7 clarifies intended-account checks, absolute host file inputs,
 original-byte recovery from Library/Page files, and the distinction between VM
 network policy and native connector access. Authentication and publication
-validation are unchanged. The submitted 1.0.2 listing remains under external review.
+validation are unchanged. The deletion-enabled 1.0.3 submission supersedes the
+initial 1.0.2 review as described below.
+
+## Deletion-enabled 1.0.3 review
+
+The existing public plugin identity and branded MCP URL are preserved. The
+previous review was cancelled, the 1.0.3 ZIP uploaded to the same plugin, and the
+public endpoint rescanned. The portal now lists both `prepare_fighter_deletion`
+and `delete_fighter` among eleven tools. Domain verification and the existing
+reviewer OAuth connection were retained. The MCP scan reported no findings.
+
+- Public and Korean listing text, capabilities, prompts and release notes cover
+  verified ownership, the exact account/name/scope, live session/client binding,
+  ten-minute confirmation expiry, snapshot recheck and idempotent retry.
+- The deletion scope is explicit: remove active/public listings and new-match
+  access, release the account slot, retain private originals and historical
+  records, and allow already-issued asset links to expire within 600 seconds.
+- All five positive and three negative review cases were imported from the ZIP.
+  Preparation is a separate no-execution case; explicit deletion of the
+  disposable reviewer fixture runs last. Already-deleted fixtures must be
+  reported honestly and never recreated implicitly.
+- The private reviewer instructions were updated for the now-populated test
+  account and the deletion sequence. Existing credentials remained only in the
+  portal's private reviewer fields; no credentials were added to the ZIP.
+- Eleven fresh public-gateway checks passed through normal password login,
+  DCR, PKCE and consent. Invalid tokens, wrong names and foreign ownership were
+  rejected. The review fixture remained registered and the test grant was revoked.
+- The public native deletion evidence is anonymized and explicitly describes a
+  separate authorized owner case; it does not claim the reviewer fixture was
+  deleted during these boundary checks.
+- Evidence: https://oddbout.com/cloud-plugin/review-20261024/deletion-checks.json
+  and https://oddbout.com/cloud-plugin/review-20261024/native-deletion-evidence.json.
+- Video: https://oddbout.com/cloud-plugin/review-20261024/walkthrough-with-deletion.mp4
+  (140.917 seconds, 1,500,577 bytes). It combines actual authentication and
+  service-response screenshots, not a recording of a ChatGPT conversation.
+- The five changed/new public evidence files returned HTTP 200 and matched the
+  final local bytes. Publication-preservation and ZIP integrity checks passed.
+- Source release: `cc45cff3a0288b6169539ce5127dc37ccff67b1b`; website deployment
+  commit `4ceee92`, buildId `84f9e01c-c8fb-49b5-bf31-f1809cd7fc1f`.
+- ZIP SHA-256: `beb1c6da37a137c62069a933b109e1d411aadf1af70e80a9d6776b63f52f5ded`.
+- The only metadata finding was the existing non-blocking category warning
+  that the scanner could not confirm Productivity. There were no blocking findings.
+- The user confirmed all six legal/policy attestations for 1.0.3 at the final
+  action. Submit was clicked on 2026-10-24 at approximately 11:53 UTC.
+  The portal returned to the plugin list with In review; reopening the same
+  plugin confirmed **1.0.3 · In review**, **MCP configuration Configured** and
+  **Publication Not published**. The list still labels the associated initial
+  MCP app version 1.0.0; the submitted package details show 1.0.3.
+  CI was not run. Await the external decision; this is not approval/publication.
