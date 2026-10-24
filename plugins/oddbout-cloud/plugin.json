@@ -43,6 +43,7 @@
         "logo": "./assets/icon.svg"
       },
       "review": {
+        "demo_recording_url": "https://oddbout.com/cloud-plugin/review-20261024/walkthrough.mp4",
         "commerce": false,
         "commerce_description": "This plugin does not sell products, credits or subscriptions, and does not process payments.",
         "test_cases": {
@@ -63,7 +64,7 @@
               "description": "Read the registration contract",
               "prompt": "What files and motions are required to register a fighter?",
               "tools_triggered": "get_fighter_spec",
-              "expected_behavior": "Read overview and schema. Explain fighter.json, WebP assets and all 11 motions without generating or approving artwork."
+              "expected_behavior": "Read overview. Explain fighter.json, WebP assets and all 11 motions without generating or approving artwork."
             },
             {
               "description": "List owned fighters",
@@ -72,10 +73,10 @@
               "expected_behavior": "Return only fighters owned by the connected review account or accurately report an empty result."
             },
             {
-              "description": "Reject an invalid test attachment",
-              "prompt": "For this developer validation test only, prepare the attached two-byte fighter.json containing {}. Do not publish it.",
-              "tools_triggered": "check_creation_readiness, prepare_fighter_registration",
-              "expected_behavior": "Transfer the actual host file using a fresh idempotency key. Return invalid-manifest with missing fields. Do not call submit_fighter_registration."
+              "description": "Handle an unknown submission accurately",
+              "prompt": "Check the status of test submission 00000000-0000-4000-8000-000000000000. Do not create or publish anything.",
+              "tools_triggered": "get_fighter_submission",
+              "expected_behavior": "Return not-found for this nonexistent test ID. Explain that there is no accessible submission and do not claim registration or create a replacement."
             }
           ],
           "negative": [

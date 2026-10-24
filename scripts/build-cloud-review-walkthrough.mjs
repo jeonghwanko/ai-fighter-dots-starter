@@ -1,0 +1,25 @@
+import { readFile, writeFile, mkdir } from 'node:fs/promises';
+import path from 'node:path';
+const output = path.resolve(process.argv[2] || 'output/cloud-review/site');
+const evidence = JSON.parse(await readFile('output/cloud-review/evidence.json', 'utf8'));
+if (evidence.status !== 'passed' || evidence.steps.length !== 5 || !evidence.testGrantRevoked) throw new Error('Verified evidence and cleanup required');
+const frames = evidence.steps.map(s => ({ title:s.title, tool:s.tool, args:s.arguments, result:s.response }));
+frames[1].result = { registration:evidence.steps[1].response.registration,
+  generation:evidence.steps[1].response.generation.status, delivery:evidence.steps[1].response.delivery.status,
+  package:evidence.steps[1].response.package.status, note:'Excerpt; full response linked below.' };
+frames[2].result = { ok:true, schemaVersion:evidence.steps[2].response.data.schemaVersion,
+  manifest:evidence.steps[2].response.data.input.manifest, assetsDirectory:evidence.steps[2].response.data.input.assetsDirectory,
+  imageEncoding:evidence.steps[2].response.data.input.imageEncoding,
+  motions:Object.keys(evidence.steps[2].response.data.motions).join(', '),
+  note:'Excerpt of the actual response. Full evidence is linked below.' };
+frames.push({ title:'Server access boundaries', tool:'tools/list + unauthenticated get_profile', args:{}, result:evidence.boundaries });
+frames.push({ title:'What this walkthrough verifies', tool:'Review scope', args:{}, result:{
+  completed:'Five actual hosted MCP cases using a dedicated review account, with OAuth PKCE S256.',
+  testGrantRevoked:evidence.testGrantRevoked, limitations:evidence.limitations } });
+await mkdir(output,{recursive:true});
+await writeFile(path.join(output,'evidence.json'),JSON.stringify(evidence,null,2));
+const data=JSON.stringify({frames,date:evidence.finishedAt}).replaceAll('<','\\u003c');
+await writeFile(path.join(output,'index.html'),`<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ODDBOUT · Cloud MCP review walkthrough</title>
+<style>@font-face{font-family:Pretendard;src:url(Pretendard-Regular.woff2)}*{box-sizing:border-box}body{margin:0;background:#eeeae0;color:#201f1b;font:16px Pretendard,Arial,sans-serif}header{padding:16px 42px;border-bottom:1px solid #cbc6b9;display:flex;justify-content:space-between;align-items:center}header strong{font-size:28px;letter-spacing:-1px}header span{color:#68645c;font-size:13px}main{max-width:1160px;margin:20px auto;padding:0 28px}.eyebrow{color:#ae3b2c;font-size:12px;letter-spacing:2px;font-weight:bold}h1{font-size:36px;letter-spacing:-1.3px;margin:10px 0}p{color:#68645c;line-height:1.5;margin:8px 0 20px}.panels{display:grid;grid-template-columns:1fr 1.65fr;gap:20px}.card{background:#faf8f1;border:1px solid #d7d0c3;border-radius:10px;padding:20px;min-height:300px}h2{font-size:13px;text-transform:uppercase;letter-spacing:1.5px;color:#68645c}code{font-size:14px}pre{white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.4 Consolas,monospace;max-height:280px;overflow:auto}nav{display:flex;gap:8px;margin:22px 0;flex-wrap:wrap}button{border:1px solid #bcb5a7;background:transparent;padding:10px 15px;border-radius:5px;cursor:pointer}button[aria-current=true]{background:#ad3e2e;color:white;border-color:#ad3e2e}footer{font-size:12px;color:#68645c;display:flex;justify-content:space-between}a{color:inherit}.pass{color:#386349;font-weight:bold;font-size:13px}@media(max-width:800px){.panels{grid-template-columns:1fr}header{padding:18px}h1{font-size:28px}}</style>
+<header><img src="logo.webp" width="180" alt="ODDBOUT Fight Club"><span>DEVELOPER REVIEW · HOSTED MCP</span></header><main><div class="eyebrow">LIVE SERVICE EVIDENCE · 24 OCT 2026</div><h1 id="title"></h1><p>Actual protocol calls to <b>https://mcp.oddbout.com/mcp</b><br>This developer walkthrough displays recorded service responses. It is not a ChatGPT conversation.</p><div class="panels"><section class="card"><h2>Request</h2><code id="tool"></code><pre id="args"></pre><p class="pass">✓ Completed against the public service</p></section><section class="card"><h2>Recorded response</h2><pre id="result"></pre></section></div><nav id="nav" aria-label="Walkthrough cases"></nav><footer><span id="stamp"></span><a href="evidence.json">Full sanitized evidence</a></footer></main><script>const data=${data};const nav=document.getElementById('nav');function show(i){const f=data.frames[i];document.getElementById('title').textContent=f.title;document.getElementById('tool').textContent=f.tool;document.getElementById('args').textContent=JSON.stringify(f.args,null,2);document.getElementById('result').textContent=JSON.stringify(f.result,null,2);nav.querySelectorAll('button').forEach((b,n)=>b.setAttribute('aria-current',String(n===i)));document.getElementById('stamp').textContent='Recorded '+data.date+' · Case '+(i+1)+' / '+data.frames.length;}data.frames.forEach((f,i)=>{const b=document.createElement('button');b.textContent=String(i+1).padStart(2,'0');b.onclick=()=>show(i);nav.append(b)});show(0);</script></html>`);
+console.log(output);
