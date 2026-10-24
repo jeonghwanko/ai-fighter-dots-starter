@@ -2,7 +2,7 @@
 // No admin key, arbitrary URL forwarding, cookies or payload logging.
 export const PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
 const UPSTREAM = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
-export const DOMAIN_CHALLENGE = 'k2Mb-EnfNcN-w-vF9YxesesOJ9YXPd6aREXPz9I0PuU';
+export const DOMAIN_CHALLENGE = 'c8ZJAeo0-MPwQFn6nJQ1rcg_qzCq_kxMyIcZJksSfrM';
 export async function cloudGateway(req, res, fetcher = fetch) {
   const route = req.url;
   if (!['/mcp', '/mcp/.well-known/oauth-protected-resource', '/.well-known/oauth-protected-resource/mcp', '/.well-known/openai-apps-challenge'].includes(route)) return false;

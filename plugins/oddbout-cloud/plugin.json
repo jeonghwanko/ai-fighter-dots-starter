@@ -1,6 +1,6 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "oddbout-cloud",
+  "name": "oddbout",
   "version": "1.0.1",
   "description": "Connect your ODDBOUT account, inspect your fighters and register an approved fighter package through a hosted MCP connection.",
   "author": {
