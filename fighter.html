@@ -180,8 +180,9 @@
       }
       html[data-boot-motion="reduce"] .boot-loading-ring { animation: none; }
       /*
-       * 하단 고지(무투장 고르기 화면 동안 보인다, `showTitlePrivacyLink`). ODDBOUT 톤(2026-10-22): 잉크 스크림, Pretendard 12px 흰 글자,
-       * 라임 밑줄 링크, 각진 모서리. 캔버스의 버튼은 이 탭 높이(아래 44px)를 비운다(`ARENA_SELECT_BOTTOM_CLEAR`).
+       * 하단 원화 크레딧 탭(화면의 선수에게 원형 크레딧이 있을 때만 보인다, `showFighterCredits`). ODDBOUT 톤(2026-10-22): 잉크 스크림,
+       * Pretendard 12px 흰 글자, 라임 밑줄 링크, 각진 모서리. 캔버스의 버튼은 이 탭 높이(아래 44px)를 비운다(`ARENA_SELECT_BOTTOM_CLEAR`).
+       * 개인정보처리방침 링크는 이 페이지에 두지 않는다(2026-10-24): 진입 사이트(league.html)의 하단 메뉴가 고지한다.
        */
       .title-footnote {
         position: fixed;
@@ -202,10 +203,7 @@
         font: 12px/1.5 "Pretendard", "Malgun Gothic", sans-serif;
         text-align: center;
       }
-      /*
-       * 클래스의 display 는 UA 의 [hidden] 규칙을 이긴다. 이 한 줄이 없으면 타이틀을
-       * 떠난 뒤에도 고지가 화면 아래에 남아 브리핑·저택의 조작 안내를 덮는다.
-       */
+      /* 클래스의 display 는 UA 의 [hidden] 규칙을 이긴다. 이 한 줄이 없으면 고르기 화면을 떠난 뒤에도 탭이 경기 화면에 남는다. */
       .title-footnote[hidden] {
         display: none;
       }
@@ -222,8 +220,7 @@
         outline: 2px solid #eaff50;
         outline-offset: 2px;
       }
-      /* 원화 크레딧(`showFighterCredits`): 화면의 선수에게 원형 크레딧이 있을 때만 보인다. 누르면 고지 위로 펼친다. */
-      .fighter-credit[hidden],
+      /* 원화 크레딧 패널: 누르면 탭 위로 펼친다. */
       .fighter-credit-panel[hidden] {
         display: none;
       }
@@ -257,20 +254,20 @@
         text-align: left;
       }
     </style>
-  <script type="module" crossorigin src="/assets/fighter-DRENEwTZ.js"></script>
+  <script type="module" crossorigin src="/assets/fighter-D7AfiRef.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/registeredFighters-EA4S55Qb.js">
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CVMKP0F5.js">
   <link rel="modulepreload" crossorigin href="/assets/portraitLock-DYcks80K.js">
-  <link rel="modulepreload" crossorigin href="/assets/storageKeys-DxZd3KBb.js">
-  <link rel="modulepreload" crossorigin href="/assets/rankedDuels-CYI7YKr2.js">
+  <link rel="modulepreload" crossorigin href="/assets/storageKeys-DmbSREkT.js">
+  <link rel="modulepreload" crossorigin href="/assets/rankedDuels-DYvx-yyy.js">
   <link rel="modulepreload" crossorigin href="/assets/palette-PCgBTV9z.js">
   <link rel="modulepreload" crossorigin href="/assets/Locale-BoqNfY5_.js">
   <link rel="modulepreload" crossorigin href="/assets/CityEnvironment-AhQf9g8O.js">
   <link rel="modulepreload" crossorigin href="/assets/NativeCityOttoEncounter-CCYzVnCO.js">
   <link rel="modulepreload" crossorigin href="/assets/AttackMoves-B-lq5s5T.js">
   <link rel="modulepreload" crossorigin href="/assets/WebGl2Support-hZXjXmi-.js">
-  <link rel="modulepreload" crossorigin href="/assets/TournamentBracketScene-BoBS9woC.js">
-  <link rel="modulepreload" crossorigin href="/assets/PrivacyLink-YzpEKQLK.js">
+  <link rel="modulepreload" crossorigin href="/assets/TournamentBracketScene--oj1OChK.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaTournamentRoute-DjeIG-3s.js">
   <link rel="modulepreload" crossorigin href="/assets/leagueContent-CpjltF06.js">
   <link rel="stylesheet" crossorigin href="/assets/portraitLock-wH03GdfC.css">
 </head>
@@ -288,17 +285,10 @@
         <span class="boot-loading-en">Preparing the arena</span>
       </div>
     </div>
-    <p class="title-footnote" id="privacy-link" hidden>
-      <span class="fighter-credit" id="fighter-credit" hidden
-        ><button type="button" aria-expanded="false" aria-controls="fighter-credit-panel">원화 크레딧</button
-        ><span class="fighter-credit-panel" id="fighter-credit-panel" hidden></span
-      ></span>
-      <span
-        ><a href="./privacy.html" target="_blank" rel="noopener noreferrer"
-          >개인정보처리방침</a
-        ></span
-      >
-    </p>
+    <p class="title-footnote fighter-credit" id="fighter-credit" hidden
+      ><button type="button" aria-expanded="false" aria-controls="fighter-credit-panel">원화 크레딧</button
+      ><span class="fighter-credit-panel" id="fighter-credit-panel" hidden></span
+    ></p>
     <script>
       const bootParams = new URLSearchParams(location.search);
       document.documentElement.lang = bootParams.get("lang") === "en" ? "en" : "ko";
