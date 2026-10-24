@@ -1,6 +1,14 @@
 {
-  "_ArenaScene-C3e3H0Mr.js": {
-    "file": "assets/ArenaScene-C3e3H0Mr.js",
+  "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
+    "file": "assets/basis_transcoder-o4Hde_L7.js",
+    "src": "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.js"
+  },
+  "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm": {
+    "file": "assets/basis_transcoder-VXdx5NbI.wasm",
+    "src": "../../../../../../../home/ubuntu/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
+  },
+  "_ArenaScene-CY4blF9s.js": {
+    "file": "assets/ArenaScene-CY4blF9s.js",
     "name": "ArenaScene",
     "imports": [
       "_registeredFighters-EA4S55Qb.js",
@@ -10,7 +18,7 @@
       "_NativeCityOrthoPack-DdmfJSzV.js",
       "_palette-PCgBTV9z.js",
       "_NativeCityOttoEncounter-C4yCkg3j.js",
-      "_PauseMenuScene-Jo_B9dXu.js",
+      "_PauseMenuScene-BgfDyr3A.js",
       "_AttackMoves-B-lq5s5T.js",
       "_CityEnvironment-AhQf9g8O.js",
       "_WebGl2Support-hZXjXmi-.js",
@@ -181,8 +189,8 @@
       "_native-city-art-finish-BZDHQ1na.js"
     ]
   },
-  "_PauseMenuScene-Jo_B9dXu.js": {
-    "file": "assets/PauseMenuScene-Jo_B9dXu.js",
+  "_PauseMenuScene-BgfDyr3A.js": {
+    "file": "assets/PauseMenuScene-BgfDyr3A.js",
     "name": "PauseMenuScene",
     "imports": [
       "_registeredFighters-EA4S55Qb.js",
@@ -205,14 +213,14 @@
       "_AttackMoves-B-lq5s5T.js"
     ]
   },
-  "_TournamentBracketScene-BSYeuPfM.js": {
-    "file": "assets/TournamentBracketScene-BSYeuPfM.js",
+  "_TournamentBracketScene-BggAPBRp.js": {
+    "file": "assets/TournamentBracketScene-BggAPBRp.js",
     "name": "TournamentBracketScene",
     "imports": [
       "_registeredFighters-EA4S55Qb.js",
       "_palette-PCgBTV9z.js",
       "_NativeCityOttoEncounter-C4yCkg3j.js",
-      "_PauseMenuScene-Jo_B9dXu.js"
+      "_PauseMenuScene-BgfDyr3A.js"
     ]
   },
   "_WebGl2Support-hZXjXmi-.js": {
@@ -433,7 +441,7 @@
     ]
   },
   "fighter.html": {
-    "file": "assets/fighter-S0jUS3KD.js",
+    "file": "assets/fighter-D_uHqyK-.js",
     "name": "fighter",
     "src": "fighter.html",
     "isEntry": true,
@@ -445,9 +453,9 @@
       "_rankedDuels-DYvx-yyy.js",
       "_palette-PCgBTV9z.js",
       "_NativeCityOttoEncounter-C4yCkg3j.js",
-      "_PauseMenuScene-Jo_B9dXu.js",
+      "_PauseMenuScene-BgfDyr3A.js",
       "_leagueContent-CpjltF06.js",
-      "_TournamentBracketScene-BSYeuPfM.js"
+      "_TournamentBracketScene-BggAPBRp.js"
     ]
   },
   "league.html": {
@@ -469,14 +477,6 @@
     "css": [
       "assets/league-BQn5-qLu.css"
     ]
-  },
-  "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
-    "file": "assets/basis_transcoder-o4Hde_L7.js",
-    "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js"
-  },
-  "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm": {
-    "file": "assets/basis_transcoder-VXdx5NbI.wasm",
-    "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
   },
   "privacy.html": {
     "file": "assets/privacy-CnOUHHFs.js",
@@ -654,7 +654,7 @@
     ]
   },
   "src/render/scenes/arena/ArenaModule.ts": {
-    "file": "assets/ArenaModule-BcMLgVPD.js",
+    "file": "assets/ArenaModule-BQobAaBO.js",
     "name": "ArenaModule",
     "src": "src/render/scenes/arena/ArenaModule.ts",
     "isDynamicEntry": true,
@@ -665,12 +665,12 @@
       "_rankedDuels-DYvx-yyy.js",
       "_palette-PCgBTV9z.js",
       "_NativeCityOttoEncounter-C4yCkg3j.js",
-      "_PauseMenuScene-Jo_B9dXu.js",
-      "_ArenaScene-C3e3H0Mr.js"
+      "_PauseMenuScene-BgfDyr3A.js",
+      "_ArenaScene-CY4blF9s.js"
     ]
   },
   "src/render/scenes/village/NativeCityModule.ts": {
-    "file": "assets/NativeCityModule-D_T_klUz.js",
+    "file": "assets/NativeCityModule-_lz024ph.js",
     "name": "NativeCityModule",
     "src": "src/render/scenes/village/NativeCityModule.ts",
     "isDynamicEntry": true,
@@ -682,11 +682,11 @@
       "_NativeCityOrthoPack-DdmfJSzV.js",
       "_palette-PCgBTV9z.js",
       "_NativeCityOttoEncounter-C4yCkg3j.js",
-      "_PauseMenuScene-Jo_B9dXu.js",
+      "_PauseMenuScene-BgfDyr3A.js",
       "_AttackMoves-B-lq5s5T.js",
-      "_ArenaScene-C3e3H0Mr.js",
+      "_ArenaScene-CY4blF9s.js",
       "_WebGl2Support-hZXjXmi-.js",
-      "_TournamentBracketScene-BSYeuPfM.js",
+      "_TournamentBracketScene-BggAPBRp.js",
       "_PlayerLook-Bb3gqXoy.js",
       "_NativeCityTreeShadow-BmTBhg-P.js",
       "_NativeCityFloorDecal-DoqRDm0H.js"
