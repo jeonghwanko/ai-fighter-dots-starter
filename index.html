@@ -14,16 +14,16 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
   <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
   <meta name="theme-color" content="#14212d">
   <meta name="referrer" content="no-referrer">
-  <meta name="description" content="상상한 캐릭터를 만들고, ODDBOUT의 링에서 함께 만나세요. 나의 선수를 만들고 링에 오르세요.">
-  <meta property="og:title" content="ODDBOUT · 다음 도전자, 당신입니다">
-  <meta property="og:description" content="상상한 캐릭터를 만들고, ODDBOUT의 링에서 함께 만나세요.">
+  <meta name="description" content="응원할 선수를 고르고 16강 대진을 짜세요. 싸움은 AI가, 승부수는 대진에서. 나의 선수도 만들 수 있어요.">
+  <meta property="og:title" content="ODDBOUT · 16명, 챔피언은 하나">
+  <meta property="og:description" content="응원할 선수를 고르고 16강 대진을 짜세요. 싸움은 AI가, 승부수는 대진에서.">
   <meta property="og:type" content="website">
   <meta property="og:image" content="https://oddbout.com/art/ui/oddbout-logo.webp">
   <meta property="og:url" content="https://oddbout.com/">
   <meta name="twitter:card" content="summary_large_image">
   <link rel="canonical" href="https://oddbout.com/">
   <link rel="icon" href="/favicon.ico" sizes="32x32"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <title>ODDBOUT · 다음 도전자, 당신입니다</title>
+  <title>ODDBOUT · 16명, 챔피언은 하나</title>
   <script>
     // New visitors start in English (fighterCreatorLocale.ts). Hide the Korean source copy until league.ts replaces it.
     try {
@@ -35,7 +35,7 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
       }
     } catch {}
   </script>
-  <script type="module" crossorigin src="/assets/league-Bhkj7uo-.js"></script>
+  <script type="module" crossorigin src="/assets/league-DNpjusKF.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/registeredFighters-EA4S55Qb.js">
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CVMKP0F5.js">
   <link rel="modulepreload" crossorigin href="/assets/fighterCreatorLocale-Bh29uOe8.js">
@@ -47,11 +47,11 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
   <link rel="modulepreload" crossorigin href="/assets/fighterSheet-btpkONMn.js">
   <link rel="modulepreload" crossorigin href="/assets/portraitLock-DYcks80K.js">
   <link rel="modulepreload" crossorigin href="/assets/siteChrome-CpDKksHP.js">
-  <link rel="modulepreload" crossorigin href="/assets/leagueContent-CpjltF06.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueContent-CeTrIEyo.js">
   <link rel="stylesheet" crossorigin href="/assets/fighterSheet-D2QngLAO.css">
   <link rel="stylesheet" crossorigin href="/assets/portraitLock-wH03GdfC.css">
   <link rel="stylesheet" crossorigin href="/assets/siteChrome-C3f8swV4.css">
-  <link rel="stylesheet" crossorigin href="/assets/league-BQn5-qLu.css">
+  <link rel="stylesheet" crossorigin href="/assets/league-BYlG_Ie-.css">
 </head>
 <body>
   <a class="skip" href="#main"><span data-copy="skip">본문으로 건너뛰기</span></a>
@@ -62,10 +62,10 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
         <div class="hero-stage">
           <div class="hero-banner">
             <div class="hero-copy">
-              <span class="bout-heading" id="bout-heading" data-copy="mainEvent">메인 매치</span>
-              <h1 id="hero-title"><span data-copy="heroFirst">다음 도전자,</span><br> <span data-copy="heroLast">당신입니다.</span></h1>
-              <p class="hero-invite"><span data-copy="invite">상상한 캐릭터를 만들고,<br> 이 무대에 함께 서세요.</span></p>
-              <a class="button primary hero-play" id="hero-play" href="./fighter.html?lang=ko&amp;play=1&amp;fighter=tyson&amp;opponent=elon"><span>PLAY</span><span aria-hidden="true">▶</span></a>
+              <span class="bout-heading" id="bout-heading" data-copy="mainEvent">ODDBOUT 컵 · 16강</span>
+              <h1 id="hero-title"><span data-copy="heroFirst">16명, 네 판.</span><br> <span data-copy="heroLast">챔피언은 하나.</span></h1>
+              <p class="hero-invite"><span data-copy="invite">응원할 선수를 고르고 대진을 짜세요.<br> 싸움은 AI가, 승부수는 당신이.</span></p>
+              <div class="hero-actions"><a class="button primary hero-play" id="hero-play" href="./fighter.html?lang=ko" data-destination="fighter.html"><span data-copy="heroPlay">16강 시작</span><span aria-hidden="true">▶</span></a><a class="hero-create" href="./creator.html?lang=ko" data-destination="creator.html"><span data-copy="heroCreate">또는 나의 선수 만들기 →</span></a></div>
             </div>
             <div class="featured-bout" aria-labelledby="bout-heading bout-names">
               <div class="bout-art" aria-hidden="true">
@@ -114,21 +114,27 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
         </div>
       </div>
     </section>
-    <section class="match-section wrap" id="match" aria-labelledby="match-title">
-      <div class="section-head"><h2 id="match-title"><span data-copy="matchTitle">경기장</span></h2><p><span data-copy="matchIntro">직접 싸우거나, 함께 응원하세요.</span></p></div>
-      <div class="match-grid">
-        <div class="video-panel"><video id="match-video" controls playsinline preload="none" aria-label="루팡과 쿠마의 대결 영상" data-label="video" poster="/video/ai-fighter/match-poster.webp"><source src="/video/ai-fighter/match.mp4" type="video/mp4"></video><div class="video-caption"><span><span data-copy="matchNames">루팡 vs 쿠마</span></span><span><span data-copy="matchCaption">플레이 영상 · 10초</span></span></div></div>
-        <div class="play-paths">
-          <div class="play-path">
-            <h3><span data-copy="playTitle">직접 참전</span></h3>
-            <p><span data-copy="playBody">선수를 골라 한 판 시작하세요.</span></p>
-            <a href="./fighter.html?lang=ko" data-destination="fighter.html" class="path-link"><span data-copy="playAction">플레이하기</span><span aria-hidden="true">→</span></a>
-          </div>
-          <div class="watch-path">
-            <h3><span data-copy="watchTitle">경기 관람</span></h3>
-            <p><span data-copy="watchBody">선수들의 대결을 확인하세요.</span></p>
-            <button id="watch" class="path-link"><span data-copy="watch">영상 보기</span><span aria-hidden="true">▷</span></button>
-          </div>
+    <section class="cup-section wrap" id="cup" aria-labelledby="cup-title">
+      <div class="section-head"><h2 id="cup-title"><span data-copy="cupTitle">16강 컵</span></h2><p><span data-copy="cupIntro">싸움은 AI가. 대진은 당신이.</span></p></div>
+      <div class="cup-grid">
+        <div class="cup-demo" role="img" aria-label="예시: 대표 타이푼이 16강에서 퀵캣, 8강에서 쿠마를 이기고 4강에서 엘롱 머스캣을 기다린다" data-label="cupDemo">
+          <div class="cup-champion"><img src="/art/ui/oddbout-roster-v1/typhoon.webp" alt="" width="1024" height="1536" loading="lazy"><span class="cup-champion-name"><span class="cup-star" aria-hidden="true">★</span><span data-copy="boutLeft">타이푼</span></span></div>
+          <ol class="cup-rounds">
+            <li class="done"><span class="cup-face" style="--face-x:76%;--face-y:42%"><img src="/art/arena/concept/quickcat.webp" alt="" width="1116" height="600" loading="lazy"></span><span class="cup-round" data-copy="round16">16강</span><span class="cup-mark" data-copy="cupWon">KO승</span></li>
+            <li class="done"><span class="cup-face"><img src="/art/arena/concept/kuma.webp" alt="" width="343" height="600" loading="lazy"></span><span class="cup-round" data-copy="round8">8강</span><span class="cup-mark" data-copy="cupWon">KO승</span></li>
+            <li class="next"><span class="cup-face" style="--face-x:58%"><img src="/art/ui/oddbout-roster-v1/elong-muscat.webp" alt="" width="1024" height="1536" loading="lazy"></span><span class="cup-round" data-copy="round4">4강</span><span class="cup-mark" data-copy="cupNext">다음 경기</span></li>
+            <li class="ahead"><span class="cup-face unknown">?</span><span class="cup-round" data-copy="roundFinal">결승</span><span class="cup-mark">&nbsp;</span></li>
+            <li class="cup-trophy"><span class="cup-trophy-mark"><svg viewBox="0 0 48 48" width="46" height="46" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" aria-hidden="true"><path d="M14 7h20v10c0 6.6-4.5 11.5-10 11.5S14 23.6 14 17Z"/><path d="M14 11H7.5c0 6 2.8 9.4 7.4 10M34 11h6.5c0 6-2.8 9.4-7.4 10"/><path d="M24 28.5V36M16 41h16l-2-5H18Z"/></svg></span><span class="cup-round" data-copy="cupTrophy">우승</span><span class="cup-mark">&nbsp;</span></li>
+          </ol>
+        </div>
+        <div class="cup-guide">
+          <ol class="cup-steps">
+            <li><span>01</span><div><h3><span data-copy="cupStep1Title">대표 고르기</span></h3><p><span data-copy="cupStep1Body">응원할 선수 한 명. 위 선수 카드의 ★ 대표로 출전으로도 고릅니다.</span></p></div></li>
+            <li><span>02</span><div><h3><span data-copy="cupStep2Title">대진 짜기</span></h3><p><span data-copy="cupStep2Body">16칸에 누구를 어디 둘지 정하세요. 대진이 곧 전략입니다.</span></p></div></li>
+            <li><span>03</span><div><h3><span data-copy="cupStep3Title">결승까지</span></h3><p><span data-copy="cupStep3Body">경기는 AI끼리 싸웁니다. 네 번 이기면 우승.</span></p></div></li>
+          </ol>
+          <p class="cup-odds"><span data-copy="cupOdds">무작위 대진의 우승 확률은 약 6 %. 잘 짜면 오릅니다.</span></p>
+          <div class="cup-actions"><a href="./fighter.html?lang=ko" data-destination="fighter.html" class="path-link cup-start"><span data-copy="cupStart">16강 시작</span><span aria-hidden="true">→</span></a><a id="cup-practice" class="cup-practice" href="./fighter.html?lang=ko&amp;play=1&amp;fighter=tyson&amp;opponent=elon"><span data-copy="cupPractice">자동 연습 경기 보기</span><span aria-hidden="true">▷</span></a></div>
         </div>
       </div>
     </section>
@@ -150,7 +156,7 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
         <div class="profile-concept" id="profile-concept" hidden></div>
         <ul class="profile-tags" id="profile-tags" aria-label="캐릭터 특징" data-label="tags"></ul>
         <div class="profile-voice"><blockquote id="profile-quote"></blockquote><button id="profile-listen" class="profile-listen" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span>목소리 듣기</span><span class="profile-wave" aria-hidden="true">▂ ▅ ▃ ▆</span></button></div>
-        <div class="profile-actions"><span id="profile-status" class="profile-status" hidden></span><a id="profile-arena" class="button dark" href="./fighter.html?lang=ko" data-destination="fighter.html"><span data-copy="profileArena">경기장 입장</span></a><a id="profile-join" href="#join"><span data-copy="profileCreate">선수 만들기 →</span></a></div>
+        <div class="profile-actions"><span id="profile-status" class="profile-status" hidden></span><a id="profile-arena" class="button dark" href="./fighter.html?lang=ko" data-destination="fighter.html"><span>경기장 입장</span></a><a id="profile-join" href="#join"><span data-copy="profileCreate">선수 만들기 →</span></a></div>
       </div>
     </div>
     <div class="profile-footer"><button id="profile-prev" aria-label="이전 파이터 프로필" data-label="profilePrev">← <span id="profile-prev-name"></span></button><span id="profile-position">01 / 09</span><button id="profile-next" aria-label="다음 파이터 프로필" data-label="profileNext"><span id="profile-next-name"></span> →</button></div>
