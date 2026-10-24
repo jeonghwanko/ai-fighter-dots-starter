@@ -13,9 +13,12 @@ import { probePublic } from ${JSON.stringify(modules['mcp/connection-readiness.m
 
 // Each child gets a loopback-only test proxy configuration. No real service or user session is used.
 async function child(code, env = {}) {
+  const childEnv = { ...process.env };
+  // Empty lowercase variables mask uppercase fixtures on POSIX; remove both casings first.
+  for (const key of Object.keys(childEnv)) if (/^(?:https?|no)_proxy$/i.test(key)) delete childEnv[key];
+  Object.assign(childEnv, { NODE_USE_ENV_PROXY: '0' }, env);
   const { stdout, stderr } = await exec(process.execPath, ['--input-type=module', '-e', imports + code], {
-    env: { ...process.env, HTTP_PROXY: '', HTTPS_PROXY: '', NO_PROXY: '', http_proxy: '', https_proxy: '', no_proxy: '',
-      NODE_USE_ENV_PROXY: '0', ...env }, timeout: 40000, windowsHide: true,
+    env: childEnv, timeout: 40000, windowsHide: true,
   });
   return { value: JSON.parse(stdout.trim()), stderr };
 }
