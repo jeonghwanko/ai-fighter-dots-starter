@@ -117,7 +117,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
           const last = data[19], hasMore = data.length > 20;
           return reply({ ok: true, hasMore, nextCursor: hasMore ? `${last.created_at}|${last.id}` : null,
             fighters: data.slice(0, 20).filter(f => f.runtime_manifest_sha === f.manifest_sha)
-            .map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, runtimeScope: f.runtime_scope,
+            .map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, ...(f.profile.names ? { names: f.profile.names } : {}), runtimeScope: f.runtime_scope,
               duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha })) });
         }
         if (parts.length !== 2 || !UUID.test(parts[1])) return reply({ ok: false, code: 'not-found' }, 404);

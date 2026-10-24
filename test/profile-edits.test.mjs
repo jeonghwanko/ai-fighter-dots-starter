@@ -88,3 +88,24 @@ test('metadata edits enforce ownership, immutable art, schema, concurrency, mode
     assert.equal((await f.request(id,saved.manifestSha256,{name:'Disabled'})).status,403);
   } finally { await f.sql.close(); }
 });
+
+test('per-language names are edited like the rest of the profile, shown on the roster, and null removes them', async () => {
+  const f = await profileFixture();
+  try {
+    const first = await f.register(), id = first.fighter_id;
+    const names = { ko: '레드글러브 냥', en: 'Redglove Nyang' };
+    const set = await f.request(id, first.manifest_sha, { names }, crypto.randomUUID());
+    assert.equal(set.status, 200, await set.clone().text());
+    const saved = await set.json();
+    const listed = (await (await f.handle(new Request('http://localhost/ai-fighter/roster'))).json()).fighters.find(row => row.id === id);
+    assert.deepEqual(listed.names, names); assert.equal(listed.name, example.profile.name);
+    assert.equal((await f.request(id, saved.manifestSha256, { names: {} }, crypto.randomUUID())).status, 422);
+    assert.equal((await f.request(id, saved.manifestSha256, { names: { ja: '名前' } }, crypto.randomUUID())).status, 422);
+    const cleared = await f.request(id, saved.manifestSha256, { names: null }, crypto.randomUUID());
+    assert.equal(cleared.status, 200, await cleared.clone().text());
+    const row = (await f.sql.query('select manifest from af_submissions where id=$1', [(await cleared.json()).submissionId])).rows[0];
+    assert.equal('names' in row.manifest.profile, false);
+    const relisted = (await (await f.handle(new Request('http://localhost/ai-fighter/roster'))).json()).fighters.find(r => r.id === id);
+    assert.equal('names' in relisted, false);
+  } finally { await f.sql.close(); }
+});

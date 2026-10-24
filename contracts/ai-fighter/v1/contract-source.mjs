@@ -72,6 +72,8 @@ export const schema = {
   ...object({
     schemaVersion: { const: 1 }, specVersion: { const: 'ai-fighter-side-v1' }, localId: id,
     profile: optionalObject({ name: text(40), description: text(600), language: { enum: ['ko', 'en'] }, concept: text(800),
+      // The name per page language (2026-10-24): shown where that language is on; `name` stays the identity and the fallback.
+      names: { type: 'object', additionalProperties: false, minProperties: 1, properties: { ko: text(40), en: text(40) } },
       moves: object(Object.fromEntries(namedMoves.map(move => [move, object({ name: text(24), description: text(160) })]))),
       portrait: ref('imageView'), preview: ref('imageView') }, ['name', 'description', 'portrait', 'preview']),
     combat: optionalObject({ kitId: { const: 'standard-duel' },
@@ -101,8 +103,9 @@ export const spec = {
     mirror: 'right-source-left-runtime-flip', bodyHeight: 400, cameraElevationDegrees: 16 },
   limits, motions,
   // A reader that predates a feature rejects manifests using it (additionalProperties: false): writers emit it only when listed here.
-  features: ['profile-extras-1', 'combat-stats-1'],
-  profileExtras: { languages: ['ko', 'en'], conceptMaxLength: 800, namedMoves, moveNameMaxLength: 24, moveDescriptionMaxLength: 160,
+  features: ['profile-extras-1', 'combat-stats-1', 'profile-names-1'],
+  profileExtras: { languages: ['ko', 'en'], conceptMaxLength: 800, namedMoves, moveNameMaxLength: 24, moveDescriptionMaxLength: 160, nameMaxLength: 40,
+    names: '선택. profile.names.ko·en 은 그 언어 화면에 띄울 이름(각 40자). 없는 언어는 profile.name 을 띄운다.',
     note: '컨셉과 기술 이름·설명은 표시용 소개 텍스트다. 기술 이름은 표준 키트의 고정 동작에 붙는다. 새 동작이나 AI 지시가 아니다.' },
   combatStats: { ...combatStats,
     note: '제작자는 등급 배분만 제출한다. 모든 등급의 합은 budget과 같아야 한다. 없으면 모두 default다. 서버가 등급을 자체 수치로 바꾼다.' },

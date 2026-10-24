@@ -38,7 +38,7 @@ const planSchema = z.strictObject({
   gamePack: z.string().min(1), out: z.string().min(1), localId: z.string(),
   // language, concept, moves and stats are optional; validateFighter below enforces their contract limits and the stats budget.
   profile: z.strictObject({ name: z.string(), description: z.string(), portraitCrop: crop.optional(), previewCrop: crop.optional(),
-    language: z.string().optional(), concept: z.string().optional(),
+    language: z.string().optional(), concept: z.string().optional(), names: z.record(z.string(), z.string()).optional(),
     moves: z.record(z.string(), z.strictObject({ name: z.string(), description: z.string() })).optional(),
     stats: z.record(z.string(), z.number()).optional() }),
   encoding: z.enum(['lossless', 'lossy']).default('lossless'),
@@ -361,7 +361,7 @@ export async function packFighter(planFile) {
     const fighter = {
       schemaVersion: spec.schemaVersion, specVersion: spec.specVersion, localId: plan.localId,
       profile: { name: plan.profile.name, description: plan.profile.description,
-        ...Object.fromEntries(['language', 'concept', 'moves'].filter(key => plan.profile[key] !== undefined).map(key => [key, plan.profile[key]])),
+        ...Object.fromEntries(['language', 'concept', 'moves', 'names'].filter(key => plan.profile[key] !== undefined).map(key => [key, plan.profile[key]])),
         portrait: { assetId: packed.idle.asset.id, crop: crops.portrait }, preview: { assetId: packed.idle.asset.id, crop: crops.preview } },
       combat: { kitId: 'standard-duel', ...(plan.profile.stats ? { stats: plan.profile.stats } : {}) },
       appearance: { projection: 'orthographic', elevationDegrees: spec.input.cameraElevationDegrees, sourceFacing: 'right', leftFacing: 'mirror', bodyHeight: BODY, bodyScale: 1 },

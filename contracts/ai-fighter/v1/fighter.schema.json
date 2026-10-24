@@ -60,6 +60,25 @@
           "maxLength": 800,
           "pattern": "\\S"
         },
+        "names": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "properties": {
+            "ko": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "pattern": "\\S"
+            },
+            "en": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 40,
+              "pattern": "\\S"
+            }
+          }
+        },
         "moves": {
           "type": "object",
           "additionalProperties": false,

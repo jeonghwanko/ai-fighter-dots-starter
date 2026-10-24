@@ -24,7 +24,7 @@ async function duelFixture() {
     await sql.query(`insert into af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status)
       values($1,$2,$3,$4,$5,$6,1,'registered')`,[sub,owner,crypto.randomUUID(),manifestText,example,hash]);
     await sql.query(`insert into af_fighters(id,submission_id,owner_id,manifest_sha,profile,review_state,runtime_approved,runtime_scope,runtime_manifest_sha,review_evidence,duel_approved,duel_manifest_sha)
-      values($1,$2,$3,$4,$5,'approved',true,'arena-player-v1',$4,$6,true,$4)`,[id,sub,owner,hash,{name},{authorization:'test',validation:'test',duelValidation:'test'}]);
+      values($1,$2,$3,$4,$5,'approved',true,'arena-player-v1',$4,$6,true,$4)`,[id,sub,owner,hash,name==='A'?{name,names:{ko:'에이'}}:{name},{authorization:'test',validation:'test',duelValidation:'test'}]);
   }
   const functions={af_reserve_duel:['p_key','p_a','p_b','p_engine'],af_complete_duel:['p_id','p_engine','p_result'],af_fail_duel:['p_id','p_engine','p_code'],af_duel_rankings:[]};
   const db={rpc:async(name,args)=>{try {
@@ -35,6 +35,8 @@ async function duelFixture() {
     assert.ok(['af_fighters','af_submissions','af_duels'].includes(table));let filters=[],values=[];
     const q={select:()=>q,eq:(k,v)=>{assert.match(k,/^\w+$/);values.push(v);filters.push(`${k}=$${values.length}`);return q;},
       not:(k)=>{assert.equal(k,'completed_at');filters.push('completed_at is not null');return q;},
+      in:(k,v)=>{assert.match(k,/^\w+$/);values.push(v);filters.push(`${k}=any($${values.length})`);return q;},
+      then:(resolve,reject)=>sql.query(`select * from ${table} where ${filters.join(' and ')}`,values).then(r=>({data:r.rows}),error=>({error})).then(resolve,reject),
       maybeSingle:async()=>({data:(await sql.query(`select * from ${table} where ${filters.join(' and ')}`,values)).rows[0]??null})};return q;
   }};
   return {sql,db,ids};
@@ -61,6 +63,7 @@ test('server matches: immutable result, atomic pair records, retries, budgets, a
     assert.equal((await sql.query('select count(*)::int as n from af_duels')).rows[0].n,1);
     const rank=await (await handle(new Request('https://test/ai-fighter/rankings'))).json();
     assert.deepEqual(rank.rankings.map(x=>[x.name,Number(x.won),Number(x.lost),Number(x.points)]),[['A',1,0,3],['B',0,1,0]]);
+    assert.deepEqual(rank.rankings.map(x=>x.names??null),[{ko:'에이'},null]);
     const callsBefore=calls;assert.equal((await post()).status,200);assert.equal(calls,callsBefore);
     assert.equal((await post({...body,a:body.b,b:body.a})).status,409);
     const read=await (await handle(new Request(`https://test/ai-fighter/duels/${match.id}`))).json();assert.equal(read.match.id,match.id);

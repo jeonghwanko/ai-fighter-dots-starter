@@ -109,7 +109,8 @@
   },
   "features": [
     "profile-extras-1",
-    "combat-stats-1"
+    "combat-stats-1",
+    "profile-names-1"
   ],
   "profileExtras": {
     "languages": [
@@ -125,6 +126,8 @@
     ],
     "moveNameMaxLength": 24,
     "moveDescriptionMaxLength": 160,
+    "nameMaxLength": 40,
+    "names": "선택. profile.names.ko·en 은 그 언어 화면에 띄울 이름(각 40자). 없는 언어는 profile.name 을 띄운다.",
     "note": "컨셉과 기술 이름·설명은 표시용 소개 텍스트다. 기술 이름은 표준 키트의 고정 동작에 붙는다. 새 동작이나 AI 지시가 아니다."
   },
   "combatStats": {

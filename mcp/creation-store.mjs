@@ -23,6 +23,8 @@ export const changeSchema = z.discriminatedUnion('type', [
   // Concept, move names and duel grades are optional; their limits are the contract's (spec.json profileExtras / combatStats).
   z.object({ type: z.literal('profile'), name: z.string().min(1).max(100), description: z.string().max(2000),
     language: z.enum(spec.profileExtras.languages).optional(), concept: z.string().trim().min(1).max(spec.profileExtras.conceptMaxLength).optional(),
+    names: z.object(Object.fromEntries(spec.profileExtras.languages.map(language => [language, z.string().trim().min(1).max(spec.profileExtras.nameMaxLength).optional()])))
+      .strict().refine(value => Object.keys(value).length > 0).optional(),
     moves: z.object(Object.fromEntries(spec.profileExtras.namedMoves.map(move => [move, z.object({
       name: z.string().trim().min(1).max(spec.profileExtras.moveNameMaxLength),
       description: z.string().trim().min(1).max(spec.profileExtras.moveDescriptionMaxLength) }).strict()]))).strict().optional(),
@@ -262,7 +264,7 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
         const canonical = value => JSON.stringify(value ?? null, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
           ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v);
         const same = (a, b) => canonical(a) === canonical(b);
-        if (['name', 'description', 'language', 'concept', 'moves'].some(key => !same(manifest.profile[key], state.profile[key]))
+        if (['name', 'description', 'language', 'concept', 'moves', 'names'].some(key => !same(manifest.profile[key], state.profile[key]))
           || !same(manifest.combat.stats, state.profile.stats)) fail('package-profile-mismatch');
         const base = path.posix.dirname(manifests[0]);
         const allFiles = [...event.files, ...manifest.assets.map(asset => `${base}/${asset.path}`)];
