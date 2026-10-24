@@ -117,9 +117,29 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
         nextCommands: [], nextAction: result.account.canSubmit ? 'Continue the user-requested review group or register the approved actual package using host file attachments. Verify generation/display separately in the current conversation.' : 'Account registration access is unavailable; inspect the account response.' };
     });
   register('list_my_fighters', '내 캐릭터', 'List only the connected user’s registered fighters.', {}, async () => {
-    const { data, error } = await db.from('af_fighters').select('id,profile,status,review_state,created_at').eq('owner_id', identity.owner).order('created_at', { ascending: false }).limit(50);
+    const { data, error } = await db.from('af_fighters').select('id,profile,status,review_state,created_at').eq('owner_id', identity.owner).is('deleted_at', null).order('created_at', { ascending: false }).limit(50);
     if (error) throw new Problem(503, 'database-unavailable'); return { ok: true, fighters: data };
   });
+  const deletionRpc = async (name, args) => {
+    const { data, error } = await db.rpc(name, { p_owner: identity.owner,
+      p_session: identity.claims.session_id, p_client: identity.claims.client_id, ...args });
+    if (error) {
+      const expected = ['not-found','authentication-required','invalid-deletion-confirmation','deletion-name-mismatch',
+        'deletion-confirmation-expired','fighter-changed','fighter-deleted'];
+      throw new Problem(400, expected.includes(error.message) ? error.message : 'database-unavailable');
+    }
+    return data;
+  };
+  register('prepare_fighter_deletion', '캐릭터 삭제 확인', 'After a deletion request, verify ownership and return the exact account, fighter, effects and a 10-minute confirmation. This does not delete. Show the result to the user. Deletion removes the fighter from owned/public lists and new matches, frees its slot, and retains private package bytes and history. Never interpret preparation alone as approval.',
+    { fighterId: z.string().uuid() }, async ({ fighterId }) => ({
+      ...await deletionRpc('af_prepare_fighter_deletion', { p_fighter: fighterId }),
+      account: { id: identity.owner, email: identity.email },
+    }), { write: true });
+  register('delete_fighter', '내 캐릭터 삭제', 'Execute only the user’s explicit deletion instruction for the exact account and fighter returned by prepare_fighter_deletion. Pass that token and exact confirmName, with confirm=true. Existing approval counts only if it unambiguously matches this unchanged fighter and deletion scope; otherwise ask first. Ownership, live session, expiry and package/profile identity are rechecked atomically. This is soft deletion: private package bytes and history remain. Retry only with identical confirmation arguments.',
+    { fighterId: z.string().uuid(), confirmationToken: z.string().uuid(), confirmName: z.string().min(1).max(200), confirm: z.literal(true) },
+    ({ fighterId, confirmationToken, confirmName }) => deletionRpc('af_delete_owned_fighter', {
+      p_fighter: fighterId, p_token: confirmationToken, p_confirm_name: confirmName,
+    }), { write: true, publish: true });
   register('prepare_fighter_registration', '캐릭터 등록 준비', 'After the user requests registration and approves the final package, create/resume a private upload from the actual fighter.json file. Use a new UUID for changed package bytes and the same UUID for immutable retries. This does not publish. Return pending asset IDs for upload_fighter_asset.',
     { manifest: FILE, idempotencyKey: z.string().uuid() }, async ({ manifest, idempotencyKey }) => {
       const bytes = await downloadHostFile(manifest, spec.limits.jsonBytes, fetcher);

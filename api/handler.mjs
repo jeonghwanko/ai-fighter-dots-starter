@@ -184,8 +184,10 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
         }
       }
       if (method === 'GET' && parts[0] === 'fighters' && parts.length === 2) {
-        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at,moderation_reason').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
-        check(error); if (!data) throw new Problem(404, 'not-found'); return json({ ok: true, stage: 'registered', fighter: data });
+        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at,moderation_reason,deleted_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
+        check(error); if (!data) throw new Problem(404, 'not-found');
+        if (data.deleted_at) return json({ ok: true, stage: 'deleted', fighterId: data.id, deletedAt: data.deleted_at });
+        return json({ ok: true, stage: 'registered', fighter: data });
       }
       if (isWorker && method === 'POST') {
         let body;

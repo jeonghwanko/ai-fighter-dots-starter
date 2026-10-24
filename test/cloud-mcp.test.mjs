@@ -17,7 +17,7 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   const init=await (await handle(request('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}}))).json();
   assert.equal(init.result.serverInfo.name,'oddbout-cloud');
   const list=await (await handle(request('tools/list'))).json();
-  assert.equal(list.result.tools.length,9);
+  assert.equal(list.result.tools.length,11);
   for(const name of ['prepare_fighter_registration','upload_fighter_asset']) {
     const t=list.result.tools.find(t=>t.name===name), f=t.inputSchema.properties[t._meta['openai/fileParams'][0]];
     assert.deepEqual(new Set(f.required),new Set(['download_url','file_id']));
@@ -114,4 +114,42 @@ test('consent never redirects to a supplied third-party origin and preserves onl
   assert.equal(safeClientRedirect('https://chatgpt.com/connector_platform/oauth/callback?code=a'),true);
   for(const url of ['javascript:alert(1)','https://chatgpt.com.evil.test','https://user@chatgpt.com/x','http://chatgpt.com'])assert.equal(safeClientRedirect(url),false);
   assert.equal(authorizationId('?authorization_id='+client,null),client);assert.equal(authorizationId('?authorization_id=bad',client),null);
+});
+
+test('deletion tools require explicit confirmation and bind every call to verified owner, session and client',async()=>{
+  const calls=[],fighter=crypto.randomUUID(),confirmation=crypto.randomUUID();
+  const db={...dbFor(),rpc:async(name,args)=>{
+    calls.push([name,args]); return {data:name==='af_mcp_session_active'?true:{ok:true,stage:'confirmation-required'}};
+  }};
+  const handle=createCloudHandler({db});
+  const list=(await (await handle(request('tools/list'))).json()).result.tools;
+  const tool=list.find(t=>t.name==='delete_fighter');
+  assert.equal(tool.annotations.destructiveHint,true);
+  assert.ok(tool.inputSchema.required.includes('confirm'));
+  assert.ok(!Object.keys(tool.inputSchema.properties).some(k=>/owner|email|session|client/.test(k)));
+  const p=(await call(handle,'prepare_fighter_deletion',{fighterId:fighter})).structuredContent;
+  assert.deepEqual(p.account,{id:owner,email:'test@example.com'});
+  const args={fighterId:fighter,confirmationToken:confirmation,confirmName:'Exact name'};
+  assert.equal((await call(handle,'delete_fighter',{...args,confirm:false})).isError,true);
+  assert.equal(calls.filter(([n])=>n==='af_delete_owned_fighter').length,0);
+  await call(handle,'delete_fighter',{...args,confirm:true});
+  assert.deepEqual(calls.find(([n])=>n==='af_delete_owned_fighter')[1],{
+    p_owner:owner,p_session:session,p_client:client,p_fighter:fighter,p_token:confirmation,p_confirm_name:'Exact name'});
+  db.rpc=async name=>name==='af_mcp_session_active'?{data:true}:{error:{message:'private database details'}};
+  const failed=await call(handle,'delete_fighter',{...args,confirm:true});
+  assert.equal(failed.structuredContent.code,'database-unavailable');
+  assert.ok(!JSON.stringify(failed).includes('private database'));
+});
+
+test('owned list excludes deleted rows and owned lookup returns only a deletion receipt',async()=>{
+  const filters=[],fighter=crypto.randomUUID(),deletedAt=new Date().toISOString();
+  const query={select(){return this},eq(k,v){filters.push([k,v]);return this},is(k,v){filters.push([k,v]);return this},order(){return this},
+    async limit(){return{data:[]}},async maybeSingle(){return{data:{id:fighter,deleted_at:deletedAt,profile:{name:'Deleted'}}}}};
+  const db={...dbFor(),from:()=>query};
+  const handle=createCloudHandler({db});
+  assert.deepEqual((await call(handle,'list_my_fighters')).structuredContent.fighters,[]);
+  assert.ok(filters.some(([k,v])=>k==='deleted_at'&&v===null));
+  assert.ok(filters.some(([k,v])=>k==='owner_id'&&v===owner));
+  assert.deepEqual((await call(handle,'get_registered_fighter',{fighterId:fighter})).structuredContent,
+    {ok:true,stage:'deleted',fighterId:fighter,deletedAt});
 });

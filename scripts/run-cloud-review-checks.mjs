@@ -99,6 +99,27 @@ try {
     else assert.deepEqual(r.fighters, []);
   });
   if (expectedFighterId) {
+    if (process.env.ODDBOUT_REVIEW_CHECK_DELETION === '1') {
+      const prepared = await step('Prepare owned deletion without executing it', 'prepare_fighter_deletion', {fighterId:expectedFighterId}, r=>{
+        assert.equal(r.ok,true); assert.equal(r.stage,'confirmation-required'); assert.equal(r.account.id,credentials.id);
+        assert.equal(r.effects.retainPrivatePackageAndHistory,true);
+      });
+      await step('Reject a forged deletion confirmation', 'delete_fighter', {
+        fighterId:expectedFighterId,confirmationToken:crypto.randomUUID(),confirmName:prepared.confirmName,confirm:true,
+      },r=>{assert.equal(r.ok,false);assert.equal(r.code,'invalid-deletion-confirmation')});
+      await step('Reject the wrong confirmation name', 'delete_fighter', {
+        fighterId:expectedFighterId,confirmationToken:prepared.confirmationToken,confirmName:'Wrong confirmation name',confirm:true,
+      },r=>{assert.equal(r.ok,false);assert.equal(r.code,'deletion-name-mismatch')});
+      const foreign=process.env.ODDBOUT_REVIEW_FOREIGN_FIGHTER_ID;
+      if(foreign) await step('Reject another account’s fighter', 'prepare_fighter_deletion', {fighterId:foreign},r=>{
+        assert.equal(r.ok,false); assert.equal(r.code,'not-found');
+      });
+      // Confirmation tokens are not credentials, but keep them out of saved/public evidence too.
+      for(const entry of evidence.steps) {
+        if(entry.response?.confirmationToken) entry.response.confirmationToken='<REDACTED>';
+        if(entry.arguments?.confirmationToken) entry.arguments.confirmationToken='<REDACTED>';
+      }
+    }
     await step('Verify the native Dots registration through the public gateway', 'get_fighter_submission', { submissionId: expectedSubmissionId }, r => {
       assert.equal(r.ok, true); assert.equal(r.stage, 'registered'); assert.equal(r.fighterId, expectedFighterId);
       assert.equal(r.manifestSha256, expectedManifestSha); assert.equal(r.runtimeApproved, true);
