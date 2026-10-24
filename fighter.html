@@ -181,82 +181,8 @@
         .boot-loading-ring { animation: none; }
       }
       html[data-boot-motion="reduce"] .boot-loading-ring { animation: none; }
-      /*
-       * 하단 원화 크레딧 탭(화면의 선수에게 원형 크레딧이 있을 때만 보인다, `showFighterCredits`). ODDBOUT 톤(2026-10-22): 잉크 스크림,
-       * Pretendard 12px 흰 글자, 라임 밑줄 링크, 각진 모서리. 캔버스의 버튼은 이 탭 높이(아래 44px)를 비운다(`ARENA_SELECT_BOTTOM_CLEAR`).
-       * 개인정보처리방침 링크는 이 페이지에 두지 않는다(2026-10-24): 진입 사이트(league.html)의 하단 메뉴가 고지한다.
-       */
-      .title-footnote {
-        position: fixed;
-        right: 12px;
-        bottom: 0;
-        z-index: 2;
-        display: flex;
-        flex-wrap: wrap;
-        justify-content: center;
-        align-items: baseline;
-        gap: 0.5em;
-        max-width: min(960px, 94vw);
-        padding: 7px 18px 8px;
-        background: rgba(7, 25, 35, 0.86);
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        border-bottom: 0;
-        color: rgba(255, 255, 255, 0.72);
-        font: 12px/1.5 "Pretendard", "Malgun Gothic", sans-serif;
-        text-align: center;
-      }
-      /* 클래스의 display 는 UA 의 [hidden] 규칙을 이긴다. 이 한 줄이 없으면 고르기 화면을 떠난 뒤에도 탭이 경기 화면에 남는다. */
-      .title-footnote[hidden] {
-        display: none;
-      }
-      .title-footnote a {
-        color: #fff;
-        text-decoration: none;
-        border-bottom: 1px solid #eaff50;
-      }
-      .title-footnote a:hover,
-      .title-footnote a:focus-visible {
-        color: #eaff50;
-      }
-      .title-footnote a:focus-visible {
-        outline: 2px solid #eaff50;
-        outline-offset: 2px;
-      }
-      /* 원화 크레딧 패널: 누르면 탭 위로 펼친다. */
-      .fighter-credit-panel[hidden] {
-        display: none;
-      }
-      .fighter-credit button {
-        padding: 0;
-        background: none;
-        border: 0;
-        border-bottom: 1px solid #eaff50;
-        color: #fff;
-        font: inherit;
-        cursor: pointer;
-      }
-      .fighter-credit button:hover,
-      .fighter-credit button:focus-visible { color: #eaff50; }
-      .fighter-credit button:focus-visible {
-        outline: 2px solid #eaff50;
-        outline-offset: 2px;
-      }
-      .fighter-credit-panel {
-        position: absolute;
-        right: -1px;
-        bottom: 100%;
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        box-sizing: border-box;
-        width: min(460px, calc(100vw - 24px));
-        padding: 10px 14px;
-        background: #071923;
-        border: 1px solid rgba(255, 255, 255, 0.16);
-        text-align: left;
-      }
     </style>
-  <script type="module" crossorigin src="/assets/fighter-B0BzEDJg.js"></script>
+  <script type="module" crossorigin src="/assets/fighter-BGh3P9wX.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/registeredFighters-EA4S55Qb.js">
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CVMKP0F5.js">
   <link rel="modulepreload" crossorigin href="/assets/portraitLock-DYcks80K.js">
@@ -268,9 +194,9 @@
   <link rel="modulepreload" crossorigin href="/assets/NativeCityOttoEncounter-C4yCkg3j.js">
   <link rel="modulepreload" crossorigin href="/assets/AttackMoves-B-lq5s5T.js">
   <link rel="modulepreload" crossorigin href="/assets/WebGl2Support-hZXjXmi-.js">
-  <link rel="modulepreload" crossorigin href="/assets/PauseMenuScene-CC25Bsr2.js">
+  <link rel="modulepreload" crossorigin href="/assets/PauseMenuScene-CiWyJjTF.js">
   <link rel="modulepreload" crossorigin href="/assets/leagueContent-CpjltF06.js">
-  <link rel="modulepreload" crossorigin href="/assets/TournamentBracketScene-Dc_zdyI7.js">
+  <link rel="modulepreload" crossorigin href="/assets/TournamentBracketScene-Jgu4UvlJ.js">
   <link rel="stylesheet" crossorigin href="/assets/portraitLock-wH03GdfC.css">
 </head>
   <body>
@@ -287,10 +213,6 @@
         <span class="boot-loading-en">Preparing the arena</span>
       </div>
     </div>
-    <p class="title-footnote fighter-credit" id="fighter-credit" hidden
-      ><button type="button" aria-expanded="false" aria-controls="fighter-credit-panel">원화 크레딧</button
-      ><span class="fighter-credit-panel" id="fighter-credit-panel" hidden></span
-    ></p>
     <script>
       const bootParams = new URLSearchParams(location.search);
       document.documentElement.lang = bootParams.get("lang") === "en" ? "en" : "ko";
