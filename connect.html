@@ -1,0 +1,17 @@
+<!doctype html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer"><meta name="robots" content="noindex">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; connect-src https://ztfxxhtmtrvxvuxlqmgz.supabase.co; img-src 'self'; base-uri 'none'; form-action 'none'">
+<title>ODDBOUT · Dots 연결</title><link rel="stylesheet" href="/cloud-connect/connect.css">
+<script defer src="/cloud-connect/supabase.js"></script><script type="module" src="/cloud-connect/connect.mjs"></script></head>
+<body><main><a class="brand" href="/">ODDBOUT</a><p class="eyebrow">DOTS와 함께 만드는 내 캐릭터</p>
+<h1>Google로 로그인하고<br>Dots에 연결하세요.</h1><p>PC 설치 없이 대화에서 만든 캐릭터를 등록하고,<br>내 캐릭터와 등록 진행 상태를 확인할 수 있습니다.</p>
+<div id="status" role="status" aria-live="polite">연결 요청을 확인하고 있습니다.</div>
+<button id="login" hidden>Google로 계속하기</button>
+<section id="consent" hidden><h2>ODDBOUT 연결 승인</h2><p id="account"></p><p id="client"></p>
+<ul><li>계정 이름과 이메일 확인</li><li>내 캐릭터와 등록 진행 상태 조회</li><li>대화에서 내가 요청한 캐릭터 파일 업로드 및 등록</li></ul>
+<p class="small">이미지·영상 생성 구독을 연결하거나 결제하는 권한은 포함되지 않습니다. Dots에서 시작한 요청인지 확인한 후 승인하세요.</p>
+<button id="approve">연결 승인하고 Dots로 돌아가기</button><button id="deny" class="secondary">취소</button></section>
+<p class="small">연결 후 Dots에 “캐릭터를 만들어서 ODDBOUT에 등록해 줘”라고 말하세요. 로그인 코드나 비밀번호를 대화에 붙여 넣을 필요가 없습니다.</p>
+<footer><a href="/ai-fighter-creator/privacy.html">개인정보 처리 안내</a> · <a href="/creator.html">캐릭터 등록 안내</a></footer>
+</main></body></html>
