@@ -45,6 +45,7 @@ export function connectionHandler({ remote, root = kitRoot, sessionPath = defaul
       if (action !== 'wait') throw new Error('invalid-connection-action');
       if (current.action.status !== 'awaiting-approval')
         return { ok: false, stage: 'oddbout-connection', code: 'connection-not-started', data: current };
+      await preview(); // A pending file from another project must not be redeemed into this workspace.
       try { await wait({ sessionPath, timeoutSeconds: 0, log: () => {} }); }
       catch (error) {
         if (error.message === 'device-login-pending')

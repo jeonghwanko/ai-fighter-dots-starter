@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -90,4 +90,15 @@ test('CLI diagnostics work before login and never enter generation setup', async
   assert.equal(result.items.login.action.status, 'available'); assert.equal(result.readyForRegistration, false);
   assert.equal(result.elicitation, 'not-needed');
   await assert.rejects(checkConnection({ purpose: 'generation' }), /usage-creation-check/);
+});
+
+test('an approval for a different project is never redeemed into this workspace', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-project-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const sessionPath = path.join(dir, 'client.json');
+  await writeFile(pendingDeviceLoginPath(sessionPath), JSON.stringify({ version: 1,
+    url: 'https://abcdefghijklmnopqrst.supabase.co', publishableKey: 'sb_publishable_fixtureFixtureFixture01',
+    deviceCode, userCode: 'BCDF-GHJK', expiresAt: new Date(Date.now() + 600000).toISOString(), interval: 5 }));
+  const handle = connectionHandler({ sessionPath, probe, wait: () => assert.fail('must not redeem another project') });
+  const result = await handle({ action: 'wait' });
+  assert.equal(result.ok, false); assert.equal(result.code, 'pending-device-login-invalid');
 });
