@@ -212,11 +212,48 @@ v8 패치·기존 작업을 보존했고 실제 로그인·새 자격증명·이
 
 ### 남은 장애와 미검증
 
-VM 네트워크 정책 변경용 공식 관리 도구는 이 세션에 제공되지 않았다. 필요한 세 호스트의 정상 허용은
-초기 환경 준비자/관리자가 [환경별 공식 설정 경로](CONNECTION-READINESS.md#초기-환경-준비자-단계)에서 확인해야 한다.
-기본 Work 클라우드에는 제공되는 경우 Work network access를 사용하며, 사용자 지정 Codex 환경에만 해당 환경 설정·재게시를 적용한다.
-이번 실행에서는 허용 변경·Republish를 수행하지 않았다. 상속 프록시·CA를 변경/해제하거나 별도 직접 연결·우회 설정을 추가하지 않았다.
+VM 네트워크 정책 변경용 공식 관리 도구는 이 세션에 제공되지 않았다. 후속 UI 점검에서는 Work network access가 이미 ON이고,
+사용자 승인 후 Dot 재부팅으로도 차단이 해제되지 않았다(아래 기록). 사용자 지정 Codex 환경에만 해당 환경 설정·재게시를 적용하며,
+기본 Dots VM에 적용되는 허용목록 편집 화면은 확인되지 않았다. 상속 프록시·CA를 변경/해제하거나 별도 직접 연결·우회 설정을 추가하지 않았다.
 
 실사용 Google 로그인·기기 승인·인증된 GET /me·동일 계정 여부, 실제 이미지 생성 백엔드·구독 접근,
 Library 업로드·부모 대화 표시, 패키지 제출·선수 등록은 여전히 미검증이다. 네트워크 복구와 호스트 도구 연결 후
 사용자가 요청한 단계에서 확인해야 한다. 새 생성·업로드·등록·자격증명 발급·서비스 배포·CI는 실행하지 않았다.
+
+### 실제 사용자 설정·Dot 재부팅 확인 — 2026-10-24
+
+- 사용자 요청에 따라 같은 계정의 실제 웹 UI를 확인했다.
+  [설정 → 데이터 관리](https://chatgpt.com/settings/data-controls)의 **Work 네트워크 액세스 허용**은 처음부터 ON이었다.
+  이 값을 끄고 켜거나 다른 개인정보·사이트 승인 설정을 변경하지 않았다. 이 표시가 개별 Dot VM의 유효 정책을 보증하지는 않는다.
+- [미미](https://chatgpt.com/dots/home)의 상단 **⋯ → 재부팅 → 다시 시작**을 확인했다.
+  확인창은 진행 중 작업 중단 가능과 대화·메모리·예약 작업 유지를 안내했다.
+  자동 승인 검토가 구체적인 중단 위험에 대한 승인을 요구하여 최초 클릭을 거절했고,
+  사용자가 **재부팅하고 연결 재검사**를 명시적으로 선택한 뒤 05:21–05:22 UTC에 다시 시작을 실행했다.
+  확인창이 닫히고 대화 화면으로 돌아왔다. Work 재설정·Dot 삭제는 실행하지 않았다.
+- 재부팅 후 같은 클라우드 채팅에서 새 실행으로 검사했다. 최초 환경 표시는 unavailable이었지만 실제 셸 접근은 복구됐다.
+  HEAD `e87aca02483ce3af36174772251e21a65284ca27`, 주요 파일, v8 패치 23개 해시가 보존됐다.
+  작업 트리에는 기존 vendor 변경만 있었으며 캐릭터 output 파일은 없었다.
+- 시작 정책 파일은 v1, `restricted`, 규칙 144개이며 세 호스트의 명시적 규칙은 없었다.
+  현재 정책을 별도로 조회·갱신하는 공식 도구는 제공되지 않았다. 실제 공개 GET은 다음과 같았다.
+
+| 재부팅 후 공개 대상 | 결과 |
+| --- | --- |
+| `https://oddbout.com/` | CONNECT 403 / HTTP 000 / curl exit 56 |
+| `https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter/spec` | CONNECT 403 / HTTP 000 / curl exit 56 |
+| `https://chatgpt.com/` | CONNECT 403 / HTTP 000 / curl exit 56 |
+
+- 기본 세션과 기기 승인 대기 파일이 없는 것을 확인하고 `npm run creation:check -- connection`을 실행했다.
+  진단 exit 0, API/홈페이지 `network-connect-forbidden`, login blocked, readyForRegistration false였다.
+  Library helper 자체는 호출하지 않았으며 생성·전달은 계속 unverified다.
+- 실제 대화에 AI Fighter 도구는 여전히 없다. 웹의 설치된 플러그인에도 해당 연결이 없다.
+  저장소의 `mcp/stdio.mjs`와 생성되는 plugin manifest는 stdio 방식이며, HTTPS MCP endpoint는 구현되어 있지 않다.
+  따라서 **MCP 연결·목록 갱신만 남았다**는 앞선 설명은 불완전했다. 로컬 stdio 실행 성공은 Dots 연결 성공이 아니다.
+- 실제 연결 UI는 [플러그인](https://chatgpt.com/plugins) → **추가(+) → 사용자 지정 MCP 서버 추가**이며
+  이름, 서버 URL 또는 터널 ID, 인증을 요구한다. 준비된 클라우드 endpoint/터널이 없어 생성·권한 승인은 진행하지 않았다.
+  [연결 조건](CONNECTION-READINESS.md#dots-클라우드의-mcp-연결-조건)에 공식 문서와 구현 경계를 기록했다.
+
+Work 표시가 ON인데 이 Dot VM의 요청이 차단되는 원인은 현재 도구로 확정할 수 없다.
+추가 호스트 입력·Republish를 사용자가 빠뜨렸다고 결론 내리지 않는다. 플랫폼 확인이 필요한 근거는
+검사 시각, Work ON, 승인된 재부팅 이후에도 반복되는 세 대상의 CONNECT 403이다.
+[OpenAI 지원](https://help.openai.com/en/articles/6614161-how-can-i-contact-support)은 Help Center 오른쪽 아래 채팅에서 문의할 수 있다.
+사용자 동의 없이 문의나 로그 전송은 하지 않았다. 로그인·생성·업로드·등록·서비스 배포·CI는 계속 미실행이다.

@@ -7,6 +7,10 @@ immutable version snapshots, group gates, and a managed CLI job ledger. Generati
 and packaging continue to use the pinned sprite-gen and existing fighter tools. Credentials are not
 included in the plugin; each creator uses their own accounts.
 
+This is a desktop stdio plugin. Installing or refreshing it does not connect it to a Dots cloud chat.
+The repository does not currently provide a hosted HTTPS MCP endpoint. See
+[the cloud connection prerequisites](CONNECTION-READINESS.md#dots-클라우드의-mcp-연결-조건) before advising a cloud user to refresh or reconnect.
+
 ## Install on this computer
 
 From a checkout with Node 22.12+ and `npm ci --ignore-scripts` completed:

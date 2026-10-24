@@ -30,8 +30,31 @@ VM 설치와 호스트 종류에 맞는 네트워크 준비는 초기 환경 준
 구형 호스트에 `connect_oddbout` 도구가 없다면 반환된 CLI `command`와 `resumeCommand`를 쓴다.
 준비 도구 자체가 보이지 않을 때는 에이전트가 키트 디렉터리에서 `npm run creation:check -- connection`을 실행한다.
 등록만 점검하려면 `npm run creation:check -- registration`이다. 이 명령은 생성·등록·로그인 시작·키트 업데이트를 하지 않는다.
-새 코드를 설치한 뒤에는 한 번 MCP를 재시작해 도구 목록을 갱신한다. 구형 프로세스가 반환하는 `restart-required`는
-이 런타임 갱신 문제이며 Google 로그인을 반복해서 해결하지 않는다.
+이미 해당 실행 호스트에 연결된 MCP라면 새 코드를 설치한 뒤 한 번 재시작해 도구 목록을 갱신한다.
+구형 프로세스가 반환하는 `restart-required`는 이 런타임 갱신 문제이며 Google 로그인을 반복해서 해결하지 않는다.
+호스트 연결 자체가 없을 때의 조치는 다음 절과 다르다. VM 안에서 stdio 서버의 `tools/list`가 성공한 것만으로
+Dots 대화에 도구가 연결됐다고 보고하지 않는다.
+
+## Dots 클라우드의 MCP 연결 조건
+
+이 저장소의 `mcp/stdio.mjs`, 로컬/배포 플러그인은 **로컬 stdio MCP**다. PC의 설치·`config.toml`·로그인 세션은
+Dots 클라우드에 자동 설치되거나 공유되지 않는다. 현재 저장소에는 클라우드용 HTTPS MCP endpoint가 없다.
+`deploy/creator-site.json`의 등록 REST API는 MCP URL이 아니다. 그 주소에 임의로 `/mcp`를 붙이지 않는다.
+[공식 Desktop-only 안내](https://developers.openai.com/plugins/deploy/desktop-only)
+
+2026-10-24 실제 개인 계정 웹 UI에서 확인한 연결 경로는 다음과 같다.
+
+1. [플러그인](https://chatgpt.com/plugins) → 오른쪽 위 **추가(+)** → **사용자 지정 MCP 서버 추가**.
+2. **이름**, **연결: 서버 URL 또는 터널**, **인증**을 지정한다.
+3. 준비자가 검증한 HTTPS MCP 주소 또는 공식 Secure MCP Tunnel ID가 있어야 한다. 연결 대상·계정 권한을 검토한 뒤 생성한다.
+4. 연결된 custom MCP가 이미 있을 때만 그 연결의 **Refresh**로 메타데이터를 갱신하고 새 대화에서 실제 도구를 확인한다.
+   버튼의 실제 제공 여부를 확인한다. 이 계정에는 AI Fighter 클라우드 연결이 없어 Refresh 적용은 검증하지 않았다.
+
+로컬 파일과 계정 세션에 의존하는 현재 서버를 인증 없이 공개하거나, 유지관리자의 PC를 다른 사용자의 실행 공간으로
+공유하지 않는다. 클라우드 MCP를 제공하려면 사용자 인증·작업 공간 격리·VM 파일 전달을 포함한 연결 구현이 먼저 필요하다.
+이는 일반 제작 사용자가 설정 값을 채워 해결할 문제가 아니다. 공식 터널도 명시적으로 선택·구성되어야 하며
+실제 제작 VM의 파일 접근과 사용자 계정 범위를 별도로 확인한다.
+[공식 MCP 연결 및 갱신 안내](https://developers.openai.com/plugins/deploy/connect-chatgpt)
 
 ## 시스템이 분리해서 보고하는 상태
 
@@ -60,10 +83,22 @@ VM 설치와 호스트 종류에 맞는 네트워크 준비는 초기 환경 준
 
 - Dots/미미가 사용하는 기본 ChatGPT Work 클라우드라면, 제공되는 경우 설정의 `Data controls → Work network access`를 확인한다.
   공개 인터넷 허용은 관리자 제한을 해제하지 않는다. 변경 적용은 현재 실행 종료 후 환경 갱신 시점이다.
+  Work 설정의 표시 값만으로 개별 Dot VM의 유효 정책까지 적용됐다고 판단하지 않는다.
   [공식 Work 네트워크 안내](https://learn.chatgpt.com/docs/enterprise/chatgpt-work-overview#network-access-and-external-destinations)
 - 사용자가 구성·게시한 Codex 클라우드 환경이면 `Allow Codex to access internet`, 필요한 `Additional allowed domains`를 확인하고
   해당 환경을 다시 게시한 뒤 새 작업에서 검사한다. 기본 Work 환경에 이 편집 화면이나 Republish가 있다고 가정하지 않는다.
   [공식 Codex 환경 안내](https://learn.chatgpt.com/docs/environments/cloud-environments#connect-to-services)
+
+2026-10-24 실제 계정에서는 [설정 → 데이터 관리](https://chatgpt.com/settings/data-controls)의
+**Work 네트워크 액세스 허용**이 이미 켜져 있었다. ON인데 VM 공개 요청이 CONNECT 403이면 같은 스위치를 켜라고
+반복 안내하지 않는다. 이 관찰만으로 설정 반영 지연·계정 정책·플랫폼 문제 중 하나를 확정할 수도 없다.
+기본 Dots VM에 사용자 지정 Codex 환경의 허용목록 편집·Republish가 적용된다고 가정하지 않는다.
+
+실제로 제공된 재시작 경로는 [미미](https://chatgpt.com/dots/home) → 상단 **⋯** → **재부팅** → **다시 시작**이다.
+확인창은 진행 중 작업이 중단될 수 있고 대화·메모리·예약 작업은 유지된다고 안내한다.
+진행 중 작업을 먼저 확인하고 필요한 승인을 받은 뒤 사용한다. **ChatGPT Work 재설정**이나 Dot **삭제**와 혼동하지 않는다.
+재부팅은 호스트 허용을 보장하지 않는다. 같은 작업에서 실제 요청과 대화의 도구 목록을 재검사하고, 여전히 막히면
+시각·채팅 식별자·Work 스위치 상태·CONNECT 결과를 플랫폼 지원에 전달할 근거로 정리한다.
 
 웹 검색·연결된 앱의 성공은 VM 셸의 네트워크 허용을 뜻하지 않는다. 실패한 바로 그 환경에서 재검사해야 한다.
 키트의 공개 진단·등록 API·Google 세션 교환/갱신은 `api/runtime-fetch.mjs`로 환경의 HTTP_PROXY/HTTPS_PROXY와
