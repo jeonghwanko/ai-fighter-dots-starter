@@ -1,6 +1,7 @@
 # ODDBOUT cloud plugin review
 
-Status on 2026-10-24: **own-domain draft uploaded; not submitted for review**.
+Status on 2026-10-24: **submitted; portal shows 1.0.2 · In review**.
+Publication is still **Not published**; submission is not approval.
 This remote MCP submission is independent of the local MCP eligibility case.
 
 ## Final draft and public addresses
@@ -34,12 +35,16 @@ legacy Render URL and branded URL are explicitly accepted audiences of one
 service; ordinary database/storage access remains unavailable to OAuth tokens.
 
 Edge Function version 6 and the branded-audience migration are deployed.
-The gateway code must be deployed to Render before verifying the new challenge
-and completing the own-domain OAuth connection. The free Render instance can
+Render deployment `dep-dbe6lqjncjis73d6mmkg` serves gateway commit
+`4d745e42df6663f7e7384e6dac36d610ae029358`. Live checks verified the exact commit,
+branded resource metadata, hostname-specific challenge, nine tools and a branded
+HTTP 401 authentication challenge. The portal verified the domain and completed
+OAuth with the dedicated reviewer. Its MCP scan reported no findings.
+The free Render instance can
 take 50 seconds or more to start after inactivity. No paid plan was selected.
 
 A dedicated ordinary reviewer account was created with explicit user approval.
-Password login and the earlier Render draft's OAuth consent completed in the
+Password login and the final own-domain draft's OAuth consent completed in the
 real browser. Credentials are stored outside the repository in a restricted
 local file and may be sent only to OpenAI's private Review details. Never put
 reviewer passwords in source, ZIPs, screenshots, logs or public walkthroughs.
@@ -57,14 +62,34 @@ Desktop and 390px layouts were inspected. The real reviewer email login and
 consent screen were verified. Existing game-site updates were fast-forwarded
 and preserved before publishing the connection and policy pages.
 
-## Remaining submission work
+## Submitted evidence and outcome
 
-1. Deploy and verify the own-domain gateway, proof, resource metadata and OAuth.
-2. Run the five proposed positive and three negative review cases with the
-   dedicated review account. Proposed expected outcomes are not test evidence.
-3. Add an accessible real walkthrough and private credentials in Review details.
-4. Resolve blocking tool/metadata findings, inspect binding attestations and
-   submit. Record the actual queued review status and submission identifier.
+- Five live non-publishing MCP cases passed on the dedicated review account:
+  profile, registration readiness, overview contract, empty owned fighter list,
+  and accurate not-found handling for a nonexistent submission.
+- The checks used normal password authentication, a separate OAuth client,
+  PKCE S256 and consent. Its temporary grant was revoked after testing; the
+  portal's ChatGPT connection was preserved.
+- Twelve targeted gateway, MCP/authentication and worker tests passed.
+- Sanitized responses: https://oddbout.com/cloud-plugin/review-20261024/evidence.json
+- Walkthrough: https://oddbout.com/cloud-plugin/review-20261024/walkthrough.mp4
+  (87-second video assembled from actual authentication and response screenshots;
+  not a recording of a ChatGPT conversation). Live bytes matched local files.
+- Final ZIP SHA-256: `1b5f1c713a60670434f8d773a019041e66865647faca0113821aaad95292be82`.
+- Dedicated credentials and sign-in instructions were saved only in the portal's
+  private reviewer fields. The package includes five positive and three negative
+  scenarios. Negative server boundary checks do not certify model behavior.
+- The user explicitly confirmed all six legal/policy attestations at the final
+  submission step. The Submit action completed, and the final plugin details
+  show **MCP configuration Configured**, **1.0.2 · In review** and
+  **Publication Not published**. The portal list labels its associated initial
+  MCP app version 1.0.0; the submitted package version is 1.0.2.
+- A non-blocking category finding remained: the scanner could not confirm
+  Productivity. There were no blocking findings at submission.
 
-No new fighter was generated or published for review. A draft, successful
-deployment or domain proof response is not a completed public submission.
+Await the external review decision. Do not submit the earlier drafts or claim
+that ordinary users can install this listing from the directory before approval.
+
+No new fighter was generated or published for review. The live account checks
+do not prove host attachment transfer or a complete successful registration.
+These limitations were disclosed in the private review instructions and video.
