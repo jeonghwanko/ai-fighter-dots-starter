@@ -52,7 +52,7 @@ export async function authenticateCloud(db, request, now = Date.now) {
 
 export function cloudServer({ db, identity, fetcher = fetch }) {
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
-    instructions: 'Create and register AI Fighter characters using the user’s own generation account. Do not generate merely to test access. Require the user’s final registration request and preserve motion review boundaries. Use host file attachments for fighter.json and WebP assets. Never ask for tokens, local PC installation or callback URLs in chat. A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
+    instructions: 'Create and register AI Fighter characters using the user’s own generation account. Call this cloud connector’s check_creation_readiness before first generation, after a workspace restart and before registration. It checks account access; generation and display still require actual host evidence. Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. Require the user’s final registration request and preserve motion review boundaries. Use host file attachments for fighter.json and WebP assets. Never ask for tokens or callback URLs in chat. A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
   // The existing API runs in-process with an identity bound to this verified request. The shim cannot be
   // selected from tool inputs and never receives/returns a privileged credential or another user's identity.
   const scoped = identity ? new Proxy(db, { get(target, key) {
@@ -86,6 +86,17 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
         network: 'The cloud connector handles registration and host file downloads; no user PC MCP or VM registration API login is needed.' } }), { publicTool: true });
   register('get_profile', 'ODDBOUT 연결 계정', 'Read the connected ODDBOUT account. Its opaque ID is stable across reconnections and email changes. No creation or publication.', {},
     async () => ({ id: identity.owner, ...(identity.email ? { email: identity.email } : {}), nickname: 'ODDBOUT' }), { profile: true });
+  register('check_creation_readiness', '클라우드 제작·등록 연결 점검', 'Use before first generation, after a workspace restart and before registration. Checks this cloud account’s registration access without a PC or CLI login. Generation, conversation display and package review remain unverified until actual evidence exists; this call never generates.',
+    { purpose: z.enum(['generation','connection','registration']).default('registration') }, async ({ purpose }) => {
+      const result = await invoke('me');
+      if (!result.ok) return result;
+      return { ok: true, purpose, scope: 'cloud-registration-connection', account: result.account,
+        registration: { status: result.account.canSubmit ? 'ready' : 'blocked', requiresPc: false, auth: 'connected-google-oauth' },
+        generation: { status: 'unverified', reason: 'actual-host-generation-call-required' },
+        delivery: { status: 'unverified', inputCapability: 'openai-fileParams', reason: 'actual-conversation-preview-and-file-transfer-required' },
+        package: { status: 'unverified', reason: 'final-visual-review-and-package-validation-required' },
+        nextCommands: [], nextAction: result.account.canSubmit ? 'Continue the user-requested review group or register the approved actual package using host file attachments. Verify generation/display separately in the current conversation.' : 'Account registration access is unavailable; inspect the account response.' };
+    });
   register('list_my_fighters', '내 캐릭터', 'List only the connected user’s registered fighters.', {}, async () => {
     const { data, error } = await db.from('af_fighters').select('id,profile,status,review_state,created_at').eq('owner_id', identity.owner).order('created_at', { ascending: false }).limit(50);
     if (error) throw new Problem(503, 'database-unavailable'); return { ok: true, fighters: data };

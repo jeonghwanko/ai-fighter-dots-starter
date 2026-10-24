@@ -17,7 +17,7 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   const init=await (await handle(request('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}}))).json();
   assert.equal(init.result.serverInfo.name,'oddbout-cloud');
   const list=await (await handle(request('tools/list'))).json();
-  assert.equal(list.result.tools.length,8);
+  assert.equal(list.result.tools.length,9);
   for(const name of ['prepare_fighter_registration','upload_fighter_asset']) {
     const t=list.result.tools.find(t=>t.name===name), f=t.inputSchema.properties[t._meta['openai/fileParams'][0]];
     assert.deepEqual(new Set(f.required),new Set(['download_url','file_id']));
@@ -43,6 +43,13 @@ test('normal user tokens, wrong audiences, expiry, future tokens, missing grants
   assert.equal(await verifiedUserId(dbFor(),req),null);
   const encoded=`a.${Buffer.from(JSON.stringify(claims())).toString('base64url')}.c`;
   assert.equal(await verifiedUserId({auth:{getUser:async()=>({data:{user:{id:owner}}})}},new Request(CLOUD_RESOURCE,{headers:{authorization:`Bearer ${encoded}`}})),null);
+});
+test('cloud readiness never turns account access into generation, display or package approval',async()=>{
+  const db={...dbFor(),rpc:async name=>({data:name==='af_account'?{invited:true,accessMode:'open',canSubmit:true}:true})};
+  const ready=(await call(createCloudHandler({db}),'check_creation_readiness',{purpose:'registration'})).structuredContent;
+  assert.equal(ready.registration.status,'ready');assert.equal(ready.registration.requiresPc,false);
+  for(const key of ['generation','delivery','package'])assert.equal(ready[key].status,'unverified');
+  assert.deepEqual(ready.nextCommands,[]);
 });
 test('files cannot fetch arbitrary URLs, follow redirects or exceed manifest byte budget',async()=>{
   for(const url of ['http://files.oaiusercontent.com/a','https://127.0.0.1/x','https://files.oaiusercontent.com.evil.test/x','https://user@files.oaiusercontent.com/x','https://files.oaiusercontent.com:444/x']) assert.equal(allowedFileUrl(url),false);
