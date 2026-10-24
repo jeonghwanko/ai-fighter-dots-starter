@@ -273,8 +273,8 @@
     "file": "assets/infoPage-3AVXp6ft.css",
     "src": "_infoPage-3AVXp6ft.css"
   },
-  "_leagueContent-CJjuhVjB.js": {
-    "file": "assets/leagueContent-CJjuhVjB.js",
+  "_leagueContent-Btfc6sV_.js": {
+    "file": "assets/leagueContent-Btfc6sV_.js",
     "name": "leagueContent"
   },
   "_native-city-art-finish-BZDHQ1na.js": {
@@ -408,7 +408,7 @@
     ]
   },
   "credits.html": {
-    "file": "assets/credits-BsNwzf8j.js",
+    "file": "assets/credits-Dc9ln1MF.js",
     "name": "credits",
     "src": "credits.html",
     "isEntry": true,
@@ -416,7 +416,7 @@
       "__oddbout-analytics-CVMKP0F5.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
       "_siteChrome-CpDKksHP.js",
-      "_leagueContent-CJjuhVjB.js"
+      "_leagueContent-Btfc6sV_.js"
     ],
     "css": [
       "assets/credits-D3j8SwRf.css"
@@ -433,7 +433,7 @@
     ]
   },
   "fighter.html": {
-    "file": "assets/fighter-BGYjLDhg.js",
+    "file": "assets/fighter-Hztz-rMm.js",
     "name": "fighter",
     "src": "fighter.html",
     "isEntry": true,
@@ -446,12 +446,12 @@
       "_palette-PCgBTV9z.js",
       "_NativeCityOttoEncounter-C4yCkg3j.js",
       "_PauseMenuScene-smmk0Mm7.js",
-      "_leagueContent-CJjuhVjB.js",
+      "_leagueContent-Btfc6sV_.js",
       "_TournamentBracketScene-DneVdeiU.js"
     ]
   },
   "league.html": {
-    "file": "assets/league-DF9UYHYo.js",
+    "file": "assets/league-B2x9WYEJ.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
@@ -464,10 +464,10 @@
       "_fighterCreator-SGERSUSu.js",
       "_fighterSheet-btpkONMn.js",
       "_siteChrome-CpDKksHP.js",
-      "_leagueContent-CJjuhVjB.js"
+      "_leagueContent-Btfc6sV_.js"
     ],
     "css": [
-      "assets/league-Dsqbw_pT.css"
+      "assets/league-DEdUP4VH.css"
     ]
   },
   "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
