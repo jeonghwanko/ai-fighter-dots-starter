@@ -244,7 +244,8 @@
     "profileExtras": {
       "features": [
         "profile-extras-1",
-        "combat-stats-1"
+        "combat-stats-1",
+        "profile-names-1"
       ],
       "concept": 800,
       "conceptStep": "Draft the concept (origin, why the fighter fights, manner) from the intake description during appearance; confirm it in final.",
@@ -462,14 +463,14 @@
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "05a3a61b514ed1155bf78cfa157f3bcf7646a4185d295fcd84d665a4c8b9e8e3",
+  "revision": "9ed302514d623f5e137001927b788a43f1458c490de94042ced1e49d7c54ce19",
   "provenance": {
-    "sourceCommit": "97516c94ee591703513aeda9cc9d657438e9670c",
+    "sourceCommit": "63a78731e25125a0bda1fbe2b6156f345635924d",
     "sourceDirty": false,
     "sourceFiles": {
       "tools/ai-fighter/creation-context.mjs": "b5fab4d1b72085919ea772dae7f5628350c6bf729716f718640852466316c798",
       "tools/ai-fighter/export-creation-context.mjs": "fcad318b37dae57a352b4c8ee509a1b03dd143a83f0518d726b06ff53df6d30d",
-      "contracts/ai-fighter/v1/contract-source.mjs": "8d162b7898b8bc0570bf548f1b7dbeefbd09455046d6398610c0628ce9ddd8e6",
+      "contracts/ai-fighter/v1/contract-source.mjs": "4260f9643fdffd87c98424e3516bf12b42fd7e349094a415516cfaf46c536092",
       "src/world/native-city-combat.json": "0eb2dea149253f08ddc7067b0f3388f9f10dfe3cae9c8485d2e13a9aefa632be",
       "src/app/InputBindings.ts": "5630231310270410724c2e1273f902e82c5175ddaf42103a68913f7562754f25",
       "src/render/scenes/village/NativeCityFightInputController.ts": "0aa2e10401626e0017b3613bd00a91e4ada5ae6b33e060f2d8783324ade02a14",
