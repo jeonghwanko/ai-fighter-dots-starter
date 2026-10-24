@@ -3,10 +3,12 @@ import assert from 'node:assert/strict';
 import { createHandler, readBody, sha256 } from '../api/handler.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 
-test('public spec announces beta registration while anonymous writes fail', async () => {
+test('public spec announces open registration while anonymous writes fail', async () => {
   const handle = createHandler({ db: {} });
   const spec = await (await handle(new Request('https://test/ai-fighter/spec'))).json();
   assert.equal(spec.data.registration.available, true);
+  assert.equal(spec.data.registration.mode, 'open');
+  assert.equal(spec.data.registration.approvalRequired, false);
   const result = await handle(new Request('https://test/ai-fighter/submissions', { method: 'POST', body: '{}' }));
   assert.equal(result.status, 401);
 });
@@ -30,6 +32,32 @@ test('server validates JSON before writing a submission', async () => {
   assert.deepEqual(calls, ['af_authorize', 'af_authorize', 'af_create_submission']);
   assert.equal((await sha256(new TextEncoder().encode('abc'))).length, 64);
 });
+test("?fighter= targets the caller's fighter for an in-place update; a malformed ID writes nothing", async () => {
+  const owner = crypto.randomUUID(), fighter = crypto.randomUUID(), calls = [];
+  const handle = createHandler({ db: { auth: { getUser: async () => ({ data: { user: { id: owner } } }) },
+    rpc: async (name, args) => { calls.push([name, args]); return name === 'af_authorize' ? { data: true }
+      : args.p_fighter === fighter ? { data: { id: crypto.randomUUID(), manifest_sha: args.p_sha, status: 'uploading' } }
+      : { error: { message: 'fighter-not-found' } }; } } });
+  const send = query => handle(new Request(`https://test/ai-fighter/submissions${query}`, { method: 'POST',
+    headers: { authorization: 'Bearer signed-user-token-for-test', 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify(example) }));
+  assert.equal((await send(`?fighter=${fighter}`)).status, 200);
+  assert.equal(calls.find(([name]) => name === 'af_create_submission')[1].p_fighter, fighter);
+  assert.equal((await send(`?fighter=${crypto.randomUUID()}`)).status, 404);
+  calls.length = 0;
+  assert.equal((await send('?fighter=not-a-uuid')).status, 422);
+  assert.ok(!calls.some(([name]) => name === 'af_create_submission'));
+});
+test('the registration API returns the database fighter limit as a conflict', async () => {
+  const handle = createHandler({ db: {
+    auth: { getUser: async () => ({ data: { user: { id: crypto.randomUUID() } } }) },
+    rpc: async name => name === 'af_authorize' ? { data: true } : { error: { message: 'fighter-quota' } },
+  } });
+  const response = await handle(new Request('https://test/ai-fighter/submissions', { method: 'POST',
+    headers: { authorization: 'Bearer signed-user-token-for-test', 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify(example) }));
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).code, 'fighter-quota');
+});
+
 test('text that Postgres jsonb cannot store is rejected with 422 before any write', async () => {
   const owner = crypto.randomUUID(), calls = [];
   const handle = createHandler({ db: { auth: { getUser: async () => ({ data: { user: { id: owner } } }) },

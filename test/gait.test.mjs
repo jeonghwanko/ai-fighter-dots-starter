@@ -1,0 +1,105 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
+import sharp from 'sharp';
+import { alphaBounds, walkPlan, sequenceHash, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence } from '../tools/ai-fighter/gait.mjs';
+import { preview } from '../scripts/gait.mjs';
+
+function frame(bottom = 70, mark = 0, height = 80) {
+  const width = 64, data = Buffer.alloc(width * height * 4);
+  for (let y = 10; y < bottom; y++) for (let x = 20; x < 40; x++) {
+    const at = (y * width + x) * 4;
+    data[at] = 100 + mark; data[at + 3] = 255;
+  }
+  return { width, height, data };
+}
+function sequence() {
+  const value = { frames: Array.from({ length: 16 }, (_, i) => frame(70, i)), durations: Array(16).fill(100) };
+  value.sha256 = sequenceHash(value); return value;
+}
+function plan() {
+  const value = walkPlan(); value.geometry = { width: 64, height: 80, groundY: 70, groundTolerance: 2 }; return value;
+}
+function annotations(seq) {
+  return { sequenceSha256: seq.sha256, visual: { identity: 'pass', anatomy: 'pass', alternation: 'pass', loop: 'pass' },
+    stances: [{ foot: 'near', start: 1, end: 3, box: [10, 60, 40, 10] }, { foot: 'far', start: 9, end: 11, box: [10, 60, 40, 10] }] };
+}
+const reports = () => [0, 1].map(() => ({ stride_verified: true, foot_velocity_px_per_second: -10 }));
+
+test('the alternating 17 px baseline regression is caught before packaging', () => {
+  const seq = sequence(); seq.frames[1] = frame(53, 1); seq.sha256 = sequenceHash(seq);
+  const report = combineReview(seq, plan(), null);
+  assert.equal(report.status, 'fail');
+  assert.ok(report.errors.some(e => e.code === 'GROUND_OFFSET' && e.frame === 1 && e.measured === 53));
+  assert.equal(report.stridePixels, null);
+});
+test('a clean silhouette and visual pass cannot replace two measured same-foot stances', () => {
+  const seq = sequence(), a = annotations(seq);
+  assert.equal(combineReview(seq, plan(), null).status, 'unverified');
+  assert.equal(combineReview(seq, plan(), a).status, 'unverified');
+  a.stances.pop();
+  assert.equal(combineReview(seq, plan(), a, reports().slice(0, 1)).status, 'unverified');
+});
+test('speed is converted from px/s to px/cycle; disagreeing or forward-moving feet fail', () => {
+  const seq = sequence(), a = annotations(seq);
+  const valid = combineReview(seq, plan(), a, reports());
+  assert.equal(valid.status, 'pass'); assert.equal(valid.durationSeconds, 1.6); assert.equal(valid.stridePixels, 16);
+  const different = reports(); different[1].foot_velocity_px_per_second = -30;
+  assert.equal(combineReview(seq, plan(), a, different).status, 'fail');
+  const forward = reports(); forward[0].foot_velocity_px_per_second = 10;
+  assert.equal(combineReview(seq, plan(), a, forward).status, 'fail');
+});
+test('evidence expires after a pixel or timing change and cannot be reused for another motion', () => {
+  const seq = sequence(), report = combineReview(seq, plan(), annotations(seq), reports());
+  assert.equal(requireReview(report, seq, 'walk'), report);
+  seq.durations[0] = 101;
+  assert.throws(() => requireReview(report, seq, 'walk'), /STALE/);
+  seq.durations[0] = 100; seq.frames[0].data[0] = 1;
+  assert.throws(() => requireReview(report, seq, 'walk'), /STALE/);
+  assert.throws(() => requireReview(report, seq, 'run'), /REQUIRED/);
+});
+test('unknown visual anatomy and mismatched support phases are not passed', () => {
+  const seq = sequence(), a = annotations(seq);
+  a.visual.anatomy = 'unverified';
+  assert.equal(combineReview(seq, plan(), a, reports()).status, 'unverified');
+  a.stances[0].start = 9; a.stances[0].end = 11;
+  assert.equal(combineReview(seq, plan(), a, reports()).status, 'fail');
+});
+test('a repeated pixel frame cannot pass as an extra drawing', () => {
+  const seq = sequence(); seq.frames[1] = seq.frames[0];
+  assert.ok(inspectGeometry(seq, plan()).errors.some(e => e.code === 'DUPLICATE_FRAME'));
+});
+async function temporary(fn) {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gait-review-'));
+  try { return await fn(dir); } finally {
+    assert.ok(path.resolve(dir).startsWith(path.resolve(tmpdir()) + path.sep));
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+async function manifest(dir, name, value) {
+  await sharp(value.data, { raw: { width: value.width, height: value.height, channels: 4 } }).png().toFile(path.join(dir, name + '.png'));
+  const data = { sprite_sheet_alpha: name + '.png', frame_layout: { rows: { idle: [{ x: 0, y: 0, w: value.width, h: value.height }] } }, animation: { rows: { idle: { durations_ms: [100] } } } };
+  await writeFile(path.join(dir, name + '.json'), JSON.stringify(data));
+  return { file: name + '.json', state: 'idle' };
+}
+test('a crouched pose uses the neutral reference scale instead of being inflated to standing height', async () => temporary(async dir => {
+  const reference = await manifest(dir, 'standing', frame(70)), crouch = await manifest(dir, 'crouch', frame(40));
+  const value = await commonGameRequest({ reference, assets: [{ id: 'idle', source: reference }, { id: 'crouch', source: crouch }] }, dir);
+  assert.equal(value.referenceBodyHeight, 60);
+  assert.deepEqual(value.request.assets.map(a => a.source_body_height), [60, 60]);
+  const mismatch = await manifest(dir, 'different-canvas', frame(40, 0, 81));
+  await assert.rejects(commonGameRequest({ reference, assets: [{ id: 'wrong', source: mismatch }] }, dir), /Coordinate space/);
+  assert.equal(alphaBounds((await loadSequence(crouch, dir)).frames[0]).bottom, 40);
+}));
+test('failed review still creates a self-contained preview and escapes annotation text', async () => temporary(async dir => {
+  const seq = sequence(), a = annotations(seq); a.visual.anatomy = 'fail'; a.visual.notes = '</script><script>unexpected()</script>';
+  const report = combineReview(seq, plan(), a, reports());
+  await preview(seq, plan(), report, dir);
+  const html = await readFile(path.join(dir, 'preview.html'), 'utf8');
+  assert.ok(html.includes('data:image/png;base64,'));
+  assert.ok(!html.includes('</script><script>unexpected()'));
+  assert.ok(html.includes('\\u003c/script>'));
+  assert.ok((await readFile(path.join(dir, 'contact-sheet.png'))).length > 100);
+}));

@@ -1,0 +1,272 @@
+"""AI Fighter's explicit, review-bound extension of the pinned motion inspector.
+
+The upstream report is retained verbatim. Only its two-lobe ambiguity can be
+resolved, and only with fresh per-frame anatomical-foot outlines, both contact
+landmarks, a shallow sole arch, and all other upstream checks passing. This is
+conditional authoring evidence, not automatic anatomy recognition or a security
+certificate. No source image, timing, upstream module or report is patched.
+"""
+from __future__ import annotations
+
+import argparse
+import copy
+import hashlib
+import json
+import math
+from pathlib import Path
+import sys
+
+import numpy as np
+from PIL import Image, ImageDraw
+from sprite_gen.qa.motion import analyze_motion
+from sprite_gen.spec.assets import load_asset
+from sprite_gen.spec.runio import acquire_run_dir_lock, atomic_write_set, release_run_dir_lock
+
+ENGINE = "ai-fighter-foot-evidence-v1"
+LOBE_REASON = "multiple contact lobes in foot ROI"
+REVIEW_KEYS = ("sameAnatomicalFoot", "completeFoot", "otherFootExcluded", "groundContact")
+
+
+def pixel_binding(sequence):
+    # Independent of paths/PNG encoding, but sensitive to every pixel and duration.
+    return {"size": list(sequence.frames[0].size),
+            "rgbaSha256": [hashlib.sha256(f.convert("RGBA").tobytes()).hexdigest() for f in sequence.frames],
+            "durationsSeconds": list(sequence.durations)}
+
+
+def _stance(sequence, foot, start, end, box, facing):
+    if foot not in ("near", "far") or facing not in ("left", "right"):
+        raise ValueError("Explicit near/far foot and left/right facing are required")
+    if type(start) is not int or type(end) is not int or not 0 <= start <= end - 2 or end >= len(sequence.frames):
+        raise ValueError("One stance needs at least three consecutive frames inside the sequence")
+    # The official inspector validates the ROI and source geometry/timing.
+    analyze_motion(sequence, contacts=[(start, end)], foot_box=box, facing=facing)
+    return {"foot": foot, "start": start, "end": end, "box": list(box), "facing": facing}
+
+
+def template(sequence, foot, start, end, box, facing):
+    stance = _stance(sequence, foot, start, end, box, facing)
+    return {"kind": "ai-fighter-foot-evidence", "version": 1, "sequence": pixel_binding(sequence),
+            "stance": stance,
+            "review": {"reviewer": "", "method": "visual-per-frame", "notes": "",
+                       **{key: "unverified" for key in REVIEW_KEYS}},
+            "frames": [{"frame": i, "nearOutline": [], "farOutline": [], "heel": [], "forefoot": []}
+                       for i in range(start, end + 1)]}
+
+
+def _point(value, size):
+    return (isinstance(value, list) and len(value) == 2 and all(type(n) is int for n in value)
+            and 0 <= value[0] < size[0] and 0 <= value[1] < size[1])
+
+
+def _segments_intersect(a, b, c, d):
+    def cross(p, q, r):
+        return (q[0]-p[0])*(r[1]-p[1]) - (q[1]-p[1])*(r[0]-p[0])
+    def on(p, q, r):
+        return min(p[0],q[0]) <= r[0] <= max(p[0],q[0]) and min(p[1],q[1]) <= r[1] <= max(p[1],q[1])
+    p, q, r, s = cross(a,b,c), cross(a,b,d), cross(c,d,a), cross(c,d,b)
+    return ((p*q < 0 and r*s < 0) or (p == 0 and on(a,b,c)) or (q == 0 and on(a,b,d))
+            or (r == 0 and on(c,d,a)) or (s == 0 and on(c,d,b)))
+
+
+def _outline(points, size):
+    if not isinstance(points, list) or not 3 <= len(points) <= 128 or not all(_point(p,size) for p in points):
+        raise ValueError("Each complete-foot outline needs 3–128 integer vertices inside the canvas")
+    if len({tuple(p) for p in points}) != len(points):
+        raise ValueError("Outline vertices must be distinct; do not repeat the first vertex")
+    edges = list(zip(points, points[1:] + points[:1]))
+    if abs(sum(a[0]*b[1]-b[0]*a[1] for a,b in edges)) < 8:
+        raise ValueError("Foot outline has insufficient area")
+    for i,(a,b) in enumerate(edges):
+        for j,(c,d) in enumerate(edges):
+            if j <= i+1 or (i == 0 and j == len(edges)-1):
+                continue
+            if _segments_intersect(a,b,c,d):
+                raise ValueError("Foot outline self-intersects")
+    image = Image.new("1",size)
+    ImageDraw.Draw(image).polygon([tuple(p) for p in points],fill=1)
+    return np.asarray(image,dtype=bool)
+
+
+def _components(mask):
+    remaining = set(zip(*np.nonzero(mask)))
+    count = 0
+    while remaining:
+        count += 1
+        if count > 1:
+            return count
+        stack = [remaining.pop()]
+        while stack:
+            y,x = stack.pop()
+            for dy in (-1,0,1):
+                for dx in (-1,0,1):
+                    point = (y+dy,x+dx)
+                    if point in remaining:
+                        remaining.remove(point); stack.append(point)
+    return count
+
+
+def _intervals(band):
+    starts = np.flatnonzero(band & ~np.r_[False,band[:-1]])
+    ends = np.flatnonzero(band & ~np.r_[band[1:],False]) + 1
+    return [(int(a),int(b)) for a,b in zip(starts,ends)]
+
+
+def validate_evidence(sequence, stance, evidence):
+    issues, observations = [], []
+    if not isinstance(evidence,dict) or evidence.get("kind") != "ai-fighter-foot-evidence" or evidence.get("version") != 1:
+        return ["EVIDENCE_SCHEMA"], observations
+    if evidence.get("sequence") != pixel_binding(sequence):
+        issues.append("EVIDENCE_STALE_PIXELS_OR_TIMING")
+    if evidence.get("stance") != stance:
+        issues.append("EVIDENCE_STANCE_MISMATCH")
+    review = evidence.get("review")
+    if (not isinstance(review,dict) or review.get("method") != "visual-per-frame"
+            or not isinstance(review.get("reviewer"),str) or not review["reviewer"].strip()
+            or not isinstance(review.get("notes"),str) or len(review["notes"].strip()) < 20
+            or any(review.get(key) != "pass" for key in REVIEW_KEYS)):
+        issues.append("EVIDENCE_VISUAL_REVIEW_REQUIRED")
+    frames = evidence.get("frames")
+    expected = list(range(stance["start"],stance["end"]+1))
+    if (not isinstance(frames,list) or [f.get("frame") if isinstance(f,dict) else None for f in frames] != expected
+            or any(type(f.get("frame")) is not int for f in frames)):
+        issues.append("EVIDENCE_FRAME_COVERAGE")
+    if issues:
+        return issues, observations
+    size = sequence.frames[0].size
+    x,y,w,h = stance["box"]
+    roi = np.zeros((size[1],size[0]),dtype=bool); roi[y:y+h,x:x+w] = True
+    tracked_name = stance["foot"] + "Outline"
+    other_name = ("far" if stance["foot"] == "near" else "near") + "Outline"
+    for entry in frames:
+        index = entry["frame"]
+        defects = []
+        alpha = np.asarray(sequence.frames[index].convert("RGBA"))[:,:,3] > 0
+        try:
+            tracked = _outline(entry.get(tracked_name),size) & alpha
+            other = _outline(entry.get(other_name),size) & alpha
+        except ValueError as error:
+            issues.append(f"FRAME_{index}: {error}"); continue
+        if _components(tracked) != 1 or _components(other) != 1:
+            defects.append("FOOT_OUTLINES_MUST_EACH_IDENTIFY_ONE_CONNECTED_FOOT")
+        if (tracked & other).any():
+            defects.append("FOOT_IDENTITY_OVERLAP")
+        if (other & roi).any():
+            defects.append("OTHER_FOOT_IN_ROI")
+        if (tracked & ~roi).any():
+            defects.append("COMPLETE_FOOT_CLIPPED_BY_ROI")
+        if (alpha & roi & ~tracked).any():
+            defects.append("UNASSIGNED_FOREGROUND_IN_ROI")
+        if defects:
+            issues.extend(f"FRAME_{index}: {d}" for d in defects); continue
+        region = alpha[y:y+h,x:x+w]
+        ys,xs = np.nonzero(region)
+        left,top,right,bottom = int(xs.min()),int(ys.min()),int(xs.max())+1,int(ys.max())+1
+        band = region[max(top,bottom-2):bottom].any(axis=0)
+        lobes = _intervals(band)
+        heel, forefoot = entry.get("heel"),entry.get("forefoot")
+        if not all(_point(p,size) and tracked[p[1],p[0]] and y+bottom-2 <= p[1] < y+bottom for p in (heel,forefoot)):
+            defects.append("HEEL_AND_FOREFOOT_MUST_TOUCH_ACTUAL_BOTTOM_BAND")
+        else:
+            expected_order = heel[0] < forefoot[0] if stance["facing"] == "right" else heel[0] > forefoot[0]
+            if not expected_order:
+                defects.append("CONTACT_LANDMARK_FACING")
+        merged_depth = None
+        if len(lobes) == 2:
+            gap = lobes[1][0]-lobes[0][1]
+            # Fixed, documented conservative sole-shape limits; never CLI knobs.
+            limit = min(math.ceil((bottom-top)*.20),math.ceil((right-left)*.12))
+            merged_depth = next((depth for depth in range(3,limit+1)
+                                 if len(_intervals(region[max(top,bottom-depth):bottom].any(axis=0))) == 1),None)
+            if gap > (right-left)*.30 or merged_depth is None:
+                defects.append("CONTACT_GAP_IS_NOT_A_SHALLOW_SOLE_ARCH")
+            if not defects:
+                contacts = sorted([heel[0]-x,forefoot[0]-x])
+                if not all(a <= p < b for p,(a,b) in zip(contacts,lobes)):
+                    defects.append("LANDMARKS_MUST_COVER_BOTH_CONTACT_LOBES")
+        elif len(lobes) != 1:
+            defects.append("UNSUPPORTED_CONTACT_TOPOLOGY")
+        observations.append({"frame":index,"lobeCount":len(lobes),"soleMergeDepth":merged_depth,
+                             "contactLobesX":[[a+x,b+x] for a,b in lobes],"issues":defects})
+        issues.extend(f"FRAME_{index}: {d}" for d in defects)
+    return issues, observations
+
+
+def inspect(sequence, foot, start, end, box, facing, evidence):
+    stance = _stance(sequence,foot,start,end,box,facing)
+    upstream = analyze_motion(sequence,contacts=[(start,end)],foot_box=box,facing=facing)
+    issues, observations = validate_evidence(sequence,stance,evidence)
+    result = copy.deepcopy(upstream)
+    candidate = result["contact_candidates"][0]
+    original_reasons = list(candidate["reasons"])
+    # Never replace another failed check or use a reviewer-provided speed.
+    other_failures = [reason for reason in original_reasons if reason != LOBE_REASON]
+    speed = candidate.get("measured_velocity_candidate_px_per_second")
+    verified = (not issues and not other_failures and isinstance(speed,(int,float)) and math.isfinite(speed)
+                and (not original_reasons or original_reasons == [LOBE_REASON]))
+    candidate["reasons"] = other_failures + issues if verified else original_reasons + issues
+    candidate.update(status="verified" if verified else "needs-review",confidence=.9 if verified else 0.,
+                     foot_velocity_px_per_second=speed if verified else None,
+                     stride_px_per_second=abs(speed) if verified else None)
+    result.update(status="verified" if verified else "needs-review",stride_verified=verified,
+                  confidence=.9 if verified else 0.,foot_velocity_px_per_second=speed if verified else None,
+                  stride_px_per_second=abs(speed) if verified else None)
+    result["upstream_report"] = upstream
+    result["measurement_engine"] = ENGINE
+    result["foot_evidence"] = {"status":"verified" if not issues else "unverified", "stance":stance,
+                               "sequence":pixel_binding(sequence),"review":evidence.get("review") if isinstance(evidence,dict) else None,
+                               "issues":issues,"observations":observations,"declaration":copy.deepcopy(evidence),
+                               "resolvedReason":LOBE_REASON if verified and LOBE_REASON in original_reasons else None}
+    result["warnings"] = ["Conditional on explicit reviewer-labelled complete anatomical feet; not automatic foot recognition."]
+    if not verified:
+        result["warnings"].append("Contact evidence or an upstream stance check failed; stride remains unverified.")
+    result["method"]["contact"] += " AI Fighter foot-evidence v1 checks both labelled foot outlines and shallow heel/forefoot arch evidence; upstream report retained."
+    return result
+
+
+def main():
+    parser=argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command",choices=("template","inspect"))
+    parser.add_argument("--source",type=Path,required=True)
+    parser.add_argument("--state")
+    parser.add_argument("--contacts",required=True,help="One inclusive same-foot span, e.g. 1:3")
+    parser.add_argument("--foot-box",required=True)
+    parser.add_argument("--foot",choices=("near","far"),required=True)
+    parser.add_argument("--facing",choices=("left","right"),required=True)
+    parser.add_argument("--foot-evidence",type=Path)
+    parser.add_argument("--out",type=Path,required=True)
+    args=parser.parse_args()
+    try:
+        start,end=map(int,args.contacts.split(":")); box=list(map(int,args.foot_box.split(",")))
+        sequence=load_asset(args.source,state=args.state)
+        output=args.out.resolve()
+        protected=[args.source.resolve(),*(Path(p).resolve() for p in sequence.source_files)]
+        if args.foot_evidence:
+            protected.append(args.foot_evidence.resolve())
+        if (output in protected or (output.exists() and any(p.exists() and output.samefile(p) for p in protected))
+                or output.name == ".sprite-gen.lock" or output.name.endswith(".sg-rwlock")):
+            raise ValueError("Output must not overwrite source, evidence or lock files")
+        if args.command == "template":
+            if output.exists():
+                raise ValueError("Template already exists; preserve the reviewer's evidence")
+            result=template(sequence,args.foot,start,end,box,args.facing)
+        else:
+            if args.foot_evidence is None:
+                raise ValueError("inspect requires --foot-evidence; use official inspect-motion for the default route")
+            raw=args.foot_evidence.read_bytes()
+            result=inspect(sequence,args.foot,start,end,box,args.facing,json.loads(raw.decode("utf-8-sig")))
+            result["foot_evidence"].update(file=str(args.foot_evidence.resolve()),sha256=hashlib.sha256(raw).hexdigest())
+        output.parent.mkdir(parents=True,exist_ok=True)
+        acquire_run_dir_lock(output.parent,"ai-fighter-foot-evidence")
+        try:
+            atomic_write_set({output:json.dumps(result,ensure_ascii=False,indent=2,allow_nan=False)+"\n"})
+        finally:
+            release_run_dir_lock(output.parent)
+        print(json.dumps({"out":str(output),"stride_verified":result.get("stride_verified"),"command":args.command}))
+        return 0
+    except (ValueError,OSError,TypeError,KeyError) as error:
+        print(str(error),file=sys.stderr); return 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

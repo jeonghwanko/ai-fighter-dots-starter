@@ -1,6 +1,6 @@
 {
   "name": "ai-fighter-dots-starter",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Local Dot/Codex MCP starter for AI Fighter authoring and package validation",
   "private": true,
   "type": "module",
@@ -13,6 +13,9 @@
     "url": "https://github.com/jeonghwanko/ai-fighter-dots-starter.git"
   },
   "scripts": {
+    "site:build": "node scripts/build-creator-site.mjs",
+    "site:publish": "node scripts/publish-creator-site.mjs",
+    "worker:deploy": "node scripts/deploy-render.mjs",
     "start": "node mcp/stdio.mjs",
     "login": "node scripts/login.mjs",
     "logout": "node scripts/login.mjs logout",
@@ -20,6 +23,8 @@
     "sprite:status": "node scripts/sprite-gen.mjs status",
     "sprite": "node scripts/sprite-gen.mjs",
     "fighter:pack": "node scripts/pack-fighter.mjs",
+    "fighter:gait": "node scripts/gait.mjs",
+    "fighter:contact": "node scripts/contact.mjs",
     "example": "node scripts/create-example.mjs",
     "validate": "node tools/ai-fighter/validate-package.mjs",
     "test": "node --test test/*.test.mjs",
@@ -27,6 +32,12 @@
     "spec:build": "node tools/ai-fighter/build-contract.mjs",
     "contract:vendored": "node tools/ai-fighter/vendored-contract.mjs",
     "mcp:smoke": "node scripts/mcp-smoke.mjs",
+    "creation:context": "node scripts/creation-context.mjs",
+    "creation:delivery": "node scripts/check-creation-delivery.mjs",
+    "creation:check": "node scripts/check-connection.mjs",
+    "creation:run": "node scripts/run-creation-job.mjs",
+    "plugin:build": "node scripts/build-local-plugin.mjs",
+    "plugin:bundle": "node scripts/build-plugin-bundle.mjs",
     "worker:once": "node worker/run.mjs",
     "worker:watch": "node worker/run.mjs --watch",
     "test:live": "node scripts/live-registration-test.mjs"
@@ -36,6 +47,7 @@
     "@supabase/supabase-js": "2.117.3",
     "ajv": "6.15.0",
     "sharp": "0.35.5",
+    "undici": "7.30.1",
     "zod": "4.6.7"
   },
   "devDependencies": {

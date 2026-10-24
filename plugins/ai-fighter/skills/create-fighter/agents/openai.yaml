@@ -1,0 +1,4 @@
+interface:
+  display_name: "AI Fighter Creator"
+  short_description: "Create fighters with grouped reviews and resumable local jobs"
+  default_prompt: "Use $create-fighter to create or resume my AI Fighter character."

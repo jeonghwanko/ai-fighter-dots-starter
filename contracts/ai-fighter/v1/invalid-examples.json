@@ -10,5 +10,14 @@
   { "description": "없는 프레임을 재생", "path": ["clips", "combo", "sequence", 0, "frame"], "value": 63, "expectedCode": "SEQUENCE_FRAME" },
   { "description": "외형으로 몸 크기 배율을 변경", "path": ["appearance", "bodyScale"], "value": 100, "expectedCode": "SCHEMA_CONST" },
   { "description": "프레임 밖 기준점", "path": ["clips", "idle", "origins", 0, "originX"], "value": 1024, "expectedCode": "ORIGIN_OUT_OF_BOUNDS" },
-  { "description": "누운 자세가 착지보다 먼저", "path": ["clips", "fall", "landmarks", "lieSequenceIndex"], "value": 0, "expectedCode": "FALL_PHASE_ORDER" }
+  { "description": "누운 자세가 착지보다 먼저", "path": ["clips", "fall", "landmarks", "lieSequenceIndex"], "value": 0, "expectedCode": "FALL_PHASE_ORDER" },
+  { "description": "능력치 합이 예산을 넘음", "path": ["combat", "stats", "power"], "value": 5, "expectedCode": "STATS_BUDGET" },
+  { "description": "능력치 등급이 범위 밖", "path": ["combat", "stats", "speed"], "value": 9, "expectedCode": "SCHEMA_MAXIMUM" },
+  { "description": "능력치 대신 피해 수치를 지정", "path": ["combat", "stats", "damage"], "value": 99, "expectedCode": "SCHEMA_ADDITIONALPROPERTIES" },
+  { "description": "기술 이름 일부만 제출", "path": ["profile", "moves"], "value": { "combo": { "name": "연타", "description": "연타" } }, "expectedCode": "SCHEMA_REQUIRED" },
+  { "description": "표준 키트에 없는 기술 이름", "path": ["profile", "moves", "fireball"], "value": { "name": "불꽃", "description": "새 기술" }, "expectedCode": "SCHEMA_ADDITIONALPROPERTIES" },
+  { "description": "지원하지 않는 작성 언어", "path": ["profile", "language"], "value": "ja", "expectedCode": "SCHEMA_ENUM" },
+  { "description": "언어별 이름이 비어 있음", "path": ["profile", "names"], "value": {}, "expectedCode": "SCHEMA_MINPROPERTIES" },
+  { "description": "지원하지 않는 언어의 이름", "path": ["profile", "names"], "value": { "ja": "名前" }, "expectedCode": "SCHEMA_ADDITIONALPROPERTIES" },
+  { "description": "40자를 넘는 언어별 이름", "path": ["profile", "names"], "value": { "en": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx" }, "expectedCode": "SCHEMA_MAXLENGTH" }
 ]

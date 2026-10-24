@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readdir, readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { createRemoteClient } from '../api/client.mjs';
+import { createLazyRemoteClient, createRemoteClient } from '../api/client.mjs';
 
 const url = 'https://abcdefghijklmnopqrst.supabase.co';
 const jwt = secondsFromNow => `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + secondsFromNow })).toString('base64url')}.signature`;
@@ -31,6 +31,32 @@ test('a valid access token is reused without an auth round trip', async () => {
   await client.request('spec'); await client.request('spec');
   assert.deepEqual(refreshes, []); assert.deepEqual(sentTokens, [token, token]);
 });
+
+test('a running client discovers a later login, adopts reauthentication, and stops after logout', async () => {
+  const file = path.join(directory, 'late-login.json');
+  const client = createLazyRemoteClient(file, { createAuthClient: () => ({ auth: { refreshSession: () => assert.fail('fresh token') } }) });
+  sentTokens = [];
+  await assert.rejects(client.request('me'), /client-sign-in-required/);
+  const config = { url, publishableKey: 'sb_publishable_test', accessToken: jwt(3600), refreshToken: 'first' };
+  await writeFile(file, JSON.stringify(config));
+  await client.request('me');
+  const replacement = jwt(1800);
+  await writeFile(file, JSON.stringify({ ...config, accessToken: replacement, refreshToken: 'second' }));
+  await client.request('me');
+  assert.deepEqual(sentTokens, [config.accessToken, replacement]);
+  await rm(file);
+  await assert.rejects(client.request('me'), /client-sign-in-required/);
+  assert.equal(sentTokens.length, 2);
+});
+
+test('session replacement cannot silently change the owner of subsequent upload requests', async () => {
+  const { file, client } = await clientWith(jwt(3600), () => assert.fail('fresh token'));
+  const config = JSON.parse(await readFile(file, 'utf8'));
+  const replacement = `header.${Buffer.from(JSON.stringify({ exp: Math.floor(Date.now() / 1000) + 3600, sub: 'another-user' })).toString('base64url')}.signature`;
+  await writeFile(file, JSON.stringify({ ...config, accessToken: replacement }));
+  await assert.rejects(client.request('submissions'), /client-account-changed/);
+  assert.deepEqual(sentTokens, []);
+});
 test('a token near expiry is refreshed once for concurrent calls and the session file is replaced atomically', async () => {
   const fresh = jwt(3600);
   const { file, client, refreshes } = await clientWith(jwt(10), () => ({ data: { session: { access_token: fresh, refresh_token: 'r2' } } }));
@@ -46,6 +72,15 @@ test('a revoked session asks for a new sign-in and keeps the saved file', async 
   const before = await readFile(file, 'utf8');
   await assert.rejects(client.request('spec'), /client-sign-in-required/);
   assert.equal(await readFile(file, 'utf8'), before); assert.deepEqual(sentTokens, []);
+});
+test('a blocked refresh preserves the session and is not reported as a revoked account', async () => {
+  for (const [error, reason] of [[new Error('fetch failed', { cause: new Error('Tunnel connection failed: 403 Forbidden') }), 'network-connect-forbidden'],
+    [new TypeError('fetch failed'), 'api-unreachable']]) {
+    const { file, client } = await clientWith(jwt(-5), () => ({ data: { session: null }, error }));
+    const before = await readFile(file, 'utf8');
+    await assert.rejects(client.request('me'), { message: reason });
+    assert.equal(await readFile(file, 'utf8'), before); assert.deepEqual(sentTokens, []);
+  }
 });
 test('processes sharing one session file adopt a saved refresh instead of spending an old token', async () => {
   const fresh = jwt(3600);

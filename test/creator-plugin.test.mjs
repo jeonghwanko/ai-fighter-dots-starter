@@ -1,0 +1,275 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { randomUUID } from 'node:crypto';
+import { cp, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
+import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { createCreationStore, localPath } from '../mcp/creation-store.mjs';
+import { createJobStore, executeEngine, runCreationJob } from '../mcp/creation-jobs.mjs';
+import { createServer } from '../mcp/server.mjs';
+import { buildLocalPlugin } from '../scripts/build-local-plugin.mjs';
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+
+const context = { owner: 'game', contextVersion: 1, specVersion: spec.specVersion, revision: 'a'.repeat(64),
+  contract: { motions: spec.motions }, controls: { actions: [] }, timing: { clocks: {} }, workflow: { gates: {}, groups: [
+    { id: 'appearance', motions: ['idle'] }, { id: 'locomotion', motions: ['fightIdle', 'walk', 'run'] },
+    { id: 'attacks', motions: ['combo', 'slam', 'dash'] }, { id: 'defense', motions: ['block', 'hit', 'groggy', 'fall'], auxiliaries: ['getUp'] },
+    { id: 'final', motions: [] },
+  ] } };
+const kitRoot = fileURLToPath(new URL('../', import.meta.url));
+const sessionId = 'test-fighter';
+const request = async () => new Response(JSON.stringify(context));
+async function temporary(label) {
+  const parent = path.join(kitRoot, 'output'); await mkdir(parent, { recursive: true });
+  return realpath(await mkdtemp(path.join(parent, label)));
+}
+async function fixture(t, options = {}) {
+  const root = await temporary('fighter creator ');
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const store = createCreationStore(root, { contextRequest: request, ...options });
+  await store.create({ sessionId, brief: 'Test fixture; no generated character', mode: options.mode ?? 'creation' });
+  const put = async (name, bytes = name) => {
+    const filename = await localPath(root, name, { createParents: true }); await writeFile(filename, bytes); return name;
+  };
+  const change = async event => store.change(sessionId, (await store.read(sessionId)).revision, event);
+  const record = async (item, version = 'v1') => {
+    const file = await put(`input/${item}-${version}.txt`);
+    await change({ type: 'version', item, version, files: [file], note: 'Test bytes, not generated art' });
+  };
+  const review = async (item, version = 'v1') => {
+    const evidence = await put(`evidence/${item}-${version}.txt`);
+    await change({ type: 'review', item, version, verdict: options.mode === 'dialogue-only' ? 'hypothetical' : 'passed', evidence: [evidence], note: 'Synthetic review test' });
+  };
+  const select = (item, version = 'v1') => change({ type: 'select', item, version, feedback: 'Accept this test version' });
+  return { root, store, put, change, record, review, select, jobs: createJobStore(store) };
+}
+function plan(overrides = {}) {
+  return { engine: 'sprite', args: ['gen', '--provider', 'codex', '--prompt', 'fixture'],
+    workflowArgs: ['workflow', '--kind', 'image', '--image-provider', 'codex', '--confirmed-access', 'codex'],
+    groupId: 'appearance', targets: [{ item: 'idle', version: 'v1' }], inputs: [],
+    outputs: [`output/${sessionId}-work/artifacts/idle/v1/image.png`], ...overrides };
+}
+
+test('versions survive source overwrites; revised motions preserve other choices and old files', async t => {
+  const f = await fixture(t);
+  await f.record('idle'); await f.review('idle'); await f.select('idle'); await f.change({ type: 'advance' });
+  for (const item of ['fightIdle', 'walk', 'run']) { await f.record(item); await f.review(item); await f.select(item); }
+  await f.change({ type: 'revision', item: 'walk', feedback: 'Less bounce' });
+  assert.equal((await f.store.inspect(sessionId)).decision.canAdvance, false);
+  await f.record('walk', 'v2');
+  let state = await f.store.read(sessionId);
+  assert.equal(state.items.walk.selectedVersion, 'v1');
+  assert.equal(state.items.run.selectedVersion, 'v1');
+  assert.deepEqual(Object.keys(state.items.walk.versions), ['v1', 'v2']);
+  await f.put('input/walk-v1.txt', 'overwritten source');
+  const preserved = state.items.walk.versions.v1.files[0];
+  assert.equal(await readFile(path.join(f.root, preserved.path), 'utf8'), 'input/walk-v1.txt');
+  await f.review('walk', 'v2'); await f.select('walk', 'v2');
+  assert.equal((await f.store.inspect(sessionId)).decision.nextGroup, 'attacks');
+  await f.change({ type: 'restore', item: 'walk', version: 'v1', feedback: 'Use the original walk' });
+  assert.equal((await f.store.read(sessionId)).items.walk.version, 'v1');
+  await f.put(preserved.path, 'changed preserved pixels');
+  const inspection = await f.store.inspect(sessionId);
+  assert.equal(inspection.effectiveItems.walk.review, 'unverified');
+  assert.equal(inspection.effectiveItems.walk.selectedVersion, null);
+});
+
+test('later delegation cannot pass earlier review; appearance revisions invalidate dependent motion evidence', async t => {
+  const f = await fixture(t);
+  await f.record('idle'); await f.review('idle');
+  await f.change({ type: 'delegate', groups: ['locomotion', 'attacks'], feedback: 'Delegate those groups' });
+  await assert.rejects(f.record('walk'), /previous-group-pending/);
+  await f.select('idle'); await f.change({ type: 'advance' });
+  await f.record('walk'); await f.review('walk');
+  await f.change({ type: 'revision', item: 'idle', feedback: 'Change the outfit' });
+  await f.record('idle', 'v2'); await f.review('idle', 'v2'); await f.select('idle', 'v2');
+  assert.equal((await f.store.inspect(sessionId)).effectiveItems.walk.review, 'unverified');
+  assert.equal((await f.store.read(sessionId)).groupId, 'appearance');
+});
+
+test('concurrent writers do not lose decisions; fresh revisions and context are required', async t => {
+  let current = structuredClone(context);
+  const f = await fixture(t, { contextRequest: async () => new Response(JSON.stringify(current)) });
+  const changes = await Promise.allSettled([
+    f.store.change(sessionId, 1, { type: 'profile', name: 'A', description: 'A', feedback: 'A' }),
+    f.store.change(sessionId, 1, { type: 'profile', name: 'B', description: 'B', feedback: 'B' }),
+  ]);
+  assert.equal(changes.filter(x => x.status === 'fulfilled').length, 1);
+  assert.equal((await f.store.read(sessionId)).revision, 2);
+  await assert.rejects(f.store.change(sessionId, 1, { type: 'advance' }), /revision-conflict/);
+  current.revision = 'b'.repeat(64);
+  assert.deepEqual((await f.store.inspect(sessionId)).decision.blockers.filter(x => x === 'context-changed'), ['context-changed']);
+  await assert.rejects(f.change({ type: 'advance' }), /context-changed/);
+  await f.change({ type: 'refresh-context', note: 'Compared changed game requirements' });
+  assert.equal((await f.store.read(sessionId)).contextRevision, current.revision);
+});
+
+test('dialogue-only sessions cannot run real jobs or store production approvals', async t => {
+  const f = await fixture(t, { mode: 'dialogue-only' });
+  const evidence = await f.put('review.txt'); await f.record('idle');
+  await assert.rejects(f.change({ type: 'review', item: 'idle', version: 'v1', verdict: 'passed', evidence: [evidence], note: 'fake' }), /review-mode/);
+  await assert.rejects(f.jobs.prepare(sessionId, (await f.store.read(sessionId)).revision, randomUUID(), plan()), /dialogue-only/);
+});
+
+test('job retries are immutable and execute once, also across new store instances', async t => {
+  const f = await fixture(t), jobId = randomUUID(), p = plan();
+  const prepared = await f.jobs.prepare(sessionId, 1, jobId, p);
+  assert.equal((await f.jobs.prepare(sessionId, 999, jobId, p)).requestHash, prepared.requestHash);
+  await assert.rejects(f.jobs.prepare(sessionId, 1, jobId, plan({ args: ['gen', '--provider', 'grok'] })), /provider-preflight|key-conflict/);
+  let calls = 0;
+  const execute = async (_root, _engine, argv) => {
+    calls++; if (argv[0] !== 'workflow') await f.put(p.outputs[0], 'synthetic output'); return { code: 0 };
+  };
+  const result = await runCreationJob(f.store, sessionId, jobId, { execute });
+  assert.equal(result.status, 'succeeded'); assert.equal(result.attempt, 1); assert.equal(calls, 2);
+  assert.equal(result.outputs[0].bytes, 16);
+  await runCreationJob(createCreationStore(f.root, { contextRequest: request }), sessionId, jobId, { execute });
+  assert.equal(calls, 2);
+  await f.put(p.outputs[0], 'edited');
+  assert.equal((await f.jobs.inspect(sessionId, jobId)).observedStatus, 'outputs-changed');
+});
+
+test('unknown outcome blocks even a new request ID; resolving requires evidence and never reruns', async t => {
+  const f = await fixture(t), jobId = randomUUID();
+  await f.jobs.prepare(sessionId, 1, jobId, plan());
+  let calls = 0;
+  await runCreationJob(f.store, sessionId, jobId, { execute: async (_r, _e, argv) => {
+    calls++; return argv[0] === 'workflow' ? { code: 0 } : { code: null, signal: 'SIGTERM' };
+  } });
+  assert.equal((await f.jobs.inspect(sessionId, jobId)).observedStatus, 'unknown');
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan()), /needs-inspection/);
+  await runCreationJob(f.store, sessionId, jobId, { execute: async () => { calls++; return { code: 0 }; } });
+  assert.equal(calls, 2);
+  const evidence = await f.put('provider-record.txt', 'synthetic evidence of request not started');
+  await f.jobs.resolve(sessionId, jobId, { outcome: 'not-started', evidence: [evidence], note: 'Inspected original record' });
+  assert.equal((await f.jobs.prepare(sessionId, 1, randomUUID(), plan())).status, 'prepared');
+});
+
+test('preflight choices preserve exit 75, missing outputs stay unknown, changed input and cancelled work do not run', async t => {
+  const f = await fixture(t), input = await f.put('request.json', '{}');
+  const key = randomUUID(); await f.jobs.prepare(sessionId, 1, key, plan({ inputs: [input] }));
+  await f.put(input, '{"changed":true}');
+  let calls = 0;
+  await assert.rejects(runCreationJob(f.store, sessionId, key, { execute: async () => { calls++; } }), /inputs-changed/);
+  await f.jobs.cancel(sessionId, key);
+  assert.equal((await runCreationJob(f.store, sessionId, key)).status, 'cancelled'); assert.equal(calls, 0);
+  const next = randomUUID(); await f.jobs.prepare(sessionId, 1, next, plan());
+  const blocked = await runCreationJob(f.store, sessionId, next, { execute: async () => { calls++; return { code: 75 }; } });
+  assert.equal(blocked.status, 'needs-input'); assert.equal(calls, 1); assert.equal(blocked.stage, 'preflight');
+  const third = randomUUID(); await f.jobs.prepare(sessionId, 1, third, plan());
+  const missing = await runCreationJob(f.store, sessionId, third, { execute: async () => ({ code: 0 }) });
+  assert.equal(missing.status, 'unknown'); assert.equal(missing.reason, 'declared-output-missing');
+});
+
+test('a new user decision during preflight stops dependent generation', async t => {
+  const f = await fixture(t), key = randomUUID();
+  await f.jobs.prepare(sessionId, 1, key, plan());
+  let calls = 0;
+  const result = await runCreationJob(f.store, sessionId, key, { execute: async () => {
+    calls++; await f.change({ type: 'revision', item: 'idle', feedback: 'Stop and change the outfit first' }); return { code: 0 };
+  } });
+  assert.equal(calls, 1); assert.equal(result.status, 'needs-input');
+  assert.equal(result.reason, 'session-or-input-changed-before-execution');
+});
+
+test('provider overrides and engine output escapes are rejected before reserving work', async t => {
+  const f = await fixture(t);
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan({ args: ['gen', '--provider', 'codex', '--provider=grok'] })), /duplicate-provider/);
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan({ args: ['gen', '--provider', 'codex', '--out', '../outside.png'] })), /output-outside/);
+  assert.deepEqual(await f.jobs.list(sessionId), []);
+});
+
+test('execution rejects a modified reserved plan and revalidates the command allowlist', async t => {
+  const f = await fixture(t), key = randomUUID();
+  await f.jobs.prepare(sessionId, 1, key, plan());
+  const job = await f.jobs.read(sessionId, key);
+  job.plan.args = ['unsupported-command'];
+  await f.jobs.write(sessionId, job);
+  let calls = 0;
+  await assert.rejects(runCreationJob(f.store, sessionId, key, { execute: async () => { calls++; return { code: 0 }; } }), /job-plan-changed/);
+  await assert.rejects(f.jobs.gate(await f.store.read(sessionId), job.plan), /unsupported-sprite-command/);
+  assert.equal(calls, 0);
+});
+
+test('final package tracks every asset and metadata-only edits preserve animation selections', async t => {
+  const f = await fixture(t);
+  for (const group of context.workflow.groups.slice(0, -1)) {
+    for (const item of [...group.motions, ...(group.auxiliaries ?? [])]) { await f.record(item); await f.review(item); await f.select(item); }
+    await f.change({ type: 'advance' });
+  }
+  const dir = `output/${sessionId}-work/artifacts/final/v1`;
+  await cp(path.join(kitRoot, 'examples', 'sparring-bot'), path.join(f.root, dir), { recursive: true });
+  const manifestPath = `${dir}/fighter.json`, manifest = JSON.parse(await readFile(path.join(f.root, manifestPath), 'utf8'));
+  const { name, description, language, concept, moves } = manifest.profile, extras = { language, concept, moves, stats: manifest.combat.stats };
+  // The recorded profile must carry the package's concept, move names and grades too.
+  await f.change({ type: 'profile', name, description, feedback: 'Profile without the extras' });
+  await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Extras missing' }), /profile-mismatch/);
+  await assert.rejects(f.change({ type: 'profile', name, description, ...extras, stats: { power: 5, toughness: 5, speed: 5 }, feedback: 'Over budget' }));
+  await f.change({ type: 'profile', name, description, ...extras, feedback: 'Fixture profile' });
+  await f.change({ type: 'package', files: [manifestPath], note: 'Geometric format fixture; not generated art' });
+  assert.equal((await f.store.read(sessionId)).package.files.length, manifest.assets.length + 1);
+  const evidence = await f.put('final-review.txt', 'Synthetic review fixture');
+  await f.change({ type: 'package-review', verdict: 'passed', evidence: [evidence], feedback: 'Synthetic acceptance' });
+  assert.equal((await f.store.inspect(sessionId)).decision.canAdvance, true);
+  await f.change({ type: 'profile', name: 'Renamed', description, ...extras, feedback: 'Change only the name' });
+  let inspected = await f.store.inspect(sessionId);
+  assert.ok(inspected.decision.blockers.includes('package-unchecked'));
+  assert.ok(Object.values(inspected.effectiveItems).every(item => item.selectedVersion === 'v1'));
+  await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Old name' }), /profile-mismatch/);
+});
+
+test('real engine dispatch can read bundled installation status without generation', async t => {
+  const f = await fixture(t);
+  assert.equal((await executeEngine(f.root, 'sprite', ['status'])).code, 0);
+});
+
+test('state paths reject traversal, reserved device names and symlinked parents', async t => {
+  const f = await fixture(t);
+  for (const value of ['../private', 'a/../x', 'C:/x', 'a\\x', 'a//b', 'a:stream', 'con/file', 'a/nul.txt', 'a/trailing.'])
+    await assert.rejects(localPath(f.root, value), /path-not-allowed/);
+  const other = await temporary('fighter-outside-'); t.after(() => rm(other, { recursive: true, force: true }));
+  await symlink(other, path.join(f.root, 'linked'), process.platform === 'win32' ? 'junction' : 'dir');
+  await assert.rejects(localPath(f.root, 'linked/private.json', { createParents: true }), /path-not-allowed/);
+});
+
+test('MCP exposes structured mutations and resume state without invoking generation', async t => {
+  const f = await fixture(t);
+  const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+  await createServer({ root: f.root, contextRequest: request }).connect(serverSide);
+  const client = new Client({ name: 'creator-tools-test', version: '1' }); await client.connect(clientSide); t.after(() => client.close());
+  const tools = (await client.listTools()).tools;
+  assert.equal(tools.find(t => t.name === 'get_creation_job').annotations.readOnlyHint, true);
+  assert.equal(tools.find(t => t.name === 'prepare_creation_job').annotations.readOnlyHint, false);
+  assert.equal((await client.callTool({ name: 'list_creation_sessions', arguments: {} })).structuredContent.data[0].sessionId, sessionId);
+  const updated = await client.callTool({ name: 'update_creation_session', arguments: { sessionId, expectedRevision: 1,
+    change: { type: 'profile', name: 'Fixture', description: 'Test', feedback: 'Name chosen' } } });
+  assert.equal(updated.structuredContent.data.revision, 2);
+  const conflict = await client.callTool({ name: 'update_creation_session', arguments: { sessionId, expectedRevision: 1, change: { type: 'advance' } } });
+  assert.equal(conflict.structuredContent.code, 'session-revision-conflict');
+});
+
+test('built local marketplace starts its MCP from a different cwd and carries no account config', async t => {
+  const scratch = await temporary('fighter plugin ');
+  t.after(() => rm(scratch, { recursive: true, force: true }));
+  // Build into a fresh real checkout output, not a hidden/global app configuration.
+  const relative = `output/plugin-test-${randomUUID()}`;
+  const built = await buildLocalPlugin(relative, { workspace: scratch });
+  t.after(() => rm(built.marketplace, { recursive: true, force: true }));
+  const manifest = JSON.parse(await readFile(path.join(built.plugin, 'mcp.json'), 'utf8'));
+  const config = manifest.mcpServers['ai-fighter-creator'];
+  assert.deepEqual(config.env, { AI_FIGHTER_ROOT: scratch });
+  assert.equal(config.cwd, await realpath(kitRoot));
+  const home = path.join(scratch, 'empty-home'); await mkdir(home);
+  const client = new Client({ name: 'built-plugin-test', version: '1' });
+  await client.connect(new StdioClientTransport({ command: config.command, args: config.args, cwd: scratch,
+    env: { ...config.env, HOME: home, USERPROFILE: home }, stderr: 'pipe' }));
+  try {
+    assert.ok((await client.listTools()).tools.some(t => t.name === 'create_creation_session'));
+    const result = await client.callTool({ name: 'list_creation_sessions', arguments: {} });
+    assert.deepEqual(result.structuredContent.data, []);
+  } finally { await client.close(); }
+  await assert.rejects(buildLocalPlugin(relative), /output-exists/);
+});

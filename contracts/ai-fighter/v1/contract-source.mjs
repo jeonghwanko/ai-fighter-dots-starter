@@ -3,6 +3,7 @@
 const frameStandard = { roles: { fighter: { walk: 16, run: 12 } } }; // Published v1 snapshot.
 
 const object = properties => ({ type: 'object', additionalProperties: false, required: Object.keys(properties), properties });
+const optionalObject = (properties, required) => ({ type: 'object', additionalProperties: false, required, properties });
 const integer = (minimum, maximum) => ({ type: 'integer', minimum, maximum });
 const number = (minimum, maximum) => ({ type: 'number', minimum, maximum });
 const array = (items, minItems, maxItems) => ({ type: 'array', items, minItems, maxItems });
@@ -26,6 +27,14 @@ export const motions = {
   groggy: { kind: 'action', loop: true, minHits: 0, maxHits: 0, purpose: '기절/흔들림 반복.' },
   fall: { kind: 'action', loop: false, minHits: 1, maxHits: 1, purpose: '넘어짐·착지·누움. 일어서기 프레임도 명시.' },
 };
+
+/**
+ * The standard-duel kit's four moves a creator may name (display only — the moves themselves are the kit's), and the duel grades a creator
+ * allocates (2026-10-23). Grades are not HP or damage: the server maps each grade to its own tuning (`RegisteredDuelStats.ts`).
+ */
+export const namedMoves = Object.freeze(['combo', 'slam', 'dash', 'block']);
+// A guard grade was tried and dropped (2026-10-23 sweep): raising the guard more often only lost bouts, so it could not be a fair choice.
+export const combatStats = Object.freeze({ keys: Object.freeze(['power', 'toughness', 'speed']), min: 1, max: 5, budget: 9, default: 3 });
 
 export const limits = Object.freeze({ jsonBytes: 262144, assetBytes: 4000000, packageAssetBytes: 10000000,
   assetCount: 16, imageDimension: 4096, imagePixels: 16777216, packagePixels: 33554432, clipDurationMs: 10000 });
@@ -62,8 +71,13 @@ export const schema = {
   description: '제작 입력 전용. 통과는 등록/승인이 아니다. 실제 파일 검사는 별도로 수행한다.',
   ...object({
     schemaVersion: { const: 1 }, specVersion: { const: 'ai-fighter-side-v1' }, localId: id,
-    profile: object({ name: text(40), description: text(600), portrait: ref('imageView'), preview: ref('imageView') }),
-    combat: object({ kitId: { const: 'standard-duel' } }),
+    profile: optionalObject({ name: text(40), description: text(600), language: { enum: ['ko', 'en'] }, concept: text(800),
+      // The name per page language (2026-10-24): shown where that language is on; `name` stays the identity and the fallback.
+      names: { type: 'object', additionalProperties: false, minProperties: 1, properties: { ko: text(40), en: text(40) } },
+      moves: object(Object.fromEntries(namedMoves.map(move => [move, object({ name: text(24), description: text(160) })]))),
+      portrait: ref('imageView'), preview: ref('imageView') }, ['name', 'description', 'portrait', 'preview']),
+    combat: optionalObject({ kitId: { const: 'standard-duel' },
+      stats: object(Object.fromEntries(combatStats.keys.map(key => [key, integer(combatStats.min, combatStats.max)]))) }, ['kitId']),
     appearance: object({ projection: { const: 'orthographic' }, elevationDegrees: { const: 16 },
       sourceFacing: { const: 'right' }, leftFacing: { const: 'mirror' }, bodyHeight: { const: 400 }, bodyScale: { const: 1 } }),
     assets: array(ref('asset'), 1, limits.assetCount),
@@ -88,7 +102,14 @@ export const spec = {
     durationUnit: 'milliseconds', frames: 'contiguous-zero-based', landmarks: 'sequence-step-indices-except-borrowed-frame',
     mirror: 'right-source-left-runtime-flip', bodyHeight: 400, cameraElevationDegrees: 16 },
   limits, motions,
-  combatKits: [{ id: 'standard-duel', description: '서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다.',
+  // A reader that predates a feature rejects manifests using it (additionalProperties: false): writers emit it only when listed here.
+  features: ['profile-extras-1', 'combat-stats-1', 'profile-names-1'],
+  profileExtras: { languages: ['ko', 'en'], conceptMaxLength: 800, namedMoves, moveNameMaxLength: 24, moveDescriptionMaxLength: 160, nameMaxLength: 40,
+    names: '선택. profile.names.ko·en 은 그 언어 화면에 띄울 이름(각 40자). 없는 언어는 profile.name 을 띄운다.',
+    note: '컨셉과 기술 이름·설명은 표시용 소개 텍스트다. 기술 이름은 표준 키트의 고정 동작에 붙는다. 새 동작이나 AI 지시가 아니다.' },
+  combatStats: { ...combatStats,
+    note: '제작자는 등급 배분만 제출한다. 모든 등급의 합은 budget과 같아야 한다. 없으면 모두 default다. 서버가 등급을 자체 수치로 바꾼다.' },
+  combatKits: [{ id: 'standard-duel', description: '서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다. 능력치 등급 배분(combat.stats)만 고른다.',
     integration: 'pending-game-integration',
     currentConsumers: { player: 'FighterFightSkin / Lupin rules', opponent: 'NativeCityKumaArt / CityFighters rules' },
     warning: '현재 플레이어와 AI 상대 규칙은 다르다. 이 ID는 서버 연결 계약이며 통합 경쟁 규칙 구현을 뜻하지 않는다.' }],

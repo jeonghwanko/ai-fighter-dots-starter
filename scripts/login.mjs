@@ -1,21 +1,35 @@
 // Google sign-in for Dot. Creates this user's own Supabase session file; nothing is shared with the browser.
 // Usage: npm run login | npm run login -- --link | npm run login -- --replace | npm run logout
+//        npm run login -- --device [--replace]  then  npm run login -- --device-wait [--timeout <seconds>]
+//        npm run login -- --paste [--replace]  then  npm run login -- --finish   (address read from this terminal)
+// --device is for a workspace the user's browser cannot reach (a bot VM): the user approves a public pairing code on
+// the homepage while signed in, and this workspace redeems a one-use token. Nothing secret passes through chat.
 // --link adds Google to the existing account in the session file (beta accounts made before Google sign-in).
 // --replace allows a login to overwrite a session file that belongs to a different user.
+// --paste / --finish is a manual callback exchange, not a secure delivery channel. The callback address carries an
+// authorization code: it must reach --finish only through input the user controls on this workspace (its own
+// terminal), never through chat or ordinary logs. Without such input, report the sign-in blocker instead.
 import { spawn } from 'node:child_process';
 import { randomBytes } from 'node:crypto';
 import { realpathSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { mkdir, readFile, rm } from 'node:fs/promises';
 import { homedir } from 'node:os';
+import { createInterface } from 'node:readline';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { apiRequest, validProjectUrl, withSessionLock, writeSessionFile } from '../api/client.mjs';
+import { isTransportCode, connectionAction } from '../api/connection-errors.mjs';
+import { runtimeFetch } from '../api/runtime-fetch.mjs';
+import { PUBLIC_CREATOR_PAGE, creatorPage } from '../mcp/creator-handoff.mjs';
 
 export const DEFAULT_LOGIN_PORT = 47821;
 export const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
+// A chat round trip is slower than a local browser redirect; the authorization code itself is still single-use.
+export const PASTE_LOGIN_TTL_MS = 10 * 60 * 1000;
 export const defaultSessionPath = () => process.env.AI_FIGHTER_CLIENT_CONFIG || path.join(homedir(), '.ai-fighter', 'client.json');
+export const pendingLoginPath = sessionPath => path.join(path.dirname(sessionPath), 'pending-login.json');
 
 /** Decoded JWT payload, or null. Used only to read `role`, `sub` and `exp`; the server verifies every token. */
 export function jwtPayload(token) {
@@ -41,9 +55,10 @@ export async function projectSettings({ argv = [], env = process.env, sessionPat
   return { url, publishableKey, port };
 }
 
-function memoryStorage() {
-  const items = new Map();
-  return { getItem: key => items.get(key) ?? null, setItem: (key, value) => { items.set(key, value); }, removeItem: key => { items.delete(key); } };
+function memoryStorage(initial = {}) {
+  const items = new Map(Object.entries(initial));
+  return { getItem: key => items.get(key) ?? null, setItem: (key, value) => { items.set(key, value); }, removeItem: key => { items.delete(key); },
+    snapshot: () => Object.fromEntries(items) };
 }
 
 const page = (title, body) => `<!doctype html><meta charset="utf-8"><title>${title}</title>
@@ -112,7 +127,7 @@ export async function login({ argv = process.argv.slice(2), log = console.error,
   // The user already in the session file. An operator-issued beta session may be its only copy.
   const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
   const state = randomBytes(16).toString('hex'), redirectTo = `http://127.0.0.1:${port}/callback/${state}`;
-  const auth = createAuthClient(url, publishableKey, { auth: { flowType: 'pkce', storage: memoryStorage(), persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
+  const auth = createAuthClient(url, publishableKey, { global: { fetch: runtimeFetch }, auth: { flowType: 'pkce', storage: memoryStorage(), persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
   const linkedUser = link ? await adoptExistingSession(auth, sessionPath, url, publishableKey) : null;
   const options = { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } };
   const { data, error } = link ? await auth.auth.linkIdentity({ provider: 'google', options })
@@ -124,9 +139,19 @@ export async function login({ argv = process.argv.slice(2), log = console.error,
     log(`브라우저가 열리지 않으면 이 주소를 여세요:\n${data.url}`);
     open(data.url);
   } });
+  return completeSignIn({ auth, code, link, linkedUser, replace, previousUser, sessionPath, url, publishableKey, log, request });
+}
+
+/** Exchange the code, refuse a different user unless asked, write the session file, and report account status. */
+async function completeSignIn({ auth, code, ...rest }) {
   const exchanged = await auth.auth.exchangeCodeForSession(code);
   const session = exchanged.data?.session;
   if (exchanged.error || !session?.access_token || !session.refresh_token || !session.user?.id) throw new Error('oauth-exchange-failed');
+  return saveSignIn({ session, ...rest });
+}
+
+/** Refuse a different user unless asked, write the session file, and report account status. */
+async function saveSignIn({ session, link = false, linkedUser = null, replace, previousUser, sessionPath, url, publishableKey, log, request }) {
   // Linking must keep the same user, or the fighters it owns would no longer be this session's.
   if (link && session.user.id !== linkedUser) throw new Error('link-user-mismatch');
   if (!link && !replace && previousUser && previousUser !== session.user.id) throw new Error('session-user-differs');
@@ -137,14 +162,165 @@ export async function login({ argv = process.argv.slice(2), log = console.error,
   log(`세션 파일: ${sessionPath}`);
   try {
     const result = await request(url, session.access_token, 'me');
-    log(result.account?.invited ? '베타 초대가 확인되었습니다. 선수를 제출할 수 있습니다.'
-      : '아직 베타 초대가 없습니다. AI Fighter 홈페이지에서 초대를 요청하세요. 검사와 제작은 지금도 할 수 있습니다.');
+    log(result.account?.invited ? '로그인이 확인되었습니다. 사전 승인 없이 선수를 제출할 수 있습니다.'
+      : '이 계정은 현재 이용이 제한되어 있습니다. 홈페이지에서 계정 상태를 확인하세요.');
   } catch (problem) {
-    log(problem.message === 'route-not-found' ? '서버가 아직 초대 상태 확인을 지원하지 않습니다. 제출할 때 초대 여부를 확인합니다.'
-      : '초대 상태를 확인하지 못했습니다. 제출할 때 다시 확인합니다.');
+    log(problem.message === 'route-not-found' ? '서버가 계정 상태 조회를 지원하지 않습니다. 제출할 때 다시 확인합니다.'
+      : '계정 상태를 확인하지 못했습니다. 제출할 때 다시 확인합니다.');
   }
-  log('Dot 앱이 이미 실행 중이었다면 앱을 다시 시작하세요.');
+  log('ODDBOUT 연결 상태를 다시 확인하면 현재 MCP에서 바로 이어서 사용할 수 있습니다.');
   return { sessionPath, userId: session.user.id };
+}
+
+/**
+ * Step 1 of a pasted-address login. Starts PKCE with the same allow-listed loopback redirect, saves the verifier and
+ * state to a 0600 file beside the session file, prints the Google address, and exits without waiting.
+ */
+export async function startPasteLogin({ argv = [], log = console.error, createAuthClient = createClient } = {}) {
+  if (argv.includes('--link')) throw new Error('paste-link-unsupported');
+  const sessionPath = defaultSessionPath(), pendingPath = pendingLoginPath(sessionPath);
+  const { url, publishableKey, port } = await projectSettings({ argv, sessionPath });
+  const state = randomBytes(16).toString('hex'), redirectTo = `http://127.0.0.1:${port}/callback/${state}`;
+  const storage = memoryStorage();
+  const auth = createAuthClient(url, publishableKey, { global: { fetch: runtimeFetch }, auth: { flowType: 'pkce', storage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
+  const { data, error } = await auth.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } } });
+  if (error || !data?.url) throw new Error('oauth-start-failed');
+  await mkdir(path.dirname(pendingPath), { recursive: true, mode: 0o700 });
+  // A new start replaces an older pending login; its code could no longer be exchanged anyway.
+  await writeSessionFile(pendingPath, { version: 1, url, publishableKey, port, state, replace: argv.includes('--replace'),
+    createdAt: new Date().toISOString(), storage: storage.snapshot() });
+  log('1. 아래 주소를 휴대폰이나 PC 브라우저에서 열고 Google 계정을 고르세요. 홈페이지에서 쓸 계정과 같은 계정이어야 합니다.');
+  log(data.url);
+  log(`2. 로그인 뒤 브라우저가 "연결할 수 없음" 같은 페이지(http://127.0.0.1:${port}/callback/…)로 갑니다. 정상입니다.`);
+  log('3. 그 주소창 주소에는 인증 코드가 들어 있습니다. 대화·메시지·일반 로그에 붙여 넣지 마세요.');
+  log('   이 작업 공간의 터미널에서 직접 npm run login -- --finish 를 실행하고, 주소를 입력하세요. 10분 안에 해야 합니다.');
+  log('   이 작업 공간의 터미널에 직접 입력할 수 없다면 이 방식은 쓸 수 없습니다. 로그인이 막혔다고 알리세요.');
+  return { pendingPath, authorizationUrl: data.url, redirectPrefix: `http://127.0.0.1:${port}/callback/`, expiresInMs: PASTE_LOGIN_TTL_MS };
+}
+
+export const pendingDeviceLoginPath = sessionPath => path.join(path.dirname(sessionPath), 'pending-device-login.json');
+const DEVICE_CODE = /^afd_[a-f0-9]{64}$/, USER_CODE = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/;
+
+/** An unauthenticated JSON POST to the AI Fighter API (device routes only; no user token exists yet). */
+const devicePost = (url, publishableKey, route, body) => apiRequest(url, publishableKey, route,
+  { method: 'POST', body: JSON.stringify(body ?? {}), headers: { apikey: publishableKey, 'content-type': 'application/json' } });
+
+/**
+ * Device-connection sign-in, step 1: for a workspace whose 127.0.0.1 callback the user's browser cannot reach.
+ * The secret device code stays in a 0600 file here; the printed link carries only the public pairing code.
+ */
+export async function startDeviceLogin({ argv = [], log = console.error, post = devicePost, page = PUBLIC_CREATOR_PAGE,
+  sessionPath = defaultSessionPath() } = {}) {
+  if (argv.includes('--link')) throw new Error('device-link-unsupported');
+  const pendingPath = pendingDeviceLoginPath(sessionPath);
+  // A second start must not replace the only copy of a request that may already be approved.
+  let existing;
+  try { existing = JSON.parse(await readFile(pendingPath, 'utf8')); }
+  catch (error) { if (error.code !== 'ENOENT') throw new Error('pending-device-login-invalid'); }
+  if (existing !== undefined) {
+    if (existing?.version !== 1 || !Number.isFinite(Date.parse(existing.expiresAt))) throw new Error('pending-device-login-invalid');
+    if (Date.parse(existing.expiresAt) > Date.now()) throw new Error('device-login-already-pending');
+  }
+  const { url, publishableKey } = await projectSettings({ argv, sessionPath });
+  let started;
+  try { started = await post(url, publishableKey, 'device-logins'); }
+  catch (error) {
+    // A server without the route predates device login: report it, never fall back to pasting a callback.
+    if (error.status === 404 || ['not-found', 'route-not-found'].includes(error.message)) throw new Error('device-login-unavailable');
+    if (isTransportCode(error.message)) throw error;
+    throw new Error(error.message === 'rate-limit' ? 'device-login-rate-limit' : 'device-login-start-failed');
+  }
+  if (!DEVICE_CODE.test(started?.deviceCode ?? '') || !USER_CODE.test(started?.userCode ?? '') || !Number.isFinite(Date.parse(started?.expiresAt))
+    || !Number.isInteger(started?.interval) || started.interval < 1 || started.interval > 60) throw new Error('invalid-api-response');
+  await mkdir(path.dirname(pendingPath), { recursive: true, mode: 0o700 });
+  await writeSessionFile(pendingPath, { version: 1, url, publishableKey, deviceCode: started.deviceCode, userCode: started.userCode,
+    expiresAt: started.expiresAt, interval: started.interval, replace: argv.includes('--replace') });
+  const verificationUrl = `${creatorPage(page).href}#device=${started.userCode}`;
+  log('아래 링크를 휴대폰이나 PC 브라우저에서 열고, 홈페이지에서 쓸 Google 계정으로 로그인하세요.');
+  log(verificationUrl);
+  log(`화면에 표시된 코드가 ${started.userCode} 와 같은지 확인한 뒤 승인하세요. 10분 안에 해야 합니다.`);
+  log('이 링크와 코드는 비밀번호가 아닙니다. 승인에는 본인의 Google 로그인이 필요합니다. 본인이 시작하지 않은 요청이면 승인하지 마세요.');
+  log('승인한 뒤에는 이 작업 공간에서 npm run login -- --device-wait 를 실행합니다.');
+  return { userCode: started.userCode, verificationUrl, expiresAt: started.expiresAt };
+}
+
+/**
+ * Step 2: poll until the user approves, then redeem the one-use magic-link token into a normal session file.
+ * Stops at `timeoutSeconds` while still pending (the request stays open for another wait), or at expiry.
+ */
+export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.error, post = devicePost, request = apiRequest,
+  sessionPath = defaultSessionPath(),
+  createAuthClient = createClient, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
+  const pendingPath = pendingDeviceLoginPath(sessionPath);
+  const pending = await readSession(pendingPath);
+  if (!pending || pending.version !== 1 || !DEVICE_CODE.test(pending.deviceCode ?? '') || !validProjectUrl(pending.url)
+    || !isPublishableKey(pending.publishableKey)) throw new Error('pending-device-login-missing');
+  const close = () => rm(pendingPath, { force: true });
+  const expiry = Date.parse(pending.expiresAt), deadline = Math.min(expiry, now() + timeoutSeconds * 1000);
+  let interval = pending.interval * 1000, answer = null;
+  while (!answer) {
+    if (now() >= expiry) { await close(); throw new Error('device-login-expired'); }
+    try {
+      const reply = await post(pending.url, pending.publishableKey, 'device-logins/token', { deviceCode: pending.deviceCode });
+      if (reply?.status === 'approved') answer = reply;
+      else if (reply?.status !== 'pending') throw new Error('invalid-api-response');
+    } catch (error) {
+      if (['device-login-expired', 'device-login-consumed', 'device-login-not-found'].includes(error.message)) { await close(); throw new Error(error.message); }
+      if (error.message === 'slow-down') interval += 5000;
+      else throw error; // Keep the pending file; connectivity recovery resumes this request, never a new login.
+    }
+    if (answer) break;
+    if (now() + interval > deadline) {
+      const error = new Error(now() + interval > expiry ? 'device-login-expired' : 'device-login-pending');
+      error.retryAfterSeconds = Math.ceil(interval / 1000);
+      throw error;
+    }
+    await sleep(interval);
+  }
+  await close(); // the approval is spent on the server either way
+  if (typeof answer.tokenHash !== 'string' || !/^[a-f0-9]{40,128}$/.test(answer.tokenHash)) throw new Error('invalid-api-response');
+  const auth = createAuthClient(pending.url, pending.publishableKey, { global: { fetch: runtimeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+  const verified = await auth.auth.verifyOtp({ type: 'email', token_hash: answer.tokenHash });
+  const session = verified.data?.session;
+  if (verified.error || !session?.access_token || !session.refresh_token || !session.user?.id) throw new Error('device-login-redeem-failed');
+  const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
+  return saveSignIn({ session, replace: pending.replace, previousUser, sessionPath, url: pending.url, publishableKey: pending.publishableKey, log, request });
+}
+
+/** The loopback callback address inside pasted text, bound to the pending state and port; never a bare code. */
+export function parsePastedCallback(text, { port, state }) {
+  const found = String(text ?? '').match(/https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/callback\/[^\s"'<>]*/);
+  if (!found) throw new Error('pasted-address-invalid');
+  let address;
+  try { address = new URL(found[0]); } catch { throw new Error('pasted-address-invalid'); }
+  if (Number(address.port) !== port || address.pathname !== `/callback/${state}`) throw new Error('pasted-address-mismatch');
+  const code = address.searchParams.get('code'), problem = address.searchParams.get('error_code') ?? address.searchParams.get('error');
+  if (problem) throw new Error(problem === 'identity_already_exists' ? 'identity-already-linked' : 'oauth-denied');
+  if (!code || !/^[A-Za-z0-9._~-]{8,512}$/.test(code)) throw new Error('pasted-address-invalid');
+  return code;
+}
+
+/** Step 2: exchange the pasted address with the saved verifier, then write the session exactly as a normal login. */
+export async function finishPasteLogin({ pasted, log = console.error, createAuthClient = createClient, request = apiRequest, now = Date.now } = {}) {
+  const sessionPath = defaultSessionPath(), pendingPath = pendingLoginPath(sessionPath);
+  const pending = await readSession(pendingPath);
+  if (!pending || pending.version !== 1 || typeof pending.state !== 'string' || typeof pending.storage !== 'object') throw new Error('pending-login-missing');
+  if (now() - Date.parse(pending.createdAt) > PASTE_LOGIN_TTL_MS) {
+    await rm(pendingPath, { force: true });
+    throw new Error('pending-login-expired');
+  }
+  if (!validProjectUrl(pending.url) || !isPublishableKey(pending.publishableKey)) throw new Error('pending-login-missing');
+  // A wrong paste keeps the pending login so the user can paste the right address.
+  const code = parsePastedCallback(pasted, pending);
+  const auth = createAuthClient(pending.url, pending.publishableKey, { global: { fetch: runtimeFetch }, auth: { flowType: 'pkce', storage: memoryStorage(pending.storage),
+    persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
+  const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
+  try {
+    return await completeSignIn({ auth, code, replace: pending.replace, previousUser, sessionPath,
+      url: pending.url, publishableKey: pending.publishableKey, log, request });
+  } finally {
+    await rm(pendingPath, { force: true }); // the code is spent either way
+  }
 }
 
 /**
@@ -159,7 +335,7 @@ export async function logout({ log = console.error, createAuthClient = createCli
     let ended = false;
     if (saved && validProjectUrl(saved.url) && isPublishableKey(saved.publishableKey) && typeof saved.accessToken === 'string') {
       try {
-        const auth = createAuthClient(saved.url, saved.publishableKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+        const auth = createAuthClient(saved.url, saved.publishableKey, { global: { fetch: runtimeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
         let token = saved.accessToken;
         if ((jwtPayload(token)?.exp ?? 0) * 1000 <= Date.now() + 5000 && typeof saved.refreshToken === 'string') {
           const refreshed = await auth.auth.refreshSession({ refresh_token: saved.refreshToken });
@@ -172,8 +348,8 @@ export async function logout({ log = console.error, createAuthClient = createCli
     return ended;
   });
   log(`${sessionPath}를 지웠습니다.`);
-  log(revoked ? '서버의 세션도 끝냈습니다. 실행 중인 Dot 앱을 다시 시작하세요.'
-    : '서버의 세션을 끝내지 못했습니다. 이미 끝났거나 연결할 수 없습니다. 실행 중인 Dot 앱을 닫아야 세션 파일이 다시 생기지 않습니다.');
+  log(revoked ? '서버의 세션도 끝냈습니다. 다음 MCP 요청부터 로그아웃이 반영됩니다.'
+    : '서버의 세션을 끝내지 못했습니다. 로컬 연결은 해제했으며 다음 MCP 요청부터 로그인이 필요합니다.');
 }
 
 const messages = {
@@ -193,13 +369,47 @@ const messages = {
   'manual-linking-disabled': 'Supabase Auth에서 수동 계정 연결(manual linking)이 꺼져 있습니다. 운영자가 켠 뒤 다시 실행하세요.',
   'identity-already-linked': '이 Google 계정은 이미 다른 사용자에 연결되어 있습니다. 그 Google 계정으로 먼저 로그인해 생긴 사용자를 운영자가 정리해야 합니다.',
   'link-user-mismatch': '연결 결과가 기존 사용자와 다릅니다. 세션 파일을 바꾸지 않았습니다.',
+  'paste-link-unsupported': '--paste 는 --link 와 함께 쓸 수 없습니다. 기존 베타 계정 연결은 브라우저가 있는 PC에서 실행하세요.',
+  'device-link-unsupported': '--device 는 --link 와 함께 쓸 수 없습니다. 기존 베타 계정 연결은 브라우저가 있는 PC에서 실행하세요.',
+  'device-login-unavailable': '서버가 기기 연결 로그인을 아직 지원하지 않습니다. 로그인이 막혔다고 알리세요. 콜백 주소를 대화로 옮기는 방식으로 대신하지 않습니다.',
+  'device-login-rate-limit': '기기 연결 요청이 너무 많습니다. 몇 분 뒤 다시 시작하세요.',
+  'device-login-start-failed': '기기 연결 로그인을 시작하지 못했습니다. 잠시 후 다시 실행하세요.',
+  'device-login-already-pending': '기존 기기 연결 요청이 남아 있습니다. 새 요청을 만들지 말고 사용자가 승인한 뒤 npm run login -- --device-wait 로 이어가세요.',
+  'pending-device-login-invalid': '기존 기기 연결 기록을 판독할 수 없어 보존했습니다. 기록과 서버 상태를 확인하기 전에는 새 로그인 요청을 만들지 않습니다.',
+  'pending-device-login-missing': '진행 중인 기기 연결 로그인이 없습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'device-login-pending': '아직 승인되지 않았습니다. 사용자가 승인한 뒤 npm run login -- --device-wait 를 다시 실행하세요.',
+  'device-login-expired': '기기 연결 요청이 만료되었습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'device-login-consumed': '이 기기 연결 요청은 이미 사용되었습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'device-login-not-found': '서버에서 이 기기 연결 요청을 찾지 못했습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'device-login-redeem-failed': '승인된 로그인을 세션으로 바꾸지 못했습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'invalid-api-response': '서버 응답을 이해하지 못했습니다. 잠시 후 다시 실행하세요.',
+  'pending-login-missing': '진행 중인 로그인이 없습니다. npm run login -- --paste 부터 다시 실행하세요.',
+  'pending-login-expired': '로그인 시작 후 10분이 지났습니다. npm run login -- --paste 부터 다시 실행하세요.',
+  'pasted-address-invalid': '입력한 내용에서 로그인 주소(http://127.0.0.1:…/callback/…)를 찾지 못했습니다. 이 터미널에서 주소창 주소 전체를 다시 입력하세요.',
+  'pasted-address-mismatch': '입력한 주소가 이번 로그인과 맞지 않습니다. 가장 최근에 받은 링크로 로그인한 뒤의 주소를 이 터미널에서 입력하세요.',
 };
+
+/** One line typed into this process's own terminal, so the address stays out of argv and shell history. */
+function readTerminalLine(prompt) {
+  return new Promise(resolve => {
+    const lines = createInterface({ input: process.stdin, output: process.stderr });
+    lines.question(prompt, answer => { lines.close(); resolve(answer); });
+  });
+}
 
 /** True when this file is the entry script, also when it is run through a symlink or junction. */
 function isEntry() {
   try { return Boolean(process.argv[1]) && realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url)); } catch { return false; }
 }
 if (isEntry()) {
-  const run = process.argv[2] === 'logout' ? logout() : login({ argv: process.argv.slice(2) });
-  run.catch(error => { console.error(messages[error.message] ?? `로그인 실패: ${error.message}`); process.exitCode = 1; });
+  const argv = process.argv.slice(2), finish = argv.indexOf('--finish');
+  const timeout = argv.indexOf('--timeout');
+  const run = argv[0] === 'logout' ? logout()
+    : argv.includes('--device-wait') ? waitDeviceLogin({ timeoutSeconds: timeout >= 0 ? Number(argv[timeout + 1]) || 600 : 600 })
+    : argv.includes('--device') ? startDeviceLogin({ argv })
+    : finish >= 0 ? (argv.length > finish + 1 ? Promise.resolve(argv.slice(finish + 1).join(' ')) : readTerminalLine('로그인 후 주소창 주소: '))
+      .then(pasted => finishPasteLogin({ pasted }))
+    : argv.includes('--paste') ? startPasteLogin({ argv }) : login({ argv });
+  run.catch(error => { console.error(isTransportCode(error.message) ? connectionAction(error.message).message
+    : messages[error.message] ?? `로그인 실패: ${error.message}`); process.exitCode = 1; });
 }

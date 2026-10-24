@@ -22,10 +22,18 @@ export function createDuelHandler({db,simulateDuel,engineVersion}) {
     if (!parsed.ok || !validateFighter(parsed.data).ok) throw new Problem(409,'package-invalid');
     return parsed.data;
   }
+  /** The ranking rows with each fighter's per-language names (contract profile.names) where he has them. */
+  async function rankings() {
+    const rows=await rpc('af_duel_rankings',{});
+    if (!rows.length) return rows;
+    const {data,error}=await db.from('af_fighters').select('id,profile').in('id',rows.map(row=>row.id)); check(error);
+    const names=new Map((data??[]).map(f=>[f.id,f.profile?.names]));
+    return rows.map(row=>names.get(row.id)?{...row,names:names.get(row.id)}:row);
+  }
   return async (request,parts) => {
     try {
       if (request.method==='OPTIONS') return reply({ok:true});
-      if (request.method==='GET' && parts.join('/')==='rankings') return reply({ok:true,rankings:await rpc('af_duel_rankings',{}),engine:engineVersion});
+      if (request.method==='GET' && parts.join('/')==='rankings') return reply({ok:true,rankings:await rankings(),engine:engineVersion});
       if (request.method==='GET' && parts.length===2 && parts[0]==='duels' && UUID.test(parts[1])) {
         const {data,error}=await db.from('af_duels').select('*').eq('id',parts[1]).not('completed_at','is',null).maybeSingle(); check(error);
         if (!data) throw new Problem(404,'not-found'); return reply({ok:true,match:present(data)});

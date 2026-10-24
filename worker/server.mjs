@@ -1,0 +1,86 @@
+import { createServer } from 'node:http';
+import { createHmac, timingSafeEqual } from 'node:crypto';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { validProjectUrl } from '../api/client.mjs';
+import { makePackageValidator } from '../mcp/package-access.mjs';
+import { runWithConfig } from './run.mjs';
+import { cloudGateway } from './cloud-gateway.mjs';
+
+/** HTTP-triggered worker. Supabase owns the durable queue and five-minute leases. */
+export function createWorkerServer({ wakeToken, run, log = console.log, commit = null }) {
+  if (!/^[a-f0-9]{64}$/.test(wakeToken ?? '')) throw new Error('invalid-wake-token');
+  let active = null, stopping = false, requested = false;
+  async function drain() {
+    do {
+      requested = false;
+      try {
+        while (!stopping) {
+          const result = await run();
+          // Never log credentials, signed URLs or package contents.
+          log(JSON.stringify({ stage: result.stage, submissionId: result.submissionId }));
+          if (result.stage === 'idle' || result.stage === 'retry-later') break;
+        }
+      } catch {
+        log(JSON.stringify({ stage: 'retry-later' }));
+      }
+    } while (requested && !stopping);
+  }
+  const server = createServer(async (req, res) => {
+    if (await cloudGateway(req, res)) return;
+    const reply = (status, body) => {
+      res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
+      res.end(JSON.stringify(body));
+    };
+    if (req.method === 'GET' && req.url === '/health') {
+      return reply(stopping ? 503 : 200, { ok: !stopping, commit: /^[a-f0-9]{40}$/.test(commit ?? '') ? commit : null });
+    }
+    if (req.method !== 'POST' || req.url !== '/wake') return reply(404, { ok: false });
+    const timestamp = req.headers['x-ai-fighter-time'];
+    const seconds = typeof timestamp === 'string' && /^\d{10}$/.test(timestamp) ? Number(timestamp) : 0;
+    const age = Math.floor(Date.now() / 1000) - seconds;
+    if (seconds === 0 || age < -30 || age > 180) return reply(401, { ok: false });
+    // The managed pg_net queue can be readable by database roles. It receives only
+    // a short-lived HMAC, never the durable wake key stored in Vault and Render.
+    const expected = Buffer.from(`Bearer ${createHmac('sha256', wakeToken).update(timestamp).digest('hex')}`);
+    const supplied = Buffer.from(req.headers.authorization ?? '');
+    if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
+      return reply(401, { ok: false });
+    }
+    if (stopping) return reply(503, { ok: false });
+    req.resume(); // No user-supplied job payload; claim only from the authenticated queue.
+    requested = true;
+    if (!active) active = drain().finally(() => { active = null; });
+    reply(202, { ok: true });
+  });
+  server.requestTimeout = 10_000;
+  server.headersTimeout = 10_000;
+  return {
+    server,
+    async stop() {
+      stopping = true;
+      server.close();
+      server.closeIdleConnections();
+      await active;
+    },
+  };
+}
+
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
+  const config = { url: process.env.AI_FIGHTER_PROJECT_URL, workerToken: process.env.AI_FIGHTER_WORKER_TOKEN };
+  if (!validProjectUrl(config.url) || !/^afw_[a-f0-9]{64}$/.test(config.workerToken ?? '')) {
+    throw new Error('invalid-worker-config');
+  }
+  // Exercise the actual native WebP decoder and child-process validator on this host.
+  // This existing geometric fixture is a readiness check, never a new registered fighter.
+  const started = Date.now();
+  const preflight = await makePackageValidator(fileURLToPath(new URL('../', import.meta.url)))('examples/sparring-bot/fighter.json');
+  if (!preflight.ok) throw new Error(`validator-preflight-failed:${preflight.stage}`);
+  console.log(JSON.stringify({ stage: 'validator-ready', elapsedMs: Date.now() - started }));
+  const app = createWorkerServer({
+    wakeToken: process.env.AI_FIGHTER_WAKE_TOKEN,
+    commit: process.env.RENDER_GIT_COMMIT,
+    run: () => runWithConfig(config),
+  });
+  app.server.listen(Number(process.env.PORT ?? 10000), '0.0.0.0');
+  for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => { void app.stop(); });
+}

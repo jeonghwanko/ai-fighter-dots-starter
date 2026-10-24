@@ -31,6 +31,11 @@ async function eachLimited(items, limit, cancel, task) {
 
 export async function runOnce(configPath, submissionId) {
   const config = JSON.parse(await readFile(configPath, 'utf8'));
+  return runWithConfig(config, submissionId);
+}
+
+/** Environment-backed web services need no credential file on their ephemeral disk. */
+export async function runWithConfig(config, submissionId) {
   if (!validProjectUrl(config.url) || !/^afw_[a-f0-9]{64}$/.test(config.workerToken ?? '')) throw new Error('invalid-worker-config');
   const send = (route, body) => apiRequest(config.url, config.workerToken, route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
   const job = await send('worker/claim', { ...(submissionId ? { submissionId } : {}) });

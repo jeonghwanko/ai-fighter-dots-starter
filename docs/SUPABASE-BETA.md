@@ -1,4 +1,7 @@
-# Supabase Free 베타 운영
+# 이전 초대 베타 운영 기록
+
+> 이 문서는 이전 설계·시험 기록이다. 2026-10-21부터 초대와 사전 승인은 폐지했다. 현재 설치·등록·사후 조치는 [공개 이용 정책](OPEN-REGISTRATION.md)을 따른다. 아래 초대·승인 절차를 신규 사용자에게 적용하지 않는다.
+
 
 v0.2는 초대된 사용자의 업로드 → 서버 파일 검사 → 선수 레지스트리 등록을 구현한다.
 2026-10-19 기존 Free 프로젝트에서 실제 MCP로 예제 선수 1명을 등록했다.
@@ -34,7 +37,7 @@ sequenceDiagram
 같은 키에 다른 JSON을 보내면 409다. 수정한 패키지는 새 키로 제출한다.
 24시간 안에 업로드를 끝내지 못한 제출은 같은 사용자의 다음 제출 생성 때 `rejected`(`upload-expired`)로 닫힌다.
 그 전까지 조회 응답은 `uploading`에 `code: "upload-expired"`와 빈 `pending`을 함께 보인다.
-사용자당 등록 선수는 1명이며 등록 후 교체 API는 아직 없다.
+현재 사용자당 등록 선수는 최대 3명이다. 새 선수는 `fighter` 없이 제출하며, 기존 선수 수정은 추가 등록 수를 차지하지 않는다. 등록한 선수는 `POST submissions?fighter=<id>`로 패키지를 제자리에서 교체한다. 선수 ID와 전적은 유지된다.
 
 ## 배포
 
@@ -244,7 +247,8 @@ Dot에서 첫 실제 등록:
 ## 제작자 홈페이지 연결 링크
 
 `open_creator_homepage`는 `POST /creator-handoffs`로 이 계정 전용 일회용 토큰을 받아
-`https://rupin.pryzm.gg/creator.html#handoff=<tokenHash>` 링크를 만든다. 어느 기기의 브라우저에서나 열린다.
+`https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html#handoff=<tokenHash>` 링크를 만든다. 어느 기기의 브라우저에서나 열린다.
+홈페이지는 무료 GitHub Pages에서 제공하고 기존 Supabase를 사용한다. [호스팅·재배포 안내](CREATOR-HOSTING.md)를 따른다.
 
 - 서버는 `auth.admin.generateLink({ type: 'magiclink' })`로 토큰을 만든다. 메일은 보내지 않으며 해시만 돌려준다.
   발급된 토큰의 사용자 ID가 요청한 사용자와 다르면 거부한다. 이메일이 없는 계정은 `handoff-email-required`(422).
@@ -315,8 +319,9 @@ npm run worker:watch
 **검사기 버전.** 작업자는 `VALIDATOR_VERSION`을 영수증에 적고 서버는 `af_settings.validator_versions`에 있는 값만 받는다.
 새 검사기를 배포할 때는 먼저 새 버전을 목록에 추가하고, 모든 작업자를 바꾼 뒤 옛 버전을 지운다.
 결과가 즉시 나타나지 않을 수 있다. PC에서 실행하면 PC가 꺼진 동안 제출은 대기한다.
-상시 운영은 [systemd 유닛 예시](../deploy/ai-fighter-worker.service)처럼 서버 서비스로 둔다.
-전용 사용자, 메모리 512 MB·CPU 50% 상한, 작업 폴더만 쓰기 가능, 비정상 종료 시 재시작이다.
+현재 운영은 [독립 무료 호스팅](CREATOR-HOSTING.md)의 Render Free 웹 작업자다.
+Supabase가 대기 제출이 있을 때만 인증된 HTTP 요청으로 깨우고, 중단된 임대는 다시 시도한다.
+기존 FindThem의 systemd 작업자는 중지·비활성화했다. [systemd 유닛](../deploy/ai-fighter-worker.service)은 별도 서버 운영을 위한 참고 예시다.
 작업자를 옮길 때는 새 토큰 해시를 먼저 등록하고, 새 작업자가 큐를 정상 조회하는지 확인한 뒤 옛 작업자를 멈추고 옛 토큰을 끈다.
 작업자 토큰은 큐를 검사·확정할 권한이다. 이를 Dot에 제공하지 않는다.
 

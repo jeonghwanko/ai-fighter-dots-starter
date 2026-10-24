@@ -5,6 +5,26 @@
   "profile": {
     "name": "Sparring Bot",
     "description": "Original geometric format fixture. Not approved game art.",
+    "language": "en",
+    "concept": "A training robot built from simple shapes. It exists to test the format, not to tell a story.",
+    "moves": {
+      "combo": {
+        "name": "Test Jabs",
+        "description": "The standard combo under a fixture name."
+      },
+      "slam": {
+        "name": "Test Slam",
+        "description": "The standard slam under a fixture name."
+      },
+      "dash": {
+        "name": "Test Dash",
+        "description": "The standard dash under a fixture name."
+      },
+      "block": {
+        "name": "Test Guard",
+        "description": "The standard block under a fixture name."
+      }
+    },
     "portrait": {
       "assetId": "idle",
       "crop": {
@@ -25,7 +45,12 @@
     }
   },
   "combat": {
-    "kitId": "standard-duel"
+    "kitId": "standard-duel",
+    "stats": {
+      "power": 3,
+      "toughness": 3,
+      "speed": 3
+    }
   },
   "appearance": {
     "projection": "orthographic",
