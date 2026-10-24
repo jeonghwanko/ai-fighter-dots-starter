@@ -68,6 +68,8 @@ Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른�
 - OAuth 로그인·승인 뒤 Dots에서 네이티브 `get_profile`, `list_my_fighters` 성공.
 - 네이티브 `check_creation_readiness`는 `canSubmit: true`, `registration.status: ready`,
   `requiresPc: false` 반환. 생성·화면 표시·패키지 검토는 별도로 unverified를 유지한다.
+- 기존 미미는 최초 연결 때의 8개 도구 목록을 유지했다. 도구 새로 고침과 승인된
+  공식 재부팅 후 미미 대화에서도 준비 점검 도구의 실제 호출 및 ready 응답을 확인했다.
 - 클라우드 VM에서 정확히 `{}`인 2바이트 시험 파일을 호스트 파일 입력으로 전달했다.
   `prepare_fighter_registration`이 서버 검증에 도달해 `invalid-manifest` 및 필수 필드 누락으로
   거절했다. 임의 URL·토큰 복사·VM의 직접 API 통신 없이 파일 전달이 확인됐다.
