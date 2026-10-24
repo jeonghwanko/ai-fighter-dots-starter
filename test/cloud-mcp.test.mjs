@@ -33,6 +33,11 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   assert.equal(metadata.resource,CLOUD_RESOURCE);
   const gateway=await handle(new Request('http://edge-runtime/ai-fighter-mcp/.well-known/oauth-protected-resource'));
   assert.equal(gateway.status,200);
+  const contract=await (await handle(request('tools/call',{name:'get_fighter_spec',arguments:{section:'overview'}}))).json();
+  assert.equal(contract.result.structuredContent.data.registration.available,true);
+  assert.equal(contract.result.structuredContent.data.registration.requiresPc,false);
+  assert.equal(contract.result.structuredContent.data.registration.assetUpload,'openai-fileParams');
+  assert.equal(contract.result.structuredContent.data.registration.approvalRequired,false);
 });
 test('normal user tokens, wrong audiences, expiry, future tokens, missing grants and spoofed identities are rejected',async()=>{
   const req=new Request(CLOUD_RESOURCE,{headers:{authorization:`Bearer ${token}`}});

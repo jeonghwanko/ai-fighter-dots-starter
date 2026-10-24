@@ -6,6 +6,15 @@ Create your own fighter with Dot, then register it and play in AI Fighter. Start
 
 This kit is MIT-licensed; the bundled sprite-gen submodule is Apache-2.0. Generation uses **your own accounts and subscriptions**. You do not need an AI Fighter account to begin creating locally. Google sign-in is required to upload and register; no invitation or manual approval is required.
 
+## Register from Dots without a PC
+
+Connect the hosted **ODDBOUT** MCP in ChatGPT Plugins, sign in with Google, then select
+`@ODDBOUT` in your Dots conversation. The cloud connector handles account checks,
+file transfer and registration; no local MCP installation, API key or callback copying is needed.
+See [cloud connection instructions](docs/CLOUD-MCP.md) for the endpoint and first-time setup.
+Image generation, previews and package review still use the selected host and your own generation account.
+The setup below is for running the creation kit in a workspace; it is not required to authenticate the cloud connector.
+
 ## 1. Start a local chat
 
 For an installable local Codex plugin, run `npm run plugin:build`. **AI Fighter Creator** bundles the

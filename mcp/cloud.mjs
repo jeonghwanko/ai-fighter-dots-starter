@@ -59,7 +59,7 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
     if (key === 'auth') return { getClaims: async () => ({ data: { claims: { sub: identity.owner, is_anonymous: false, role: 'authenticated' } }, error: null }) };
     const value = Reflect.get(target, key); return typeof value === 'function' ? value.bind(target) : value;
   } }) : null;
-  const api = scoped ? createHandler({ db: scoped }) : null;
+  const api = createHandler({ db: scoped ?? db });
   const invoke = async (path, method = 'GET', body, headers = {}) => {
     const response = await api(new Request(`https://internal.invalid/ai-fighter/${path}`, {
       method, headers: { authorization: 'Bearer internal-request-identity', ...headers }, ...(body === undefined ? {} : { body }) }));
@@ -78,12 +78,21 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
     });
   };
   register('get_fighter_spec', '캐릭터 등록 규격', 'Read the fighter contract before authoring. All 11 motions and actual visual review are required. This does not generate or register.',
-    { section: z.enum(['overview', 'schema', 'creation']).default('overview') }, async ({ section }) => ({ ok: true,
-      data: section === 'schema' ? schema : section === 'overview' ? spec : { steps: ['appearance review', 'locomotion review', 'attack review', 'defense/reaction review', 'final review', 'prepare_fighter_registration', 'upload_fighter_asset for each pending asset', 'submit_fighter_registration', 'get_fighter_submission'],
+    { section: z.enum(['overview', 'schema', 'creation']).default('overview') }, async ({ section }) => {
+      if (section === 'overview') {
+        // Reuse the deployed API's registration policy instead of the offline authoring fallback.
+        const result = await invoke('spec');
+        if (!result.ok) return result;
+        return { ...result, data: { ...result.data, registration: { ...result.data.registration,
+          auth: 'google-oauth-via-cloud-connector', assetUpload: 'openai-fileParams', requiresPc: false,
+          readinessTool: 'check_creation_readiness' } } };
+      }
+      return { ok: true, data: section === 'schema' ? schema : { steps: ['appearance review', 'locomotion review', 'attack review', 'defense/reaction review', 'final review', 'prepare_fighter_registration', 'upload_fighter_asset for each pending asset', 'submit_fighter_registration', 'get_fighter_submission'],
         account: 'Use only the current user’s chosen generation account; no subscription/API billing substitution.',
         delivery: 'Use the current conversation’s actual image previews and approved files. A file path or a readiness flag is not a preview.',
         package: 'Produce fighter.json and assets/<id>.webp with the kit game-pack/pack commands, then pass actual host file attachments. Never invent measurements or hashes.',
-        network: 'The cloud connector handles registration and host file downloads; no user PC MCP or VM registration API login is needed.' } }), { publicTool: true });
+        network: 'The cloud connector handles registration and host file downloads; no user PC MCP or VM registration API login is needed.' } };
+    }, { publicTool: true });
   register('get_profile', 'ODDBOUT 연결 계정', 'Read the connected ODDBOUT account. Its opaque ID is stable across reconnections and email changes. No creation or publication.', {},
     async () => ({ id: identity.owner, ...(identity.email ? { email: identity.email } : {}), nickname: 'ODDBOUT' }), { profile: true });
   register('check_creation_readiness', '클라우드 제작·등록 연결 점검', 'Use before first generation, after a workspace restart and before registration. Checks this cloud account’s registration access without a PC or CLI login. Generation, conversation display and package review remain unverified until actual evidence exists; this call never generates.',
