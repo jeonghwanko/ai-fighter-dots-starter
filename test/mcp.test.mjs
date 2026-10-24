@@ -170,3 +170,22 @@ test('one motion of the schema or example is a small read', async () => {
     assert.equal((await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'schema', motion: 'hp' } })).isError, true);
   } finally { await client.close(); }
 });
+
+test('profile edits need no local files and issue one metadata PATCH with stable retry arguments', async () => {
+  const calls=[],fighterId=crypto.randomUUID(),idempotencyKey=crypto.randomUUID();
+  const remote={request:async(route,options={})=>{calls.push({route,...options});
+    return route==='spec'?{data:{registration:{profileUpdate:'v1'}}}:{ok:true,stage:'registered',fighterId,manifestSha256:'b'.repeat(64)};}};
+  const client=await connectInProcess({root:null,remote});
+  const args={fighterId,idempotencyKey,expectedManifestSha256:'a'.repeat(64),profile:{name:'English name',concept:'Updated concept'}};
+  try {
+    for(let i=0;i<2;i++) assert.equal((await client.callTool({name:'update_fighter_profile',arguments:args})).structuredContent.stage,'registered');
+    assert.deepEqual(calls.map(c=>c.route),['spec',`fighters/${fighterId}/profile`,'spec',`fighters/${fighterId}/profile`]);
+    const writes=calls.filter(c=>c.method);
+    assert.equal(writes.length,2);assert.ok(writes.every(c=>c.method==='PATCH'));
+    assert.deepEqual(writes[0],writes[1]);assert.equal(writes[0].headers['idempotency-key'],idempotencyKey);
+    assert.deepEqual(JSON.parse(writes[0].body),{expectedManifestSha256:args.expectedManifestSha256,profile:args.profile});
+  } finally { await client.close(); }
+  const old=await connectInProcess({root:null,remote:{request:async()=>({data:{registration:{}}})}});
+  try { assert.equal((await old.callTool({name:'update_fighter_profile',arguments:args})).structuredContent.code,'server-feature-missing'); }
+  finally { await old.close(); }
+});

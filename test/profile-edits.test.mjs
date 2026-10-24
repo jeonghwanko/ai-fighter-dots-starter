@@ -1,0 +1,90 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { sha256 } from '../api/handler.mjs';
+import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
+import { profileFixture } from './helpers/profile-api-fixture.mjs';
+
+test('five initial attempts remain bounded; unlimited revisions reuse validated assets and preserve identity, history and admissions', async () => {
+  const f = await profileFixture();
+  try {
+    // Use four failed first attempts and register on the fifth, just like the reported account.
+    for (let i=0;i<4;i++) { const s=await f.create(JSON.stringify(example)); await f.sql.query("update af_submissions set status='rejected' where id=$1",[s.id]); }
+    const first = await f.register(), id = first.fighter_id;
+    const original = (await f.sql.query('select * from af_fighters where id=$1',[id])).rows[0];
+    await f.sql.query('update af_settings set max_reserved_bytes=$1',[f.bytes*5]);
+    let current = first;
+    for (let i=0;i<7;i++) {
+      const key=crypto.randomUUID(), profile={name:`Edited fighter ${i}`,description:`Introduction ${i}`}, expected=current.manifest_sha;
+      const response=await f.request(id,expected,profile,key);
+      assert.equal(response.status,200,await response.clone().text());
+      const saved=await response.json(); assert.equal(saved.stage,'registered'); assert.equal(saved.fighterId,id); assert.equal(saved.runtimeApproved,true);
+      const row=(await f.sql.query('select * from af_submissions where id=$1',[saved.submissionId])).rows[0];
+      assert.equal(row.asset_source_submission,first.id); assert.deepEqual(row.manifest.assets,example.assets); assert.deepEqual(row.manifest.clips,example.clips);
+      assert.equal(row.manifest_sha,await sha256(new TextEncoder().encode(row.manifest_text)));
+      assert.equal((await (await f.request(id,expected,profile,key)).json()).submissionId,row.id);
+      assert.equal((await f.request(id,expected,{name:'Conflicting retry'},key)).status,409);
+      current=row;
+    }
+    const after=(await f.sql.query('select * from af_fighters where id=$1',[id])).rows[0];
+    assert.equal(after.created_at.getTime(),original.created_at.getTime());
+    assert.equal(after.runtime_manifest_sha,current.manifest_sha); assert.equal(after.duel_manifest_sha,current.manifest_sha);
+    assert.deepEqual((await f.sql.query('select manifest from af_submissions where id=$1',[first.id])).rows[0].manifest,example);
+    assert.equal((await f.sql.query('select count(*)::int as n from storage.objects')).rows[0].n,example.assets.length);
+    const roster=await (await f.handle(new Request(`http://localhost/ai-fighter/roster/${id}`))).json();
+    assert.equal(roster.manifestSha256,current.manifest_sha); assert.equal(roster.duelApproved,true);
+    assert.ok(f.signedPaths.every(path=>path.startsWith(`${f.owner}/${first.id}/`))); assert.equal(f.uploads.length,0);
+    // Full art/combat revisions still go through uploads, and still reserve actual new bytes.
+    await assert.rejects(f.create(JSON.stringify({...example,profile:{...example.profile,name:'Art revision'}}),id),/storage-budget-full/);
+    await f.sql.query('update af_settings set max_reserved_bytes=$1',[f.bytes*6]);
+    const update=await f.register(JSON.stringify({...example,profile:{...example.profile,name:'Art revision'}}),id);
+    assert.equal(update.fighter_id,id); assert.equal(update.status,'registered');
+    const next=await (await f.request(id,update.manifest_sha,{name:'After art update'})).json();
+    assert.equal((await f.sql.query('select asset_source_submission from af_submissions where id=$1',[next.submissionId])).rows[0].asset_source_submission,update.id);
+    // An account with five failed first attempts cannot start a sixth.
+    const other=crypto.randomUUID(); await f.sql.query('insert into auth.users(id) values($1)',[other]);
+    await f.sql.query('update af_settings set max_reserved_bytes=100000000');
+    for(let i=0;i<5;i++) {
+      const s=await f.rpc('af_create_submission',{p_owner:other,p_key:crypto.randomUUID(),p_text:JSON.stringify(example),p_sha:first.manifest_sha,p_bytes:f.bytes});
+      assert.ok(s.data); await f.sql.query("update af_submissions set status='rejected' where id=$1",[s.data.id]);
+    }
+    assert.equal((await f.rpc('af_create_submission',{p_owner:other,p_key:crypto.randomUUID(),p_text:JSON.stringify(example),p_sha:first.manifest_sha,p_bytes:f.bytes})).error.message,'submission-quota');
+  } finally { await f.sql.close(); }
+});
+
+test('metadata edits enforce ownership, immutable art, schema, concurrency, moderation, rate limits, pause, RLS and CORS', async () => {
+  const f=await profileFixture();
+  try {
+    const first=await f.register(),id=first.fighter_id, key=crypto.randomUUID();
+    const send=profile=>f.request(id,first.manifest_sha,profile);
+    for(const profile of [{name:''},{name:'x'.repeat(41)},{description:' '},{name:'bad\0text'},{portrait:example.profile.portrait},{combat:{}},{}])
+      assert.equal((await send(profile)).status,422);
+    assert.equal((await f.request(id,first.manifest_sha,{name:'Other'},key,'foreign-test-token')).status,401);
+    assert.equal((await f.request(crypto.randomUUID(),first.manifest_sha,{name:'Foreign'})).status,404);
+    const response=await send({name:'Local edit'}); assert.equal(response.status,200); const saved=await response.json();
+    assert.equal((await send({name:'Stale edit'})).status,409);
+    const pending=await f.create(JSON.stringify({...example,profile:{...example.profile,name:'Pending'}}),id);
+    assert.equal((await f.request(id,saved.manifestSha256,{name:'During upload'})).status,409);
+    await f.sql.query("update af_submissions set status='rejected' where id=$1",[pending.id]);
+    await assert.rejects(f.sql.query('update af_submissions set asset_source_submission=null where id=$1',[saved.submissionId]),/immutable-submission/);
+    const changed=JSON.stringify({...example,profile:{...example.profile,name:'Bypass'},combat:{...example.combat,stats:{power:1,toughness:1,speed:1}}});
+    assert.equal((await f.rpc('af_update_fighter_profile',{p_owner:f.owner,p_key:crypto.randomUUID(),p_fighter:id,p_base:saved.submissionId,p_text:changed,p_sha:'a'.repeat(64)})).error.message,'profile-only-required');
+    await f.sql.query('update af_settings set paused=true'); assert.equal((await f.request(id,saved.manifestSha256,{name:'Paused'})).status,409);
+    await f.sql.query('update af_settings set paused=false');
+    await f.sql.query("update af_fighters set review_state='rejected',runtime_approved=false,runtime_scope=null,runtime_manifest_sha=null,duel_approved=false,duel_manifest_sha=null where id=$1",[id]);
+    assert.equal((await (await f.request(id,saved.manifestSha256,{name:'Removed'})).json()).code,'fighter-removed');
+    for(const role of ['anon','authenticated']) {
+      await f.sql.exec(`set role ${role}`);
+      await assert.rejects(f.sql.query('select public.af_update_fighter_profile($1,$2,$3,$4,$5,$6)',[f.owner,key,id,first.id,JSON.stringify(example),first.manifest_sha]),/permission denied/);
+      await f.sql.exec('reset role');
+    }
+    const preflight=await f.handle(new Request(`http://localhost/ai-fighter/fighters/${id}/profile`,{method:'OPTIONS'}));
+    assert.equal(preflight.status,200); assert.match(preflight.headers.get('access-control-allow-methods'),/PATCH/);
+    assert.match(preflight.headers.get('access-control-allow-headers'),/Idempotency-Key/);
+    assert.equal(response.headers.get('access-control-allow-origin'),'*');
+    assert.equal(f.uploads.length,0);
+    await f.sql.query('update af_creators set request_count=120,request_window=now() where owner_id=$1',[f.owner]);
+    assert.equal((await f.request(id,saved.manifestSha256,{name:'Rate limited'})).status,429);
+    await f.sql.query('update af_creators set enabled=false,request_count=0 where owner_id=$1',[f.owner]);
+    assert.equal((await f.request(id,saved.manifestSha256,{name:'Disabled'})).status,403);
+  } finally { await f.sql.close(); }
+});

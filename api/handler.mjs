@@ -1,3 +1,4 @@
+import { updateFighterProfile } from './fighter-profile.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { createAccountHandler } from './account.mjs';
@@ -5,14 +6,13 @@ import { createDeviceLoginHandler } from './device-login.mjs';
 import { createAdminHandler } from './admin.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
-import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, verifiedUserId } from './http.mjs';
+import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, unstorableTextPath, verifiedUserId } from './http.mjs';
 
 export { Problem, readBody, sha256 } from './http.mjs';
 export const BUCKET = 'ai-fighter-beta';
 // The worker stamps this on every receipt. af_settings.validator_versions lists the versions af_finish accepts.
 export const VALIDATOR_VERSION = 'ai-fighter-validator-0.2.0';
-export const objectKey = (submission, asset) => `${submission.owner_id}/${submission.id}/${asset.id}.webp`;
-const json = (body, status = 200) => jsonResponse(body, status);
+export const objectKey = (submission, asset) => `${submission.owner_id}/${submission.asset_source_submission ?? submission.id}/${asset.id}.webp`;
 const ROSTER_CORS = { methods: 'GET, OPTIONS' };
 const requireId = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value; };
 // rejected and expired uploads are final: nothing remains to wait for, so pending is empty.
@@ -23,14 +23,7 @@ const view = (row, admission) => ({ ok: true, stage: row.status, submissionId: r
   ...(row.status === 'registered' ? { availability: admission?.runtime_approved ? 'active' : 'removed', moderationReason: admission?.moderation_reason ?? '' } : {}),
   pending: row.status === 'registered' ? []
     : row.status === 'rejected' || uploadExpired(row) ? [] : ['server-validation', 'registration'] });
-/** Postgres jsonb cannot store U+0000 or an unpaired surrogate. JSON.parse and the v1 schema accept both. */
-function unstorableTextPath(value, at = '') {
-  if (typeof value === 'string') return value.includes('\0') || !value.isWellFormed() ? at : null;
-  if (!value || typeof value !== 'object') return null;
-  for (const [key, item] of Object.entries(value)) { const found = unstorableTextPath(item, `${at}/${key}`); if (found !== null) return found; }
-  return null;
-}
-const conflictCodes = ['idempotency-conflict','fighter-quota','fighter-removed','fighter-unchanged','open-submission-exists','submission-quota','storage-budget-full','assets-incomplete','upload-expired','stale-validation','submissions-paused','beta-capacity'];
+const conflictCodes = ['idempotency-conflict','fighter-quota','fighter-removed','fighter-unchanged','fighter-changed','profile-not-editable','open-submission-exists','submission-quota','storage-budget-full','assets-incomplete','upload-expired','stale-validation','submissions-paused','beta-capacity'];
 function check(error) {
   if (!error) return;
   if (conflictCodes.includes(error.message)) throw new Problem(409, error.message);
@@ -38,7 +31,7 @@ function check(error) {
   if (error.message === 'rate-limit') throw new Problem(429, 'rate-limit');
   if (error.message === 'account-disabled') throw new Problem(403, 'account-disabled');
   if (['validator-version','validation-incomplete','validation-result-limit'].includes(error.message)) throw new Problem(400, error.message);
-  if (error.message === 'byte-budget-mismatch') throw new Problem(422, error.message);
+  if (['byte-budget-mismatch','profile-only-required'].includes(error.message)) throw new Problem(422, error.message);
   throw new Problem(503, 'database-unavailable');
 }
 export function createHandler({ db, simulateDuel = null, engineVersion = null, creatorLink = null, analytics = null }) {
@@ -84,9 +77,16 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
     check(error); if (!data) throw new Problem(404, 'not-found'); return data;
   }
   return async request => {
+    let cors;
+    const json = (body, status = 200) => jsonResponse(body, status, cors);
     try {
       const segments = new URL(request.url).pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter');
       const parts = prefix >= 0 ? segments.slice(prefix + 1) : segments, method = request.method;
+      const profileRoute = parts[0] === 'fighters' && parts[2] === 'profile' && parts.length === 3;
+      if (profileRoute) {
+        cors = { methods: 'PATCH, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
+        if (method === 'OPTIONS') return json({ ok: true });
+      }
       if (parts[0] === 'admin') return adminHandler(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
@@ -96,7 +96,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
       if (parts.length === 1 && ['me', 'access-requests', 'creator-handoffs'].includes(parts[0])) return accountHandler(request, parts);
       if (method === 'GET' && parts.join('/') === 'spec') return json({ ok: true, stage: 'public-contract', data: { ...spec,
         registration: { available: true, mode: 'open', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary',
-          approvalRequired: false, publication: 'automatic-after-file-validation', moderation: 'post-publication', deviceLogin: 'v1' } } });
+          approvalRequired: false, publication: 'automatic-after-file-validation', moderation: 'post-publication', deviceLogin: 'v1', profileUpdate: 'v1', initialSubmissionLimit: 5, revisionsCountTowardLimit: false } } });
       // Validated, active packages are public; uploads and removed packages remain private.
       if (parts[0] === 'roster' && (method === 'GET' || method === 'OPTIONS')) {
         const reply = (body, status = 200) => jsonResponse(body, status, ROSTER_CORS);
@@ -136,6 +136,10 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
       const isWorker = parts[0] === 'worker';
       const owner = await authenticate(request, isWorker);
       if (!isWorker && parts.join('/') === 'analytics/context' && analytics) return analytics.context(request, owner);
+      if (profileRoute && method === 'PATCH') {
+        const row = await updateFighterProfile({ request, owner, id: requireId(parts[1]), key: requireId(request.headers.get('idempotency-key')), db, rpc });
+        return json(await present(row));
+      }
       if (method === 'POST' && parts.join('/') === 'submissions') {
         const key = requireId(request.headers.get('idempotency-key'));
         // ?fighter=<id> replaces the package of the caller's own fighter in place (2026-10-23); absent, it is a first registration.

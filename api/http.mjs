@@ -51,3 +51,11 @@ export async function readBody(request, maximum) {
   for (const part of parts) { result.set(part, offset); offset += part.length; }
   return result;
 }
+
+/** Postgres jsonb cannot store U+0000 or an unpaired surrogate. JSON.parse and the v1 schema accept both. */
+export function unstorableTextPath(value, at = '') {
+  if (typeof value === 'string') return value.includes('\0') || !value.isWellFormed() ? at : null;
+  if (!value || typeof value !== 'object') return null;
+  for (const [key, item] of Object.entries(value)) { const found = unstorableTextPath(item, `${at}/${key}`); if (found !== null) return found; }
+  return null;
+}

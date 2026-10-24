@@ -1,0 +1,32 @@
+import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
+import { Problem, readBody, sha256, unstorableTextPath } from './http.mjs';
+
+const editable = new Set(['name', 'description', 'language', 'concept', 'moves']);
+/** Reconstruct from the expected immutable version, including on an idempotent retry. */
+export async function updateFighterProfile({ request, owner, id, key, db, rpc }) {
+  let body;
+  try {
+    const parsed = parseFighterJson(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 16000)));
+    if (!parsed.ok) throw new Error('invalid-json');
+    body = parsed.data;
+  } catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
+  if (!body || Array.isArray(body) || Object.keys(body).some(k => !['profile', 'expectedManifestSha256'].includes(k))
+    || !/^[a-f0-9]{64}$/.test(body.expectedManifestSha256 ?? '') || !body.profile || typeof body.profile !== 'object'
+    || Array.isArray(body.profile) || !Object.keys(body.profile).length || Object.keys(body.profile).some(k => !editable.has(k)))
+    throw new Problem(422, 'invalid-profile');
+  const { data: previous, error: previousError } = await db.from('af_submissions').select('*').eq('owner_id', owner).eq('idempotency_key', key).maybeSingle();
+  if (previousError) throw new Problem(503, 'database-unavailable');
+  if (previous && (previous.replaces_fighter !== id || !previous.validation?.profileBaseSubmission)) throw new Problem(409, 'idempotency-conflict');
+  let query = db.from('af_submissions').select('*').eq('owner_id', owner)
+    .eq('fighter_id', id).eq('manifest_sha', body.expectedManifestSha256).eq('status', 'registered');
+  if (previous) query = query.eq('id', previous.validation.profileBaseSubmission);
+  const { data: base, error } = await query.order('created_at', { ascending: false }).limit(1).maybeSingle();
+  if (error) throw new Problem(503, 'database-unavailable');
+  if (!base) throw new Problem(previous ? 409 : 404, previous ? 'idempotency-conflict' : 'fighter-not-found');
+  const manifest = { ...base.manifest, profile: { ...base.manifest.profile, ...body.profile } };
+  const result = validateFighter(manifest);
+  if (!result.ok || unstorableTextPath(manifest) !== null) throw new Problem(422, 'invalid-profile', result.errors?.slice(0, 20));
+  const text = JSON.stringify(manifest);
+  return rpc('af_update_fighter_profile', { p_owner: owner, p_key: key, p_fighter: id, p_base: base.id,
+    p_text: text, p_sha: await sha256(new TextEncoder().encode(text)) });
+}

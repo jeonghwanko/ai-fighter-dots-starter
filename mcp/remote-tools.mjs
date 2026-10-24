@@ -45,7 +45,7 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
   const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: /^[a-z0-9-]+$/.test(error.message) ? error.message : 'remote-operation-failed' }); } };
   if (validatePackage) {
     server.registerTool('submit_fighter_package', {
-      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically. Each account has one fighter: to change it later (concept, move names, stats or art), pass its fighterId — the package is replaced in place and the fighter keeps its ID and duel record. Omit fighterId only for the first registration.',
+      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically. For text-only edits use update_fighter_profile without uploading assets. To change a registered fighter later (concept, move names, stats or art), pass its fighterId — the package is replaced in place and the fighter keeps its ID and duel record. Omit fighterId only for the first registration.',
       inputSchema: { manifestPath: z.string().min(1).max(512), idempotencyKey: z.string().uuid(), fighterId: z.string().uuid().optional() }, outputSchema,
       annotations: { ...read, readOnlyHint: false },
     }, safe(async ({ manifestPath, idempotencyKey, fighterId }) => {
@@ -81,6 +81,19 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
       return remote.request(`submissions/${created.submissionId}/submit`, { method: 'POST' });
     }));
   }
+  server.registerTool('update_fighter_profile', {
+    description: 'Edit your registered fighter name, description, language, concept or move text without local image files or image uploads. Requires user intent to edit. Read get_registered_fighter first and pass its manifest_sha as expectedManifestSha256. Keeps the fighter ID and duel record; revisions do not consume the five initial-submission attempts. Reuse one idempotencyKey and identical arguments for retries. A fighter-changed response requires reading the latest profile before a new edit.',
+    inputSchema: { fighterId: z.string().uuid(), idempotencyKey: z.string().uuid(), expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      profile: z.object({ name: z.string().min(1).max(40).optional(), description: z.string().min(1).max(600).optional(),
+        language: z.enum(['en','ko']).optional(), concept: z.string().min(1).max(800).optional(),
+        moves: z.object(Object.fromEntries(['combo','slam','dash','block'].map(key => [key, z.object({ name: z.string().min(1).max(24), description: z.string().min(1).max(160) }).strict()]))).strict().optional()
+      }).strict().refine(value => Object.keys(value).length > 0) }, outputSchema, annotations: { ...read, readOnlyHint: false },
+  }, safe(async ({ fighterId, idempotencyKey, expectedManifestSha256, profile }) => {
+    if ((await remote.request('spec'))?.data?.registration?.profileUpdate !== 'v1')
+      return { ok: false, stage: 'remote-spec', code: 'server-feature-missing' };
+    return remote.request(`fighters/${fighterId}/profile`, { method: 'PATCH',
+      headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey }, body: JSON.stringify({ expectedManifestSha256, profile }) });
+  }));
   server.registerTool('open_creator_homepage', {
     description: 'Make a one-use link that signs the current user into the AI Fighter creator homepage (https://oddbout.com/creator.html) with this account: their registered fighters, animations, statistics and downloads. Use when the user asks to see their fighters on the homepage. Give the link to the user as a clickable link; it opens in any browser on any device, works once and expires in 10 minutes. Do not open it yourself: opening it uses it up.',
     inputSchema: {}, outputSchema, annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: false, openWorldHint: true },
