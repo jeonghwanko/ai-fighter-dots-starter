@@ -1,25 +1,37 @@
 # ODDBOUT 연결과 제작 준비
 
 일반 제작 사용자의 흐름은 **ODDBOUT 연결 → 본인 Google 로그인 → 공개 확인 코드 확인·연결 승인**이다.
-VM 설치·도메인 허용·환경 재게시(Republish)는 초기 환경 준비자가 처리하고 준비된 작업 공간을 재사용한다.
+VM 설치와 호스트 종류에 맞는 네트워크 준비는 초기 환경 준비자가 처리하고 준비된 작업 공간을 재사용한다.
 등록 연결과 이미지 생성 접근, 결과 전달은 서로 다른 상태다. 하나가 성공했다고 나머지를 완료로 표시하지 않는다.
 
 ## 사용자가 보는 연결
 
-1. 에이전트는 `check_creation_readiness`로 준비 상태를 읽는다. `account`는 사용자가 실제 선택한 경우에만 넘긴다.
+1. 에이전트는 `check_creation_readiness(purpose: "connection")`으로 연결 상태만 읽는다.
+   완성된 패키지를 등록할 때는 `purpose: "registration"`이다. 이 두 단계에서는 생성 구독을 묻거나 Python 설치·키트 업데이트를 하지 않는다.
+   새로운 생성 준비에만 기본 `purpose: "generation"`을 사용하고 `account`는 사용자가 실제 선택한 경우에만 넘긴다.
 2. `items.login.action`의 이름은 **ODDBOUT 연결**이다. 호스트가 버튼을 지원하면 이 행동을 연결하고,
    지원하지 않으면 같은 이름의 선택지와 공식 링크로 안내한다. 키트가 Dots 자체 UI를 설치하거나 제어하지는 않는다.
-3. 사용자가 연결을 요청하고 `action.status: "available"`이면 에이전트가 반환된 `command`를 실행한다.
-   기존 `npm run login -- --device` 경로이며, 프로젝트 공개 설정 인자까지 응답에 포함된다.
-   사용자는 반환된 공식 홈페이지 링크에서 Google 로그인 후 코드가 같은지 확인하고 승인한다.
+3. 사용자가 연결 또는 등록을 요청하고 `action.status: "available"`이면 `connect_oddbout(action: "start")`를 호출한다.
+   기존 기기 로그인 경로를 MCP에서 직접 실행하며, 에이전트가 셸 명령·프로젝트 키를 조립할 필요가 없다.
+   사용자는 반환된 `verificationUrl`에서 Google 로그인 후 `userCode`가 같은지 확인하고 승인한다.
    본인이 시작하지 않은 요청은 승인하지 않는다. 콜백 주소·토큰을 대화로 복사하지 않는다.
-4. `awaiting-approval`이면 이미 시작된 요청이다. `resumeCommand`인 `npm run login -- --device-wait`로 이어간다.
-   연결 대기·전송 장애 때문에 `--device`를 다시 실행하지 않는다. `restart-required`면 저장된 세션을 보존하고 MCP만 다시 시작한다.
-5. 에이전트는 다시 readiness를 호출해 인증된 `GET /me`를 확인한다. 공개 `/spec` 응답이나 로컬 세션 파일만으로
+4. `awaiting-approval`이면 이미 시작된 요청이다. 다시 `start`해도 같은 공개 링크를 반환한다.
+   사용자가 승인하면 `connect_oddbout(action: "wait")`로 한 번 조회한다. 아직 대기 중이면 `retryAfterSeconds`를 지켜 조회한다.
+   긴 폴링으로 대화를 붙잡거나 새 요청을 만들지 않는다. 네트워크 오류에도 기존 요청을 보존한다.
+5. 로그인 전부터 등록 도구가 노출되며 실제 호출 시 현재 세션을 확인한다. 로그인·같은 사용자 재로그인·로그아웃 때문에
+   MCP를 재시작할 필요가 없다. 다른 사용자로 세션이 바뀌면 진행 중 제출을 차단한다.
+   연결 도구는 승인 교환 뒤 인증된 `GET /me`를 확인한다. 공개 `/spec` 응답이나 로컬 세션 파일만으로
    계정 연결 완료를 표시하지 않는다. 생성 계정과 같은 계정인지 역시 별도 근거가 없으면 `unknown`이다.
 
 `action.status: "blocked"` / `check-required`이면 새 로그인을 시작하지 않고 `nextAction`의 담당자·이유를 안내한다.
 정상 연결된 사용자는 캐릭터마다 다시 로그인하지 않는다. 실제 인증 만료와 VM 네트워크 실패를 구분한다.
+이미 인증된 등록 API가 정상이라면 홈페이지 장애가 별도로 있어도 등록 연결을 차단하지 않는다.
+
+구형 호스트에 `connect_oddbout` 도구가 없다면 반환된 CLI `command`와 `resumeCommand`를 쓴다.
+준비 도구 자체가 보이지 않을 때는 에이전트가 키트 디렉터리에서 `npm run creation:check -- connection`을 실행한다.
+등록만 점검하려면 `npm run creation:check -- registration`이다. 이 명령은 생성·등록·로그인 시작·키트 업데이트를 하지 않는다.
+새 코드를 설치한 뒤에는 한 번 MCP를 재시작해 도구 목록을 갱신한다. 구형 프로세스가 반환하는 `restart-required`는
+이 런타임 갱신 문제이며 Google 로그인을 반복해서 해결하지 않는다.
 
 ## 시스템이 분리해서 보고하는 상태
 
@@ -43,6 +55,19 @@ VM 설치·도메인 허용·환경 재게시(Republish)는 초기 환경 준비
 기존 결과가 있으면 회수·표시하고, `pending`·`unknown`을 재생성 허가로 바꾸지 않는다.
 
 ## 초기 환경 준비자 단계
+
+먼저 **어떤 클라우드 실행 환경인지** 확인한다. 아래 설정은 서로 대체하지 않는다.
+
+- Dots/미미가 사용하는 기본 ChatGPT Work 클라우드라면, 제공되는 경우 설정의 `Data controls → Work network access`를 확인한다.
+  공개 인터넷 허용은 관리자 제한을 해제하지 않는다. 변경 적용은 현재 실행 종료 후 환경 갱신 시점이다.
+  [공식 Work 네트워크 안내](https://learn.chatgpt.com/docs/enterprise/chatgpt-work-overview#network-access-and-external-destinations)
+- 사용자가 구성·게시한 Codex 클라우드 환경이면 `Allow Codex to access internet`, 필요한 `Additional allowed domains`를 확인하고
+  해당 환경을 다시 게시한 뒤 새 작업에서 검사한다. 기본 Work 환경에 이 편집 화면이나 Republish가 있다고 가정하지 않는다.
+  [공식 Codex 환경 안내](https://learn.chatgpt.com/docs/environments/cloud-environments#connect-to-services)
+
+웹 검색·연결된 앱의 성공은 VM 셸의 네트워크 허용을 뜻하지 않는다. 실패한 바로 그 환경에서 재검사해야 한다.
+설정을 변경할 수 있는 공식 도구가 없으면 확인된 실패 호스트와 환경별 설정 경로를 한 번 안내한다.
+서버 방화벽·DNS·인증 정책을 추정해서 바꾸거나 별도 프록시를 만들어 우회하지 않는다.
 
 `networkSettingsManagedByKit: false`가 명시되어 있다. 이 저장소의 도구에는 공식 VM 네트워크 허용목록이나 Republish를
 변경하는 기능이 없다. 에이전트가 자동 처리했다고 말하거나 우회 프록시·업로드를 만들지 않는다.

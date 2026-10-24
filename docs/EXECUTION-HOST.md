@@ -55,6 +55,9 @@ npm run sprite:status
   모르는 로컬 변경이 있으면 덮어쓰지 말고 새로 클론한다.
 - `npm run sprite:status` 통과는 설치 확인일 뿐이다. 로그인이나 구독 사용 가능 여부를 뜻하지 않는다.
 - **MCP `check_creation_readiness`** 를 캐릭터의 첫 생성 전, 작업 공간 재시작 뒤, 등록 전에 부른다. 상태별 의미는 [연결 안내](CONNECTION-READINESS.md)를 따른다.
+  연결만 확인할 때 `purpose: "connection"`, 완성된 패키지 등록 때 `purpose: "registration"`을 지정한다.
+  두 목적은 생성 구독 질문·키트 업데이트·Python 설치를 생략한다. 새 생성 준비만 기본 `purpose: "generation"`이다.
+  연결 실행은 `connect_oddbout`의 `start` → 사용자 Google 승인 → `wait` 순서다. 로그인 후 MCP 재시작은 필요 없다.
   - **kit:** 버전·작업 기록이 아직 하나도 없을 때만 이 브랜치를 fast-forward하고 동작 패치를 적용한다.
     추적 파일에 로컬 변경이 있거나, 다른 브랜치이거나, 원격과 갈라졌으면 바꾸지 않고 `blocked`로 알린다.
     캐릭터가 진행 중이거나 작업 공간을 모르면 보고만 한다.

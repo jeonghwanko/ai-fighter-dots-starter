@@ -149,7 +149,7 @@ export async function checkLogin({ remoteActive, request, sessionPath = defaultS
     ...(needsSignIn && available && pending.status === 'pending' ? { resumeCommand: otherDevice.wait } : {}) };
   const nextAction = account.status === 'restart-required' ? { actor: 'agent', code: 'restart-mcp',
     message: '저장된 세션을 보존하고 MCP를 다시 시작해 계정 상태를 조회한다. 다시 로그인하거나 캐릭터를 재생성하지 않는다.' }
-    : !available ? routeAction : account.nextAction ?? { actor: needsSignIn ? 'user' : 'agent', code: action.status,
+    : !available && account.status !== 'connected' ? routeAction : account.nextAction ?? { actor: needsSignIn ? 'user' : 'agent', code: action.status,
       message: needsSignIn ? '본인이 시작한 요청과 코드가 같은지 확인하고 연결을 승인한다. 기존 승인 대기는 새로 시작하지 않고 이어간다.'
         : '계정 상태를 확인한 뒤 기존 제작 기록에서 재개한다. 연결 확인은 생성·등록 실행 승인이 아니다.' };
   return { ...account, status: needsSignIn && !available ? 'blocked' : needsSignIn && pending.status === 'pending' ? 'pending-approval' : account.status,
@@ -191,16 +191,19 @@ export async function elicitAccount(lowLevelServer) {
   } catch { return { method: 'unsupported', choice: null }; }
 }
 
-export async function checkReadiness({ store, jobs, sessionId, account, remoteActive, lowLevelServer, kit = {}, login = {} } = {}) {
+export async function checkReadiness({ store, jobs, sessionId, account, purpose = 'generation', remoteActive, lowLevelServer, kit = {}, login = {} } = {}) {
+  if (!['generation', 'connection', 'registration'].includes(purpose)) throw new Error('invalid-readiness-purpose');
+  const needsGeneration = purpose === 'generation';
   const progress = await creationProgress({ store, jobs, sessionId });
   let choice = account ?? null, elicitation = 'not-needed';
-  if (!choice) ({ method: elicitation, choice } = await elicitAccount(lowLevelServer));
+  if (needsGeneration && !choice) ({ method: elicitation, choice } = await elicitAccount(lowLevelServer));
   const { infrastructure, ...connection } = await checkLogin({ remoteActive, ...login });
-  const items = { kit: await checkKit({ progress, ...kit }), infrastructure, login: connection,
-    account: accountItem(choice), ...unverifiedCreation(choice) };
+  const notRequired = { status: 'not-required', reason: 'no-generation-in-this-step', nextCommands: [] };
+  const items = { kit: needsGeneration ? await checkKit({ progress, ...kit }) : notRequired, infrastructure, login: connection,
+    account: needsGeneration ? accountItem(choice) : notRequired, ...unverifiedCreation(choice) };
   const ready = ['ready', 'updated', 'patched'].includes(items.kit.status) && !items.kit.restartRequired && items.kit.nextCommands.length === 0
     && items.account.status === 'chosen-unverified';
-  return { kitAndAccountReady: ready, readyForGeneration: false,
+  return { purpose, kitAndAccountReady: ready, readyForGeneration: false,
     readyForRegistration: items.login.status === 'connected' && items.login.canSubmit === true, progress, elicitation, items,
     resume: { preserveWorkspace: true, sessionIds: progress.sessions, automaticGeneration: false, automaticSubmission: false,
       nextAction: { actor: 'agent', code: 'resume-existing-work', message: '연결 복구 뒤 같은 작업 공간에서 check_creation_readiness를 다시 호출하고 get_creation_session·get_creation_job으로 기존 버전·선택·pending/unknown 결과를 회수한다. 새 폴더·재생성·재등록으로 우회하지 않는다.' } },

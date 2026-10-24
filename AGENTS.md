@@ -55,7 +55,10 @@ This repository lets each user create their own fighter through Dot. Read
   workspace, the user's own login only, no service API keys in the environment, work folders and attempt
   records preserved across sessions, and no pulls of this repository while a character is in progress.
   Call MCP `check_creation_readiness` before a character's first generation, after a workspace restart and before
-  registration. Run its kit `nextCommands` (restart when told), pass `account` only as the user stated it (else let
+  registration. Use purpose `generation` only for generation setup; `connection` and `registration` must not
+  ask for generation subscriptions or install/update the engine. Use `connect_oddbout` start/wait for the
+  supported device connection; retain pending requests and adopt the new session without a login-only restart.
+  Run its kit `nextCommands` (restart when told), pass `account` only as the user stated it (else let
   the host form or numbered options ask). Use login commands only with a supported secure handoff or device
   connection. Callback URLs can contain codes/tokens: never ask users to paste them into ordinary chat or
   describe that as safe, even if tool output suggests paste mode. For a browser on another device, use the

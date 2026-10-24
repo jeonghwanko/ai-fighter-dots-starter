@@ -100,7 +100,7 @@ npm run login -- --url https://YOUR_PROJECT_REF.supabase.co --key YOUR_PROJECT_P
 
 로그인 코드나 토큰은 대화에 나타나지 않습니다. 서버가 아직 지원하지 않으면 에이전트는 로그인이 막혔다고 알립니다. [실행 환경 지침](docs/EXECUTION-HOST.md#7-등록)을 참고하세요.
 
-제작자 홈페이지에서 사용할 계정과 같은 Google 계정을 선택합니다. 로그인하면 `~/.ai-fighter/client.json`에 본인의 세션이 저장되고 MCP가 자동으로 읽습니다. 데스크톱 앱이 이미 실행 중이었다면 다시 시작합니다. 다른 세션 파일 위치는 `AI_FIGHTER_CLIENT_CONFIG`로 지정할 수 있습니다. 세션 토큰은 공개하지 않습니다.
+제작자 홈페이지에서 사용할 계정과 같은 Google 계정을 선택합니다. 로그인하면 `~/.ai-fighter/client.json`에 본인의 세션이 저장되고 현재 MCP가 다음 호출에서 자동으로 읽습니다. 로그인 때문에 앱을 재시작할 필요는 없습니다. 다른 세션 파일 위치는 `AI_FIGHTER_CLIENT_CONFIG`로 지정할 수 있습니다. 세션 토큰은 공개하지 않습니다.
 
 이후 에이전트가 다음 순서로 처리합니다.
 

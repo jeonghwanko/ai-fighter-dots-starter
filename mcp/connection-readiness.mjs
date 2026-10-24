@@ -12,7 +12,8 @@ export async function readProject(root) {
     if (!validProjectUrl(origin) || site.apiBase !== `${origin}/functions/v1/ai-fighter` || !isPublishableKey(site.publishableKey)
       || !/^[A-Za-z0-9._-]+$/.test(site.publishableKey)
       || page.protocol !== 'https:' || page.username || page.password || page.search || page.hash) return null;
-    return { origin, apiBase: site.apiBase, siteUrl: page.href, flags: `--url ${origin} --key ${site.publishableKey}` };
+    return { origin, apiBase: site.apiBase, siteUrl: page.href, publishableKey: site.publishableKey,
+      flags: `--url ${origin} --key ${site.publishableKey}` };
   } catch { return null; }
 }
 
@@ -53,7 +54,7 @@ export async function checkAccount({ hasSession, remoteActive, request, checkSer
   if (!checkServer || !request) return { status: 'session-present-unverified', canSubmit: null, accountMatch: 'unknown' };
   try {
     const result = await request('me', { timeoutMs: 8000 });
-    if (result?.ok !== true || typeof result.account?.invited !== 'boolean')
+    if (result?.ok !== true || typeof result.account?.canSubmit !== 'boolean')
       return { status: 'unverified', reason: 'invalid-account-response', canSubmit: null, accountMatch: 'unknown' };
     return { status: 'connected', evidence: 'authenticated GET /me', canSubmit: typeof result.account.canSubmit === 'boolean' ? result.account.canSubmit : null,
       accountMatch: 'unknown' };
@@ -81,7 +82,7 @@ export function infrastructureItem(project, connections) {
     targets: { registrationApi: { host: project ? new URL(project.apiBase).hostname : null, ...connections.api },
       homepage: { host: project ? new URL(project.siteUrl).hostname : null, ...connections.homepage },
       library: { host: 'chatgpt.com', status: 'unverified', reason: 'helper-not-probed', requiredWhen: 'VM Library helper is the selected delivery route' } },
-    note: '호스트 허용·Republish는 초기 환경 준비자가 공식 VM 설정에서 처리한다. 키트에는 이를 바꾸는 도구가 없으며 성공으로 처리하지 않는다. 제작 사용자는 준비된 작업 공간을 재사용한다.' };
+    note: '초기 환경 준비자가 실제 호스트 종류의 공식 네트워크 설정을 확인한다. Work 기본 클라우드에 사용자 지정 Codex 환경의 Republish 절차를 강제하지 않는다. 키트는 이 설정을 변경하지 않으며 제작 사용자는 준비된 작업 공간을 재사용한다.' };
 }
 
 export function unverifiedCreation(choice) {

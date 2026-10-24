@@ -16,7 +16,8 @@ do not require a PC or leave the user's chosen VM scope. Packaging still uses th
    this user's runtime kit root (`tool.repositoryRoot`), workspace (`packageRoot`), sprite-gen skill path,
    and the full creation/interaction guides. In a portable installation the kit and workspace differ.
    Read those guides, `docs/AUTHORING.md` and `vendor/sprite-gen/SKILL.md` in the returned kit root.
-   If the Python environment is missing, run `npm run sprite:setup` with cwd set to that kit root.
+   If generation is needed and the Python environment is missing, run `npm run sprite:setup` with cwd set to that kit root.
+   Connecting or registering an already-built package does not require generation setup.
    Keep all project inputs and outputs in the returned workspace. Run prepared jobs with their exact
    returned cwd/env. Do not put assets, sessions, or a Python venv in the plugin cache.
    Game data owns motions, frame counts and timing. Refresh it on resume and before each new group.
@@ -35,6 +36,12 @@ do not require a PC or leave the user's chosen VM scope. Packaging still uses th
    Local/Library saves and child-only or queued previews do not prove parent display. Recover existing results
    before retries; delivery failures do not authorize regeneration.
 5. Use `check_creation_readiness` and `docs/CONNECTION-READINESS.md` for the ODDBOUT connection action.
+   Set `purpose: connection` for sign-in checks and `purpose: registration` for an existing final package;
+   only `purpose: generation` prepares the generation engine or asks about generation access.
+   Use `connect_oddbout(action: start)` within a connection/registration request; show its public link/code,
+   then `action: wait` after the user approves. Repeated start returns the same pending link. Respect
+   retryAfterSeconds. Current runtimes adopt login without an MCP restart. If these tools are absent,
+   run `npm run creation:check -- connection` in the kit and follow its supported CLI route.
    Keep authenticated registration API access, generation access and parent delivery separate. A saved session
    is unverified until GET /me succeeds. Environment-preparer actions (VM host allowlist/Republish) are initial
    workspace setup, not repeated creator steps; the kit cannot perform those settings changes.

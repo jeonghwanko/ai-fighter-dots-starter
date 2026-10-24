@@ -28,6 +28,10 @@ function accessTokenExpiry(token) {
   try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).exp * 1000 || 0; }
   catch { return 0; }
 }
+function tokenSubject(token) {
+  try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).sub ?? null; }
+  catch { return null; }
+}
 const REFRESH_MARGIN_MS = 60000, LOCK_STALE_MS = 30000, LOCK_WAIT_MS = 15000;
 
 /** Run `task` while holding `<configPath>.lock`. Only one process refreshes or replaces a session file at a time. */
@@ -78,18 +82,19 @@ export async function createRemoteClient(configPath, { createAuthClient = create
   const auth = createAuthClient(config.url, config.publishableKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
   const fresh = () => accessTokenExpiry(config.accessToken) - Date.now() > REFRESH_MARGIN_MS;
   async function adoptSaved() {
-    try {
-      const saved = JSON.parse(await readFile(configPath, 'utf8'));
-      if (saved.url === config.url && typeof saved.accessToken === 'string' && typeof saved.refreshToken === 'string'
-        && accessTokenExpiry(saved.accessToken) > accessTokenExpiry(config.accessToken)) {
-        config.accessToken = saved.accessToken; config.refreshToken = saved.refreshToken;
-      }
-    } catch { /* keep the session in memory */ }
+    let saved;
+    try { saved = JSON.parse(await readFile(configPath, 'utf8')); }
+    catch (error) { throw new Error(error.code === 'ENOENT' ? 'client-sign-in-required' : 'invalid-client-config'); }
+    if (!saved.accessToken || typeof saved.accessToken !== 'string' || !saved.refreshToken || typeof saved.refreshToken !== 'string')
+      throw new Error('invalid-client-config');
+    // Never keep using a logged-out account, or change the owner halfway through an upload.
+    if (saved.url !== config.url || saved.publishableKey !== config.publishableKey
+      || tokenSubject(saved.accessToken) !== tokenSubject(config.accessToken)) throw new Error('client-account-changed');
+    config.accessToken = saved.accessToken; config.refreshToken = saved.refreshToken;
   }
   let pendingAuth;
   async function token() {
-    // A valid token needs no auth call.
-    if (fresh()) return config.accessToken;
+    // Serialize disk adoption with refresh, including calls that arrive during an atomic session save.
     pendingAuth ??= (async () => {
       await adoptSaved();
       if (fresh()) return config.accessToken;
@@ -114,4 +119,18 @@ export async function createRemoteClient(configPath, { createAuthClient = create
   return {
     request: async (route, options) => apiRequest(config.url, await token(), route, options),
   };
+}
+
+/** A stable MCP tool catalog can start before login. Resolve the user's session on first use, without a restart. */
+export function createLazyRemoteClient(configPath, options = {}) {
+  let client;
+  return { request: async (route, requestOptions) => {
+    try {
+      client ??= createRemoteClient(configPath, options).catch(error => { client = undefined; throw error; });
+      return await (await client).request(route, requestOptions);
+    } catch (error) {
+      if (error.code === 'ENOENT') throw new Error('client-sign-in-required');
+      throw error;
+    }
+  } };
 }

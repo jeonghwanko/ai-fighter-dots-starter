@@ -99,7 +99,7 @@ npm run login -- --url https://YOUR_PROJECT_REF.supabase.co --key YOUR_PROJECT_P
 
 If the agent works in a bot service's VM, your browser is on a different machine from its `127.0.0.1` callback. Use an officially supported secure handoff or device connection; if none is available, the agent reports that sign-in is blocked. Callback addresses can contain login codes or tokens: do not paste them into the creation chat. The CLI's existing `--paste` / `--finish` options do not themselves provide a secure transport, even with PKCE and expiry. The secure route is the device connection. When the deployed server advertises it, the agent runs `npm run login -- --device`, which prints a link to the creator homepage with a public pairing code. You open the link, sign in with Google, check that the code matches, and approve. The agent then runs `npm run login -- --device-wait`, and no login code or token passes through the chat. Until the server advertises it, the agent reports sign-in as blocked. See the [execution host instructions](docs/EXECUTION-HOST.md#7-등록).
 
-Choose the same Google account you will use on the creator homepage. Login saves your session to `~/.ai-fighter/client.json`, which MCP loads automatically. Restart the desktop app if it was already running. `AI_FIGHTER_CLIENT_CONFIG` can select another session-file location. Keep session tokens private.
+Choose the same Google account you will use on the creator homepage. Login saves your session to `~/.ai-fighter/client.json`, which the running MCP loads on the next call; a login-only app restart is unnecessary. `AI_FIGHTER_CLIENT_CONFIG` can select another session-file location. Keep session tokens private.
 
 The agent then completes these steps:
 

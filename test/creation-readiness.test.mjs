@@ -220,3 +220,29 @@ test('the MCP tool asks the account through a host form when the client supports
   const stated = (await client.callTool({ name: 'check_creation_readiness', arguments: { account: 'stop', checkRemote: false } })).structuredContent;
   assert.deepEqual([stated.data.elicitation, stated.data.items.account.status, stated.data.readyForGeneration], ['not-needed', 'stopped', false]);
 });
+
+test('connection and registration never ask generation questions or touch the engine', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-stage-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const sessionPath = path.join(dir, 'client.json');
+  await writeFile(sessionPath, JSON.stringify({ accessToken: 'token', refreshToken: 'refresh' }));
+  for (const purpose of ['connection', 'registration']) {
+    const result = await checkReadiness({ purpose, remoteActive: true,
+      lowLevelServer: { getClientCapabilities: () => assert.fail('no generation prompt') },
+      kit: { git: () => assert.fail('no git or install'), inspectPatch: () => assert.fail('no patch') },
+      login: { sessionPath, probe: publicProbe(true), request: async () => ({ ok: true, account: { canSubmit: true } }) } });
+    assert.equal(result.purpose, purpose); assert.equal(result.readyForRegistration, true);
+    assert.equal(result.elicitation, 'not-needed'); assert.equal(result.items.account.status, 'not-required');
+    assert.equal(result.items.kit.status, 'not-required'); assert.equal(result.readyForGeneration, false);
+  }
+});
+
+test('homepage failure does not redirect an already connected creator away from registration', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-homepage-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const sessionPath = path.join(dir, 'client.json');
+  await writeFile(sessionPath, JSON.stringify({ accessToken: 'token', refreshToken: 'refresh' }));
+  const result = await checkLogin({ sessionPath, remoteActive: true,
+    probe: async (_url, { spec } = {}) => spec ? { status: 'reachable', deviceLogin: 'available' }
+      : { status: 'blocked', reason: 'network-connect-forbidden' },
+    request: async () => ({ ok: true, account: { canSubmit: true } }) });
+  assert.equal(result.status, 'connected'); assert.equal(result.nextAction.actor, 'agent');
+});

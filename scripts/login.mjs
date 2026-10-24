@@ -167,7 +167,7 @@ async function saveSignIn({ session, link = false, linkedUser = null, replace, p
     log(problem.message === 'route-not-found' ? '서버가 계정 상태 조회를 지원하지 않습니다. 제출할 때 다시 확인합니다.'
       : '계정 상태를 확인하지 못했습니다. 제출할 때 다시 확인합니다.');
   }
-  log('Dot 앱이 이미 실행 중이었다면 앱을 다시 시작하세요.');
+  log('ODDBOUT 연결 상태를 다시 확인하면 현재 MCP에서 바로 이어서 사용할 수 있습니다.');
   return { sessionPath, userId: session.user.id };
 }
 
@@ -208,9 +208,10 @@ const devicePost = (url, publishableKey, route, body) => apiRequest(url, publish
  * Device-connection sign-in, step 1: for a workspace whose 127.0.0.1 callback the user's browser cannot reach.
  * The secret device code stays in a 0600 file here; the printed link carries only the public pairing code.
  */
-export async function startDeviceLogin({ argv = [], log = console.error, post = devicePost, page = PUBLIC_CREATOR_PAGE } = {}) {
+export async function startDeviceLogin({ argv = [], log = console.error, post = devicePost, page = PUBLIC_CREATOR_PAGE,
+  sessionPath = defaultSessionPath() } = {}) {
   if (argv.includes('--link')) throw new Error('device-link-unsupported');
-  const sessionPath = defaultSessionPath(), pendingPath = pendingDeviceLoginPath(sessionPath);
+  const pendingPath = pendingDeviceLoginPath(sessionPath);
   // A second start must not replace the only copy of a request that may already be approved.
   let existing;
   try { existing = JSON.parse(await readFile(pendingPath, 'utf8')); }
@@ -247,8 +248,9 @@ export async function startDeviceLogin({ argv = [], log = console.error, post = 
  * Stops at `timeoutSeconds` while still pending (the request stays open for another wait), or at expiry.
  */
 export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.error, post = devicePost, request = apiRequest,
+  sessionPath = defaultSessionPath(),
   createAuthClient = createClient, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
-  const sessionPath = defaultSessionPath(), pendingPath = pendingDeviceLoginPath(sessionPath);
+  const pendingPath = pendingDeviceLoginPath(sessionPath);
   const pending = await readSession(pendingPath);
   if (!pending || pending.version !== 1 || !DEVICE_CODE.test(pending.deviceCode ?? '') || !validProjectUrl(pending.url)
     || !isPublishableKey(pending.publishableKey)) throw new Error('pending-device-login-missing');
@@ -267,7 +269,11 @@ export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.erro
       else throw error; // Keep the pending file; connectivity recovery resumes this request, never a new login.
     }
     if (answer) break;
-    if (now() + interval > deadline) throw new Error(now() + interval > expiry ? 'device-login-expired' : 'device-login-pending');
+    if (now() + interval > deadline) {
+      const error = new Error(now() + interval > expiry ? 'device-login-expired' : 'device-login-pending');
+      error.retryAfterSeconds = Math.ceil(interval / 1000);
+      throw error;
+    }
     await sleep(interval);
   }
   await close(); // the approval is spent on the server either way
@@ -341,8 +347,8 @@ export async function logout({ log = console.error, createAuthClient = createCli
     return ended;
   });
   log(`${sessionPath}를 지웠습니다.`);
-  log(revoked ? '서버의 세션도 끝냈습니다. 실행 중인 Dot 앱을 다시 시작하세요.'
-    : '서버의 세션을 끝내지 못했습니다. 이미 끝났거나 연결할 수 없습니다. 실행 중인 Dot 앱을 닫아야 세션 파일이 다시 생기지 않습니다.');
+  log(revoked ? '서버의 세션도 끝냈습니다. 다음 MCP 요청부터 로그아웃이 반영됩니다.'
+    : '서버의 세션을 끝내지 못했습니다. 로컬 연결은 해제했으며 다음 MCP 요청부터 로그인이 필요합니다.');
 }
 
 const messages = {
