@@ -142,7 +142,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
       }
       if (method === 'POST' && parts.join('/') === 'submissions') {
         const key = requireId(request.headers.get('idempotency-key'));
-        // ?fighter=<id> replaces the package of the caller's own fighter in place (2026-10-23); absent, it is a first registration.
+        // ?fighter=<id> replaces the package of the caller's own fighter in place (2026-10-23); absent, it registers another fighter within the account quota.
         const target = new URL(request.url).searchParams.get('fighter');
         if (target !== null && !UUID.test(target)) throw new Problem(422, 'invalid-fighter');
         let text;

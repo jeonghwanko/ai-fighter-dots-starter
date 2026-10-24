@@ -47,6 +47,15 @@ test('a revoked session asks for a new sign-in and keeps the saved file', async 
   await assert.rejects(client.request('spec'), /client-sign-in-required/);
   assert.equal(await readFile(file, 'utf8'), before); assert.deepEqual(sentTokens, []);
 });
+test('a blocked refresh preserves the session and is not reported as a revoked account', async () => {
+  for (const [error, reason] of [[new Error('fetch failed', { cause: new Error('Tunnel connection failed: 403 Forbidden') }), 'network-connect-forbidden'],
+    [new TypeError('fetch failed'), 'api-unreachable']]) {
+    const { file, client } = await clientWith(jwt(-5), () => ({ data: { session: null }, error }));
+    const before = await readFile(file, 'utf8');
+    await assert.rejects(client.request('me'), { message: reason });
+    assert.equal(await readFile(file, 'utf8'), before); assert.deepEqual(sentTokens, []);
+  }
+});
 test('processes sharing one session file adopt a saved refresh instead of spending an old token', async () => {
   const fresh = jwt(3600);
   const shared = await clientWith(jwt(10), () => ({ data: { session: { access_token: fresh, refresh_token: 'r2' } } }));

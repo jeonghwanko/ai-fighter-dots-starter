@@ -102,18 +102,22 @@ export function createServer({ root, remote, creatorPage, contextRequest } = {})
   const validatePackage = root ? makePackageValidator(root) : undefined;
   const records = root ? registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) : {};
   server.registerTool('check_creation_readiness', {
-    description: 'Call before the first generation of a character, after a workspace restart, and before registration. Reports three items with fixed options: '
+    description: 'Call before the first generation of a character, after a workspace restart, and before registration. Reports separate setup/connection/generation/delivery states: '
       + '(1) kit: before any version/job exists it fast-forwards this checkout on codex/creator-hosting and applies the hash-bound sprite-gen motion patch; run every nextCommands entry and restart the host when restartRequired; while a character is in progress it changes nothing. '
       + '(2) account: pass account only when the user actually stated it; otherwise the host may show a choice form, else present options as numbered choices. Never infer, switch provider or use a paid API. Access and preview display stay unverified until an actual result is shown in this conversation; creation:delivery checks records only. '
       + '(3) login: ODDBOUT sign-in. Use routes.sameDevice only when the user\'s browser runs on this workspace. For a browser on another device (a bot VM), '
       + 'use routes.otherDevice only when its status is available: run start, give the user the link and pairing code (not secrets), and run wait after they approve on the homepage. '
-      + 'If it is blocked, report the sign-in blocker. Never ask the user to paste a callback address or token into chat, never call that safe, and do not work around a block.',
+      + 'Use login.action labelled ODDBOUT 연결 as the connection choice, not an automatic login. Resume an existing pending device request instead of starting another. '
+      + 'Infrastructure CONNECT failures belong to the environment preparer (official host allowlist/Republish); the kit cannot change VM network settings. Do not ask ordinary creators to repeat environment setup or sign in to fix a network block. '
+      + 'Generation access and parent-conversation delivery have separate unverified states; kitAndAccountReady, saved sessions and records are not live proof. '
+      + 'If blocked, report the named actor and next action. Never ask for a callback address/token in chat or work around a block. After recovery read existing sessions/jobs; do not regenerate or resubmit.',
     inputSchema: { sessionId: identifier.optional(), account: z.enum(['gpt', 'grok', 'stop']).optional(), checkRemote: z.boolean().default(true) },
     outputSchema, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
   }, async ({ sessionId, account, checkRemote }) => {
     try {
       return respond({ ok: true, stage: 'creation-readiness', data: await checkReadiness({ ...records, sessionId, account,
-        remoteActive: Boolean(remote), lowLevelServer: server.server, kit: { fetchRemote: checkRemote }, login: { checkServer: checkRemote } }) });
+        remoteActive: Boolean(remote), lowLevelServer: server.server, kit: { fetchRemote: checkRemote },
+        login: { checkServer: checkRemote, request: remote?.request } }) });
     } catch (error) {
       return respond({ ok: false, stage: 'creation-readiness', code: /^[a-z][a-z0-9-]+$/.test(error.message) ? error.message
         : error.code === 'ENOENT' ? 'record-or-file-not-found' : 'readiness-check-failed' });

@@ -63,6 +63,12 @@ This repository lets each user create their own fighter through Dot. Read
   which requires the deployed server to advertise registration.deviceLogin "v1". The link and pairing code are
   public; tell the user to approve only a request they started and whose code matches. If no secure route is
   supported, report the authentication blocker; do not implement a bypass or assume a planned flow already exists.
+- Follow `docs/CONNECTION-READINESS.md`: present the ODDBOUT connection action, then the user's Google sign-in
+  and device approval. Reuse the existing device flow; no callback secrets in chat. Keep ODDBOUT API/account,
+  generation access and parent delivery separate. A saved session is not a server-verified account.
+  VM CONNECT/network blocks belong to the initial environment preparer; ordinary creators reuse that workspace.
+  The kit cannot change VM host allowlists or Republish. Report that limitation without claiming success.
+  After recovery inspect existing sessions/jobs and pending device approval before any new action.
 - Design the default customer flow for one already-owned generation subscription.
   Separate actual image/video/editor capabilities from subscription names and API billing.
   Do not make a second subscription or self-hosted VACE/ComfyUI GPU server a hidden requirement.

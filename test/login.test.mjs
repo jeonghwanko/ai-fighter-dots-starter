@@ -265,3 +265,22 @@ test('device login stops while pending without losing the request, and ends on e
   await assert.rejects(startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: old }), /device-login-unavailable/);
   await assert.rejects(startDeviceLogin({ argv: ['--url', URL_, '--key', KEY, '--link'], log: () => {}, post: deviceApi([]) }), /device-link-unsupported/);
 });
+
+test('device connection transport failure preserves the pending request and recovery never starts a second login', async () => {
+  const sessionPath = path.join(directory, 'device-recovery', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  const calls = [];
+  const post = deviceApi([], calls);
+  await startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post });
+  const pendingPath = pendingDeviceLoginPath(sessionPath), original = await readFile(pendingPath, 'utf8');
+  await assert.rejects(startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post }), /device-login-already-pending/);
+  assert.equal(calls.length, 1);
+  for (const reason of ['network-connect-forbidden', 'network-timeout', 'api-unreachable']) {
+    await assert.rejects(waitDeviceLogin({ post: deviceApi([new Error(reason)], calls),
+      sleep: async () => assert.fail('do not loop on connection failure'), log: () => {} }), { message: reason });
+    assert.equal(await readFile(pendingPath, 'utf8'), original);
+  }
+  await assert.rejects(waitDeviceLogin({ timeoutSeconds: 0, post: deviceApi([{ status: 'pending' }], calls), log: () => {} }), /device-login-pending/);
+  assert.equal(calls.filter(call => call.route === 'device-logins').length, 1);
+  assert.equal(await readFile(pendingPath, 'utf8'), original);
+});

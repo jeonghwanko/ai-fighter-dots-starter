@@ -8,6 +8,7 @@
 
 - 생성 결과를 대화에 보여주는 경로와 혼잡·한도 오류 중단 방침: [DELIVERY.md](DELIVERY.md)
 - 제작 단계와 피드백: [DOT-CREATION.md](DOT-CREATION.md)
+- 사용자 연결과 초기 환경 준비자 역할·오류별 다음 행동: [CONNECTION-READINESS.md](CONNECTION-READINESS.md)
 
 ## 1. 기본 형태
 
@@ -33,7 +34,8 @@
   - 생성: 사용자가 고른 생성 도구(Codex CLI, grok CLI 또는 xAI API)가 요구하는 주소
   - 등록: `deploy/creator-site.json`의 `apiBase`, `siteUrl`
   - 이 중 하나가 막힌 샌드박스에서는 설치나 생성이 중간에 실패한다.
-    시작 전에 접속을 확인하고, 막혀 있으면 사용자에게 그대로 알린다.
+    초기 환경 준비자가 시작 전에 접속과 공식 VM 허용·재게시 상태를 확인한다. 일반 제작 사용자는 이 환경을 재사용한다.
+    키트는 VM 허용목록·Republish를 변경할 수 없다. 막히면 준비자에게 필요한 조치를 알리고 성공 처리하거나 우회하지 않는다.
 
 ### 설치와 버전 고정
 
@@ -52,16 +54,19 @@ npm run sprite:status
 - 이미 설치된 작업 공간을 재사용할 때는 커밋, 작업 중 변경, 패치 상태를 확인한다.
   모르는 로컬 변경이 있으면 덮어쓰지 말고 새로 클론한다.
 - `npm run sprite:status` 통과는 설치 확인일 뿐이다. 로그인이나 구독 사용 가능 여부를 뜻하지 않는다.
-- **MCP `check_creation_readiness`** 를 캐릭터의 첫 생성 전, 작업 공간 재시작 뒤, 등록 전에 부른다. 세 항목을 한 번에 돌려준다.
+- **MCP `check_creation_readiness`** 를 캐릭터의 첫 생성 전, 작업 공간 재시작 뒤, 등록 전에 부른다. 상태별 의미는 [연결 안내](CONNECTION-READINESS.md)를 따른다.
   - **kit:** 버전·작업 기록이 아직 하나도 없을 때만 이 브랜치를 fast-forward하고 동작 패치를 적용한다.
     추적 파일에 로컬 변경이 있거나, 다른 브랜치이거나, 원격과 갈라졌으면 바꾸지 않고 `blocked`로 알린다.
     캐릭터가 진행 중이거나 작업 공간을 모르면 보고만 한다.
     돌려준 `nextCommands`를 모두 실행하고, `restartRequired`면 호스트를 다시 시작한다.
   - **account:** 사용자가 대화에서 실제로 말한 계정만 넘긴다. 없으면 호스트가 지원할 때 선택 양식(MCP elicitation)을 띄우고,
     지원하지 않으면 돌려준 고정 선택지를 번호로 보여준다.
-  - **login:** ODDBOUT 로그인 상태와 명령을 돌려준다(7절).
+  - **infrastructure:** 등록 API·홈페이지 접속과 환경 준비자 조치를 분리한다. Library helper는 실제 점검 전까지 미검증이다.
+  - **login:** ODDBOUT 연결 행동, 저장된 세션·승인 대기와 인증된 서버 계정 조회를 구분한다(7절).
+  - **generation / delivery:** 실제 생성 접근과 부모 대화 전달을 별도로 보고한다. 이 도구에서는 호출·표시하지 않으므로 미검증이다.
 
-  이 도구는 준비 조건만 확인한다. `readyForGeneration`이나 선택된 계정은 실제 생성 접근의 검증값이 아니다.
+  `kitAndAccountReady`는 키트와 생성 계정 선택만 확인한다. 이 도구는 생성·전달을 확인하지 않아 `readyForGeneration`은 false다.
+  요청된 첫 생성은 [DELIVERY.md](DELIVERY.md)의 실제 사전 조건을 별도로 확인한다. 확인용 새 생성은 하지 않는다.
   로그인 파일 존재도 유효한 서버 세션이나 사용자 계정 동일성의 증거로 확대하지 않는다.
   생성 접근, 이 대화에서의 실제 표시, 동작 품질은 실제 결과로만 확인된다.
   `creation:delivery`는 기록의 누락·모순을 검사할 뿐 표시를 증명하지 않는다.
@@ -144,7 +149,7 @@ npm run sprite:status
   다른 기기의 사용자 브라우저에서 그 VM의 loopback 주소에 직접 닿는다고 가정하지 않는다.
   - 현재 CLI의 `--paste` / `--finish`는 수동 콜백 교환 기능이며 보안 전달 채널 자체가 아니다.
     `--finish`는 인자가 없으면 이 작업 공간의 터미널에서 주소를 읽는다. 그 터미널에 사용자가 직접 입력할 수 있을 때만 쓴다.
-    `check_creation_readiness`는 이 명령을 제안하지 않는다. 다른 기기 브라우저는 `blocked-no-secure-route`로 보고한다.
+    `check_creation_readiness`는 이 명령을 제안하지 않는다. 다른 기기 브라우저는 아래 기기 연결 지원이 확인되지 않으면 `blocked-no-secure-route`로 보고한다.
     **콜백 주소를 대화에 붙여넣도록 요청하지 않는다**.
     주소에는 인증 코드·토큰이 포함될 수 있다. PKCE·일회성·만료는 대화 기록에 남겨도 안전하다는 뜻이 아니다.
   - VM에서는 공식적으로 지원되는 secure handoff 또는 기기 연결 경로가 있는지 먼저 확인한다.
@@ -165,6 +170,7 @@ npm run sprite:status
 
     요청은 10분 뒤 만료된다. 폴링은 5초 간격이며 너무 빠르면 늦춘다. 승인은 사용자당 시간당 10회로 제한된다.
     `--device-wait --timeout <초>`는 아직 승인 전이면 요청을 유지한 채 끝난다.
+    전송 장애도 기존 요청을 보존하고 멈춘다. 복구 후 같은 `--device-wait`로 재개하며 새 `--device` 요청을 만들지 않는다.
 
 ## 8. 종료와 정리
 
@@ -181,6 +187,7 @@ npm run sprite:status
 | 상황 | 에이전트의 행동 |
 | --- | --- |
 | 설치 중 네트워크·DNS 실패 | 어느 주소가 막혔는지 알린다. 다른 경로로 우회 설치하지 않는다. |
+| VM CONNECT/tunnel 403 | 서비스 인증 실패와 구분하고 초기 환경 준비자에게 호스트 허용·재게시 확인을 요청한다. 일반 사용자에게 재로그인·반복 설치를 시키지 않는다. |
 | Python·Node 버전 미달 | 작업 공간에서 설치할 수 있으면 설치한다. 없으면 제한을 알린다. |
 | 로그인 안 됨·만료 | 사용자에게 로그인을 요청한다. 다른 계정이나 API 키로 대체하지 않는다. |
 | 모델 혼잡(`Selected model is at capacity`) | 생성 전 오류인지 확인한다. [DELIVERY.md](DELIVERY.md)의 사용자 중단 방침을 따른다. 모델 변경은 사용자 승인 후에만 한다. |
@@ -209,4 +216,5 @@ npm run sprite:status
 - [ ] 보존 기간과 삭제 절차가 정해져 있고, 사용자에게 안내된다.
 - [ ] 등록용 Google 로그인은 지원되는 보안 경로로 확인했다. 봇 VM에서는 콜백 주소를 대화에 복사하지 않으며,
   지원 경로가 없거나 실제 로그인을 실행하지 않았다면 미검증·차단 상태로 남긴다.
-- [ ] `check_creation_readiness`가 새 작업 공간에서 kit·account·login 세 항목을 돌려주고, 호스트가 선택 양식을 띄우는지(또는 번호 선택지로 대체되는지) 확인했다.
+- [ ] `check_creation_readiness`가 kit·infrastructure·account·login·generation·delivery를 분리하고,
+  호스트가 ODDBOUT 연결 선택을 표시하는지(버튼 미지원이면 선택지·링크로 대체) 확인했다. 키트 검사만으로 Dots UI 검증을 대신하지 않는다.

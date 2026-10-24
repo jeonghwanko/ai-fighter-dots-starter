@@ -78,6 +78,11 @@ npm run validate -- output/my-fighter/fighter.json
 
 ## 5. 로그인과 등록
 
+일반 사용자 흐름은 **ODDBOUT 연결 → 본인 Google 로그인 → 공개 코드 확인·연결 승인**입니다.
+에이전트는 등록 API·계정, 생성 접근, 부모 대화 전달 상태를 각각 표시합니다. VM 호스트 허용·Republish는 초기 환경 준비자가
+맡고 사용자는 준비된 VM을 재사용합니다. 키트가 Dots 자체 버튼이나 VM 보안 설정을 변경하지는 않습니다.
+호스트가 버튼을 지원하지 않으면 같은 이름의 선택지와 공식 링크로 안내합니다. [연결 상태와 복구](docs/CONNECTION-READINESS.md)를 참고하세요.
+
 등록을 요청하면 에이전트가 `deploy/creator-site.json`을 읽고, **`apiBase`의 origin**을 프로젝트 URL로, `publishableKey`를 공개 키로 사용해 Google 로그인을 시작합니다. 기존 서비스에 연결하므로 사용자가 Supabase 프로젝트를 만들거나 서비스 키를 발급받을 필요는 없습니다. 공개 설정값을 대입하면 다음 명령입니다.
 
 ```sh
