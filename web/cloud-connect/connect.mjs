@@ -54,8 +54,8 @@ async function start() {
     byId('login').hidden = mode !== 'login'; byId('consent').hidden = mode !== 'consent';
     byId('login-note').hidden = mode !== 'login'; byId('retry-link').hidden = mode !== 'error';
     byId('account').textContent = accountEmail || words.googleAccount; byId('client').textContent = clientLabel;
-    byId('privacy-link').href = '/ai-fighter-creator/privacy' + (language === 'ko' ? '.ko' : '') + '.html';
-    byId('help-link').href = '/creator.html?lang=' + language;
+    byId('privacy-link').href = '/cloud-plugin/privacy' + (language === 'ko' ? '.ko' : '') + '.html';
+    byId('help-link').href = '/cloud-plugin/support' + (language === 'ko' ? '.ko' : '') + '.html';
     document.querySelector('.brand').href = '/?lang=' + language;
   };
   const state = (nextMode, nextStatus) => { mode = nextMode; statusKey = nextStatus; render(); };
