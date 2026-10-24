@@ -1,4 +1,4 @@
-import {mkdir,writeFile,readFile} from 'node:fs/promises';
+import {mkdir,writeFile,readFile,cp} from 'node:fs/promises';
 import {resolve,join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import {content,identity} from '../website/cloud-plugin/content.mjs';
@@ -13,5 +13,7 @@ export async function buildCloudPluginSite(siteRoot) {
   }
   const shared=await readFile(new URL('../website/ai-fighter-creator/style.css',import.meta.url),'utf8');
   await writeFile(join(dir,'style.css'),shared+'\n@font-face{font-family:Pretendard;src:url(/fonts/Pretendard-Regular.woff2);font-weight:400;font-display:swap}@font-face{font-family:Pretendard;src:url(/fonts/Pretendard-Bold.woff2);font-weight:700;font-display:swap}:root{font-family:Pretendard,Arial,sans-serif}article{max-width:800px;margin:45px 0 70px}header nav{flex-wrap:wrap}');
+  // Review links must survive full game releases, which replace the public tree.
+  await cp(new URL('../website/cloud-plugin/review-20261024/',import.meta.url),join(dir,'review-20261024'),{recursive:true});
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(resolve(process.argv[1])).href){if(!process.argv[2])throw new Error('Supply the existing site root');await buildCloudPluginSite(resolve(process.argv[2]));}
