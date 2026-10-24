@@ -3,7 +3,7 @@
   "mcpServers": {
     "oddbout": {
       "type": "streamable-http",
-      "url": "https://ai-fighter-validator.onrender.com/mcp",
+      "url": "https://mcp.oddbout.com/mcp",
       "extensions": {
         "com.openai": {
           "auth": {

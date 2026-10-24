@@ -1,75 +1,70 @@
 # ODDBOUT cloud plugin review
 
-Status on 2026-10-24: **draft created; not submitted for review**. This remote
-MCP submission is independent of the local MCP partner eligibility case.
+Status on 2026-10-24: **own-domain draft uploaded; not submitted for review**.
+This remote MCP submission is independent of the local MCP eligibility case.
 
-## Draft and package
+## Final draft and public addresses
 
-- Portal: https://platform.openai.com/plugins/manage/plugin_asdk_app_6adc53c4d8b48191ab5ffbf0ef1655c6
-- Initial uploaded draft: `appsub_6adc53c4d8e88191b5c676beb2f61602`, version 1.0.0.
-- Publisher selected in the portal: verified individual **정환 고**.
-- Source: `plugins/oddbout-cloud/`. Version 1.0.1 changes the MCP address to the
-  verified-origin-capable public entry point. Its ZIP has been prepared locally
-  but has not yet been uploaded to this draft.
-- Metadata contains five proposed positive and three negative review cases.
-  These are review plans, not evidence that a dedicated reviewer account has run them.
-- The dedicated reviewer account, its private credentials, and a recorded cloud
-  walkthrough are still required. Never put reviewer passwords in the public ZIP.
+- Portal: https://platform.openai.com/plugins/manage/plugin_asdk_app_6adc695de1bc8191a604b42bbaa178af
+- Version: `appsub_6adc695de1ec8191a9e9734d647cef44`, package `oddbout-dots` 1.0.2.
+- Source: `plugins/oddbout-cloud/`. Publisher: verified individual **정환 고**.
+- Public MCP: https://mcp.oddbout.com/mcp
+- Google/email consent UI: https://oddbout.com/connect.html
+- EN/KR product, support, privacy and terms: https://oddbout.com/cloud-plugin/
+- Domain proof: https://mcp.oddbout.com/.well-known/openai-apps-challenge
 
-## Deployed endpoints
+The portal locks an uploaded package's MCP URL. Earlier Supabase and Render URL
+drafts remain unsubmitted; the own-domain draft above is the final target.
+Do not submit the earlier drafts or overwrite their hostname's challenge token.
 
-- Public MCP: https://ai-fighter-validator.onrender.com/mcp
-- Original connection: https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp
-- Google consent UI: https://oddbout.com/connect.html
-- EN/KR product, support, privacy and terms pages: https://oddbout.com/cloud-plugin/
-- Domain proof: https://ai-fighter-validator.onrender.com/.well-known/openai-apps-challenge
+Spaceship DNS has `mcp CNAME ai-fighter-validator.onrender.com` (TTL 30 minutes).
+Render verified the custom domain and issued its TLS certificate. Existing root
+GitHub Pages A records and the www CNAME are unchanged. The original Render URL
+remains a compatibility endpoint; public plugin metadata uses the branded URL.
+
+## Authentication and hosting
 
 The gateway forwards only the fixed Supabase MCP endpoint with bounded request
-bodies and protocol headers. It does not receive an administrative database key
-or forward cookies, wake headers, user-supplied destinations or redirects.
-Supabase still checks signatures, issuer, the dedicated MCP role/marker, owner,
-OAuth client, live session, consent and revocation. The two HTTPS entry points
-are explicitly accepted audiences of this one service. Ordinary database and
-storage access remain unavailable to these OAuth tokens.
+bodies and protocol headers. It receives no administrative database key and
+forwards no cookies, wake headers, arbitrary destinations or redirects. Resource
+metadata selects one of two fixed public origins from the incoming hostname.
+Supabase still checks signatures, issuer, dedicated MCP role/marker, owner,
+OAuth client, live session, consent and revocation. The original Supabase URL,
+legacy Render URL and branded URL are explicitly accepted audiences of one
+service; ordinary database/storage access remains unavailable to OAuth tokens.
 
-The user explicitly approved the additional Render entry point and token
-handling after automatic approval review initially rejected that change.
-The existing free Render instance can take 50 seconds or more to start after
-inactivity; do not claim instant initial connections. No paid plan was selected.
+Edge Function version 6 and the branded-audience migration are deployed.
+The gateway code must be deployed to Render before verifying the new challenge
+and completing the own-domain OAuth connection. The free Render instance can
+take 50 seconds or more to start after inactivity. No paid plan was selected.
 
-The MCP Edge Function is ACTIVE version 5. The public origin hook migration was
-applied. Live checks confirmed the exact deployment commit, verification file,
-resource metadata, all nine tools, and HTTP 401 for an unauthenticated private
-tool call. The final publication tool is annotated as destructive because its
-immutable package becomes public. Twelve targeted gateway, MCP/authentication
-and worker tests passed. No new fighter was generated or published for review.
+A dedicated ordinary reviewer account was created with explicit user approval.
+Password login and the earlier Render draft's OAuth consent completed in the
+real browser. Credentials are stored outside the repository in a restricted
+local file and may be sent only to OpenAI's private Review details. Never put
+reviewer passwords in source, ZIPs, screenshots, logs or public walkthroughs.
 
 ## Connection screen
 
-Uses the existing ODDBOUT logo and self-hosted Pretendard fonts. EN/KR covers
+Uses the real ODDBOUT logo and self-hosted Pretendard fonts. EN/KR covers
 headings, actions, consent, errors, accessibility labels and support links.
-Language changes preserve the current authorization ID. The initial choice
-uses URL, session preference, then browser language. Narrow app panels use a
-single column. Content hashes version the CSS and JS to avoid stale caches.
+Language changes preserve the authorization ID. URL preference, session
+preference and browser language determine the initial locale. Narrow app panels
+use one column. Content hashes version CSS/JS. The primary Google button and
+expandable email login both use normal Supabase authentication; no bypass exists.
 
-Both desktop and 390px layouts were inspected, including the actual app panel.
-The public HTML, CSS, JavaScript and all eight information pages were compared
-with the generated files. Existing game-site deployments were fast-forwarded
-and preserved before adding these files.
+Desktop and 390px layouts were inspected. The real reviewer email login and
+consent screen were verified. Existing game-site updates were fast-forwarded
+and preserved before publishing the connection and policy pages.
 
-## Resume submission
+## Remaining submission work
 
-1. Obtain the pending explicit portal-access confirmation. Browser automatic
-   approval review rejected observation of the signed-in OpenAI Platform origin,
-   even though the user requested public submission. Do not bypass this gate.
-2. Upload the prepared 1.0.1 ZIP to the existing ODDBOUT draft, not a new plugin.
-3. Connect the public MCP URL and verify its domain using the exact challenge
-   currently shown by the portal. If that token changed, update the public proof.
-4. Use a dedicated review account and sample data, not the owner's Google
-   account. Run the documented review cases and record actual results.
-5. Add a real walkthrough URL and private reviewer credentials in Review details.
-6. Resolve blocking metadata/tool findings, inspect any binding attestations,
-   and submit. Record the actual queued review status and submission identifier.
+1. Deploy and verify the own-domain gateway, proof, resource metadata and OAuth.
+2. Run the five proposed positive and three negative review cases with the
+   dedicated review account. Proposed expected outcomes are not test evidence.
+3. Add an accessible real walkthrough and private credentials in Review details.
+4. Resolve blocking tool/metadata findings, inspect binding attestations and
+   submit. Record the actual queued review status and submission identifier.
 
-The old local-MCP support case is not a prerequisite for these steps. A draft,
-successful deployment or domain proof response is not a completed submission.
+No new fighter was generated or published for review. A draft, successful
+deployment or domain proof response is not a completed public submission.

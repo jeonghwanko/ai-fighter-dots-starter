@@ -7,10 +7,14 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
 
 export const CLOUD_RESOURCE = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
-export const PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
+export const LEGACY_PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
+export const PUBLIC_RESOURCE = 'https://mcp.oddbout.com/mcp';
 export function validCloudAudience(aud) {
-  return aud === CLOUD_RESOURCE || aud === PUBLIC_RESOURCE || (Array.isArray(aud) && aud.length === 2 &&
-    new Set(aud).size === 2 && aud.every(value => [CLOUD_RESOURCE, PUBLIC_RESOURCE].includes(value)));
+  const current = [CLOUD_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_RESOURCE];
+  if (typeof aud === 'string') return current.includes(aud);
+  if (!Array.isArray(aud) || new Set(aud).size !== aud.length) return false;
+  const expected = aud.length === 2 ? [CLOUD_RESOURCE, LEGACY_PUBLIC_RESOURCE] : current;
+  return aud.length === expected.length && aud.every(value => expected.includes(value));
 }
 export const CLOUD_ISSUER = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/auth/v1';
 const FILE = z.object({ download_url: z.string().max(8192), file_id: z.string().min(1).max(256),
@@ -150,7 +154,8 @@ export function createCloudHandler({ db, fetcher = fetch }) {
     // The Edge gateway may strip /functions/v1 and replace the origin before forwarding.
     const segments = url.pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter-mcp');
     const route = (prefix < 0 ? segments : segments.slice(prefix + 1)).join('/');
-    const resource = request.headers.get('x-oddbout-public-resource') === PUBLIC_RESOURCE ? PUBLIC_RESOURCE : CLOUD_RESOURCE;
+    const requestedResource = request.headers.get('x-oddbout-public-resource');
+    const resource = [PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE].includes(requestedResource) ? requestedResource : CLOUD_RESOURCE;
     const metadataUrl = `${resource}/.well-known/oauth-protected-resource`;
     if (route === '.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource,
       authorization_servers: [CLOUD_ISSUER], scopes_supported: ['openid', 'email', 'profile'],

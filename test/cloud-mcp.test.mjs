@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudHandler, authenticateCloud, allowedFileUrl, downloadHostFile, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE } from '../mcp/cloud.mjs';
+import { createCloudHandler, authenticateCloud, allowedFileUrl, downloadHostFile, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE } from '../mcp/cloud.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { safeClientRedirect, authorizationId } from '../web/cloud-connect/connect.mjs';
 import { migratedDatabase } from './helpers/fighter-database.mjs';
@@ -45,7 +45,8 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
 test('normal user tokens, wrong audiences, expiry, future tokens, missing grants and spoofed identities are rejected',async()=>{
   const req=new Request(CLOUD_RESOURCE,{headers:{authorization:`Bearer ${token}`}});
   assert.equal((await authenticateCloud(dbFor(),req)).owner,owner);
-  assert.equal((await authenticateCloud(dbFor({...claims(),aud:[CLOUD_RESOURCE,PUBLIC_RESOURCE]}),req)).owner,owner);
+  assert.equal((await authenticateCloud(dbFor({...claims(),aud:[CLOUD_RESOURCE,LEGACY_PUBLIC_RESOURCE]}),req)).owner,owner);
+  assert.equal((await authenticateCloud(dbFor({...claims(),aud:[CLOUD_RESOURCE,LEGACY_PUBLIC_RESOURCE,PUBLIC_RESOURCE]}),req)).owner,owner);
   for(const aud of [[CLOUD_RESOURCE,'https://evil.test'],[CLOUD_RESOURCE,CLOUD_RESOURCE],[],['authenticated'],[CLOUD_RESOURCE,PUBLIC_RESOURCE,'authenticated']])
     assert.equal(await authenticateCloud(dbFor({...claims(),aud}),req),null);
   for(const delta of [{aud:'authenticated'},{role:'authenticated'},{iss:'https://evil.test'},{exp:0},{nbf:Date.now()/1000+100},{client_id:null},{session_id:null},{is_anonymous:true},{af_mcp:'admin'},{sub:'other'}])
@@ -98,7 +99,7 @@ test('native OAuth hook isolates connector tokens and live-session checks enforc
     const hook=e=>db.query('select public.af_mcp_access_token_hook($1) value',[e]).then(r=>r.rows[0].value.claims);
     assert.deepEqual(await hook(plain),plain.claims);
     assert.equal((await hook({...plain,claims:{...plain.claims,client_id:client}})).role,'af_mcp');
-    assert.deepEqual((await hook({...plain,claims:{...plain.claims,client_id:client}})).aud,[CLOUD_RESOURCE,PUBLIC_RESOURCE]);
+    assert.deepEqual((await hook({...plain,claims:{...plain.claims,client_id:client}})).aud,[CLOUD_RESOURCE,LEGACY_PUBLIC_RESOURCE,PUBLIC_RESOURCE]);
     await db.query('insert into auth.oauth_clients(id) values($1)',[client]);
     await db.query('insert into auth.sessions(id,user_id,oauth_client_id,scopes) values($1,$2,$3,$4)',[session,owner,client,'openid email profile']);
     await db.query('insert into auth.oauth_consents(user_id,client_id,scopes) values($1,$2,$3)',[owner,client,'openid email profile']);

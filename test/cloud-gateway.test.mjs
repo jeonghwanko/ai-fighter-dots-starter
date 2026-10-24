@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {createServer} from 'node:http';
-import {cloudGateway,PUBLIC_RESOURCE,DOMAIN_CHALLENGE} from '../worker/cloud-gateway.mjs';
+import {createServer,request} from 'node:http';
+import {cloudGateway,PUBLIC_RESOURCE,LEGACY_PUBLIC_RESOURCE,DOMAIN_CHALLENGE,BRANDED_DOMAIN_CHALLENGE} from '../worker/cloud-gateway.mjs';
 async function serverFor(fetcher,run) {
   const server=createServer(async(req,res)=>{if(!await cloudGateway(req,res,fetcher)){res.writeHead(404);res.end();}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -16,11 +16,21 @@ test('public gateway forwards only the fixed MCP endpoint and bounded protocol h
     assert.equal(calls[0].options.redirect,'error');assert.equal(calls[0].options.headers.get('cookie'),null);
     assert.equal(calls[0].options.headers.get('x-ai-fighter-time'),null);
     assert.equal(calls[0].options.headers.get('authorization'),'Bearer oauth-token');
-    assert.equal(calls[0].options.headers.get('x-oddbout-public-resource'),PUBLIC_RESOURCE);
+    assert.equal(calls[0].options.headers.get('x-oddbout-public-resource'),LEGACY_PUBLIC_RESOURCE);
     assert.equal((await fetch(base+'/mcp?url=https://evil.test')).status,404);
     assert.equal(calls.length,1);
+    await new Promise((resolve,reject)=>{
+      const req=request(base+'/mcp',{method:'POST',headers:{host:'mcp.oddbout.com'}},res=>{res.resume();res.on('end',resolve)});
+      req.on('error',reject);req.end('{}');
+    });
+    assert.equal(calls[1].options.headers.get('x-oddbout-public-resource'),PUBLIC_RESOURCE);
     assert.equal(await (await fetch(base+'/.well-known/openai-apps-challenge')).text(),DOMAIN_CHALLENGE);
-    assert.equal(calls.length,1);
+    const brandedProof=await new Promise((resolve,reject)=>{
+      const req=request(base+'/.well-known/openai-apps-challenge',{headers:{host:'mcp.oddbout.com'}},res=>{let body='';res.on('data',part=>body+=part);res.on('end',()=>resolve(body))});
+      req.on('error',reject);req.end();
+    });
+    assert.equal(brandedProof,BRANDED_DOMAIN_CHALLENGE);
+    assert.equal(calls.length,2);
   });
 });
 test('oversized requests and upstream failures do not leak OAuth tokens or return success',async()=>{
