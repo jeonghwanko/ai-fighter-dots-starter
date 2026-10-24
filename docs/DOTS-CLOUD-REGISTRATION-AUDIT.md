@@ -152,6 +152,64 @@
 - 이 보완 이후 VM 재검사 결과는 별도로 기록한다. 전송 수정은 환경의 허용 정책을 바꾸지 않으므로
   앞서 확인한 호스트 차단이 자동 해제됐다고 판단하지 않는다.
 
+### 프록시 보완의 같은 VM 후속 검증 — 2026-10-24
+
+- `/workspace/ai-fighter-dots-starter`의 작업 없는 체크아웃에서 기존 HEAD `240537bd25a7c000e9cd7abb44f2e189ed7defb4`와
+  작업 상태를 다시 확인했다. 캐릭터 결과 파일·ODDBOUT 세션·기기 승인 대기 파일은 없었고,
+  기존 v8 패치 23개 파일은 manifest의 적용 후 해시와 모두 일치했다.
+- 두 원격 브랜치를 명시적으로 fetch한 뒤 `codex/dots-creator-flow`의
+  **`11651786e94d5e0d0a85c7e6efae6535d6d9aab2`**를 서브모듈 재귀 갱신 없이 fast-forward했다.
+  이 후속 검증에서 제품 전송·인증 코드를 추가 변경하지 않았다.
+- `npm ci --ignore-scripts --no-audit --no-fund`의 첫 실행은 기본 `/home/agent/.npm/_cacache` 생성 ENOENT로 실패했다.
+  쓰기 가능한 `/tmp`의 새 캐시를 `--cache`로 지정해 같은 잠금 파일로 다시 설치했고 123개 패키지 설치가 완료됐다.
+  무결성 검사·TLS 검증을 끄지 않았고, 설치된 Undici는 7.30.1이다.
+
+#### 테스트 이식성 결함과 검증 결과
+
+- 최초 VM 실행에서 기존 8개 파일의 **67/67**은 통과했지만 새 runtime-fetch 테스트는 **1/4**였다.
+  모의 프록시로 가야 할 요청의 timeout/DNS 실패, 잘못된 프록시 검사의 빈 결과를 확인했다.
+- 테스트가 소문자 프록시 변수를 빈 문자열로 남기고 대문자 변수에 모의 프록시를 넣었다.
+  Linux에서는 Undici가 존재하는 소문자 값을 우선하여 대문자 모의 설정을 무시했다.
+  설치된 EnvHttpProxyAgent 소스·문서로 우선순위를 확인하고, 임시 복사본에서 원인을 재현·분리했다.
+- `test/runtime-fetch.test.mjs`의 자식 프로세스 환경 구성만 수정했다. 기존 HTTP(S)_PROXY/NO_PROXY 키를
+  대소문자 구분 없이 제거한 뒤 해당 테스트의 모의 값만 넣는다. 이는 loopback 모의 테스트에만 적용되며
+  실제 VM·진단·제품 실행 환경의 프록시 설정은 변경하지 않는다. assertion 12개 행과 기대값은 그대로다.
+  이 최소 수정의 커밋은 **`80ed95f799b275cee82c2ec68e30a4cd6022d819`**이다.
+- 수정한 저장소 원본 `node test/runtime-fetch.test.mjs`는 **4/4** 통과했다(약 26초).
+  최종 관련 검사 합계는 **71/71**: runtime-fetch 4, client 9, connection-readiness 4, creation-readiness 12,
+  login 10, connect-oddbout 4, mcp 11, creator-plugin 15, portable-plugin 2.
+  각각 독립 Node 프로세스와 공식 실행 네트워크 권한을 사용했고 인증/API는 모의 값·임시 파일만 사용했다.
+- 이 VM 실행 검증은 Node v24.19.0에서 수행했다. Node 22.12 실제 실행 검증이나 실서비스 인증 성공으로 확대하지 않는다.
+  문서 상대 링크, diff-check와 번들 명세의 `api/runtime-fetch.mjs` 포함도 확인했다. 배포 ZIP은 만들지 않았다.
+
+#### 옵션 추가 없이 실행한 실제 공개 진단
+
+`NODE_USE_ENV_PROXY`가 없는 상태에서 아래 두 명령을 그대로 실행했다. HTTP(S)_PROXY/NO_PROXY/CA를 추가·변경하지 않았다.
+기본 계정 세션·기기 승인 대기 파일이 없음을 먼저 확인했으므로, 이 진단에서 인증 교환·갱신·GET /me를 실행하지 않았다.
+
+```sh
+npm run creation:check -- connection
+npm run creation:check -- registration
+```
+
+| 목적 | 홈페이지 oddbout.com | 등록 API ztfxxhtmtrvxvuxlqmgz.supabase.co |
+| --- | --- | --- |
+| connection | blocked / network-connect-forbidden | blocked / network-connect-forbidden |
+| registration | blocked / network-connect-forbidden | blocked / network-connect-forbidden |
+
+두 명령 모두 exit 0으로 진단 결과를 반환했다. 이는 진단 명령의 완료이며 연결 성공이 아니다.
+kit/account는 not-required, elicitation은 not-needed, login은 blocked, readyForRegistration은 false,
+deviceLogin은 unknown, 생성·전달은 unverified였다. Library는 helper-not-probed이며 이번 후속 검사에서 호출하지 않았다.
+앞선 기본 Node 실행의 network-dns-failed는 해결되어 상속 프록시의 실제 차단을 분류하지만, 호스트 허용 차단은 남아 있다.
+
+새 MCP 프로세스에서는 initialize/tools/list만 실행했다. 도구 19개, connect_oddbout의 status/start/wait,
+readiness의 generation/connection/registration, 로그인 전 등록 도구 노출을 확인했다.
+현재 Dots 대화에는 여전히 AI Fighter 도구가 제공되지 않는다. 공식 호스트 연결·도구 목록 갱신 완료는 미검증이다.
+시작 시 네트워크 정책 v1은 restricted이며 필요한 세 호스트의 명시적 규칙은 여전히 없었다.
+environment_status·정책 변경 도구도 제공되지 않아 현재 observations_current나 허용 변경은 수행하지 못했다.
+
+v8 패치·기존 작업을 보존했고 실제 로그인·새 자격증명·이미지 생성·업로드·등록·서비스 배포·CI는 실행하지 않았다.
+
 ### 남은 장애와 미검증
 
 VM 네트워크 정책 변경용 공식 관리 도구는 이 세션에 제공되지 않았다. 필요한 세 호스트의 정상 허용은
