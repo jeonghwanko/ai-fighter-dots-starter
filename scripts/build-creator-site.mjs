@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { homepageEntries } from './homepage-entry.mjs';
 import { writeSiteDiscovery } from './site-discovery.mjs';
 import { buildPluginPolicySite, sitePrivacyNotice, policyFiles } from './build-plugin-policy-site.mjs';
+import { buildCloudConnect } from './build-cloud-connect.mjs';
 
 import { youtubeChannelPlugin } from './site-social.mjs';
 import { milestonePlugin } from './site-milestones.mjs';
@@ -69,6 +70,7 @@ await writeFile(join(output, '.nojekyll'), '');
 if (config.customDomain) await writeFile(join(output, 'CNAME'), config.customDomain + '\n');
 // Policy files must exist before the artifact fingerprint is measured.
 await buildPluginPolicySite(join(output, 'ai-fighter-creator'), { publish: true });
+await buildCloudConnect(output);
 // Serve the actual homepage at /; retain the old filename as a compatible redirect.
 const homepage = await readFile(join(output, 'league.html'), 'utf8');
 for (const [path, html] of Object.entries(homepageEntries(homepage))) {

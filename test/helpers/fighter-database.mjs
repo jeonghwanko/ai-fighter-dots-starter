@@ -2,8 +2,11 @@ import { readFile, readdir } from 'node:fs/promises';
 import { PGlite } from '@electric-sql/pglite';
 export async function migratedDatabase() {
   const db = new PGlite();
-  await db.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+  await db.exec(`create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin;
     create schema auth; create table auth.users(id uuid primary key,email text);
+    create table auth.oauth_clients(id uuid primary key, deleted_at timestamptz);
+    create table auth.sessions(id uuid primary key,user_id uuid,oauth_client_id uuid,not_after timestamptz,scopes text);
+    create table auth.oauth_consents(user_id uuid,client_id uuid,revoked_at timestamptz,scopes text);
     create function auth.uid() returns uuid language sql as 'select nullif(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';
     grant usage on schema auth to authenticated,service_role;
     create function auth.jwt() returns jsonb language sql as 'select coalesce(nullif(current_setting(''request.jwt.claims'',true),''''),''{}'')::jsonb';

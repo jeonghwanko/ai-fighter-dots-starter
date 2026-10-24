@@ -24,9 +24,16 @@ export async function verifiedUserId(db, request) {
   if (typeof db.auth.getClaims === 'function') {
     const { data, error } = await db.auth.getClaims(token);
     const claims = data?.claims;
-    return !error && claims && claims.is_anonymous !== true && UUID.test(claims.sub ?? '') ? claims.sub : null;
+    return !error && claims && !claims.client_id && claims.role !== 'af_mcp' && claims.is_anonymous !== true && UUID.test(claims.sub ?? '') ? claims.sub : null;
   }
   const { data, error } = await db.auth.getUser(token);
+  // Older clients lack getClaims. Only use decoding here to DENY connector tokens; getUser still verifies identity.
+  if (token.split('.').length === 3) {
+    try {
+      const claims = JSON.parse(atob(token.split('.')[1].replaceAll('-', '+').replaceAll('_', '/')));
+      if (claims.client_id || claims.role === 'af_mcp') return null;
+    } catch { return null; }
+  }
   return !error && data?.user && !data.user.is_anonymous && UUID.test(data.user.id ?? '') ? data.user.id : null;
 }
 

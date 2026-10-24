@@ -57,7 +57,7 @@ Run the printed `codex mcp add ai-fighter --env ... -- ...` command. It includes
 
 The agent reads `get_fighter_spec` sections `context`, `overview`, `creation`, `guide`, and the required `schema`. The game owns the current motions, frame requirements, controls, and timing. Refresh `context` at each review group and before packaging; the agent keeps your selections tied to the relevant versions. See [game-provided creation context](docs/GAME-CREATION-CONTEXT.md).
 
-Local creation can begin before MCP is connected. A browser-only chat that cannot execute local processes needs a local host to perform generation and packaging.
+Local creation can begin before MCP is connected. Dots can connect to the [cloud registration MCP](docs/CLOUD-MCP.md) using Google login without a user PC. Generation, preview delivery and packaging still need the corresponding capabilities in the selected host.
 
 ## 4. Create and review the fighter
 
@@ -146,7 +146,7 @@ The game supports direct control and common-AI control. Registered fighters use 
 
 File tools require `AI_FIGHTER_ROOT`. Remote tools require a valid user session. Remove the Codex connection with `codex mcp remove ai-fighter`.
 
-This MCP supplies the contract, validation, and registration tools. Local generation uses the bundled sprite-gen with your account; supported appearance previews can use the host's direct image tool after the [delivery preflight](docs/DELIVERY.md). The conversation model, CLI worker model and image backend are separate; login or a requested model name does not verify generation support. The stdio setup above runs on a local host. A web-only ChatGPT connection requires a separately hosted HTTPS MCP endpoint with per-user authentication.
+The stdio MCP supplies the contract, validation, and registration tools. Local generation uses the bundled sprite-gen with your account; supported appearance previews can use the host's direct image tool after the [delivery preflight](docs/DELIVERY.md). The conversation model, CLI worker model and image backend are separate; login or a requested model name does not verify generation support. Dots can use the deployed [HTTPS cloud MCP](docs/CLOUD-MCP.md) with per-user Google authorization and host file attachments for registration.
 
 ## Development and reference
 
