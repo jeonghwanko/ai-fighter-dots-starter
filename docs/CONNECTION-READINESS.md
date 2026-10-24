@@ -66,6 +66,10 @@ VM 설치와 호스트 종류에 맞는 네트워크 준비는 초기 환경 준
   [공식 Codex 환경 안내](https://learn.chatgpt.com/docs/environments/cloud-environments#connect-to-services)
 
 웹 검색·연결된 앱의 성공은 VM 셸의 네트워크 허용을 뜻하지 않는다. 실패한 바로 그 환경에서 재검사해야 한다.
+키트의 공개 진단·등록 API·Google 세션 교환/갱신은 `api/runtime-fetch.mjs`로 환경의 HTTP_PROXY/HTTPS_PROXY와
+NO_PROXY를 사용한다. Node 22.12에서도 동작하도록 Undici EnvHttpProxyAgent를 포함하며 별도 실행 옵션을 사용자에게
+요구하지 않는다. 상속된 CA 신뢰와 TLS 검증을 유지하고, 프록시 오류 때 직접 연결로 재시도하지 않는다.
+이 전송 호환성은 프록시의 허용 정책을 변경하지 않는다.
 설정을 변경할 수 있는 공식 도구가 없으면 확인된 실패 호스트와 환경별 설정 경로를 한 번 안내한다.
 서버 방화벽·DNS·인증 정책을 추정해서 바꾸거나 별도 프록시를 만들어 우회하지 않는다.
 

@@ -9,7 +9,7 @@ import { ensureSpritePatch, patchFile } from './sprite-patch.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
 const runtimeFiles = [
-  'LICENSE', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'server/ai-fighter-package.mjs',
+  'LICENSE', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'api/runtime-fetch.mjs', 'server/ai-fighter-package.mjs',
   'deploy/creation-context-source.json', 'deploy/creator-site.json',
   'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/run-creation-job.mjs',
   'scripts/sprite-patch.mjs', 'patches/sprite-gen-gpt-motion.json', 'patches/README.md',

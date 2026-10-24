@@ -21,6 +21,7 @@ import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { apiRequest, validProjectUrl, withSessionLock, writeSessionFile } from '../api/client.mjs';
 import { isTransportCode, connectionAction } from '../api/connection-errors.mjs';
+import { runtimeFetch } from '../api/runtime-fetch.mjs';
 import { PUBLIC_CREATOR_PAGE, creatorPage } from '../mcp/creator-handoff.mjs';
 
 export const DEFAULT_LOGIN_PORT = 47821;
@@ -126,7 +127,7 @@ export async function login({ argv = process.argv.slice(2), log = console.error,
   // The user already in the session file. An operator-issued beta session may be its only copy.
   const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
   const state = randomBytes(16).toString('hex'), redirectTo = `http://127.0.0.1:${port}/callback/${state}`;
-  const auth = createAuthClient(url, publishableKey, { auth: { flowType: 'pkce', storage: memoryStorage(), persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
+  const auth = createAuthClient(url, publishableKey, { global: { fetch: runtimeFetch }, auth: { flowType: 'pkce', storage: memoryStorage(), persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
   const linkedUser = link ? await adoptExistingSession(auth, sessionPath, url, publishableKey) : null;
   const options = { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } };
   const { data, error } = link ? await auth.auth.linkIdentity({ provider: 'google', options })
@@ -181,7 +182,7 @@ export async function startPasteLogin({ argv = [], log = console.error, createAu
   const { url, publishableKey, port } = await projectSettings({ argv, sessionPath });
   const state = randomBytes(16).toString('hex'), redirectTo = `http://127.0.0.1:${port}/callback/${state}`;
   const storage = memoryStorage();
-  const auth = createAuthClient(url, publishableKey, { auth: { flowType: 'pkce', storage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
+  const auth = createAuthClient(url, publishableKey, { global: { fetch: runtimeFetch }, auth: { flowType: 'pkce', storage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
   const { data, error } = await auth.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } } });
   if (error || !data?.url) throw new Error('oauth-start-failed');
   await mkdir(path.dirname(pendingPath), { recursive: true, mode: 0o700 });
@@ -278,7 +279,7 @@ export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.erro
   }
   await close(); // the approval is spent on the server either way
   if (typeof answer.tokenHash !== 'string' || !/^[a-f0-9]{40,128}$/.test(answer.tokenHash)) throw new Error('invalid-api-response');
-  const auth = createAuthClient(pending.url, pending.publishableKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+  const auth = createAuthClient(pending.url, pending.publishableKey, { global: { fetch: runtimeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
   const verified = await auth.auth.verifyOtp({ type: 'email', token_hash: answer.tokenHash });
   const session = verified.data?.session;
   if (verified.error || !session?.access_token || !session.refresh_token || !session.user?.id) throw new Error('device-login-redeem-failed');
@@ -311,7 +312,7 @@ export async function finishPasteLogin({ pasted, log = console.error, createAuth
   if (!validProjectUrl(pending.url) || !isPublishableKey(pending.publishableKey)) throw new Error('pending-login-missing');
   // A wrong paste keeps the pending login so the user can paste the right address.
   const code = parsePastedCallback(pasted, pending);
-  const auth = createAuthClient(pending.url, pending.publishableKey, { auth: { flowType: 'pkce', storage: memoryStorage(pending.storage),
+  const auth = createAuthClient(pending.url, pending.publishableKey, { global: { fetch: runtimeFetch }, auth: { flowType: 'pkce', storage: memoryStorage(pending.storage),
     persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
   const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
   try {
@@ -334,7 +335,7 @@ export async function logout({ log = console.error, createAuthClient = createCli
     let ended = false;
     if (saved && validProjectUrl(saved.url) && isPublishableKey(saved.publishableKey) && typeof saved.accessToken === 'string') {
       try {
-        const auth = createAuthClient(saved.url, saved.publishableKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+        const auth = createAuthClient(saved.url, saved.publishableKey, { global: { fetch: runtimeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
         let token = saved.accessToken;
         if ((jwtPayload(token)?.exp ?? 0) * 1000 <= Date.now() + 5000 && typeof saved.refreshToken === 'string') {
           const refreshed = await auth.auth.refreshSession({ refresh_token: saved.refreshToken });

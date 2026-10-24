@@ -10,6 +10,8 @@ export function transportCode(error) {
     if (Array.isArray(item.errors)) queue.push(...item.errors.slice(0, 8));
   }
   const message = messages.join(' ');
+  const preserved = [...codes, ...messages].find(value => value !== 'api-unreachable' && isTransportCode(value));
+  if (preserved) return preserved;
   if (/\b(?:CONNECT|tunnel|proxy)\b[^\n]{0,160}\b403\b/i.test(message)) return 'network-connect-forbidden';
   if (codes.some(code => ['TimeoutError', 'AbortError', 'ETIMEDOUT', 'UND_ERR_CONNECT_TIMEOUT'].includes(code))) return 'network-timeout';
   if (codes.some(code => ['ENOTFOUND', 'EAI_AGAIN'].includes(code))) return 'network-dns-failed';

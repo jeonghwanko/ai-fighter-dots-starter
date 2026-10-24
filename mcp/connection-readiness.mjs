@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { validProjectUrl } from '../api/client.mjs';
 import { connectionAction, transportCode } from '../api/connection-errors.mjs';
+import { runtimeFetch } from '../api/runtime-fetch.mjs';
 import { isPublishableKey, pendingDeviceLoginPath } from '../scripts/login.mjs';
 
 export async function readProject(root) {
@@ -19,7 +20,7 @@ export async function readProject(root) {
 
 const unknown = reason => ({ status: 'unverified', reason, deviceLogin: 'unknown' });
 /** A reachable HTTP error is different from a CONNECT failure before reaching the service. */
-export async function probePublic(url, { spec = false, fetchImpl = fetch } = {}) {
+export async function probePublic(url, { spec = false, fetchImpl = runtimeFetch } = {}) {
   try {
     const response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(8000) });
     if (!response.ok) {

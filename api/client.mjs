@@ -1,6 +1,7 @@
 import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { createClient } from '@supabase/supabase-js';
 import { transportCode } from './connection-errors.mjs';
+import { runtimeFetch } from './runtime-fetch.mjs';
 
 export function validProjectUrl(url) {
   return typeof url === 'string' && /^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(url);
@@ -11,7 +12,7 @@ const bodyBytes = body => body == null ? 0 : typeof body === 'string' ? Buffer.b
 
 export async function apiRequest(url, token, route, { method = 'GET', body, headers = {}, timeoutMs = transferTimeoutMs(bodyBytes(body)) } = {}) {
   let response;
-  try { response = await fetch(`${url}/functions/v1/ai-fighter/${route}`, { method, body, headers: { authorization: `Bearer ${token}`, ...headers }, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) }); }
+  try { response = await runtimeFetch(`${url}/functions/v1/ai-fighter/${route}`, { method, body, headers: { authorization: `Bearer ${token}`, ...headers }, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) }); }
   catch (error) { throw new Error(transportCode(error)); }
   let result;
   try { result = await response.json(); } catch {
@@ -79,7 +80,7 @@ export async function writeSessionFile(configPath, config) {
 export async function createRemoteClient(configPath, { createAuthClient = createClient } = {}) {
   const config = JSON.parse(await readFile(configPath, 'utf8'));
   if (!validProjectUrl(config.url) || !config.publishableKey || !config.accessToken || !config.refreshToken) throw new Error('invalid-client-config');
-  const auth = createAuthClient(config.url, config.publishableKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+  const auth = createAuthClient(config.url, config.publishableKey, { global: { fetch: runtimeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
   const fresh = () => accessTokenExpiry(config.accessToken) - Date.now() > REFRESH_MARGIN_MS;
   async function adoptSaved() {
     let saved;
