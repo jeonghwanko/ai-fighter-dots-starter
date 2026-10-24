@@ -12,12 +12,20 @@ const credentials = JSON.parse(await readFile(credentialPath, 'utf8'));
 assert.equal(credentials.email, 'turbo08+oddbout-review@gmail.com');
 const supabase = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co';
 const endpoint = 'https://mcp.oddbout.com/mcp';
+const expectedFighterId = process.env.ODDBOUT_REVIEW_EXPECTED_FIGHTER_ID;
+const expectedSubmissionId = process.env.ODDBOUT_REVIEW_EXPECTED_SUBMISSION_ID;
+const expectedManifestSha = process.env.ODDBOUT_REVIEW_EXPECTED_MANIFEST_SHA256;
+if (expectedFighterId || expectedSubmissionId || expectedManifestSha) {
+  assert.match(expectedFighterId ?? '', /^[a-f0-9-]{36}$/);
+  assert.match(expectedSubmissionId ?? '', /^[a-f0-9-]{36}$/);
+  assert.match(expectedManifestSha ?? '', /^[a-f0-9]{64}$/);
+}
 const client = createClient(supabase, 'sb_publishable_6UkV7tRAQ1P4qss5cTYSwQ_kVxSIv_V', {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
 const evidence = { endpoint, startedAt: new Date().toISOString(),
   presentation: 'Actual hosted MCP protocol checks, not a ChatGPT conversation recording',
-  account: 'Dedicated empty review account', steps: [], limitations: [
+  account: 'Dedicated review account', steps: [], limitations: [
     'No character generation, visual approval or public registration.',
     'Host file attachment transfer and a successful full registration are not exercised here.',
     'Negative checks verify server boundaries; they do not certify model responses to prompts.'
@@ -85,7 +93,22 @@ try {
     assert.equal(r.generation.status, 'unverified'); assert.equal(r.package.status, 'unverified');
   });
   await step('Read fighter requirements', 'get_fighter_spec', { section: 'overview' }, r => assert.equal(r.ok, true));
-  await step('List owned fighters', 'list_my_fighters', {}, r => { assert.equal(r.ok, true); assert.deepEqual(r.fighters, []); });
+  await step('List owned fighters', 'list_my_fighters', {}, r => {
+    assert.equal(r.ok, true);
+    if (expectedFighterId) assert.deepEqual(r.fighters.map(f => f.id), [expectedFighterId]);
+    else assert.deepEqual(r.fighters, []);
+  });
+  if (expectedFighterId) {
+    await step('Verify the native Dots registration through the public gateway', 'get_fighter_submission', { submissionId: expectedSubmissionId }, r => {
+      assert.equal(r.ok, true); assert.equal(r.stage, 'registered'); assert.equal(r.fighterId, expectedFighterId);
+      assert.equal(r.manifestSha256, expectedManifestSha); assert.equal(r.runtimeApproved, true);
+    });
+    await step('Verify the immutable registered fighter', 'get_registered_fighter', { fighterId: expectedFighterId }, r => {
+      assert.equal(r.ok, true); assert.equal(r.fighter.id, expectedFighterId);
+      assert.equal(r.fighter.submission_id, expectedSubmissionId); assert.equal(r.fighter.manifest_sha, expectedManifestSha);
+      assert.equal(r.fighter.profile.name, 'ODDBOUT Review Test'); assert.equal(r.fighter.runtime_approved, true);
+    });
+  }
   await step('Handle an unknown submission accurately', 'get_fighter_submission', { submissionId: '00000000-0000-4000-8000-000000000000' }, r => {
     assert.equal(r.ok, false); assert.equal(r.code, 'not-found');
   });

@@ -90,6 +90,23 @@ and preserved before publishing the connection and policy pages.
 Await the external review decision. Do not submit the earlier drafts or claim
 that ordinary users can install this listing from the directory before approval.
 
-No new fighter was generated or published for review. The live account checks
-do not prove host attachment transfer or a complete successful registration.
-These limitations were disclosed in the private review instructions and video.
+At initial submission no fighter was generated or published. The five recorded
+account checks and initial video did not exercise successful registration; that
+scope was disclosed in the private review instructions and video.
+
+## Additional native Dots verification
+
+After submission, the user explicitly authorized a real registration test on the
+dedicated reviewer. Dots transferred an existing approved package (11 WebP files,
+5,537,184 bytes), with test-only profile metadata, using native MCP file inputs.
+Submission `131d7814-2c24-4a82-9707-1ebff7978f67` became registered fighter
+`1c6160e0-a138-4e25-8b95-db023b8cc408`, named `ODDBOUT Review Test`.
+The public MCP gateway independently returned the same immutable manifest hash
+and `runtimeApproved: true`; seven read-only checks passed and their temporary
+OAuth grant was revoked. The review account now contains that one test fighter.
+No new artwork was generated. See [the registration record](CLOUD-MCP.md#실제-파일-등록-검증--2026-10-24).
+
+MCP function v7 clarifies intended-account checks, absolute host file inputs,
+original-byte recovery from Library/Page files, and the distinction between VM
+network policy and native connector access. Authentication and publication
+validation are unchanged. The submitted 1.0.2 listing remains under external review.
