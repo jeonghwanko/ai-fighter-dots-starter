@@ -19,7 +19,8 @@ export const copy = {
     privacy:'개인정보', help:'도움말', returnDots:'Dots로 돌아가기', loading:'연결 요청을 확인하고 있습니다.',
     login:'캐릭터를 소유할 계정으로 로그인하세요.', consent:'Dots에서 시작한 요청인지 확인해 주세요.',
     noRequest:'Dots의 ODDBOUT 플러그인에서 연결을 시작해 주세요.', failed:'요청이 만료되었거나 연결할 수 없습니다. Dots에서 다시 시도해 주세요.',
-    unsafe:'지원하는 연결 요청이 아닙니다. 권한을 승인하지 않았습니다.', googleAccount:'Google 계정', connecting:'Google 로그인으로 이동합니다.', approving:'연결을 마무리하고 있습니다.'
+    unsafe:'지원하는 연결 요청이 아닙니다. 권한을 승인하지 않았습니다.', googleAccount:'ODDBOUT 계정', connecting:'Google 로그인으로 이동합니다.', approving:'연결을 마무리하고 있습니다.',
+    emailOption:'이메일 계정으로 로그인', emailLabel:'이메일', passwordLabel:'비밀번호', emailSignIn:'로그인', emailConnecting:'로그인하고 있습니다.', emailFailed:'이메일 또는 비밀번호를 확인해 주세요.'
   },
   en: {
     title:'ODDBOUT · Connect to Dots', headline1:'Your fighter.', headline2:'Into the ring.',
@@ -30,7 +31,8 @@ export const copy = {
     privacy:'Privacy', help:'Help', returnDots:'Return to Dots', loading:'Checking your connection request.',
     login:'Use the account that will own your fighter.', consent:'Confirm that you started this request in Dots.',
     noRequest:'Start the connection from the ODDBOUT plugin in Dots.', failed:'This request expired or could not be completed. Start again from Dots.',
-    unsafe:'This connection request is not supported. No access was approved.', googleAccount:'Google account', connecting:'Opening Google sign-in.', approving:'Completing your connection.'
+    unsafe:'This connection request is not supported. No access was approved.', googleAccount:'ODDBOUT account', connecting:'Opening Google sign-in.', approving:'Completing your connection.',
+    emailOption:'Sign in with an email account', emailLabel:'Email', passwordLabel:'Password', emailSignIn:'Sign in', emailConnecting:'Signing in.', emailFailed:'Check your email and password and try again.'
   }
 };
 async function start() {
@@ -52,6 +54,7 @@ async function start() {
     byId('step-label').textContent = words[mode === 'consent' ? 'stepConsent' : 'stepConnect'];
     byId('panel-title').textContent = words[mode === 'consent' ? 'consentTitle' : mode === 'error' ? 'errorTitle' : 'panelTitle'];
     byId('login').hidden = mode !== 'login'; byId('consent').hidden = mode !== 'consent';
+    byId('email-login').hidden = mode !== 'login';
     byId('login-note').hidden = mode !== 'login'; byId('retry-link').hidden = mode !== 'error';
     byId('account').textContent = accountEmail || words.googleAccount; byId('client').textContent = clientLabel;
     byId('privacy-link').href = '/cloud-plugin/privacy' + (language === 'ko' ? '.ko' : '') + '.html';
@@ -88,8 +91,23 @@ async function start() {
       const { error } = await auth.signInWithOAuth({ provider: 'google', options: {
         redirectTo: location.origin + '/connect.html?authorization_id=' + encodeURIComponent(id) + '&lang=' + language, queryParams: { prompt: 'select_account' } } });
       if (error) { fail(); byId('login').disabled = false; }
-    }; return;
+    };
+    byId('email-form').onsubmit = async event => {
+      event.preventDefault();
+      byId('email-submit').disabled = byId('login').disabled = true;
+      statusKey = 'emailConnecting'; render();
+      try {
+        const result = await auth.signInWithPassword({ email: byId('email-address').value.trim(), password: byId('email-password').value });
+        byId('email-password').value = '';
+        if (result.error || !result.data.session || result.data.session.user.is_anonymous) { state('login', 'emailFailed'); return; }
+        await showConsent(result.data.session);
+      } catch { state('login', 'emailFailed'); }
+      finally { byId('email-password').value = ''; byId('email-submit').disabled = byId('login').disabled = false; }
+    };
+    return;
   }
+  await showConsent(session);
+  async function showConsent(session) {
   const details = await auth.oauth.getAuthorizationDetails(id);
   if (details.error || !details.data) { fail(); return; }
   if (details.data.redirect_url) { go(details.data.redirect_url); return; }
@@ -105,6 +123,7 @@ async function start() {
       go(result.data.redirect_url);
     } catch { fail(); byId('approve').disabled = byId('deny').disabled = false; }
   };
+  }
 }
 if (typeof document !== 'undefined') start().catch(() => {
   const words = copy[document.documentElement.lang === 'ko' ? 'ko' : 'en'];
