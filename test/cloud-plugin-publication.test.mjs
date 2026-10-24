@@ -11,7 +11,8 @@ test('a clean publication preserves submitted review links and completed registr
     await buildCloudPluginSite(root);
     const dir = join(root, 'cloud-plugin/review-20261024');
     const html = await readFile(join(dir, 'index.html'), 'utf8');
-    for (const file of ['evidence.json', 'native-registration-evidence.json', 'walkthrough.mp4', 'logo.webp', 'Pretendard-Regular.woff2']) {
+    for (const file of ['evidence.json', 'native-registration-evidence.json', 'walkthrough.mp4', 'logo.webp', 'Pretendard-Regular.woff2',
+      'deletion.html', 'deletion-checks.json', 'native-deletion-evidence.json', 'walkthrough-with-deletion.mp4']) {
       assert.ok((await stat(join(dir, file))).size > 0, `Public review file missing: ${file}`);
     }
     assert.match(html, /href="native-registration-evidence.json"/);

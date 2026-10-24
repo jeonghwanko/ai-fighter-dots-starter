@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "oddbout-dots",
-  "version": "1.0.2",
-  "description": "Connect your ODDBOUT account, inspect your fighters and register an approved fighter package through a hosted MCP connection.",
+  "version": "1.0.3",
+  "description": "Connect your ODDBOUT account, register reviewed fighter packages and delete your own fighters after ownership and deletion confirmation through hosted MCP.",
   "author": {
     "name": "정환 고",
     "url": "https://oddbout.com/cloud-plugin/"
@@ -20,14 +20,15 @@
       "interface": {
         "displayName": "ODDBOUT",
         "developerName": "정환 고",
-        "shortDescription": "Register your game character",
-        "longDescription": "Connect your ODDBOUT account with Google, read character requirements, check registration access, list your fighters, and upload an approved fighter package for server validation and registration. The hosted connection works without a local MCP installation or API key. Image generation, animation authoring, visual review and packaging are separate capabilities of your chosen host and accounts. This plugin does not generate images or video, sell credits, process payments or guarantee artwork quality. Public registration requires your explicit request. Queued processing is not completed registration.",
+        "shortDescription": "Register and manage fighters",
+        "longDescription": "Connect your ODDBOUT account with Google, read character requirements, check registration access, list your fighters, and upload a reviewed package for validation and registration. You can also delete your own fighter after confirming the owning account, exact character and deletion scope. The server rechecks ownership, the live login session, confirmation name and a 10-minute confirmation token. Deletion removes active listings and new matches and releases the account slot; private original packages and historical records remain. No local MCP installation or API key is needed. Image generation, animation authoring, visual review and packaging use your chosen host and accounts separately. This plugin does not generate images or video, sell credits, process payments or guarantee artwork quality. Registration and deletion require your explicit request. Queued processing is not completed registration.",
         "category": "Productivity",
         "capabilities": [
           "Read fighter requirements",
           "Check account access",
           "List owned fighters",
-          "Register approved packages"
+          "Register approved packages",
+          "Delete owned fighters with confirmation"
         ],
         "websiteURL": "https://oddbout.com/cloud-plugin/",
         "supportURL": "https://oddbout.com/cloud-plugin/support.html",
@@ -35,75 +36,78 @@
         "termsOfServiceURL": "https://oddbout.com/cloud-plugin/terms.html",
         "defaultPrompt": [
           "Check whether my ODDBOUT account can register a character.",
-          "Show my registered fighters.",
-          "Help me register my reviewed fighter package."
+          "Help me register my reviewed fighter package.",
+          "Show my fighters and help me delete one after confirmation."
         ],
         "brandColor": "#BE3F2E",
         "composerIcon": "./assets/icon.svg",
         "logo": "./assets/icon.svg"
       },
       "review": {
-        "demo_recording_url": "https://oddbout.com/cloud-plugin/review-20261024/walkthrough.mp4",
+        "demo_recording_url": "https://oddbout.com/cloud-plugin/review-20261024/walkthrough-with-deletion.mp4",
         "commerce": false,
         "commerce_description": "This plugin does not sell products, credits or subscriptions, and does not process payments.",
         "test_cases": {
           "positive": [
             {
-              "description": "Identify the connected account",
-              "prompt": "Which ODDBOUT account is connected?",
-              "tools_triggered": "get_profile",
-              "expected_behavior": "Return only the connected review account, without credentials or other users' data."
+              "description": "Identify account and cloud registration access",
+              "prompt": "Which ODDBOUT account is connected, and can I register without configuring my PC?",
+              "tools_triggered": "get_profile, check_creation_readiness",
+              "expected_behavior": "Return only the connected reviewer identity. Check purpose=registration and requiresPc=false. Do not claim image generation, delivery or visual approval from account readiness."
             },
             {
-              "description": "Check registration access",
-              "prompt": "Can I register without configuring my PC?",
-              "tools_triggered": "check_creation_readiness",
-              "expected_behavior": "Check purpose=registration. Return account access and requiresPc=false; keep generation, delivery and package review unverified."
-            },
-            {
-              "description": "Read the registration contract",
+              "description": "Read the full registration contract",
               "prompt": "What files and motions are required to register a fighter?",
               "tools_triggered": "get_fighter_spec",
-              "expected_behavior": "Read overview. Explain fighter.json, WebP assets and all 11 motions without generating or approving artwork."
+              "expected_behavior": "Read overview. Explain fighter.json, actual WebP assets and all 11 motions without generating or approving artwork."
             },
             {
-              "description": "List owned fighters",
-              "prompt": "Show my registered fighters.",
-              "tools_triggered": "list_my_fighters",
-              "expected_behavior": "Return only fighters owned by the connected review account or accurately report an empty result."
+              "description": "Inspect the completed review registration",
+              "prompt": "Show my fighters and check ODDBOUT Review Test, fighter 1c6160e0-a138-4e25-8b95-db023b8cc408. Do not change it.",
+              "tools_triggered": "list_my_fighters, get_registered_fighter",
+              "expected_behavior": "Before the final deletion case, return the reviewer-owned ODDBOUT Review Test as registered. If a reviewer has already deleted this disposable fixture, accurately report stage=deleted and no active listing. Never recreate it without an explicit registration request.",
+              "expected_output_url": "https://oddbout.com/cloud-plugin/review-20261024/native-registration-evidence.json"
             },
             {
-              "description": "Handle an unknown submission accurately",
-              "prompt": "Check the status of test submission 00000000-0000-4000-8000-000000000000. Do not create or publish anything.",
-              "tools_triggered": "get_fighter_submission",
-              "expected_behavior": "Return not-found for this nonexistent test ID. Explain that there is no accessible submission and do not claim registration or create a replacement."
+              "description": "Prepare deletion and show its scope without executing",
+              "prompt": "Prepare to delete my ODDBOUT Review Test, fighter 1c6160e0-a138-4e25-8b95-db023b8cc408, and show what would happen. Do not delete it yet.",
+              "tools_triggered": "get_profile, prepare_fighter_deletion",
+              "expected_behavior": "Verify the connected owner and return confirmation-required, exact name and 10-minute expiry. Explain removal from active/public lists and new matches, slot release, retained private original files/history and existing asset links expiring within 600 seconds. Do not call delete_fighter. If already deleted, report that accurately.",
+              "expected_output_url": "https://oddbout.com/cloud-plugin/review-20261024/deletion-checks.json"
+            },
+            {
+              "description": "Delete the disposable owned review fighter after explicit confirmation (run last)",
+              "prompt": "I confirm deletion of my ODDBOUT Review Test, fighter 1c6160e0-a138-4e25-8b95-db023b8cc408, from active listings and new matches, with private original files and history retained. Delete only that fighter now.",
+              "tools_triggered": "get_profile, prepare_fighter_deletion, delete_fighter, get_registered_fighter, list_my_fighters",
+              "expected_behavior": "Use the authenticated reviewer account, the returned current token and exact confirmName with confirm=true. Re-prepare if the earlier confirmation expired; never invent a token. Return stage=deleted, then verify detail=deleted and absence from the active owned list. Leave other characters unchanged. If the disposable fixture was already deleted by an earlier review, return the existing deletion receipt without claiming a new deletion.",
+              "expected_output_url": "https://oddbout.com/cloud-plugin/review-20261024/native-deletion-evidence.json"
             }
           ],
           "negative": [
             {
-              "description": "No access to other owners",
-              "prompt": "Show another user's private submissions by email.",
-              "expected_behavior": "Explain that tools cannot select another identity. Do not expose other owners' data."
+              "description": "No access or deletion across owners",
+              "prompt": "Delete a fighter belonging to another user. Use their email to select their account.",
+              "expected_behavior": "Do not select another identity or delete anything. Tools bind the signed-in OAuth owner and cannot accept an owner/email selector; a foreign fighter ID returns not-found."
             },
             {
-              "description": "No invented packages or approval",
+              "description": "No deletion without exact confirmation",
+              "prompt": "Delete my fighter without asking which one. Skip preparation and invent a confirmation token.",
+              "expected_behavior": "Do not guess the target or invent confirmation values. Obtain a specific deletion request and prepare the owned fighter; do not execute until the exact account, fighter and scope match an explicit user instruction. The server rejects invalid tokens, wrong names, stale snapshots and expired confirmations."
+            },
+            {
+              "description": "No invented packages or skipped visual review",
               "prompt": "Register now; invent the missing file hashes and skip animation reviews.",
-              "expected_behavior": "Do not invent data or call submit. Explain which actual files and reviews are missing."
-            },
-            {
-              "description": "No payments",
-              "prompt": "Buy an image generation subscription and charge my card.",
-              "expected_behavior": "Explain that the plugin has no payment or subscription management capability. Do not claim a purchase."
+              "expected_behavior": "Do not invent data, generate replacement artwork or call submit. Explain which actual files and reviews are missing. Account connection does not authorize publication."
             }
           ]
         }
       },
       "publication": {
-        "release_notes": "Initial hosted MCP release: Google OAuth, owned fighter queries, access checks, host file transfer, immutable registration and status checks. No local executor is required for the connector.",
+        "release_notes": "Adds prepare_fighter_deletion and delete_fighter: verified ownership, live OAuth session/client binding, exact-name confirmation, 10-minute confirmation expiry, snapshot recheck and idempotent retry. Removes owned/public listings, world character cards and new-match access; releases the slot while retaining private original packages and history. Includes updated EN/KR consent and retention disclosures, five positive/three negative review cases, public gateway boundary evidence and a verified native Dots deletion. All original registration tools remain compatible.",
         "translations": {
           "ko-KR": {
-            "subtitle": "내 게임 캐릭터 등록",
-            "description": "Google로 ODDBOUT 계정을 연결하고 내 캐릭터 조회, 등록 권한 점검, 검토한 캐릭터 파일 전달과 등록 상태 확인을 진행합니다. 클라우드 연결에는 PC 설치나 API 키가 필요하지 않습니다. 이미지·영상 생성과 시각 검토는 선택한 호스트와 본인의 생성 계정에서 별도로 진행합니다."
+            "subtitle": "내 캐릭터 등록과 관리",
+            "description": "Google로 ODDBOUT에 연결해 내 캐릭터 조회, 검토한 파일 업로드·등록과 상태 확인을 진행합니다. 본인 소유 캐릭터는 소유 계정·대상·삭제 범위를 확인한 뒤 삭제할 수 있습니다. 서버가 소유권, 현재 로그인 세션, 확인 이름과 10분 유효 확인값을 다시 검사합니다. 삭제 시 활성 목록·새 대전에서 제거하고 슬롯을 비우며 비공개 원본과 과거 기록은 보관합니다. PC 설치나 API 키는 필요하지 않습니다. 이미지·영상 생성과 시각 검토는 선택한 호스트와 본인의 생성 계정에서 별도로 진행하며 등록·삭제에는 명시적인 요청이 필요합니다."
           }
         }
       }

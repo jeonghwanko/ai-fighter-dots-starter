@@ -3,9 +3,9 @@ export const content = {
   en: {
     nav:['Overview','Privacy','Terms','Support'],
     index:{title:'Your fighter. Connected.',intro:'Connect ODDBOUT to Dots with Google. No local MCP installation or API key.',sections:[
-      ['What you can do','Read fighter requirements, check your account’s registration access, list your fighters, upload a reviewed package and follow its registration status.'],
+      ['What you can do','Read fighter requirements, check registration access, list your fighters, upload a reviewed package and follow its status. Request deletion of your own fighter after confirming the account, character and scope.'],
       ['Make it yours','Image generation, animation authoring, visual review and packaging use your chosen host and generation account. Connecting ODDBOUT does not provide a generation subscription or approve unfinished artwork.'],
-      ['Connect from Dots','Open ODDBOUT in Dots and choose Connect, sign in with the Google account that will own your fighters, then review and approve access. The public plugin is awaiting submission/review; it is not yet listed for everyone.'],
+      ['Connect from Dots','Open ODDBOUT in Dots and choose Connect, sign in with the Google account that will own your fighters, then review and approve access. Public directory approval is pending; the listing is not yet available to everyone.'],
       ['Register when ready','Ask to register the final package after reviewing it. The service validates all required files. Queued processing is not completed registration; check the final status. Registered fighter profiles and game assets are public.'] ]},
     privacy:{title:'Privacy notice',intro:'How the ODDBOUT cloud plugin handles your account and character files.',sections:[
       ['Who provides this plugin','The public plugin is published by 정환 고 for ODDBOUT. The ODDBOUT service is operated by Lucas Foundation. Contact turbo08@gmail.com for privacy questions or data requests.'],
@@ -30,9 +30,9 @@ export const content = {
   ko: {
     nav:['소개','개인정보','이용약관','지원'],
     index:{title:'나의 캐릭터, Dots와 연결.',intro:'Google로 ODDBOUT에 연결하세요. 로컬 MCP 설치나 API 키가 필요하지 않습니다.',sections:[
-      ['할 수 있는 일','캐릭터 규격 확인, 계정의 등록 가능 여부 점검, 내 캐릭터 조회, 검토한 패키지 업로드와 등록 상태 확인을 지원합니다.'],
+      ['할 수 있는 일','캐릭터 규격·등록 권한 확인, 내 캐릭터 조회, 검토한 패키지 업로드와 등록 상태 확인을 지원합니다. 본인 캐릭터는 소유 계정·대상·범위를 확인한 뒤 삭제할 수 있습니다.'],
       ['제작은 내가 선택한 환경에서','이미지 생성·애니메이션 제작·시각 검토·패키징은 선택한 호스트와 생성 계정을 사용합니다. ODDBOUT 연결만으로 생성 구독이 제공되거나 미완성 작업이 승인되지는 않습니다.'],
-      ['Dots에서 연결하기','Dots의 ODDBOUT에서 연결을 선택하고, 캐릭터를 소유할 Google 계정으로 로그인한 뒤 권한을 확인해 승인하세요. 공개 플러그인은 제출·심사 준비 중이며 아직 일반 공개 목록에 등록되지 않았습니다.'],
+      ['Dots에서 연결하기','Dots의 ODDBOUT에서 연결을 선택하고, 캐릭터를 소유할 Google 계정으로 로그인한 뒤 권한을 확인해 승인하세요. 공개 디렉터리 승인을 기다리고 있으며 아직 일반 공개 목록에 등록되지 않았습니다.'],
       ['준비되면 등록하기','최종 패키지를 검토한 뒤 등록을 요청하세요. 서버가 필요한 파일을 검증합니다. 대기 중은 등록 완료가 아니므로 최종 상태를 확인하세요. 등록된 캐릭터 프로필과 게임 에셋은 공개됩니다.'] ]},
     privacy:{title:'개인정보 처리 안내',intro:'ODDBOUT 클라우드 플러그인이 계정과 캐릭터 파일을 처리하는 방법입니다.',sections:[
       ['제공자','공개 플러그인 게시자는 정환 고이며, ODDBOUT 서비스는 Lucas Foundation이 운영합니다. 개인정보 문의와 데이터 요청은 turbo08@gmail.com으로 보내 주세요.'],
