@@ -7,6 +7,11 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
 
 export const CLOUD_RESOURCE = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
+export const PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
+export function validCloudAudience(aud) {
+  return aud === CLOUD_RESOURCE || aud === PUBLIC_RESOURCE || (Array.isArray(aud) && aud.length === 2 &&
+    new Set(aud).size === 2 && aud.every(value => [CLOUD_RESOURCE, PUBLIC_RESOURCE].includes(value)));
+}
 export const CLOUD_ISSUER = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/auth/v1';
 const FILE = z.object({ download_url: z.string().max(8192), file_id: z.string().min(1).max(256),
   mime_type: z.string().max(128).optional(), file_name: z.string().max(512).optional() }).strict();
@@ -39,7 +44,7 @@ export async function authenticateCloud(db, request, now = Date.now) {
   if (!token) return null;
   const { data, error } = await db.auth.getClaims(token);
   const c = data?.claims;
-  if (error || !c || c.iss !== CLOUD_ISSUER || c.aud !== CLOUD_RESOURCE || c.role !== 'af_mcp' ||
+  if (error || !c || c.iss !== CLOUD_ISSUER || !validCloudAudience(c.aud) || c.role !== 'af_mcp' ||
     !UUID.test(c.sub ?? '') || !UUID.test(c.client_id ?? '') || !UUID.test(c.session_id ?? '') ||
     c.is_anonymous !== false || !Number.isFinite(c.exp) || c.exp * 1000 <= now() ||
     (c.nbf !== undefined && (!Number.isFinite(c.nbf) || c.nbf * 1000 > now())) || c.af_mcp !== 'registration-v1') return null;
@@ -65,10 +70,10 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
       method, headers: { authorization: 'Bearer internal-request-identity', ...headers }, ...(body === undefined ? {} : { body }) }));
     return response.json();
   };
-  const register = (name, title, description, inputSchema, run, { write = false, files = [], profile = false, publicTool = false } = {}) => {
+  const register = (name, title, description, inputSchema, run, { write = false, publish = false, files = [], profile = false, publicTool = false } = {}) => {
     server.registerTool(name, { title, description, inputSchema,
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
-      annotations: { ...READ, readOnlyHint: !write, openWorldHint: write },
+      annotations: { ...READ, readOnlyHint: !write, openWorldHint: write, destructiveHint: publish },
       _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
         ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } }, async args => {
       if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
@@ -131,7 +136,7 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
       return invoke(`submissions/${submissionId}/assets/${assetId}`, 'PUT', bytes, { 'content-type': 'image/webp' });
     }, { write: true, files: ['file'] });
   register('submit_fighter_registration', '캐릭터 등록', 'Publish the user-approved uploaded package after authoritative validation. Requires the user’s explicit registration request. All asset uploads and visual reviews must be complete. Queued/validating is not registered; follow get_fighter_submission until final.',
-    { submissionId: z.string().uuid() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true });
+    { submissionId: z.string().uuid() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true, publish: true });
   register('get_fighter_submission', '등록 진행 상태', 'Read your submission. Only registered confirms registration; rejected contains the validation failure. Do not regenerate automatically.',
     { submissionId: z.string().uuid() }, ({ submissionId }) => invoke(`submissions/${submissionId}`));
   register('get_registered_fighter', '등록된 캐릭터 확인', 'Read your registered fighter and immutable package identity.',
@@ -145,12 +150,13 @@ export function createCloudHandler({ db, fetcher = fetch }) {
     // The Edge gateway may strip /functions/v1 and replace the origin before forwarding.
     const segments = url.pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter-mcp');
     const route = (prefix < 0 ? segments : segments.slice(prefix + 1)).join('/');
-    const metadataUrl = `${CLOUD_RESOURCE}/.well-known/oauth-protected-resource`;
-    if (route === '.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource: CLOUD_RESOURCE,
+    const resource = request.headers.get('x-oddbout-public-resource') === PUBLIC_RESOURCE ? PUBLIC_RESOURCE : CLOUD_RESOURCE;
+    const metadataUrl = `${resource}/.well-known/oauth-protected-resource`;
+    if (route === '.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource,
       authorization_servers: [CLOUD_ISSUER], scopes_supported: ['openid', 'email', 'profile'],
       resource_name: 'ODDBOUT character registration', resource_documentation: 'https://oddbout.com/docs.html' });
     if (route) return json({ error: 'not_found' }, 404);
-    if (request.headers.has('origin') && !['https://chatgpt.com','https://chat.openai.com','https://oddbout.com'].includes(request.headers.get('origin')))
+    if (request.headers.has('origin') && !['https://chatgpt.com','https://chat.openai.com','https://platform.openai.com','https://oddbout.com'].includes(request.headers.get('origin')))
       return json({ error: 'origin_not_allowed' }, 403);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
       'access-control-allow-origin': request.headers.get('origin') ?? 'https://chatgpt.com',
