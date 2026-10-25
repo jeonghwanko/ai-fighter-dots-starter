@@ -1,1 +1,0 @@
-function e(e){document.querySelectorAll(`[data-destination]`).forEach(t=>{t.href=`./${t.dataset.destination}?lang=${e}${t.dataset.anchor?`#${t.dataset.anchor}`:``}`})}export{e as t};
