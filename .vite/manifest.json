@@ -293,12 +293,12 @@
       "assets/infoPage-3AVXp6ft.css"
     ]
   },
-  "_league-12HeKhEF.css": {
-    "file": "assets/league-12HeKhEF.css",
-    "src": "_league-12HeKhEF.css"
+  "_league-DFfqQdmM.css": {
+    "file": "assets/league-DFfqQdmM.css",
+    "src": "_league-DFfqQdmM.css"
   },
-  "_leagueContent-DRjrmRLY.js": {
-    "file": "assets/leagueContent-DRjrmRLY.js",
+  "_leagueContent-DGRZ2h48.js": {
+    "file": "assets/leagueContent-DGRZ2h48.js",
     "name": "leagueContent"
   },
   "_native-city-art-finish-BZDHQ1na.js": {
@@ -440,7 +440,7 @@
     ]
   },
   "credits.html": {
-    "file": "assets/credits-B2uFF_Qw.js",
+    "file": "assets/credits-B-l1X_rm.js",
     "name": "credits",
     "src": "credits.html",
     "isEntry": true,
@@ -448,7 +448,7 @@
       "__oddbout-analytics-CVMKP0F5.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
       "_siteChrome-BsRLwno4.js",
-      "_leagueContent-DRjrmRLY.js"
+      "_leagueContent-DGRZ2h48.js"
     ],
     "css": [
       "assets/credits-D3j8SwRf.css"
@@ -465,7 +465,7 @@
     ]
   },
   "fighter.html": {
-    "file": "assets/fighter-D9FVdXkX.js",
+    "file": "assets/fighter-sP-1553e.js",
     "name": "fighter",
     "src": "fighter.html",
     "isEntry": true,
@@ -479,12 +479,12 @@
       "_NativeCityOttoEncounter-xJl3WwqM.js",
       "_PauseMenuScene-Bf1ogDVD.js",
       "_ArenaFacePaint-DGC-iZa4.js",
-      "_leagueContent-DRjrmRLY.js",
+      "_leagueContent-DGRZ2h48.js",
       "_TournamentBracketScene-f-bt98ll.js"
     ]
   },
   "fighters.html": {
-    "file": "assets/fighters-CNX8BHk6.js",
+    "file": "assets/fighters-mVkFhMgN.js",
     "name": "fighters",
     "src": "fighters.html",
     "isEntry": true,
@@ -498,15 +498,15 @@
       "_fighterSheet-M7M2fdAg.js",
       "_siteChrome-BsRLwno4.js",
       "_siteLinks-Cb1kHGko.js",
-      "_leagueContent-DRjrmRLY.js"
+      "_leagueContent-DGRZ2h48.js"
     ],
     "css": [
       "assets/fighters-B-O3qCNv.css",
-      "assets/league-12HeKhEF.css"
+      "assets/league-DFfqQdmM.css"
     ]
   },
   "league.html": {
-    "file": "assets/league--hx-alh_.js",
+    "file": "assets/league-DRHAVPLj.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
@@ -517,10 +517,10 @@
       "_OddboutCommunity-yZWAEfH9.js",
       "_siteLinks-Cb1kHGko.js",
       "_arena-concept-runtime-BHN1CmLz.js",
-      "_leagueContent-DRjrmRLY.js"
+      "_leagueContent-DGRZ2h48.js"
     ],
     "css": [
-      "assets/league-12HeKhEF.css"
+      "assets/league-DFfqQdmM.css"
     ]
   },
   "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
