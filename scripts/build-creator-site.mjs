@@ -33,9 +33,14 @@ await mkdir(output, { recursive: true });
 if ((await readdir(output)).length) throw new Error('Output directory must be empty');
 const { build } = await import(pathToFileURL(join(source, 'node_modules/vite/dist/node/index.js')).href);
 const { creationContextPlugin } = await import(pathToFileURL(join(source, 'tools/ai-fighter/creation-context-plugin.mjs')).href);
+// Per-match-up share previews: the game writes every shareable pair's page and card and links them. Older sources have no plugin and
+// keep linking fighter.html, so a rollback still builds.
+const boutShareModule = join(source, 'tools/ai-fighter/bout-share-pages.mjs');
+const boutSharePages = await readFile(boutShareModule).then(() => true, () => false)
+  ? [(await import(pathToFileURL(boutShareModule).href)).boutSharePagesPlugin(new URL('.', config.gameUrl).href)] : [];
 await build({
   configFile: false, root: source, envDir: false, base: config.base,
-  plugins: [creationContextPlugin(), milestonePlugin(), youtubeChannelPlugin(config.youtubeChannelUrl), googleAnalyticsPlugin(config.analyticsMeasurementId, config.siteUrl, config.apiBase), {
+  plugins: [creationContextPlugin(), ...boutSharePages, milestonePlugin(), youtubeChannelPlugin(config.youtubeChannelUrl), googleAnalyticsPlugin(config.analyticsMeasurementId, config.siteUrl, config.apiBase), {
     name: 'standalone-creator-origin',
     transformIndexHtml: { order: 'pre', handler(html, context) {
       const text = publicSiteText(html);
