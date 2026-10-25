@@ -9,6 +9,8 @@ export function youtubeChannelPlugin(channelUrl) {
   return { name: 'oddbout-youtube-channel', enforce: 'pre',
     transform(code, id) {
       if (!id.replaceAll('\\', '/').endsWith('/src/creator/siteChrome.ts')) return null;
+      // Newer sources draw their own brand icons from oddbout-community.json (YouTube among them): leave their footer alone.
+      if (code.includes('club-social')) return null;
       const anchor = 'element.append(logo, tagline, nav);';
       if (code.split(anchor).length !== 2) throw new Error('Review the ODDBOUT social footer hook');
       return code.replace(anchor, anchor + '\n  const youtube = document.createElement("a"); youtube.href = ' + JSON.stringify(href) +
