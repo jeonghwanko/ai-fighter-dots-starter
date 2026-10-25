@@ -22,6 +22,10 @@
 (function () {
   var link = new URLSearchParams(location.search), target = new URLSearchParams("lang=ko&play=1&fighter=dolseok&opponent=sikeundung");
   ["bout", "rules"].forEach(function (key) { var value = link.get(key); if (value !== null) target.set(key, value); });
+  ["utm_id", "utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content"].forEach(function (key) {
+    var value = link.get(key);
+    if (value && value.length <= 100 && !value.includes("@")) target.set(key, value);
+  });
   location.replace("../fighter.html?" + target.toString());
 })();
 </script>
