@@ -74,10 +74,10 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
       method, headers: { authorization: 'Bearer internal-request-identity', ...headers }, ...(body === undefined ? {} : { body }) }));
     return response.json();
   };
-  const register = (name, title, description, inputSchema, run, { write = false, publish = false, files = [], profile = false, publicTool = false } = {}) => {
+  const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, files = [], profile = false, publicTool = false } = {}) => {
     server.registerTool(name, { title, description, inputSchema,
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
-      annotations: { ...READ, readOnlyHint: !write, openWorldHint: write, destructiveHint: publish },
+      annotations: { ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish },
       _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
         ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } }, async args => {
       if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
@@ -139,7 +139,7 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
     { fighterId: z.string().uuid(), confirmationToken: z.string().uuid(), confirmName: z.string().min(1).max(200), confirm: z.literal(true) },
     ({ fighterId, confirmationToken, confirmName }) => deletionRpc('af_delete_owned_fighter', {
       p_fighter: fighterId, p_token: confirmationToken, p_confirm_name: confirmName,
-    }), { write: true, publish: true });
+    }), { write: true, publish: true, openWorld: true });
   register('prepare_fighter_registration', '캐릭터 등록 준비', 'After the user requests registration and approves the final package, create/resume a private upload from the actual fighter.json file. Use a new UUID for changed package bytes and the same UUID for immutable retries. This does not publish. Return pending asset IDs for upload_fighter_asset.',
     { manifest: FILE, idempotencyKey: z.string().uuid() }, async ({ manifest, idempotencyKey }) => {
       const bytes = await downloadHostFile(manifest, spec.limits.jsonBytes, fetcher);
@@ -148,7 +148,7 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
       const { data, error } = await db.from('af_submissions').select('manifest').eq('id', result.submissionId).eq('owner_id', identity.owner).single();
       if (error) throw new Problem(503, 'database-unavailable');
       return { ...result, assets: data.manifest.assets.map(({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 })) };
-    }, { write: true, files: ['manifest'] });
+    }, { write: true, openWorld: true, files: ['manifest'] });
   register('upload_fighter_asset', '캐릭터 파일 전달', 'Upload one actual WebP file to your private submission. Its size and SHA-256 must match fighter.json. Repeat safely with identical bytes; never regenerate for a delivery failure.',
     { submissionId: z.string().uuid(), assetId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), file: FILE }, async ({ submissionId, assetId, file }) => {
       const { data: row, error } = await db.from('af_submissions').select('manifest,status,expires_at').eq('id', submissionId).eq('owner_id', identity.owner).maybeSingle();
@@ -159,9 +159,9 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
       const bytes = await downloadHostFile(file, asset.bytes, fetcher);
       if (bytes.length !== asset.bytes || await sha256(bytes) !== asset.sha256) throw new Problem(422, 'asset-hash-or-size');
       return invoke(`submissions/${submissionId}/assets/${assetId}`, 'PUT', bytes, { 'content-type': 'image/webp' });
-    }, { write: true, files: ['file'] });
+    }, { write: true, openWorld: true, files: ['file'] });
   register('submit_fighter_registration', '캐릭터 등록', 'Publish the user-approved uploaded package after authoritative validation. Requires the user’s explicit registration request. All asset uploads and visual reviews must be complete. Queued/validating is not registered; follow get_fighter_submission until final.',
-    { submissionId: z.string().uuid() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true, publish: true });
+    { submissionId: z.string().uuid() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true, publish: true, openWorld: true });
   register('get_fighter_submission', '등록 진행 상태', 'Read your submission. Only registered confirms registration; rejected contains the validation failure. Do not regenerate automatically.',
     { submissionId: z.string().uuid() }, ({ submissionId }) => invoke(`submissions/${submissionId}`));
   register('get_registered_fighter', '등록된 캐릭터 확인', 'Read your registered fighter and immutable package identity.',

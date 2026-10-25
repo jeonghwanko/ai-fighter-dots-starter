@@ -161,3 +161,51 @@ reviewer OAuth connection were retained. The MCP scan reported no findings.
   **Publication Not published**. The list still labels the associated initial
   MCP app version 1.0.0; the submitted package details show 1.0.3.
   CI was not run. Await the external decision; this is not approval/publication.
+
+## 2026-10-25 supplement without replacing the pending review
+
+The user requested retention disclosures, actual file-registration reproduction
+and corrected tool safety annotations while preserving the current review.
+The 1.0.3 ZIP and submission `appsub_c4f81422604c81919f02f879be61a50f`
+are unchanged. Do not cancel or resubmit solely to refresh the tool snapshot.
+
+- Live database inspection confirmed no scheduled erasure of original packages,
+  account/ownership records, registration results, match history or deletion
+  receipts. The EN/KR privacy notice now says these have no fixed retention end.
+  Upload closure (24h), deletion-confirmation validity (10m) and signed-link
+  expiry (at most 10m) do not erase underlying data. The active hourly job removes
+  analytics context/outbox records older than 29 days; this does not describe
+  provider-side retention. Ownership-verified erasure requests go to support and
+  are complete only after actual processing, not merely disconnecting/deleting.
+- MCP function v9 separates private confirmation writes from open-world actions.
+  `prepare_fighter_deletion` is write/non-destructive/closed-world; file imports
+  and public roster changes retain `openWorldHint: true`, and final registration
+  and deletion retain `destructiveHint: true`. Auth and ownership gates are unchanged.
+  The live 14-file bundle was preserved except this annotation change; public
+  `https://mcp.oddbout.com/mcp` returned the corrected eleven-tool list.
+- A new actual native host-file run used the dedicated normal reviewer. The local
+  Codex connector uploaded fighter.json and 11 unchanged approved WebP files
+  (5,537,184 bytes) to the cloud MCP. Submission
+  `31995d93-a3e9-4b6c-aecf-54344f013b6e` became active registered fighter
+  `9a363794-a8d6-47ff-bb3b-c3d7ea1029ac` with `runtimeApproved: true`.
+  `get_registered_fighter` and `list_my_fighters` confirmed ownership and the
+  same immutable manifest hash. The older review fixture is also preserved.
+- Manifest SHA-256: `47a2ba95bf3c99a4376fccb94697129a29203b510dedfd01bd4591001da1a2ef`.
+  Sample ZIP SHA-256: `f831f87409fd5e1521260ca108c2ce4683a23bc938fe80d78bd029faaf7db362`.
+  Reusing the recorded idempotency key resumes that result; a fresh test requires
+  explicit intent, an available slot, changed test metadata and a fresh key.
+- Supplemental EN/KR instructions, sample ZIP, sanitized native responses and
+  62-second EN/KR-captioned video live under `/cloud-plugin/review-20261025/`.
+  The existing submitted evidence landing page links to this supplement. The
+  video condenses nine screenshots captured during real native execution; it is
+  explicitly not a Dots conversation or fresh cloud-VM recording. Earlier native
+  Dots VM and independent public-gateway checks retain their original scope.
+- The operator Google connection was restored and verified through get_profile;
+  the temporary reviewer connection was removed. No credential appears in the
+  sample, public evidence, video or source. No fixture was deleted by this run.
+- Eleven targeted tests passed, including clean-publication preservation of both
+  evidence folders and both retention disclosures. CI was not run.
+
+Live metadata fixes do not rewrite the portal's frozen pending tool scan. If
+reviewers require a new snapshot, prepare it only when the user-authorized
+feedback workflow requires resubmission; keep the current submission meanwhile.

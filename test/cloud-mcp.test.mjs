@@ -34,6 +34,14 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   const publicMetadata=await (await handle(new Request(`${CLOUD_RESOURCE}/.well-known/oauth-protected-resource`,{headers:{'x-oddbout-public-resource':PUBLIC_RESOURCE}}))).json();
   assert.equal(publicMetadata.resource,PUBLIC_RESOURCE);
   assert.equal(list.result.tools.find(t=>t.name==='submit_fighter_registration').annotations.destructiveHint,true);
+  // Persisting a private confirmation is a write, but it does not publish or
+  // contact an open-ended recipient. File imports and public roster changes do.
+  const preparation=list.result.tools.find(t=>t.name==='prepare_fighter_deletion').annotations;
+  assert.equal(preparation.readOnlyHint,false);
+  assert.equal(preparation.openWorldHint,false);
+  assert.equal(preparation.destructiveHint,false);
+  for(const name of ['prepare_fighter_registration','upload_fighter_asset','submit_fighter_registration','delete_fighter'])
+    assert.equal(list.result.tools.find(t=>t.name===name).annotations.openWorldHint,true,name);
   const gateway=await handle(new Request('http://edge-runtime/ai-fighter-mcp/.well-known/oauth-protected-resource'));
   assert.equal(gateway.status,200);
   const contract=await (await handle(request('tools/call',{name:'get_fighter_spec',arguments:{section:'overview'}}))).json();
