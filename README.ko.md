@@ -8,6 +8,14 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 [게임하기](https://oddbout.com/fighter.html) · [내 선수 관리](https://oddbout.com/creator.html?lang=ko) · [제작 시작 안내](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/START-HERE.md) · [문제 제보](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
 
+## 플레이 미리보기
+
+[![ODDBOUT 대전 플레이: 경기장의 두 캐릭터](docs/media/oddbout-gameplay.gif)](docs/media/oddbout-gameplay.mp4)
+
+기존 ODDBOUT의 게임 플레이 영상입니다. 구독 기반 캐릭터 제작 과정은 아직 실험 중이며, 이 영상은 전체 제작 과정을 보여주는 데모는 아닙니다.
+
+[10초 영상 보기](docs/media/oddbout-gameplay.mp4) · [ODDBOUT 플레이](https://oddbout.com/fighter.html) · [질문과 피드백](https://github.com/jeonghwanko/ai-fighter-dots-starter/discussions)
+
 ## 무엇을 만들 수 있나요?
 
 - 짧은 설명이나 참고 이미지로 시작합니다. 둘을 함께 보내도 됩니다.
