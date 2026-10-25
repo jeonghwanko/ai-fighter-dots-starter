@@ -87,6 +87,12 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
         cors = { methods: 'PATCH, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
         if (method === 'OPTIONS') return json({ ok: true });
       }
+      // The creator page registers a package picked in the browser (2026-10-26): create, upload, submit and poll.
+      // Bearer auth only, no cookies, so any origin may call it the way the kit's CLI does.
+      if (parts[0] === 'submissions') {
+        cors = { methods: 'GET, POST, PUT, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
+        if (method === 'OPTIONS') return json({ ok: true });
+      }
       if (parts[0] === 'admin') return adminHandler(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
