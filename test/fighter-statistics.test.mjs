@@ -1,26 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
-import { PGlite } from '@electric-sql/pglite';
+import { applyMigration, migrationNames, supabasePlatform } from './helpers/fighter-database.mjs';
 import { createHandler } from '../api/handler.mjs';
 
 test('owned statistics use all completed matches beyond top 20, preserve public ranking and enforce access', async () => {
-  const sql = new PGlite();
+  const sql = await supabasePlatform();
   try {
-    await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
-      create schema auth; create table auth.users(id uuid primary key,email text);
-      create function auth.uid() returns uuid language sql as 'select null::uuid';
-      grant usage on schema auth to authenticated,service_role;
-      create schema storage; create schema cron; create function cron.schedule(text,text,text) returns bigint language sql as 'select 1::bigint';
-      create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
-      create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
-      grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
-    const dir = new URL('../supabase/migrations/', import.meta.url);
-    const migrations = (await readdir(dir)).filter(name => name.endsWith('.sql') && !name.includes('dispatch')).sort();
+    const migrations = await migrationNames();
     // Compare rankings before and after this migration; later migrations apply after the comparison.
     const target = migrations.indexOf('20261020090000_ai_fighter_owned_statistics.sql');
     assert.ok(target > 0);
-    for (const name of migrations.slice(0, target)) await sql.exec(await readFile(new URL(name, dir), 'utf8'));
+    for (const name of migrations.slice(0, target)) await applyMigration(sql, name);
     const owners = Array.from({ length: 23 }, () => crypto.randomUUID());
     const owner = owners[20], other = owners[0], ids = Array.from({ length: 23 }, () => crypto.randomUUID()), hash = 'a'.repeat(64);
     for (const [index, id] of ids.entries()) {
@@ -41,9 +31,9 @@ test('owned statistics use all completed matches beyond top 20, preserve public 
       values(gen_random_uuid(),$1,$2,$3,$3,0,'unfinished')`, [ids[20], ids[22], hash]);
     const rankings = async () => (await sql.query('select to_jsonb(r) as record from af_duel_rankings() r')).rows.map(row => row.record);
     const before = await rankings(); assert.equal(before.length, 20); assert.ok(before.every(row => row.id !== ids[20]));
-    await sql.exec(await readFile(new URL(migrations[target], dir), 'utf8'));
+    await applyMigration(sql, migrations[target]);
     assert.deepEqual(await rankings(), before); // Top-20 behavior and ties stay backward compatible.
-    for (const name of migrations.slice(target + 1)) await sql.exec(await readFile(new URL(name, dir), 'utf8'));
+    for (const name of migrations.slice(target + 1)) await applyMigration(sql, name);
     assert.deepEqual(await rankings(), before);
     await sql.exec('set role service_role');
     const calls = [];
