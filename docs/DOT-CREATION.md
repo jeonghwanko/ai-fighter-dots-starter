@@ -125,6 +125,17 @@ GitHub ZIP에는 서브모듈 내용이 없으므로 Git clone을 사용한다.
 Python 탐지가 필요한 호스트는 `AI_FIGHTER_BOOTSTRAP_PYTHON`에 Python 실행 파일 경로를 지정한다.
 해당 변수는 venv 생성에만 쓴다. 생성과 추출은 항상 포함된 도구의 venv에서 실행한다.
 
+`sprite:setup`은 이어서 외부 도구를 갖춘다(sudo 없음, 상세는 [실행 환경 2절](EXECUTION-HOST.md#2-작업-공간-준비)):
+
+| 도구 | 쓰임 | 설치 |
+| --- | --- | --- |
+| `img2webp`(`-exact`, libwebp 1.5+) | 걷기·달리기 WebP, 필수 | 없거나 오래되면 키트가 libwebp 1.6.0을 SHA-256 고정으로 venv에 받는다 |
+| RIFE | 루프 이음새 보정, 선택 | 키트가 `sprite-gen rife install`을 부른다. 확인 프레임 실패는 경고 |
+| `ffmpeg`·`ffprobe` | 영상 → 프레임, 필수 | 사용자·준비자가 설치: `sudo apt install ffmpeg` / `brew install ffmpeg` / `winget install --id Gyan.FFmpeg -e` |
+
+`sprite:status`의 `tools`가 `ready`가 아니면 생성을 시작하지 않는다. `install.actor`가 `agent`면 `npm run sprite:setup`을 실행하고,
+`user`면 그 명령을 사용자에게 전한다. sudo 명령을 에이전트가 대신 실행하지 않는다.
+
 ## 2. Dot이 읽을 규칙과 계정 선택
 
 1. `get_fighter_spec`의 `overview`, `creation`, `guide`, `schema`를 읽는다. `creation`은 현재 호스트의

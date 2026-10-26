@@ -73,7 +73,9 @@ npm run sprite:setup
 npm run sprite:status
 ```
 
-설치 도구가 고정된 버전의 sprite-gen 소스를 받아 전용 Python 환경에 설치합니다. GitHub 소스 ZIP에는 서브모듈 파일이 없으므로 Git clone을 사용하세요. 상태 명령은 설치 상태를 확인하며, 생성 기능 접근이나 잔여 한도까지 확인하지는 않습니다. 캐릭터를 제작 중이라면 작업 폴더를 유지하고 저장소 업데이트를 받지 마세요.
+설치 도구가 고정된 버전의 sprite-gen 소스를 받아 전용 Python 환경에 설치합니다. GitHub 소스 ZIP에는 서브모듈 파일이 없으므로 Git clone을 사용하세요. 상태 명령은 설치 상태를 확인하며, 생성 기능 접근이나 잔여 한도까지 확인하지는 않습니다.
+
+설치 도구는 sprite-gen이 쓰는 외부 도구도 sudo 없이 받습니다. `-exact`를 지원하는 `img2webp`(libwebp 1.6.0, SHA-256 고정 — 시스템에 없거나 Ubuntu 24.04의 1.3.x처럼 오래되면 키트 전용 환경에 넣습니다)와 걷기·달리기 루프를 매끄럽게 잇는 RIFE(`sprite-gen rife install`, 약 430MB 다운로드)입니다. `ffmpeg`는 먼저 직접 설치하세요: `sudo apt install ffmpeg`(Ubuntu·Debian), `brew install ffmpeg`(macOS), `winget install --id Gyan.FFmpeg -e`(Windows). 설치와 `sprite:status`가 도구마다 `ok`·`missing`·`broken`과 고치는 명령을 보여줍니다. GPU가 없는 Linux에서는 RIFE용으로 `sudo apt install libvulkan1 mesa-vulkan-drivers`도 필요합니다. RIFE가 없으면 루프는 촬영된 그대로 잘리고 경고가 남습니다. 캐릭터를 제작 중이라면 작업 폴더를 유지하고 저장소 업데이트를 받지 마세요.
 
 도구 연결은 [Codex 로컬 플러그인 안내](docs/LOCAL-PLUGIN.md)를 따릅니다. MCP를 직접 연결하려면 `node scripts/print-install.mjs`로 설치 명령을 출력해 실행하세요. 다른 로컬 호스트는 `AI_FIGHTER_ROOT`를 이 저장소 경로로 지정하고 `mcp/stdio.mjs`를 연결합니다.
 
