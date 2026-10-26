@@ -117,13 +117,23 @@ export function validateFighter(data) {
         add('GET_UP_DURATION_LIMIT', `${at}/landmarks/getUp`, spec.limits.clipDurationMs, getUpMs);
     }
     if (name === 'skill') {
-      // A strike lands once; a run has a tell and a recovery. Either is readable: its tell lasts at least the floor (combatStyle.tellFloorMs).
+      // A strike lands once; a run has a tell and a recovery; a stance has a window and a strike segment around its one contact. Each is
+      // readable: its tell lasts at least the floor (combatStyle.tellFloorMs).
       const marks = clip.skill, startMs = index => steps.slice(0, index).reduce((sum, step) => sum + step.durationMs, 0);
-      for (const key of ['windupTo', 'recoverFrom', 'launch', 'struck']) if (marks[key] !== undefined) indexInRange(marks[key], `${at}/skill/${key}`);
+      for (const key of ['windupTo', 'recoverFrom', 'launch', 'struck', 'windowFrom', 'windowTo', 'strikeFrom', 'strikeTo'])
+        if (marks[key] !== undefined) indexInRange(marks[key], `${at}/skill/${key}`);
       for (const [index, value] of (marks.run ?? []).entries()) indexInRange(value, `${at}/skill/run/${index}`);
       if (spec.combatStyle.strikeKinds.includes(marks.kind)) {
         if (hits.length !== 1) add('SKILL_CONTACT', `${at}/hitSequenceIndices`, 'one contact', hits.length);
         else if (startMs(hits[0]) < spec.combatStyle.tellFloorMs.strike) add('SKILL_TELL', `${at}/hitSequenceIndices/0`, `>= ${spec.combatStyle.tellFloorMs.strike} ms`, startMs(hits[0]));
+      } else if (spec.combatStyle.stanceKinds.includes(marks.kind)) {
+        const { windowFrom: from, windowTo: to, strikeFrom, strikeTo } = marks, window = spec.combatStyle.stanceWindowMs;
+        if (hits.length !== 1) add('SKILL_CONTACT', `${at}/hitSequenceIndices`, 'one contact', hits.length);
+        else if ([from, to, strikeFrom, strikeTo].some(value => value === undefined) || !(from < to && to <= strikeFrom && strikeFrom <= hits[0] && hits[0] < strikeTo))
+          add('SKILL_STANCE_MARKS', `${at}/skill`, 'windowFrom < windowTo <= strikeFrom <= contact < strikeTo', marks);
+        else if (startMs(from) < spec.combatStyle.tellFloorMs.stance) add('SKILL_TELL', `${at}/skill/windowFrom`, `>= ${spec.combatStyle.tellFloorMs.stance} ms`, startMs(from));
+        else if (startMs(to) - startMs(from) < window.min || startMs(to) - startMs(from) > window.max)
+          add('SKILL_WINDOW', `${at}/skill`, `${window.min}..${window.max} ms`, startMs(to) - startMs(from));
       } else if (marks.windupTo === undefined || marks.recoverFrom === undefined || !(marks.windupTo < marks.recoverFrom))
         add('SKILL_RUN_MARKS', `${at}/skill`, 'windupTo < recoverFrom', marks);
       else if (startMs(marks.windupTo) < spec.combatStyle.tellFloorMs.run) add('SKILL_TELL', `${at}/skill/windupTo`, `>= ${spec.combatStyle.tellFloorMs.run} ms`, startMs(marks.windupTo));

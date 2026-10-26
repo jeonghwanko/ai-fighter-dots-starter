@@ -240,6 +240,12 @@ test('optional clips, names, bout lines, grades and fighting style pass through 
   assert.deepEqual(toDuelStyle(fighter), { ...style, skill: 'pincer' });
   const report = JSON.parse(await readFile(result.report, 'utf8'));
   assert.deepEqual(Object.keys(report.motions).slice(-3), ['skill', 'entrance', 'victory']);
+  // A stance skill carries its window and strike marks the same way.
+  const stance = { kind: 'counter', windowFrom: 1, windowTo: 2, strikeFrom: 2, strikeTo: 3 };
+  const countered = await run(directory, plan(directory, 'counter', value => { useOptionalClips(value); value.motions.skill.skill = stance; }));
+  assert.equal(countered.ok, true, JSON.stringify(countered.errors));
+  const counter = JSON.parse(await readFile(path.join(directory, 'counter', 'fighter.json'), 'utf8'));
+  assert.deepEqual(counter.clips.skill.skill, stance); assert.equal(toDuelStyle(counter).skill, 'counter');
   // Without the optional fields the package is the one it always was.
   const plain = await run(directory, plan(directory, 'plain'));
   assert.equal(plain.ok, true, JSON.stringify(plain.errors));
@@ -250,6 +256,10 @@ test('optional clips, names, bout lines, grades and fighting style pass through 
 test('optional clips are checked by the plan and by the contract before anything is written', async () => {
   const directory = await gamePack('optional-invalid');
   await addOptionalClips(directory);
+  // A stance whose 1200 ms window (one step) outlasts the bout's rhythm.
+  const packFile = path.join(directory, 'game-pack.json'), source = JSON.parse(await readFile(packFile, 'utf8'));
+  source.animations['bot/skill-long'] = { ...source.animations['bot/skill'], durations_ms: [200, 1200, 200, 200] };
+  await writeFile(packFile, JSON.stringify(source));
   for (const [label, change, code] of [
     ['skill-on-slam', p => { p.motions.slam.skill = { kind: 'pincer' }; }, 'PLAN_FIELD'],
     ['unknown-clip', p => { p.motions.taunt = { animation: 'bot/fightIdle' }; }, 'PLAN_SCHEMA'],
@@ -257,6 +267,9 @@ test('optional clips are checked by the plan and by the contract before anything
     ['no-kind', p => { delete p.motions.skill.skill; }, 'SCHEMA_REQUIRED'],
     ['no-contact', p => { p.motions.skill.hitSequenceIndices = []; }, 'SKILL_CONTACT'],
     ['run-marks', p => { p.motions.skill = { animation: 'bot/skill', skill: { kind: 'flight', windupTo: 3, recoverFrom: 1 } }; }, 'SKILL_RUN_MARKS'],
+    ['stance-marks', p => { p.motions.skill.skill = { kind: 'counter', windowFrom: 1, windowTo: 3, strikeFrom: 3, strikeTo: 3 }; }, 'SKILL_STANCE_MARKS'],
+    ['stance-window', p => { p.motions.skill.skill = { kind: 'brace', windowFrom: 1, windowTo: 2, strikeFrom: 2, strikeTo: 3 };
+      p.motions.skill.animation = 'bot/skill-long'; }, 'SKILL_WINDOW'],
     ['mix', p => { p.profile.style = { mix: { slam: 0, combo: 1, fast: 2 } }; }, 'STYLE_MIX'],
     ['extras', p => { p.profile.style = { summon: 'bolt', shockwave: true }; }, 'STYLE_EXTRAS'],
     ['long-line', p => { p.profile.lines = { win: 'x'.repeat(41) }; }, 'SCHEMA_MAXLENGTH'],

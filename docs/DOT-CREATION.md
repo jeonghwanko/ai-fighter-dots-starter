@@ -304,8 +304,9 @@ npm run sprite -- game-pack --request game.json --out-dir pack
 ```
 
 - 선택 동작은 필수 전투 동작과 같이 포장한다. 시트·프레임·기준점·접지·해시는 그림에서 잰다.
-- `skill.kind`와 표식(`windupTo`·`recoverFrom`·`run`·`launch`·`struck`)은 접촉 단계처럼 game-pack 재생 단계 번호다. `skill`은 skill 동작에만 쓴다.
-- 기술의 접촉·예고 시간, 공격 섞기, `skill` 클립·`summon`·`shockwave` 두 개 한도는 계약 검사가 확인한다. 실패하면 아무것도 쓰지 않는다.
+- `skill.kind`와 표식(돌진의 `windupTo`·`recoverFrom`·`run`·`launch`·`struck`, 자세의 `windowFrom`·`windowTo`·`strikeFrom`·`strikeTo`)은
+  접촉 단계처럼 game-pack 재생 단계 번호다. `skill`은 skill 동작에만 쓴다.
+- 기술의 접촉·예고 시간·자세 창 길이, 공격 섞기, `skill` 클립·`summon`·`shockwave` 두 개 한도는 계약 검사가 확인한다. 실패하면 아무것도 쓰지 않는다.
 - 제출 전 서버 `/spec`에 `profile-lines-1`·`combat-style-1`·`extra-clips-1`이 있어야 한다. 없으면 제출 도구가 업로드 전에 멈춘다.
 
 `fighter:pack`이 그림에서 재는 값:

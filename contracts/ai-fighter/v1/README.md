@@ -25,11 +25,11 @@ Beyond the 11 required motions a package may add three clips (`spec.json` `optio
 
 | Clip | What to draw | Timing and marks |
 | --- | --- | --- |
-| `skill` | One signature move: tell, contact (or run), recovery | 0–1 contact, `skill.kind` and the marks below |
+| `skill` | One signature move: tell, contact (or run, or stance window), recovery | 0–1 contact, `skill.kind` and the marks below |
 | `entrance` | An in-place entrance before the bout | No contact. Plays once during READY → FIGHT! of a cup bout |
 | `victory` | A looping victory pose after the win | No contact. Loops under the winner's light after the KO |
 
-`skill.kind` is one of five rules (`spec.json` `combatStyle.skillKinds`). The server takes the rule's numbers from a built-in fighter that uses the same skill.
+`skill.kind` is one of seven rules (`spec.json` `combatStyle.skillKinds`). The server takes the rule's numbers from a built-in fighter that uses the same skill.
 
 | `kind` | Skill | Clip condition |
 | --- | --- | --- |
@@ -38,10 +38,15 @@ Beyond the 11 required motions a package may add three clips (`spec.json` `optio
 | `flight` | Flying charge: passes through the opponent to the end | `windupTo` < `recoverFrom`, `windupTo` starting at 240 ms or later |
 | `feint` | Feint charge: may stop at the fork | Same as `flight` |
 | `slide` | Slide: glides along a set line and leaves ice | Same as `flight` |
+| `counter` | Counter: a frontal melee swing inside the stance window is blocked and struck back at once; an empty window is an opening | One contact, `windowFrom` < `windowTo` ≤ `strikeFrom` ≤ contact < `strikeTo`, `windowFrom` starting at 100 ms or later, window 200–1000 ms |
+| `brace` | Brace: blocks during the stance window, then shoves | Same as `counter` |
 
 The marks are sequence step indices, like `hitSequenceIndices`. `windupTo` is the step where the tell ends and `recoverFrom` the step where the recovery starts.
 Optional marks: `run` is the pair of steps alternated during the run, `launch` the first step of the run and `struck` the step where the body front meets the opponent.
-The tell floor (`spec.json` `combatStyle.tellFloorMs`) is the time the opponent needs to see the skill coming. Errors: `SKILL_CONTACT`, `SKILL_RUN_MARKS`, `SKILL_TELL`.
+The two stances (`counter`, `brace`) also use sequence step indices: `windowFrom`..`windowTo` is the stance window and `strikeFrom`..`strikeTo` the strike (shove) segment,
+which holds the one contact. The steps before the window are the tell. The window length is bounded by `combatStyle.stanceWindowMs`.
+The tell floor (`spec.json` `combatStyle.tellFloorMs`) is the time the opponent needs to see the skill coming.
+Errors: `SKILL_CONTACT`, `SKILL_RUN_MARKS`, `SKILL_STANCE_MARKS`, `SKILL_TELL`, `SKILL_WINDOW`.
 
 ## Fighting style
 

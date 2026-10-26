@@ -36,7 +36,8 @@ const motionPlan = z.strictObject({
   gaitReview: z.string().min(1).optional(),
   hitSequenceIndices: z.array(z.number().int().min(0)).optional(),
   landmarks: z.record(z.string(), z.unknown()).optional(),
-  // The skill clip's rule and marks ({ kind, windupTo?, recoverFrom?, run?, launch?, struck? }, playback steps); the contract checks them.
+  // The skill clip's rule and marks, all playback steps: a run's { windupTo, recoverFrom, run?, launch?, struck? } or a stance's
+  // { windowFrom, windowTo, strikeFrom, strikeTo }. The contract checks them.
   skill: z.record(z.string(), z.unknown()).optional(),
 });
 const planSchema = z.strictObject({

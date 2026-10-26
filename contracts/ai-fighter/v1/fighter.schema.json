@@ -1724,7 +1724,9 @@
                     "pincer",
                     "flight",
                     "feint",
-                    "slide"
+                    "slide",
+                    "counter",
+                    "brace"
                   ]
                 },
                 "windupTo": {
@@ -1756,11 +1758,31 @@
                   "type": "integer",
                   "minimum": 0,
                   "maximum": 127
+                },
+                "windowFrom": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                },
+                "windowTo": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                },
+                "strikeFrom": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
+                },
+                "strikeTo": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 127
                 }
               }
             }
           },
-          "description": "고유 기술 한 동작: 예고·접촉(또는 돌진)·회수. 종류는 skill.kind."
+          "description": "고유 기술 한 동작: 예고·접촉(또는 돌진, 자세 창)·회수. 종류는 skill.kind."
         },
         "entrance": {
           "type": "object",

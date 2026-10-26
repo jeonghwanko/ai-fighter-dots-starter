@@ -145,14 +145,16 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 
 | 동작 | 내용 | 시간·표식 |
 | --- | --- | --- |
-| `skill` | 고유 기술 한 동작: 예고·접촉(또는 돌진)·회수 | 접촉 0~1개, `skill.kind`와 표식 |
+| `skill` | 고유 기술 한 동작: 예고·접촉(또는 돌진, 자세 창)·회수 | 접촉 0~1개, `skill.kind`와 표식 |
 | `entrance` | 경기 시작 전 제자리 등장 | 접촉 없음 |
 | `victory` | 이긴 뒤 승리 자세 반복 | 접촉 없음, 반복 |
 
-- `skill.kind`는 `stretch`·`pincer`·`flight`·`feint`·`slide` 가운데 하나다. 기술의 규칙 수치는 서버가 정한다.
+- `skill.kind`는 `stretch`·`pincer`·`flight`·`feint`·`slide`·`counter`·`brace` 가운데 하나다. 기술의 규칙 수치는 서버가 정한다.
 - `stretch`·`pincer`는 접촉 1개이고 첫 접촉이 360 ms 이후에 시작한다.
 - `flight`·`feint`·`slide`는 `skill.windupTo`(예고가 끝나는 단계) < `skill.recoverFrom`(회수가 시작하는 단계)이고 `windupTo`가 240 ms 이후에 시작한다.
   선택 표식 `run`(돌진 동안 번갈아 그릴 두 단계), `launch`, `struck`도 재생 단계 번호다.
+- `counter`(반격)·`brace`(버티기)는 접촉 1개이고 `skill.windowFrom` < `windowTo` ≤ `strikeFrom` ≤ 접촉 < `strikeTo`다.
+  `windowFrom`..`windowTo`가 자세 창(200~1000 ms), `strikeFrom`..`strikeTo`가 쳐내는 구간이며 `windowFrom`은 100 ms 이후에 시작한다.
 - 자세한 뜻과 오류 코드는 [계약 안내의 Optional clips](../contracts/ai-fighter/v1/README.md#optional-clips)를 따른다.
 샘플 로봇은 파일 형식 시험용이다. 넘어짐·연타 등의 연기 품질을 보여주는 작품이 아니다.
 

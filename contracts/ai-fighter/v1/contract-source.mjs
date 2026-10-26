@@ -33,19 +33,21 @@ export const motions = {
  * skill clip IS his skill — its `skill.kind` picks one of the engine's closed skill rules and its marks time it (`combatStyle.skillKinds`).
  */
 export const optionalClips = {
-  skill: { kind: 'action', loop: false, minHits: 0, maxHits: 1, purpose: '고유 기술 한 동작: 예고·접촉(또는 돌진)·회수. 종류는 skill.kind.' },
+  skill: { kind: 'action', loop: false, minHits: 0, maxHits: 1, purpose: '고유 기술 한 동작: 예고·접촉(또는 돌진, 자세 창)·회수. 종류는 skill.kind.' },
   entrance: { kind: 'action', loop: false, minHits: 0, maxHits: 0, purpose: '경기 시작 전 제자리 등장 동작.' },
   victory: { kind: 'action', loop: true, minHits: 0, maxHits: 0, purpose: '이긴 뒤 승리 자세 반복.' },
 };
 
 /**
  * The fighting style a creator picks (2026-10-27): closed choices and small grades only — the server maps each to its own tuning
- * (`RegisteredDuelStyle.ts`). Skill kinds are the engine's rules a single skill clip can time: a strike with one contact (stretch, pincer) or a
- * run with a tell and a recovery (flight, feint, slide). `extrasBudget`: of the skill clip, a summon and the shockwave, at most this many.
+ * (`RegisteredDuelStyle.ts`). Skill kinds are the engine's rules a single skill clip can time: a strike with one contact (stretch, pincer), a
+ * run with a tell and a recovery (flight, feint, slide), or a stance with a window and a strike segment (counter, brace — 2026-10-27).
+ * `extrasBudget`: of the skill clip, a summon and the shockwave, at most this many.
  */
 export const combatStyle = Object.freeze({
-  skillKinds: Object.freeze(['stretch', 'pincer', 'flight', 'feint', 'slide']),
+  skillKinds: Object.freeze(['stretch', 'pincer', 'flight', 'feint', 'slide', 'counter', 'brace']),
   strikeKinds: Object.freeze(['stretch', 'pincer']),
+  stanceKinds: Object.freeze(['counter', 'brace']),
   actions: Object.freeze(['slam', 'combo', 'fast']),
   supers: Object.freeze(['slam', 'combo', 'fast', 'dash']),
   summons: Object.freeze(['crane', 'bolt', 'sportsCar', 'roadster']),
@@ -54,8 +56,10 @@ export const combatStyle = Object.freeze({
   temper: Object.freeze(['guard', 'retreat', 'measure', 'patience']),
   exchanges: Object.freeze({ keys: Object.freeze(['cross', 'pinball', 'rush']), min: 0, max: 3 }),
   extrasBudget: 2,
-  // The tell a person must be able to read: a strike's first contact, a run's tell end, at least this far into the clip.
-  tellFloorMs: Object.freeze({ strike: 360, run: 240 }),
+  // The tell a person must be able to read: a strike's first contact, a run's tell end, a stance's window start, at least this far in.
+  tellFloorMs: Object.freeze({ strike: 360, run: 240, stance: 100 }),
+  // A stance's window (windowFrom..windowTo): long enough to meet a swing, never a guard that outlasts the bout's rhythm.
+  stanceWindowMs: Object.freeze({ min: 200, max: 1000 }),
 });
 
 /** Display lines (2026-10-27): what he says before a bout and after it. Text only — the arena shows them. */
@@ -93,9 +97,9 @@ function clipSchema(name, motion) {
     fields.sequence = array(object({ frame: integer(0, 63), durationMs: number(1, 2000) }), 1, 128);
     fields.hitSequenceIndices = { ...array(step, motion.minHits, motion.maxHits), uniqueItems: true };
     if (landmarks[name]) fields.landmarks = landmarks[name];
-    // The skill clip names its rule and carries its run's marks (a strike's contact is `hitSequenceIndices`).
+    // The skill clip names its rule and carries its run's or its stance's marks (a strike's contact is `hitSequenceIndices`).
     if (name === 'skill') fields.skill = optionalObject({ kind: { enum: combatStyle.skillKinds }, windupTo: step, recoverFrom: step,
-      run: pair, launch: step, struck: step }, ['kind']);
+      run: pair, launch: step, struck: step, windowFrom: step, windowTo: step, strikeFrom: step, strikeTo: step }, ['kind']);
   }
   return { ...object(fields), description: motion.purpose };
 }
