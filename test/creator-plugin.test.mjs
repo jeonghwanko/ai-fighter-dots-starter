@@ -221,6 +221,30 @@ test('final package tracks every asset and metadata-only edits preserve animatio
   await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Old name' }), /profile-mismatch/);
 });
 
+test('the recorded profile carries the package bout lines and fighting style', async t => {
+  const f = await fixture(t);
+  for (const group of context.workflow.groups.slice(0, -1)) {
+    for (const item of [...group.motions, ...(group.auxiliaries ?? [])]) { await f.record(item); await f.review(item); await f.select(item); }
+    await f.change({ type: 'advance' });
+  }
+  const dir = `output/${sessionId}-work/artifacts/final/v1`;
+  await cp(path.join(kitRoot, 'examples', 'sparring-bot'), path.join(f.root, dir), { recursive: true });
+  const manifestPath = `${dir}/fighter.json`, manifest = JSON.parse(await readFile(path.join(f.root, manifestPath), 'utf8'));
+  const lines = { challenge: 'Ready.', lose: 'Recalibrating.' }, style = { mix: { slam: 1, combo: 2, fast: 1 }, super: 'dash', summon: 'crane' };
+  manifest.profile.lines = lines; manifest.combat.style = style;
+  await writeFile(path.join(f.root, manifestPath), JSON.stringify(manifest));
+  const { name, description, language, concept, moves } = manifest.profile, extras = { language, concept, moves, stats: manifest.combat.stats };
+  await f.change({ type: 'profile', name, description, ...extras, lines, feedback: 'Style missing' });
+  await assert.rejects(f.change({ type: 'package', files: [manifestPath], note: 'Style missing' }), /profile-mismatch/);
+  // The contract's style limits apply when the profile is recorded.
+  for (const invalid of [{ mix: { slam: 0, combo: 0, fast: 0 } }, { mix: { slam: 0, combo: 1, fast: 2 } }, { summon: 'bullet' }, { damage: 3 }])
+    await assert.rejects(f.change({ type: 'profile', name, description, ...extras, lines, style: invalid, feedback: 'Invalid style' }));
+  await assert.rejects(f.change({ type: 'profile', name, description, ...extras, lines: { win: 'x'.repeat(41) }, style, feedback: 'Long line' }));
+  await f.change({ type: 'profile', name, description, ...extras, lines, style, feedback: 'Fixture profile with style' });
+  await f.change({ type: 'package', files: [manifestPath], note: 'Geometric format fixture; not generated art' });
+  assert.deepEqual((await f.store.read(sessionId)).profile.style, style);
+});
+
 test('real engine dispatch can read bundled installation status without generation', async t => {
   const f = await fixture(t);
   assert.equal((await executeEngine(f.root, 'sprite', ['status'])).code, 0);

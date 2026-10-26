@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { resolveManifest } from './package-access.mjs';
 import { creatorLink } from './creator-handoff.mjs';
 
@@ -45,7 +46,7 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
   const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: /^[a-z0-9-]+$/.test(error.message) ? error.message : 'remote-operation-failed' }); } };
   if (validatePackage) {
     server.registerTool('submit_fighter_package', {
-      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically. For text-only edits use update_fighter_profile without uploading assets. Each account may register up to three fighters: to update an existing fighter (concept, move names, stats or art), pass its fighterId — the package is replaced in place and the fighter keeps its ID and duel record. Omit fighterId to register a new fighter while the account has fewer than three.',
+      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically. For text-only edits use update_fighter_profile without uploading assets. Each account may register up to three fighters: to update an existing fighter (concept, move names, bout lines, stats, fighting style or art), pass its fighterId — the package is replaced in place and the fighter keeps its ID and duel record. Omit fighterId to register a new fighter while the account has fewer than three.',
       inputSchema: { manifestPath: z.string().min(1).max(512), idempotencyKey: z.string().uuid(), fighterId: z.string().uuid().optional() }, outputSchema,
       annotations: { ...read, readOnlyHint: false },
     }, safe(async ({ manifestPath, idempotencyKey, fighterId }) => {
@@ -63,10 +64,13 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
       if (!parsed.ok || !validateFighter(parsed.data).ok) throw new Error(CHANGED);
       const directory = path.dirname(after.location);
       if ((await lstat(path.join(directory, 'assets'))).isSymbolicLink()) throw new Error(CHANGED);
-      // A server older than this kit's contract rejects the optional profile extras and duel grades; say so before uploading.
-      const { profile, combat } = parsed.data, used = [
+      // A server older than this kit's contract rejects the optional profile extras, names and bout lines, duel grades, fighting style
+      // and optional clips; say so before uploading.
+      const { profile, combat, clips } = parsed.data, used = [
         ...(['language', 'concept', 'moves'].some(key => key in profile) ? ['profile-extras-1'] : []), ...('names' in profile ? ['profile-names-1'] : []),
-        ...('stats' in combat ? ['combat-stats-1'] : [])];
+        ...('lines' in profile ? ['profile-lines-1'] : []),
+        ...('stats' in combat ? ['combat-stats-1'] : []), ...('style' in combat ? ['combat-style-1'] : []),
+        ...(Object.keys(spec.optionalClips).some(key => key in clips) ? ['extra-clips-1'] : [])];
       if (used.length) {
         const features = (await remote.request('spec'))?.data?.features ?? [];
         const missing = used.filter(feature => !features.includes(feature));

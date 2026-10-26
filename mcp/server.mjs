@@ -15,7 +15,8 @@ import { registerConnectionTool } from './connect-oddbout.mjs';
 import { identifier } from './creation-store.mjs';
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
-const MOTIONS = /** @type {[string, ...string[]]} */ (Object.keys(spec.motions));
+// The required motions, then the optional clips (skill, entrance, victory) a package may add.
+const MOTIONS = /** @type {[string, ...string[]]} */ ([...Object.keys(spec.motions), ...Object.keys(spec.optionalClips)]);
 const outputSchema = { ok: z.boolean(), stage: z.string(), data: z.unknown().optional(), errors: z.array(z.unknown()).optional(),
   pending: z.array(z.string()).optional(), assetBytes: z.number().optional(), decodedPixels: z.number().optional(), errorCount: z.number().optional(),
   code: z.string().optional() };
@@ -52,7 +53,7 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
     ].join(' '),
   });
   server.registerTool('get_fighter_spec', {
-    description: 'Read context first for game-owned current motions, frames, controls, timing and group gates; refresh at each new group and preserve its revision. Optional group narrows context motions. Read overview and creation for the package workflow and sprite-gen setup. Read guide, schema and example for the package contract; motion narrows schema/example. Example art is a format fixture.',
+    description: 'Read context first for game-owned current motions, frames, controls, timing and group gates; refresh at each new group and preserve its revision. Optional group narrows context motions. Read overview and creation for the package workflow and sprite-gen setup. Read guide, schema and example for the package contract; motion narrows schema/example (the optional clips skill, entrance and victory have no example clip). Example art is a format fixture.',
     inputSchema: { section: z.enum(['overview', 'creation', 'guide', 'schema', 'example', 'context']).default('overview'),
       group: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'final']).optional(),
       motion: z.enum(MOTIONS).optional() }, outputSchema, annotations,
@@ -64,8 +65,8 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
     if (motion && section === 'schema')
       return respond({ ok: true, stage: 'public-contract', data: { motion, clip: schema.properties.clips.properties[motion], definitions: schema.definitions } });
     if (motion && section === 'example') {
-      const clip = example.clips[motion];
-      return respond({ ok: true, stage: 'public-contract', data: { motion, clip, asset: example.assets.find(asset => asset.id === clip.assetId) } });
+      const clip = example.clips[motion] ?? null;
+      return respond({ ok: true, stage: 'public-contract', data: { motion, clip, asset: clip && example.assets.find(asset => asset.id === clip.assetId) } });
     }
     if (section === 'creation') return respond({ ok: true, stage: 'creation-kit', data: {
       tool: await spriteStatus(), packageRoot: root ?? null,

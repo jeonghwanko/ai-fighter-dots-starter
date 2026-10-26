@@ -132,6 +132,33 @@ test('a package with concept, move names or grades is not uploaded to a server t
     assert.deepEqual(requests.map(r => r.route), ['spec']);
   } finally { await client.close(); }
 });
+test('a package with bout lines, a fighting style or optional clips is uploaded only to a server that lists them', async () => {
+  const temporary = await realpath(await mkdtemp(path.join(tmpdir(), 'fighter-style-')));
+  try {
+    await cp(new URL('../examples/sparring-bot/', import.meta.url), path.join(temporary, 'styled'), { recursive: true });
+    // Metadata only: the entrance replays the guard sheet already in the package, so every asset stays the validated file.
+    const styled = structuredClone(example);
+    styled.profile.lines = { challenge: 'Ready.', win: 'Format kept.' };
+    styled.combat.style = { mix: { slam: 2, combo: 2, fast: 1 }, distance: 2, temper: { patience: 4 } };
+    styled.clips.entrance = { ...structuredClone(example.clips.fightIdle), loop: false };
+    await writeFile(path.join(temporary, 'styled', 'fighter.json'), JSON.stringify(styled));
+    const args = { manifestPath: 'styled/fighter.json', idempotencyKey: crypto.randomUUID() };
+    const old = recordingRemote(['profile-extras-1', 'combat-stats-1']), before = await connectInProcess({ root: temporary, remote: old.remote });
+    try {
+      const refused = (await before.callTool({ name: 'submit_fighter_package', arguments: args })).structuredContent;
+      assert.equal(refused.code, 'server-feature-missing', JSON.stringify(refused));
+      assert.deepEqual(refused.errors, ['profile-lines-1', 'combat-style-1', 'extra-clips-1']);
+      assert.deepEqual(old.requests.map(r => r.route), ['spec']);
+    } finally { await before.close(); }
+    const current = recordingRemote(['profile-extras-1', 'combat-stats-1', 'profile-lines-1', 'combat-style-1', 'extra-clips-1']);
+    const after = await connectInProcess({ root: temporary, remote: current.remote });
+    try {
+      const queued = (await after.callTool({ name: 'submit_fighter_package', arguments: args })).structuredContent;
+      assert.equal(queued.stage, 'queued', JSON.stringify(queued));
+      assert.deepEqual(JSON.parse(current.requests.find(r => r.route === 'submissions').body), styled);
+    } finally { await after.close(); }
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+});
 test('validate and submit share one serial decoder; a busy or invalid package is never uploaded', async () => {
   const { requests, remote } = recordingRemote(), client = await connectInProcess({ remote });
   try {
@@ -175,6 +202,11 @@ test('one motion of the schema or example is a small read', async () => {
     const walk = (await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'example', motion: 'walk' } })).structuredContent.data;
     assert.equal(walk.clip.frames.length, 16); assert.equal(walk.asset.id, walk.clip.assetId);
     assert.equal((await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'schema', motion: 'hp' } })).isError, true);
+    // An optional clip has its schema (the skill's kind and marks) but no fixture example.
+    const skill = (await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'schema', motion: 'skill' } })).structuredContent.data;
+    assert.deepEqual(skill.clip.properties.skill.required, ['kind']);
+    const victory = (await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'example', motion: 'victory' } })).structuredContent;
+    assert.equal(victory.ok, true); assert.equal(victory.data.clip, null);
   } finally { await client.close(); }
 });
 

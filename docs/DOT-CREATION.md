@@ -285,6 +285,29 @@ npm run sprite -- game-pack --request game.json --out-dir pack
 쓰러짐을 재생한 뒤 다시 일어서거나 다시 눕는 구간을 fall에 붙이지 않는다. 실제 fall 재생은 누움으로 끝나고,
 기상은 getUp을 사용하는 상황에서만 재생되는지 최종 미리보기에서 별도로 확인한다.
 
+#### 선택 동작·대사·싸우는 성격
+
+계획의 `profile`에는 `language`·`concept`·`names`·`lines`·`moves`·`stats`·`style`도 넣을 수 있다.
+`stats`·`style`은 fighter.json의 `combat.stats`·`combat.style`, 나머지는 같은 이름의 `profile` 필드가 된다.
+`motions`에는 필수 11개 밖에 선택 동작 `skill`·`entrance`·`victory`를 더할 수 있다([선택 동작](AUTHORING.md#선택-동작)).
+다음 숫자·이름은 구조 예시다.
+
+```json
+"profile": { "name": "파란 고양이", "description": "파란 갑옷의 고양이 복서",
+  "lines": { "challenge": "한 판 붙자!", "win": "역시 내가 이겼군." },
+  "style": { "mix": { "slam": 1, "combo": 3, "fast": 1 }, "distance": 2, "temper": { "patience": 4 } } },
+"motions": {
+  "skill": { "animation": "cat/claw", "hitSequenceIndices": [6], "skill": { "kind": "pincer" } },
+  "entrance": { "animation": "cat/entrance" },
+  "victory": { "animation": "cat/victory" }
+}
+```
+
+- 선택 동작은 필수 전투 동작과 같이 포장한다. 시트·프레임·기준점·접지·해시는 그림에서 잰다.
+- `skill.kind`와 표식(`windupTo`·`recoverFrom`·`run`·`launch`·`struck`)은 접촉 단계처럼 game-pack 재생 단계 번호다. `skill`은 skill 동작에만 쓴다.
+- 기술의 접촉·예고 시간, 공격 섞기, `skill` 클립·`summon`·`shockwave` 두 개 한도는 계약 검사가 확인한다. 실패하면 아무것도 쓰지 않는다.
+- 제출 전 서버 `/spec`에 `profile-lines-1`·`combat-style-1`·`extra-clips-1`이 있어야 한다. 없으면 제출 도구가 업로드 전에 멈춘다.
+
 `fighter:pack`이 그림에서 재는 값:
 
 - **크기.** idle 몸높이를 재서 400px가 아니면(2% 초과) 모든 동작을 같은 비율로 다시 맞춘다. 게임은 `actor 높이 / bodyHeight`로

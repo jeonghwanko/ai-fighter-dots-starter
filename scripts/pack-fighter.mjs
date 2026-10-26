@@ -19,6 +19,9 @@ const MARGIN = 8;              // transparent pixels kept around the motion's un
 const SCALE_TOLERANCE = 0.02;  // a game pack within 2% of the body height is used without resampling
 const MAX_COLUMNS = 8, MAX_SHEET = spec.limits.imageDimension, MAX_FRAME = 1024;
 const MOTIONS = Object.keys(spec.motions);
+// Optional clips (skill, entrance, victory): packed like the required actions when the plan names them.
+const OPTIONAL_CLIPS = Object.keys(spec.optionalClips);
+const clipSpec = name => spec.motions[name] ?? spec.optionalClips[name];
 const assetId = name => name.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
 const round = value => Math.round(value * 100) / 100;
 
@@ -33,19 +36,24 @@ const motionPlan = z.strictObject({
   gaitReview: z.string().min(1).optional(),
   hitSequenceIndices: z.array(z.number().int().min(0)).optional(),
   landmarks: z.record(z.string(), z.unknown()).optional(),
+  // The skill clip's rule and marks ({ kind, windupTo?, recoverFrom?, run?, launch?, struck? }, playback steps); the contract checks them.
+  skill: z.record(z.string(), z.unknown()).optional(),
 });
 const planSchema = z.strictObject({
   gamePack: z.string().min(1), out: z.string().min(1), localId: z.string(),
-  // language, concept, moves and stats are optional; validateFighter below enforces their contract limits and the stats budget.
+  // language, concept, names, lines, moves, stats and style are optional; validateFighter below enforces their contract limits,
+  // the stats budget and the style rules. stats and style become combat.stats and combat.style.
   profile: z.strictObject({ name: z.string(), description: z.string(), portraitCrop: crop.optional(), previewCrop: crop.optional(),
     language: z.string().optional(), concept: z.string().optional(), names: z.record(z.string(), z.string()).optional(),
+    lines: z.record(z.string(), z.string()).optional(),
     moves: z.record(z.string(), z.strictObject({ name: z.string(), description: z.string() })).optional(),
-    stats: z.record(z.string(), z.number()).optional() }),
+    stats: z.record(z.string(), z.number()).optional(), style: z.record(z.string(), z.unknown()).optional() }),
   encoding: z.enum(['lossless', 'lossy']).default('lossless'),
   quality: z.number().int().min(1).max(100).default(92),
   resample: z.enum(['lanczos3', 'nearest']).default('lanczos3'),
   reviewPolicy: z.enum(['required', 'format-only']).default('required'),
-  motions: z.strictObject(Object.fromEntries(MOTIONS.map(name => [name, motionPlan]))),
+  motions: z.strictObject({ ...Object.fromEntries(MOTIONS.map(name => [name, motionPlan])),
+    ...Object.fromEntries(OPTIONAL_CLIPS.map(name => [name, motionPlan.optional()])) }),
 });
 
 class PackError extends Error {
@@ -165,7 +173,7 @@ async function readAnimation(source, name, motion) {
 }
 
 function checkPlanFields(name, motion) {
-  const kind = spec.motions[name].kind;
+  const kind = clipSpec(name).kind;
   const misplaced = [
     name !== 'fall' && motion.getUpAnimation !== undefined && 'getUpAnimation',
     name !== 'idle' && motion.frame !== undefined && 'frame',
@@ -173,6 +181,7 @@ function checkPlanFields(name, motion) {
     !['walk', 'run'].includes(name) && motion.gaitReview !== undefined && 'gaitReview',
     kind === 'gait' && motion.hitSequenceIndices !== undefined && 'hitSequenceIndices',
     kind === 'gait' && motion.landmarks !== undefined && 'landmarks',
+    name !== 'skill' && motion.skill !== undefined && 'skill',
   ].filter(Boolean);
   if (misplaced.length) fail('PLAN_FIELD', `${name}: ${misplaced.join(', ')} not used by this motion`);
   if (motion.getUpAnimation !== undefined && motion.landmarks?.getUp !== undefined)
@@ -187,7 +196,7 @@ function encode(sheet, plan) {
 
 /** Pack one motion: dedupe by pixels, crop to the union box, measure origins and contacts, lay out the sheet. */
 async function packMotion(name, motion, animation, plan) {
-  const motionSpec = spec.motions[name];
+  const motionSpec = clipSpec(name);
   let playback = animation.frames.map((frame, step) => ({ frame, durationMs: animation.durations[step], key: animation.keys[step] }));
   if (name === 'idle') {
     const index = motion.frame ?? 0;
@@ -255,6 +264,8 @@ async function packMotion(name, motion, animation, plan) {
     clip.hitSequenceIndices = motion.hitSequenceIndices ?? [];
     if (motion.landmarks) clip.landmarks = structuredClone(motion.landmarks);
     if (getUp) clip.landmarks = { ...clip.landmarks, getUp };
+    // Skill marks are playback steps like the contacts; deduplication keeps one sequence step per playback step.
+    if (motion.skill) clip.skill = structuredClone(motion.skill);
   }
   const report = { animation: motion.animation, playbackSteps: steps.length, distinctFrames: unique.length, frameSize: [frameWidth, frameHeight],
     origin: { x: round(origin.x), y: round(origin.y), source: motion.origin ? 'plan' : 'anchor-x, measured ground line' },
@@ -295,9 +306,10 @@ export async function packFighter(planFile) {
   try {
     if (await lstat(out).then(() => true, () => false)) fail('OUT_EXISTS', `${out} exists; choose a new folder`);
     for (const [name, motion] of Object.entries(plan.motions)) checkPlanFields(name, motion);
+    const clips = [...MOTIONS, ...OPTIONAL_CLIPS.filter(name => plan.motions[name])];
     const source = await loadPack(gamePack);
     const animations = {};
-    for (const name of MOTIONS) animations[name] = await readAnimation(source, name, plan.motions[name]);
+    for (const name of clips) animations[name] = await readAnimation(source, name, plan.motions[name]);
     if (plan.motions.fall.getUpAnimation !== undefined) {
       const fall = animations.fall, getUp = await readAnimation(source, 'fall.getUp', {
         animation: plan.motions.fall.getUpAnimation, flipX: plan.motions.fall.flipX,
@@ -329,7 +341,7 @@ export async function packFighter(planFile) {
     if (!idleFrame) fail('PLAN_FIELD', 'idle: frame outside its animation');
     const body = bounds(idleFrame, ALPHA) ?? fail('EMPTY_FRAME', 'idle: no visible pixels');
     const measured = body.bottom - body.top, ratio = BODY / measured, resized = Math.abs(ratio - 1) > SCALE_TOLERANCE;
-    if (resized) for (const name of MOTIONS) {
+    if (resized) for (const name of clips) {
       const animation = animations[name];
       animation.frames = await Promise.all(animation.frames.map(frame => resize(frame, ratio, plan.resample)));
       animation.anchor = { x: animation.anchor.x * ratio, y: animation.anchor.y * ratio };
@@ -344,7 +356,7 @@ export async function packFighter(planFile) {
       }
     }
     const packed = {};
-    for (const name of MOTIONS) packed[name] = await packMotion(name, plan.motions[name], animations[name], plan);
+    for (const name of clips) packed[name] = await packMotion(name, plan.motions[name], animations[name], plan);
     // Borrowed cells may name a playback step ({ clip, step }); deduplication decides its frame index.
     const borrow = (cell, at) => {
       if (!cell || typeof cell !== 'object' || cell.step === undefined) return cell;
@@ -363,17 +375,17 @@ export async function packFighter(planFile) {
     const fighter = {
       schemaVersion: spec.schemaVersion, specVersion: spec.specVersion, localId: plan.localId,
       profile: { name: plan.profile.name, description: plan.profile.description,
-        ...Object.fromEntries(['language', 'concept', 'moves', 'names'].filter(key => plan.profile[key] !== undefined).map(key => [key, plan.profile[key]])),
+        ...Object.fromEntries(['language', 'concept', 'moves', 'names', 'lines'].filter(key => plan.profile[key] !== undefined).map(key => [key, plan.profile[key]])),
         portrait: { assetId: packed.idle.asset.id, crop: crops.portrait }, preview: { assetId: packed.idle.asset.id, crop: crops.preview } },
-      combat: { kitId: 'standard-duel', ...(plan.profile.stats ? { stats: plan.profile.stats } : {}) },
+      combat: { kitId: 'standard-duel', ...(plan.profile.stats ? { stats: plan.profile.stats } : {}), ...(plan.profile.style ? { style: plan.profile.style } : {}) },
       appearance: { projection: 'orthographic', elevationDegrees: spec.input.cameraElevationDegrees, sourceFacing: 'right', leftFacing: 'mirror', bodyHeight: BODY, bodyScale: 1 },
-      assets: MOTIONS.map(name => packed[name].asset),
-      clips: Object.fromEntries(MOTIONS.map(name => [name, packed[name].clip])),
+      assets: clips.map(name => packed[name].asset),
+      clips: Object.fromEntries(clips.map(name => [name, packed[name].clip])),
     };
     const contract = validateFighter(fighter);
     const report = { generator: 'ai-fighter-dots-starter pack-fighter', gamePackSha256: createHash('sha256').update(await readFile(gamePack)).digest('hex'),
       scale: { measuredBodyHeight: measured, targetBodyHeight: BODY, ratio: round(ratio), resampled: resized ? plan.resample : false },
-      motions: Object.fromEntries(MOTIONS.map(name => [name, packed[name].report])),
+      motions: Object.fromEntries(clips.map(name => [name, packed[name].report])),
       reviewPolicy: plan.reviewPolicy,
       review: plan.reviewPolicy === 'format-only' ? 'FORMAT ONLY: gait quality is unverified. This mode is for format fixtures; it is not visual approval.'
         : 'Walk/run evidence matches input pixels and durations. All actions still need visual review; file validation is not universal animation approval.' };
@@ -383,7 +395,7 @@ export async function packFighter(planFile) {
     await rm(staging, { recursive: true, force: true });
     try {
       await mkdir(path.join(staging, 'assets'), { recursive: true });
-      for (const name of MOTIONS) await writeFile(path.join(staging, packed[name].asset.path), packed[name].bytes, { flag: 'wx' });
+      for (const name of clips) await writeFile(path.join(staging, packed[name].asset.path), packed[name].bytes, { flag: 'wx' });
       await writeFile(path.join(staging, 'fighter.json'), JSON.stringify(fighter, null, 2) + '\n', { flag: 'wx' });
       await writeFile(path.join(staging, 'pack-report.json'), JSON.stringify(report, null, 2) + '\n', { flag: 'wx' });
       if (await lstat(out).then(() => true, () => false)) fail('OUT_EXISTS', `${out} exists; choose a new folder`);

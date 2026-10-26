@@ -9,6 +9,15 @@ import { makePackageValidator } from './package-access.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
 export const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
+const style = spec.combatStyle, range = ({ min, max }) => z.number().int().min(min).max(max);
+const styleSchema = z.object({
+  mix: z.object(Object.fromEntries(style.actions.map(action => [action, range(style.mix)]))).strict()
+    .refine(mix => style.actions.some(action => mix[action] > 0) && mix.fast <= mix.slam + mix.combo, 'style-mix').optional(),
+  special: z.enum(style.actions).optional(), super: z.enum(style.supers).optional(), distance: range(style.grade).optional(),
+  shockwave: z.literal(true).optional(), summon: z.enum(style.summons).optional(),
+  temper: z.object(Object.fromEntries(style.temper.map(key => [key, range(style.grade).optional()]))).strict().optional(),
+  exchanges: z.object(Object.fromEntries(style.exchanges.keys.map(key => [key, range(style.exchanges).optional()]))).strict().optional(),
+}).strict();
 const versionId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/);
 const note = z.string().trim().min(1).max(4000);
 const files = z.array(z.string().min(1).max(512)).min(1).max(64);
@@ -20,16 +29,20 @@ export const changeSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('restore'), item: versionId, version: versionId, feedback: note }).strict(),
   z.object({ type: z.literal('revision'), item: versionId, feedback: note }).strict(),
   z.object({ type: z.literal('delegate'), groups: z.array(z.string()).max(5), feedback: note }).strict(),
-  // Concept, move names and duel grades are optional; their limits are the contract's (spec.json profileExtras / combatStats).
+  // Concept, names, bout lines, move names, duel grades and fighting style are optional; their limits are the contract's
+  // (spec.json profileExtras / profileLines / combatStats / combatStyle). The style's extras budget also counts the skill clip: the package check has it.
   z.object({ type: z.literal('profile'), name: z.string().min(1).max(100), description: z.string().max(2000),
     language: z.enum(spec.profileExtras.languages).optional(), concept: z.string().trim().min(1).max(spec.profileExtras.conceptMaxLength).optional(),
     names: z.object(Object.fromEntries(spec.profileExtras.languages.map(language => [language, z.string().trim().min(1).max(spec.profileExtras.nameMaxLength).optional()])))
+      .strict().refine(value => Object.keys(value).length > 0).optional(),
+    lines: z.object(Object.fromEntries(spec.profileLines.keys.map(key => [key, z.string().trim().min(1).max(spec.profileLines.maxLength).optional()])))
       .strict().refine(value => Object.keys(value).length > 0).optional(),
     moves: z.object(Object.fromEntries(spec.profileExtras.namedMoves.map(move => [move, z.object({
       name: z.string().trim().min(1).max(spec.profileExtras.moveNameMaxLength),
       description: z.string().trim().min(1).max(spec.profileExtras.moveDescriptionMaxLength) }).strict()]))).strict().optional(),
     stats: z.object(Object.fromEntries(spec.combatStats.keys.map(key => [key, z.number().int().min(spec.combatStats.min).max(spec.combatStats.max)]))).strict()
       .refine(stats => Object.values(stats).reduce((sum, grade) => sum + grade, 0) === spec.combatStats.budget, 'stats-budget').optional(),
+    style: styleSchema.optional(),
     feedback: note }).strict(),
   z.object({ type: z.literal('package'), files, note }).strict(),
   z.object({ type: z.literal('package-review'), verdict: z.enum(['passed', 'failed']), evidence: files, feedback: note }).strict(),
@@ -264,8 +277,8 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
         const canonical = value => JSON.stringify(value ?? null, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
           ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v);
         const same = (a, b) => canonical(a) === canonical(b);
-        if (['name', 'description', 'language', 'concept', 'moves', 'names'].some(key => !same(manifest.profile[key], state.profile[key]))
-          || !same(manifest.combat.stats, state.profile.stats)) fail('package-profile-mismatch');
+        if (['name', 'description', 'language', 'concept', 'moves', 'names', 'lines'].some(key => !same(manifest.profile[key], state.profile[key]))
+          || !same(manifest.combat.stats, state.profile.stats) || !same(manifest.combat.style, state.profile.style)) fail('package-profile-mismatch');
         const base = path.posix.dirname(manifests[0]);
         const allFiles = [...event.files, ...manifest.assets.map(asset => `${base}/${asset.path}`)];
         state.package = { files: await snapshots(allFiles), basisHash: packageBasis(state), contextRevision: state.contextRevision,
