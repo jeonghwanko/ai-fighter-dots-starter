@@ -1,30 +1,11 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFile, readdir } from 'node:fs/promises';
-import { PGlite } from '@electric-sql/pglite';
+import { migratedDatabase } from './helpers/fighter-database.mjs';
 import { createHandler } from '../api/handler.mjs';
 import { createCreatorLink } from '../api/creator-link.mjs';
 
-async function database() {
-  const sql = new PGlite();
-  await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
-    create schema auth; create table auth.users(id uuid primary key,email text);
-    create function auth.uid() returns uuid language sql as 'select null::uuid';
-    grant usage on schema auth to authenticated,service_role;
-    create schema cron;
-    create function cron.schedule(text,text,text) returns bigint language sql as $$ select 1::bigint $$;
-    create schema storage;
-    create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
-    create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
-    grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
-  // Hosted pg_net/Vault dispatch is unrelated to account access and is unavailable in PGlite.
-  const dir = new URL('../supabase/migrations/', import.meta.url);
-  for (const name of (await readdir(dir)).filter(file => file.endsWith('.sql') && !file.includes('dispatch')).sort()) await sql.exec(await readFile(new URL(name, dir), 'utf8'));
-  return sql;
-}
-
 test('verified accounts can submit without invitations, including prior declines and expiry', async () => {
- const sql=await database();
+ const sql=await migratedDatabase();
  try {
   const owner=crypto.randomUUID(),disabled=crypto.randomUUID();
   await sql.query('insert into auth.users values($1),($2)',[owner,disabled]);
