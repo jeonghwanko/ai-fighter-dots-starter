@@ -259,6 +259,10 @@ test('normal authoring requires gait reviews; format-only is an explicit fixture
 test('reviewed input uses the verified stride and rejects changed playback timing', async () => {
   const directory = await gamePack('review-bound');
   await addGetUp(directory);
+  // Video frame times are rarely whole milliseconds (24 fps = 41.66… ms). The review binds these exact values.
+  const sourceFile = path.join(directory, 'game-pack.json'), source = JSON.parse(await readFile(sourceFile, 'utf8'));
+  for (const motion of ['walk', 'run']) source.animations[`bot/${motion}`].durations_ms = source.animations[`bot/${motion}`].durations_ms.map(() => 1000 / 24);
+  await writeFile(sourceFile, JSON.stringify(source));
   const value = plan(directory, 'fighter', p => { useGetUp(p); delete p.reviewPolicy; delete p.motions.walk.stridePixels; });
   for (const motion of ['walk', 'run']) {
     const sequence = await loadSequence({ file: 'game-pack.json', animation: `bot/${motion}` }, directory);
@@ -274,8 +278,10 @@ test('reviewed input uses the verified stride and rejects changed playback timin
   assert.equal(first.ok, true, JSON.stringify(first.errors));
   const fighter = JSON.parse(await readFile(path.join(directory, 'fighter/fighter.json'), 'utf8'));
   assert.equal(fighter.clips.walk.stridePixels, 123);
+  assert.equal(fighter.clips.walk.durationMs, 42);
   const packFile = path.join(directory, 'game-pack.json'), pack = JSON.parse(await readFile(packFile, 'utf8'));
-  pack.animations['bot/walk'].durations_ms[0] += 1;
+  // Still stale when the change disappears in whole-millisecond rounding.
+  pack.animations['bot/walk'].durations_ms[0] += 0.2;
   await writeFile(packFile, JSON.stringify(pack));
   value.out = 'changed';
   const stale = await run(directory, value);
