@@ -11,6 +11,7 @@ import { pendingLoginPath, pendingDeviceLoginPath } from '../scripts/login.mjs';
 import { createServer } from '../mcp/server.mjs';
 
 const installed = { source: true, environment: true };
+const workingTools = { inspect: async () => ({ ffmpeg: { status: 'ok' }, ffprobe: { status: 'ok' }, img2webp: { status: 'ok' }, rife: { status: 'ok' } }) };
 const jwt = payload => `e30.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`;
 const publicProbe = supported => async (_url, { spec = false } = {}) => spec
   ? { status: 'reachable', deviceLogin: supported ? 'available' : 'unsupported' }
@@ -193,6 +194,7 @@ test('ODDBOUT and kit success never verify generation or parent display, and exi
   const result = await checkReadiness({ store: { list: async () => [{ sessionId: 'existing' }], read: async () => state },
     jobs: { list: async () => work }, account: 'gpt', remoteActive: true,
     kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectPatch: patchState(true), ensurePatch: async () => assert.fail('existing work') },
+    tools: workingTools,
     login: { sessionPath, probe: publicProbe(true), request: async () => ({ ok: true, account: { invited: true, canSubmit: true } }) } });
   assert.equal(result.readyForRegistration, true); assert.equal(result.kitAndAccountReady, true);
   assert.equal(result.readyForGeneration, false); assert.equal(result.items.generation.status, 'unverified');
@@ -200,6 +202,21 @@ test('ODDBOUT and kit success never verify generation or parent display, and exi
   assert.equal(result.items.infrastructure.targets.library.status, 'unverified');
   assert.deepEqual(result.resume.sessionIds, ['existing']); assert.equal(result.resume.automaticGeneration, false);
   assert.deepEqual(work, [{ status: 'unknown' }]); assert.ok(state.items.idle.versions.v1);
+});
+
+test('a missing required system tool keeps generation from being ready and names who installs it', async () => {
+  const result = await checkReadiness({ account: 'gpt', remoteActive: false,
+    kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectPatch: patchState(true), fetchRemote: false },
+    tools: { inspect: async () => ({ ffmpeg: { status: 'missing', install: { actor: 'user', command: 'sudo apt install ffmpeg' } },
+      ffprobe: { status: 'missing', install: { actor: 'user', command: 'sudo apt install ffmpeg' } },
+      img2webp: { status: 'broken', install: { actor: 'agent', command: 'npm run sprite:setup' } }, rife: { status: 'ok' } }) },
+    login: { checkServer: false } });
+  assert.equal(result.kitAndAccountReady, false);
+  assert.deepEqual([result.items.tools.status, result.items.tools.missing], ['action-required', ['ffmpeg', 'ffprobe', 'img2webp']]);
+  assert.deepEqual(result.items.tools.nextCommands, ['npm run sprite:setup']);
+  assert.deepEqual([result.items.tools.nextAction.actor, result.items.tools.nextAction.commands], ['user', ['sudo apt install ffmpeg']]);
+  const connection = await checkReadiness({ purpose: 'connection', tools: { inspect: () => assert.fail('no tool probe') }, login: { checkServer: false } });
+  assert.equal(connection.items.tools.status, 'not-required');
 });
 
 test('the MCP tool asks the account through a host form when the client supports elicitation', async t => {

@@ -5,6 +5,7 @@ import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureSpritePatch, inspectSpritePatch } from '../scripts/sprite-patch.mjs';
+import { checkTools } from '../scripts/sprite-tools.mjs';
 import { defaultSessionPath } from '../scripts/login.mjs';
 import { connectionAction } from '../api/connection-errors.mjs';
 import { readProject, probeConnections, checkAccount, pendingConnection, infrastructureItem, unverifiedCreation } from './connection-readiness.mjs';
@@ -191,7 +192,7 @@ export async function elicitAccount(lowLevelServer) {
   } catch { return { method: 'unsupported', choice: null }; }
 }
 
-export async function checkReadiness({ store, jobs, sessionId, account, purpose = 'generation', remoteActive, lowLevelServer, kit = {}, login = {} } = {}) {
+export async function checkReadiness({ store, jobs, sessionId, account, purpose = 'generation', remoteActive, lowLevelServer, kit = {}, tools = {}, login = {} } = {}) {
   if (!['generation', 'connection', 'registration'].includes(purpose)) throw new Error('invalid-readiness-purpose');
   const needsGeneration = purpose === 'generation';
   const progress = await creationProgress({ store, jobs, sessionId });
@@ -199,13 +200,17 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   if (needsGeneration && !choice) ({ method: elicitation, choice } = await elicitAccount(lowLevelServer));
   const { infrastructure, ...connection } = await checkLogin({ remoteActive, ...login });
   const notRequired = { status: 'not-required', reason: 'no-generation-in-this-step', nextCommands: [] };
-  const items = { kit: needsGeneration ? await checkKit({ progress, ...kit }) : notRequired, infrastructure, login: connection,
+  const spriteRoot = kit.spriteRoot ?? path.join(kit.root ?? kitRoot, 'vendor', 'sprite-gen');
+  const items = { kit: needsGeneration ? await checkKit({ progress, ...kit }) : notRequired,
+    // ffmpeg, ffprobe and img2webp -exact are required; RIFE only warns (loops cut as filmed).
+    tools: needsGeneration ? await checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools }) : notRequired,
+    infrastructure, login: connection,
     account: needsGeneration ? accountItem(choice) : notRequired, ...unverifiedCreation(choice) };
   const ready = ['ready', 'updated', 'patched'].includes(items.kit.status) && !items.kit.restartRequired && items.kit.nextCommands.length === 0
-    && items.account.status === 'chosen-unverified';
+    && items.tools.status === 'ready' && items.account.status === 'chosen-unverified';
   return { purpose, kitAndAccountReady: ready, readyForGeneration: false,
     readyForRegistration: items.login.status === 'connected' && items.login.canSubmit === true, progress, elicitation, items,
     resume: { preserveWorkspace: true, sessionIds: progress.sessions, automaticGeneration: false, automaticSubmission: false,
       nextAction: { actor: 'agent', code: 'resume-existing-work', message: '연결 복구 뒤 같은 작업 공간에서 check_creation_readiness를 다시 호출하고 get_creation_session·get_creation_job으로 기존 버전·선택·pending/unknown 결과를 회수한다. 새 폴더·재생성·재등록으로 우회하지 않는다.' } },
-    meaning: 'kitAndAccountReady covers kit and provider choice only. Generation and parent display remain unverified by this tool; readyForGeneration stays false. Registration readiness means authenticated API access, not package approval or submission authorization.' };
+    meaning: 'kitAndAccountReady covers the kit, its required system tools (ffmpeg, ffprobe, img2webp with -exact) and provider choice only. Generation and parent display remain unverified by this tool; readyForGeneration stays false. Registration readiness means authenticated API access, not package approval or submission authorization.' };
 }

@@ -27,10 +27,22 @@
 ### 요구 사항
 
 - Git, Node.js 22.12 이상, Python 3.11 이상(venv 지원), 셸 명령 실행.
-- 디스크: 설치에 약 300MB가 든다(2026-10-23 Windows 실측: sprite-gen 63MB, venv 100MB, node_modules 102MB).
+- 시스템 도구 `ffmpeg`·`ffprobe`(영상 → 프레임). 키트는 sudo를 실행하지 않으므로 **초기 환경 준비자가 미리 설치한다**:
+
+  | 플랫폼 | 명령 |
+  | --- | --- |
+  | Ubuntu·Debian | `sudo apt install ffmpeg` |
+  | macOS | `brew install ffmpeg` |
+  | Windows | `winget install --id Gyan.FFmpeg -e` (설치 뒤 새 터미널) |
+
+  Linux 서버에 GPU가 없으면 RIFE용 Vulkan도 넣는다: `sudo apt install libvulkan1 mesa-vulkan-drivers`(없어도 생성은 된다).
+- `img2webp`와 RIFE는 `sprite:setup`이 sudo 없이 받는다(아래). 준비자가 따로 설치하지 않는다.
+- 디스크: 설치에 약 340MB가 든다(2026-10-23 Windows 실측: sprite-gen 63MB, venv 100MB, node_modules 102MB, 그 위에 RIFE 약 35MB).
+  RIFE 압축 파일은 받는 동안 약 430MB를 임시로 쓴다.
   캐릭터 작업 폴더는 생성 원본, 시도 횟수, 영상 사용 여부에 따라 크게 달라진다. 여유 5GB 이상을 권장한다.
 - 외부 접속이 필요한 곳:
-  - 설치: `github.com`, `raw.githubusercontent.com`, npm 레지스트리, PyPI
+  - 설치: `github.com`, `raw.githubusercontent.com`, GitHub 릴리스 파일(`objects.githubusercontent.com`·`release-assets.githubusercontent.com`, RIFE),
+    `storage.googleapis.com`(libwebp), npm 레지스트리, PyPI
   - 생성: 사용자가 고른 생성 도구(Codex CLI, grok CLI 또는 xAI API)가 요구하는 주소
   - 등록: `deploy/creator-site.json`의 `apiBase`, `siteUrl`
   - 이 중 하나가 막힌 샌드박스에서는 설치나 생성이 중간에 실패한다.
@@ -49,12 +61,24 @@ npm run sprite:status
 ```
 
 - 브랜치는 `codex/creator-hosting`이다. GitHub ZIP은 submodule이 빠지므로 쓰지 않는다.
+- `sprite:setup`은 sprite-gen 설치 뒤 생성에 필요한 외부 도구를 갖춘다. 모두 사용자 권한이며 sudo나 유료 API를 쓰지 않는다.
+  - **img2webp:** 걷기·달리기 WebP 인코딩에 필수이고 `-exact`(libwebp 1.5 이상)가 있어야 한다.
+    Ubuntu 24.04의 `apt install webp`는 1.3.x라 sprite-gen이 거부한다. PATH에 `-exact`를 지원하는 img2webp가 없으면
+    공식 libwebp 1.6.0 바이너리를 SHA-256 고정으로 받아 `vendor/sprite-gen/.venv/bin`(Windows는 `Scripts`)에 넣는다.
+    `npm run sprite`는 이 폴더를 PATH 맨 앞에 두고 sprite-gen을 실행한다.
+  - **RIFE:** 걷기·달리기 루프 이음새를 고친다. sprite-gen의 `rife install`(rife-ncnn-vulkan 20221029, SHA-256 고정, 사용자 데이터 폴더)을
+    부르고, sprite-gen이 이미 찾는 RIFE가 있으면 건너뛴다. 확인 프레임이 실패하면(대개 Vulkan 없음) 설치를 실패시키지 않고 경고와 다음 명령을 남긴다.
+    RIFE가 없으면 루프는 촬영된 그대로 잘리고 경고가 남는다.
+  - **ffmpeg·ffprobe:** 점검만 하고, 없으면 위 표의 명령을 준비자 몫으로 알린다.
+  - 끝에 도구별 상태(`ok`·`missing`·`broken`)를 출력한다. 키트가 받는 도구(img2webp)를 받지 못했을 때만 종료 코드가 1이다.
 - 설치한 커밋 SHA를 작업 기록(`creation-notes.md`)에 남긴다.
 - **한 캐릭터를 만드는 동안 저장소를 업데이트하지 않는다.** 규격·패치가 바뀌면 이미 만든 결과의 해시와 검수 근거가 맞지 않게 된다.
   업데이트는 캐릭터와 캐릭터 사이에 하고, 업데이트 뒤 `npm run sprite:status`로 패치 적용 상태를 다시 확인한다.
 - 이미 설치된 작업 공간을 재사용할 때는 커밋, 작업 중 변경, 패치 상태를 확인한다.
   모르는 로컬 변경이 있으면 덮어쓰지 말고 새로 클론한다.
 - `npm run sprite:status` 통과는 설치 확인일 뿐이다. 로그인이나 구독 사용 가능 여부를 뜻하지 않는다.
+  JSON의 `tools`에 `ffmpeg`·`ffprobe`·`img2webp`·`rife`가 각각 `status`(`ok`·`missing`·`broken`)와 `install`(`actor`: `agent`면 에이전트가
+  `npm run sprite:setup`을 실행, `user`면 준비자가 실행할 명령)로 나온다. `tools.status`가 `ready`가 아니면 생성을 시작하지 않는다.
 - **MCP `check_creation_readiness`** 를 캐릭터의 첫 생성 전, 작업 공간 재시작 뒤, 등록 전에 부른다. 상태별 의미는 [연결 안내](CONNECTION-READINESS.md)를 따른다.
   연결만 확인할 때 `purpose: "connection"`, 완성된 패키지 등록 때 `purpose: "registration"`을 지정한다.
   두 목적은 생성 구독 질문·키트 업데이트·Python 설치를 생략한다. 새 생성 준비만 기본 `purpose: "generation"`이다.
@@ -63,6 +87,8 @@ npm run sprite:status
     추적 파일에 로컬 변경이 있거나, 다른 브랜치이거나, 원격과 갈라졌으면 바꾸지 않고 `blocked`로 알린다.
     캐릭터가 진행 중이거나 작업 공간을 모르면 보고만 한다.
     돌려준 `nextCommands`를 모두 실행하고, `restartRequired`면 호스트를 다시 시작한다.
+  - **tools:** `sprite:status`의 `tools`와 같은 형식이다. ffmpeg·ffprobe·img2webp(`-exact`)가 `ok`여야 `kitAndAccountReady`가 참이 된다.
+    RIFE는 `warnings`로만 알린다. `nextCommands`는 에이전트가 실행하고, `nextAction`(actor `user`)의 sudo 명령은 준비자에게 전한다.
   - **account:** 사용자가 대화에서 실제로 말한 계정만 넘긴다. 없으면 호스트가 지원할 때 선택 양식(MCP elicitation)을 띄우고,
     지원하지 않으면 돌려준 고정 선택지를 번호로 보여준다.
   - **infrastructure:** 등록 API·홈페이지 접속과 환경 준비자 조치를 분리한다. Library helper는 실제 점검 전까지 미검증이다.

@@ -73,7 +73,9 @@ npm run sprite:setup
 npm run sprite:status
 ```
 
-Setup downloads the pinned sprite-gen source into this checkout and installs it in a dedicated Python environment. Use Git clone; the GitHub source ZIP does not contain the submodule files. The status command checks installation, not generation access or quota. Keep an in-progress character workspace in place and avoid pulling repository updates during creation.
+Setup downloads the pinned sprite-gen source into this checkout and installs it in a dedicated Python environment. Use Git clone; the GitHub source ZIP does not contain the submodule files. The status command checks installation, not generation access or quota.
+
+Setup also fetches the outside tools sprite-gen needs, without sudo: `img2webp` with `-exact` (libwebp 1.6.0, SHA-256 pinned, placed in the kit's environment when your system has none or an older one such as Ubuntu 24.04's 1.3.x) and RIFE for smooth walk and run loops (`sprite-gen rife install`, about 430 MB download). Install `ffmpeg` yourself first: `sudo apt install ffmpeg` (Ubuntu/Debian), `brew install ffmpeg` (macOS) or `winget install --id Gyan.FFmpeg -e` (Windows). Setup and `sprite:status` list each tool as `ok`, `missing` or `broken` with the command that fixes it. A Linux machine without a GPU also needs `sudo apt install libvulkan1 mesa-vulkan-drivers` for RIFE; without RIFE, loops are cut as filmed with a warning. Keep an in-progress character workspace in place and avoid pulling repository updates during creation.
 
 To connect the tools, follow the [local Codex plugin guide](docs/LOCAL-PLUGIN.md). For a manual MCP connection, run `node scripts/print-install.mjs` and follow the printed installation command. Other local hosts can connect `mcp/stdio.mjs` with `AI_FIGHTER_ROOT` set to the checkout.
 
