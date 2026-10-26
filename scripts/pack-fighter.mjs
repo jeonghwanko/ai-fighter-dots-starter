@@ -159,8 +159,9 @@ async function readAnimation(source, name, motion) {
   }
   if (frames.some(f => f.width !== frames[0].width || f.height !== frames[0].height)) fail('GAME_PACK_FRAME', `${name}: frames differ in size`);
   const [ax, ay] = Array.isArray(animation.anchor) ? animation.anchor : [frames[0].width / 2, frames[0].height];
-  return { keys: animation.frames, frames, durations: animation.durations_ms.map(ms => Math.max(1, Math.round(ms))), anchor: { x: motion.flipX ? frames[0].width - ax : ax, y: ay },
-    loop: animation.loop, events: animation.events ?? [] };
+  // The package plays whole milliseconds; a gait review is bound to the game pack's own durations.
+  return { keys: animation.frames, frames, durations: animation.durations_ms.map(ms => Math.max(1, Math.round(ms))), sourceDurations: animation.durations_ms,
+    anchor: { x: motion.flipX ? frames[0].width - ax : ax, y: ay }, loop: animation.loop, events: animation.events ?? [] };
 }
 
 function checkPlanFields(name, motion) {
@@ -315,7 +316,8 @@ export async function packFighter(planFile) {
         if (!motion.gaitReview) fail('GAIT_REVIEW_REQUIRED', `${name}: run fighter:gait review on the final game-pack animation first`);
         let review;
         try {
-          review = requireReview(JSON.parse(await readFile(path.resolve(base, motion.gaitReview), 'utf8')), animations[name], name);
+          review = requireReview(JSON.parse(await readFile(path.resolve(base, motion.gaitReview), 'utf8')),
+            { frames: animations[name].frames, durations: animations[name].sourceDurations }, name);
         } catch (error) { fail(error.message.startsWith('GAIT_') ? error.message.split(':')[0] : 'GAIT_REVIEW_UNREADABLE', `${name}: ${error.message}`); }
         if (motion.stridePixels !== undefined) fail('GAIT_STRIDE_OVERRIDE', `${name}: remove stridePixels; the verified report supplies it`);
         if (motion.origin && motion.origin.y !== review.geometry.groundY) fail('GAIT_ORIGIN_MISMATCH', `${name}: origin must use the reviewed ground line`);
