@@ -1,5 +1,10 @@
 # 보행 설계와 등록 전 검수
 
+먼저 모든 모션의 [생성 전 공통 가이드](MOTION-GUIDE.md)로 체형·참조 역할·동작 연결을 설계한다.
+이 문서의 gait 전용 검수는 `walk`/`run`에 적용한다. 공격·피격·방어 등은 해당 액션 계약으로
+검수하며, 실제 지면 관계·정체성·연결 검수는 유지한다.
+
+
 sprite-gen은 이 저장소의 `vendor/sprite-gen` 고정 커밋과 `patches/sprite-gen-gpt-motion.json`의 검토된 패치로 설치된다.
 `npm run sprite:setup`과 `npm run sprite --`가 원본/수정본 해시를 확인해 적용한다. 알 수 없는 로컬 수정은 덮어쓰지 않는다.
 설치만으로 모든 검수가 자동 실행되는 것은 아니다.

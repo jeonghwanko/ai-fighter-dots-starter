@@ -80,6 +80,14 @@ This repository lets each user create their own fighter through Dot. Read
   further VACE generation is currently paused for the requested architecture review.
 - `examples/sparring-bot` and `npm run example` are geometric test fixtures. They do not satisfy a request
   for a generated character. Do not rename or restyle that fixture and call it sprite-gen output.
+- Before authoring any motion, follow `docs/MOTION-GUIDE.md`: finish the calibrated whole-body target and
+  temporal plan first; separate authoritative pose, immutable appearance and continuity-anchor roles.
+  Review actual prepared inputs once per unchanged group; avoid competing full-body references where the
+  chosen route allows it, but retain every reference/anchor required by that route. Use motion-specific,
+  positive prompts and batch output review; do not turn internal input review into repeated user approvals.
+  Keep gait-only contact gates scoped to walk/run; actions still require direction, ground and continuity review.
+  Reference guidance is not hard pose control or a proven success-rate improvement. Preserve accepted assets,
+  unknown-outcome recovery, user generation limits and provider choice. Diagnose input failures before retrying.
 - The v1 contract requires all 11 motions, including 16 walk frames and 12 run frames. Validate actual
   motion, identity, foot alternation, and ground contact; schema/decoder success alone is not visual approval.
 - Follow `docs/GAIT-REVIEW.md`: keep one coordinate/scale reference, write the phase plan before generation,

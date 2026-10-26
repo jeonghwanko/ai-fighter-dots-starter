@@ -73,6 +73,17 @@ Re-read after a revision conflict; do not blindly replay a stale update. If game
 explain the changed requirements and use `refresh-context` after comparing them. Old selections remain
 recorded, but stale evidence must be reviewed. Keep brief conversational notes in `creation-notes.md`.
 
+## Prepare every motion before generation
+
+Read `docs/MOTION-GUIDE.md` in the returned kit root for all motions, including idle, attacks and reactions.
+Prepare a calibrated whole-body target and temporal plan; separate target pose, appearance and continuity
+references. Reduce conflicting full-body poses where the route permits, retaining its required guides/anchors.
+Review the actual input group once unless it changes. Use concrete motion-specific prompts, then review actual
+outputs together; do not add per-frame user approval gates. Preserve accepted assets and delegated scope.
+Prioritize identity, anatomy, direction, contact and continuity failures over harmless guide differences.
+Apply gait-only gates to walk/run. Reference guidance does not guarantee joint locking or improved success rates.
+A design-only request never authorizes generation; existing generation limits and unknown recovery still apply.
+
 ## Execute and recover
 
 The state tools do not generate images. Prepare an immutable command using `prepare_creation_job`;
