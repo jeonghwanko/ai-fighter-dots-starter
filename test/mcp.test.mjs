@@ -228,3 +228,26 @@ test('profile edits need no local files and issue one metadata PATCH with stable
   try { assert.equal((await old.callTool({name:'update_fighter_profile',arguments:args})).structuredContent.code,'server-feature-missing'); }
   finally { await old.close(); }
 });
+
+test('bout lines edits need profile-lines-1; null removes them and the schema bounds each line', async () => {
+  const fighterId=crypto.randomUUID(), args=lines=>({fighterId,idempotencyKey:crypto.randomUUID(),expectedManifestSha256:'a'.repeat(64),profile:{lines}});
+  const server=features=>{const calls=[];return {calls,remote:{request:async(route,options={})=>{calls.push({route,...options});
+    return route==='spec'?{data:{registration:{profileUpdate:'v1'},features}}:{ok:true,stage:'registered',fighterId,manifestSha256:'b'.repeat(64)};}}};};
+  const current=server(['profile-names-1','profile-lines-1']), client=await connectInProcess({root:null,remote:current.remote});
+  try {
+    for(const lines of [{challenge:'Ready.',lose:'Next time.'},null]) {
+      assert.equal((await client.callTool({name:'update_fighter_profile',arguments:args(lines)})).structuredContent.stage,'registered');
+      assert.deepEqual(JSON.parse(current.calls.at(-1).body).profile,{lines});
+    }
+    const writes=current.calls.filter(c=>c.method==='PATCH').length;
+    for(const lines of [{},{taunt:'x'},{win:'x'.repeat(41)},{win:''}])
+      assert.equal((await client.callTool({name:'update_fighter_profile',arguments:args(lines)})).isError,true,JSON.stringify(lines));
+    assert.equal(current.calls.filter(c=>c.method==='PATCH').length,writes);
+  } finally { await client.close(); }
+  const old=server(['profile-names-1']), before=await connectInProcess({root:null,remote:old.remote});
+  try {
+    assert.equal((await before.callTool({name:'update_fighter_profile',arguments:args({win:'Done.'})})).structuredContent.code,'server-feature-missing');
+    assert.equal((await before.callTool({name:'update_fighter_profile',arguments:{...args(null),profile:{name:'Still editable'}}})).structuredContent.stage,'registered');
+    assert.deepEqual(old.calls.filter(c=>c.method).map(c=>JSON.parse(c.body).profile),[{name:'Still editable'}]);
+  } finally { await before.close(); }
+});

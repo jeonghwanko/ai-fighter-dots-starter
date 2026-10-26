@@ -1,7 +1,7 @@
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { Problem, readBody, sha256, unstorableTextPath } from './http.mjs';
 
-const editable = new Set(['name', 'description', 'language', 'concept', 'moves', 'names']);
+const editable = new Set(['name', 'description', 'language', 'concept', 'moves', 'names', 'lines']);
 /** Reconstruct from the expected immutable version, including on an idempotent retry. */
 export async function updateFighterProfile({ request, owner, id, key, db, rpc }) {
   let body;
@@ -24,8 +24,8 @@ export async function updateFighterProfile({ request, owner, id, key, db, rpc })
   if (error) throw new Problem(503, 'database-unavailable');
   if (!base) throw new Problem(previous ? 409 : 404, previous ? 'idempotency-conflict' : 'fighter-not-found');
   const manifest = { ...base.manifest, profile: { ...base.manifest.profile, ...body.profile } };
-  // `names: null` removes the per-language names (contract profile.names); leaving it out keeps them.
-  if (body.profile.names === null) delete manifest.profile.names;
+  // `names: null` / `lines: null` remove the per-language names / bout lines (contract profile.names, profile.lines); leaving them out keeps them.
+  for (const key of ['names', 'lines']) if (body.profile[key] === null) delete manifest.profile[key];
   const result = validateFighter(manifest);
   if (!result.ok || unstorableTextPath(manifest) !== null) throw new Problem(422, 'invalid-profile', result.errors?.slice(0, 20));
   const text = JSON.stringify(manifest);

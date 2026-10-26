@@ -109,3 +109,25 @@ test('per-language names are edited like the rest of the profile, shown on the r
     assert.equal('names' in relisted, false);
   } finally { await f.sql.close(); }
 });
+
+test('bout lines are edited like the rest of the profile and null removes them', async () => {
+  const f = await profileFixture();
+  try {
+    const first = await f.register(), id = first.fighter_id;
+    const lines = { challenge: '한 판 붙자!', win: '역시 내가 이겼군.' };
+    const set = await f.request(id, first.manifest_sha, { lines }, crypto.randomUUID());
+    assert.equal(set.status, 200, await set.clone().text());
+    const saved = await set.json();
+    const row = sql => f.sql.query('select manifest from af_submissions where id=$1', [sql]).then(r => r.rows[0].manifest);
+    const edited = await row(saved.submissionId);
+    assert.deepEqual(edited.profile.lines, lines);
+    assert.deepEqual({ ...edited, profile: { ...edited.profile, lines: undefined } }, { ...example, profile: { ...example.profile, lines: undefined } });
+    assert.deepEqual((await f.sql.query('select profile from af_fighters where id=$1', [id])).rows[0].profile.lines, lines);
+    for (const invalid of [{}, { taunt: 'x' }, { lose: 'x'.repeat(41) }, { win: ' ' }])
+      assert.equal((await f.request(id, saved.manifestSha256, { lines: invalid }, crypto.randomUUID())).status, 422, JSON.stringify(invalid));
+    const cleared = await f.request(id, saved.manifestSha256, { lines: null }, crypto.randomUUID());
+    assert.equal(cleared.status, 200, await cleared.clone().text());
+    assert.equal('lines' in (await row((await cleared.json()).submissionId)).profile, false);
+    assert.equal('lines' in (await f.sql.query('select profile from af_fighters where id=$1', [id])).rows[0].profile, false);
+  } finally { await f.sql.close(); }
+});
