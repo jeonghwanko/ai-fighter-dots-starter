@@ -8,9 +8,12 @@ import example from '../contracts/ai-fighter/v1/example.fighter.json' with {type
 /** Two duel-approved fighters in a migrated PGlite, and a db adapter shaped like the Supabase client. */
 async function duelFixture() {
   const sql=new PGlite();
-  await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
+  await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin;
     create schema auth; create table auth.users(id uuid primary key,email text);
-    create function auth.uid() returns uuid language sql as 'select null::uuid';
+    create function auth.uid() returns uuid language sql as 'select null::uuid'; create function auth.jwt() returns jsonb language sql as 'select null::jsonb';
+    create table auth.sessions(id uuid primary key,user_id uuid,oauth_client_id uuid,not_after timestamptz,scopes text);
+    create table auth.oauth_clients(id uuid primary key,deleted_at timestamptz);
+    create table auth.oauth_consents(user_id uuid,client_id uuid,revoked_at timestamptz,scopes text);
     grant usage on schema auth to authenticated,service_role; create schema storage; create schema cron; create function cron.schedule(text,text,text) returns bigint language sql as 'select 1::bigint';
     create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
     create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
@@ -111,5 +114,26 @@ test('a failed run leaves the match budget, retries can finish it, and repeated 
     const braked=await post(crypto.randomUUID());
     assert.equal(braked.status,503); assert.equal((await braked.json()).code,'duels-failing');
     assert.equal((await post(first)).status,200); // A finished match is still returned.
+  } finally {await sql.close();}
+});
+
+test('a page plays the engine it names when the server keeps it; any other name plays the current engine',async()=>{
+  const {sql,db,ids}=await duelFixture();
+  try {
+    const result=engine=>({winner:0,how:'ko',ms:1000,hp:[0.5,0],contacts:[3,1],digest:engine==='test-v1'?'11111111':'00000000'});
+    const ran=[];
+    const engines={'test-v0':()=>{ran.push('test-v0');return result('test-v0');},'bad name!':()=>result('x'),'test-v2':'not a function'};
+    const handle=createHandler({db,engineVersion:'test-v1',simulateDuel:()=>{ran.push('test-v1');return result('test-v1');},engines});
+    const post=query=>handle(new Request(`https://test/ai-fighter/duels${query}`,{method:'POST',body:JSON.stringify({a:ids[0],b:ids[1],idempotencyKey:crypto.randomUUID()})}));
+    const engineOf=async response=>{assert.equal(response.status,200);return (await response.json()).match.engine;};
+    assert.equal(await engineOf(await post('?engine=test-v0')),'test-v0');
+    for(const query of ['','?engine=test-v1','?engine=test-v9','?engine=bad%20name!','?engine=test-v2']) assert.equal(await engineOf(await post(query)),'test-v1');
+    assert.deepEqual(ran,['test-v0','test-v1','test-v1','test-v1','test-v1','test-v1']);
+    const rank=await (await handle(new Request('https://test/ai-fighter/rankings'))).json();
+    assert.equal(rank.engine,'test-v1'); assert.deepEqual(rank.engines,['test-v1','test-v0']);
+    // A retry under another engine's name returns the stored match on its own engine (the page lets go of the key).
+    const key=crypto.randomUUID(),body=JSON.stringify({a:ids[0],b:ids[1],idempotencyKey:key});
+    await handle(new Request('https://test/ai-fighter/duels?engine=test-v0',{method:'POST',body}));
+    assert.equal(await engineOf(await handle(new Request('https://test/ai-fighter/duels',{method:'POST',body}))),'test-v0');
   } finally {await sql.close();}
 });
