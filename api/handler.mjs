@@ -34,8 +34,8 @@ function check(error) {
   if (['byte-budget-mismatch','profile-only-required'].includes(error.message)) throw new Problem(422, error.message);
   throw new Problem(503, 'database-unavailable');
 }
-export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, creatorLink = null, analytics = null }) {
-  const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines});
+export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null }) {
+  const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release});
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
   const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink });

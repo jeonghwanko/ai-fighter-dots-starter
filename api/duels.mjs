@@ -16,8 +16,10 @@ const ENGINE_NAME = /^[a-z0-9][a-z0-9.-]{0,63}$/;
  * `engines` (2026-10-26): earlier engines kept by name beside the current one (`engines/<name>.mjs`, written by the game's Edge deploy).
  * A page names the engine it replays with (`POST duels?engine=<name>`), so a page still on the previous engine plays that engine and the
  * site and this function need no shared release moment. A name not kept, or none, plays the current engine.
+ * `release` (2026-10-26): the deployed release's name (`release.mjs`, written by the game's Edge deploy), told by `GET rankings` so the deploy
+ * sees its own upload answer — a change to this handler alone moves no engine name.
  */
-export function createDuelHandler({db,simulateDuel,engineVersion,engines=null}) {
+export function createDuelHandler({db,simulateDuel,engineVersion,engines=null,release=null}) {
   const kept=new Map(Object.entries(engines??{}).filter(([name,run])=>ENGINE_NAME.test(name) && typeof run==='function' && name!==engineVersion));
   const pick=request=>{ const wanted=new URL(request.url).searchParams.get('engine');
     return wanted && kept.has(wanted) ? [wanted,kept.get(wanted)] : [engineVersion,simulateDuel]; };
@@ -42,7 +44,7 @@ export function createDuelHandler({db,simulateDuel,engineVersion,engines=null}) 
   return async (request,parts) => {
     try {
       if (request.method==='OPTIONS') return reply({ok:true});
-      if (request.method==='GET' && parts.join('/')==='rankings') return reply({ok:true,rankings:await rankings(),engine:engineVersion,engines:[engineVersion,...kept.keys()].filter(Boolean)});
+      if (request.method==='GET' && parts.join('/')==='rankings') return reply({ok:true,rankings:await rankings(),engine:engineVersion,engines:[engineVersion,...kept.keys()].filter(Boolean),release});
       if (request.method==='GET' && parts.length===2 && parts[0]==='duels' && UUID.test(parts[1])) {
         const {data,error}=await db.from('af_duels').select('*').eq('id',parts[1]).not('completed_at','is',null).maybeSingle(); check(error);
         if (!data) throw new Problem(404,'not-found'); return reply({ok:true,match:present(data)});

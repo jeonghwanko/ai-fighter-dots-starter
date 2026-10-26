@@ -123,14 +123,14 @@ test('a page plays the engine it names when the server keeps it; any other name 
     const result=engine=>({winner:0,how:'ko',ms:1000,hp:[0.5,0],contacts:[3,1],digest:engine==='test-v1'?'11111111':'00000000'});
     const ran=[];
     const engines={'test-v0':()=>{ran.push('test-v0');return result('test-v0');},'bad name!':()=>result('x'),'test-v2':'not a function'};
-    const handle=createHandler({db,engineVersion:'test-v1',simulateDuel:()=>{ran.push('test-v1');return result('test-v1');},engines});
+    const handle=createHandler({db,engineVersion:'test-v1',simulateDuel:()=>{ran.push('test-v1');return result('test-v1');},engines,release:'rel-0123456789ab'});
     const post=query=>handle(new Request(`https://test/ai-fighter/duels${query}`,{method:'POST',body:JSON.stringify({a:ids[0],b:ids[1],idempotencyKey:crypto.randomUUID()})}));
     const engineOf=async response=>{assert.equal(response.status,200);return (await response.json()).match.engine;};
     assert.equal(await engineOf(await post('?engine=test-v0')),'test-v0');
     for(const query of ['','?engine=test-v1','?engine=test-v9','?engine=bad%20name!','?engine=test-v2']) assert.equal(await engineOf(await post(query)),'test-v1');
     assert.deepEqual(ran,['test-v0','test-v1','test-v1','test-v1','test-v1','test-v1']);
     const rank=await (await handle(new Request('https://test/ai-fighter/rankings'))).json();
-    assert.equal(rank.engine,'test-v1'); assert.deepEqual(rank.engines,['test-v1','test-v0']);
+    assert.equal(rank.engine,'test-v1'); assert.deepEqual(rank.engines,['test-v1','test-v0']); assert.equal(rank.release,'rel-0123456789ab');
     // A retry under another engine's name returns the stored match on its own engine (the page lets go of the key).
     const key=crypto.randomUUID(),body=JSON.stringify({a:ids[0],b:ids[1],idempotencyKey:key});
     await handle(new Request('https://test/ai-fighter/duels?engine=test-v0',{method:'POST',body}));
