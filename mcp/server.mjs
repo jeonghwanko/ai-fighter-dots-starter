@@ -41,6 +41,7 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
       'Read get_fighter_spec context at entry and each group. The game owns current motions, controls and timing. Preserve context revision and item/version selections; review_creation_progress checks the group boundary. A link starts intake directly; detail choices never approve the whole appearance.',
       'Read get_fighter_spec overview and creation first, including its interactionGuide. Process evaluation and forwarded test examples do not authorize character generation.',
       'Create in review groups: appearance; locomotion/stance; attacks; defense/reactions; final review. Finish each agreed group autonomously and show its actual previews together. Do not ask permission per motion.',
+      'When the context lists an optional group (style: skill, entrance and victory clips plus the fighting style), offer it once after defense and skip it when the user declines. It never blocks final; each optional clip a package carries still needs its own selected, checked version.',
       'Interpret the full feedback and prior selections by motion and version. A revision request is not acceptance. Praise of one motion accepts only that version; if all other current versions were already selected and required checks pass, advance without asking again. Otherwise wait only for missing feedback.',
       'Skip review only for explicitly delegated groups, after any earlier non-delegated group is accepted. A create/register request alone does not waive group feedback. Revise affected assets only and preserve selected versions; ask for feedback after showing the revision.',
       'Honor explicit reference roles and requested changes before asking about unresolved conflicts. Reuse confirmed choices. Distinguish image access from video access, and prepare only the access needed for the current stage.',
@@ -55,7 +56,7 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
   server.registerTool('get_fighter_spec', {
     description: 'Read context first for game-owned current motions, frames, controls, timing and group gates; refresh at each new group and preserve its revision. Optional group narrows context motions. Read overview and creation for the package workflow and sprite-gen setup. Read guide, schema and example for the package contract; motion narrows schema/example (the optional clips skill, entrance and victory have no example clip). Example art is a format fixture.',
     inputSchema: { section: z.enum(['overview', 'creation', 'guide', 'schema', 'example', 'context']).default('overview'),
-      group: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'final']).optional(),
+      group: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'style', 'final']).optional(),
       motion: z.enum(MOTIONS).optional() }, outputSchema, annotations,
   }, async ({ section, motion, group }) => {
     if (section === 'context') {

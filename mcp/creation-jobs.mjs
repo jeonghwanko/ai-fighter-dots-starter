@@ -13,7 +13,7 @@ const spriteCommands = new Set([...generating, 'workflow', 'prepare', 'extract',
 const args = z.array(z.string().max(16000).refine(s => !s.includes('\0'))).min(1).max(128);
 export const jobPlanSchema = z.object({
   engine: z.enum(['sprite', 'fighter-pack']), args,
-  groupId: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'final']),
+  groupId: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'style', 'final']),
   targets: z.array(z.object({ item: z.string().min(1).max(64), version: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/) }).strict()).min(1).max(12),
   inputs: z.array(z.string().min(1).max(512)).max(64),
   outputs: z.array(z.string().min(1).max(512)).min(1).max(64),
@@ -66,7 +66,8 @@ export function createJobStore(store) {
     if (context.revision !== state.contextRevision) fail('context-changed');
     if (state.groupId !== plan.groupId) fail('job-group-not-current');
     const index = context.workflow.groups.findIndex(g => g.id === plan.groupId), group = context.workflow.groups[index];
-    const allowed = plan.groupId === 'final' ? Object.keys(context.contract.motions)
+    // Final may rework any clip, including the optional ones the user took.
+    const allowed = plan.groupId === 'final' ? [...Object.keys(context.contract.motions), ...Object.keys(context.contract.optionalMotions ?? {})]
       : [...group.motions, ...(group.auxiliaries ?? [])];
     if (plan.targets.some(t => !allowed.includes(t.item))) fail('job-target-outside-group');
     if (new Set(plan.targets.map(t => t.item)).size !== plan.targets.length) fail('duplicate-job-target');

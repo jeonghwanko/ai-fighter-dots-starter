@@ -4,7 +4,7 @@ import { constants } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { z } from 'zod';
-import { fetchCreationContext, reviewCreationProgress } from './creation-context.mjs';
+import { fetchCreationContext, itemBlockers, reviewCreationProgress } from './creation-context.mjs';
 import { makePackageValidator } from './package-access.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
@@ -279,6 +279,12 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
         const same = (a, b) => canonical(a) === canonical(b);
         if (['name', 'description', 'language', 'concept', 'moves', 'names', 'lines'].some(key => !same(manifest.profile[key], state.profile[key]))
           || !same(manifest.combat.stats, state.profile.stats) || !same(manifest.combat.style, state.profile.style)) fail('package-profile-mismatch');
+        // Optional clips never block a group, so the package is where they are held: each one it carries is a tracked, accepted item.
+        const { view } = await effective(state);
+        for (const id of Object.keys(spec.optionalClips).filter(id => Object.hasOwn(manifest.clips, id))) {
+          const group = state.context.workflow.groups.find(g => g.motions.includes(id));
+          if (!group || itemBlockers(view, group, id).length) fail('package-optional-clip-unreviewed');
+        }
         const base = path.posix.dirname(manifests[0]);
         const allFiles = [...event.files, ...manifest.assets.map(asset => `${base}/${asset.path}`)];
         state.package = { files: await snapshots(allFiles), basisHash: packageBasis(state), contextRevision: state.contextRevision,

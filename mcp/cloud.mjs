@@ -102,7 +102,7 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
           auth: 'google-oauth-via-cloud-connector', assetUpload: 'openai-fileParams', requiresPc: false,
           readinessTool: 'check_creation_readiness' } } };
       }
-      return { ok: true, data: section === 'schema' ? schema : { steps: ['appearance review', 'locomotion review', 'attack review', 'defense/reaction review', 'final review', 'prepare_fighter_registration', 'upload_fighter_asset for each pending asset', 'submit_fighter_registration', 'get_fighter_submission'],
+      return { ok: true, data: section === 'schema' ? schema : { steps: ['appearance review', 'locomotion review', 'attack review', 'defense/reaction review', 'optional style review (skill, entrance and victory clips, fighting style; may be skipped)', 'final review', 'prepare_fighter_registration', 'upload_fighter_asset for each pending asset', 'submit_fighter_registration', 'get_fighter_submission'],
         delivery: 'Use the current conversation’s actual image previews and approved files. A file path or a readiness flag is not a preview.',
         package: 'Produce fighter.json and assets/<id>.webp with the kit game-pack/pack commands, then pass actual host file attachments. For an existing approved package, preserve the original bytes and verify them; do not regenerate or rebuild unchanged art. Never invent measurements or hashes.',
         files: 'If the host exposes a file input as an absolute path, supply the existing workspace file. For Library or Page references, use supported materialization or an original-byte read, then verify the saved file size and SHA-256. Rendered previews are not package files. Recover existing files before any retry.',
