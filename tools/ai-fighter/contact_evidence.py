@@ -1,10 +1,15 @@
 """AI Fighter's explicit, review-bound extension of the pinned motion inspector.
 
-The upstream report is retained verbatim. Only its two-lobe ambiguity can be
-resolved, and only with fresh per-frame anatomical-foot outlines, both contact
-landmarks, a shallow sole arch, and all other upstream checks passing. This is
-conditional authoring evidence, not automatic anatomy recognition or a security
-certificate. No source image, timing, upstream module or report is patched.
+The upstream report is retained verbatim. Version 1 evidence resolves only its
+two-lobe ambiguity, with fresh per-frame anatomical-foot outlines, both contact
+landmarks on the bottom band, a shallow sole arch, and all other upstream checks
+passing. Version 2 evidence also covers padded, hoofed or clawed soles and lifted
+heels (digitigrade feet, heel-off): any number of contact lobes of the one outlined
+foot that close within the same shallow depth, and travel measured at the leading
+ground contact instead of the ROI silhouette centroid, with the upstream formulas.
+Baseline, ROI-boundary, single-shape and pose-count checks are never resolved.
+This is conditional authoring evidence, not automatic anatomy recognition or a
+security certificate. No source image, timing, upstream module or report is patched.
 """
 from __future__ import annotations
 
@@ -22,9 +27,21 @@ from sprite_gen.qa.motion import analyze_motion
 from sprite_gen.spec.assets import load_asset
 from sprite_gen.spec.runio import acquire_run_dir_lock, atomic_write_set, release_run_dir_lock
 
-ENGINE = "ai-fighter-foot-evidence-v1"
+ENGINES = {1: "ai-fighter-foot-evidence-v1", 2: "ai-fighter-foot-evidence-v2"}
 LOBE_REASON = "multiple contact lobes in foot ROI"
 REVIEW_KEYS = ("sameAnatomicalFoot", "completeFoot", "otherFootExcluded", "groundContact")
+# Upstream reasons that only proxy foot identity or travel through the ROI silhouette.
+# With v2 evidence the outlines answer identity and the leading contact track answers
+# travel. Every other upstream reason, including any added later, stays a failure.
+SILHOUETTE_PROXY_REASONS = (
+    LOBE_REASON,
+    "foot centroid moves vertically; stance is uncertain",
+    "foot silhouette area changes; tracking identity is uncertain",
+    "foot silhouette dimensions change; tracking identity is uncertain",
+    "horizontal reversal",
+    "insufficient net horizontal displacement",
+    "foot velocity is inconsistent across the declared stance",
+)
 
 
 def pixel_binding(sequence):
@@ -44,9 +61,11 @@ def _stance(sequence, foot, start, end, box, facing):
     return {"foot": foot, "start": start, "end": end, "box": list(box), "facing": facing}
 
 
-def template(sequence, foot, start, end, box, facing):
+def template(sequence, foot, start, end, box, facing, version=2):
     stance = _stance(sequence, foot, start, end, box, facing)
-    return {"kind": "ai-fighter-foot-evidence", "version": 1, "sequence": pixel_binding(sequence),
+    if version not in ENGINES:
+        raise ValueError("Unknown foot-evidence version")
+    return {"kind": "ai-fighter-foot-evidence", "version": version, "sequence": pixel_binding(sequence),
             "stance": stance,
             "review": {"reviewer": "", "method": "visual-per-frame", "notes": "",
                        **{key: "unverified" for key in REVIEW_KEYS}},
@@ -112,10 +131,80 @@ def _intervals(band):
     return [(int(a),int(b)) for a,b in zip(starts,ends)]
 
 
+def _merge_depth(region, top, bottom, left, right):
+    # Fixed, documented conservative sole-shape limits; never CLI knobs.
+    limit = min(math.ceil((bottom-top)*.20),math.ceil((right-left)*.12))
+    return next((depth for depth in range(3,limit+1)
+                 if len(_intervals(region[max(top,bottom-depth):bottom].any(axis=0))) == 1),None)
+
+
+def _v1_contact(entry, tracked, region, box, size, facing):
+    x,y = box[:2]
+    defects = []
+    ys,xs = np.nonzero(region)
+    left,top,right,bottom = int(xs.min()),int(ys.min()),int(xs.max())+1,int(ys.max())+1
+    lobes = _intervals(region[max(top,bottom-2):bottom].any(axis=0))
+    heel, forefoot = entry.get("heel"),entry.get("forefoot")
+    if not all(_point(p,size) and tracked[p[1],p[0]] and y+bottom-2 <= p[1] < y+bottom for p in (heel,forefoot)):
+        defects.append("HEEL_AND_FOREFOOT_MUST_TOUCH_ACTUAL_BOTTOM_BAND")
+    else:
+        expected_order = heel[0] < forefoot[0] if facing == "right" else heel[0] > forefoot[0]
+        if not expected_order:
+            defects.append("CONTACT_LANDMARK_FACING")
+    merged_depth = None
+    if len(lobes) == 2:
+        gap = lobes[1][0]-lobes[0][1]
+        merged_depth = _merge_depth(region,top,bottom,left,right)
+        if gap > (right-left)*.30 or merged_depth is None:
+            defects.append("CONTACT_GAP_IS_NOT_A_SHALLOW_SOLE_ARCH")
+        if not defects:
+            contacts = sorted([heel[0]-x,forefoot[0]-x])
+            if not all(a <= p < b for p,(a,b) in zip(contacts,lobes)):
+                defects.append("LANDMARKS_MUST_COVER_BOTH_CONTACT_LOBES")
+    elif len(lobes) != 1:
+        defects.append("UNSUPPORTED_CONTACT_TOPOLOGY")
+    return {"lobeCount":len(lobes),"soleMergeDepth":merged_depth,
+            "contactLobesX":[[a+x,b+x] for a,b in lobes]}, defects
+
+
+def _v2_contact(entry, tracked, region, box, size, facing):
+    """Pads, hoof walls and claws are lobes of the one outlined foot when they close within
+    the v1 shallow-sole limits. The forefoot is on the bottom band; the heel may be lifted."""
+    x,y = box[:2]
+    defects = []
+    ys,xs = np.nonzero(region)
+    left,top,right,bottom = int(xs.min()),int(ys.min()),int(xs.max())+1,int(ys.max())+1
+    lobes = _intervals(region[max(top,bottom-2):bottom].any(axis=0))
+    merged_depth = None
+    if len(lobes) > 1:
+        widest_gap = max(b[0]-a[1] for a,b in zip(lobes,lobes[1:]))
+        merged_depth = _merge_depth(region,top,bottom,left,right)
+        if widest_gap > (right-left)*.30 or merged_depth is None:
+            defects.append("CONTACT_GAP_IS_NOT_A_SHALLOW_SOLE_ARCH")
+    heel, forefoot = entry.get("heel"),entry.get("forefoot")
+    heel_lifted = None
+    if not (_point(forefoot,size) and tracked[forefoot[1],forefoot[0]] and y+bottom-2 <= forefoot[1] < y+bottom):
+        defects.append("FOREFOOT_MUST_TOUCH_ACTUAL_BOTTOM_BAND")
+    elif not (_point(heel,size) and tracked[heel[1],heel[0]]):
+        defects.append("HEEL_MUST_BE_ON_THE_TRACKED_FOOT")
+    else:
+        heel_lifted = heel[1] < y+bottom-2
+        if not (heel[0] < forefoot[0] if facing == "right" else heel[0] > forefoot[0]):
+            defects.append("CONTACT_LANDMARK_FACING")
+    # The forefoot is the last part to leave the ground, so its leading edge stays planted
+    # from foot-flat (or toe-down) to toe-off whether or not the heel has lifted.
+    leading = lobes[-1][1]-1+x if facing == "right" else lobes[0][0]+x
+    return {"lobeCount":len(lobes),"soleMergeDepth":merged_depth,
+            "contactLobesX":[[a+x,b+x] for a,b in lobes],"leadingContactX":leading,
+            "heelLifted":heel_lifted}, defects
+
+
 def validate_evidence(sequence, stance, evidence):
     issues, observations = [], []
-    if not isinstance(evidence,dict) or evidence.get("kind") != "ai-fighter-foot-evidence" or evidence.get("version") != 1:
+    if (not isinstance(evidence,dict) or evidence.get("kind") != "ai-fighter-foot-evidence"
+            or evidence.get("version") not in ENGINES):
         return ["EVIDENCE_SCHEMA"], observations
+    contact = _v1_contact if evidence["version"] == 1 else _v2_contact
     if evidence.get("sequence") != pixel_binding(sequence):
         issues.append("EVIDENCE_STALE_PIXELS_OR_TIMING")
     if evidence.get("stance") != stance:
@@ -159,52 +248,66 @@ def validate_evidence(sequence, stance, evidence):
             defects.append("UNASSIGNED_FOREGROUND_IN_ROI")
         if defects:
             issues.extend(f"FRAME_{index}: {d}" for d in defects); continue
-        region = alpha[y:y+h,x:x+w]
-        ys,xs = np.nonzero(region)
-        left,top,right,bottom = int(xs.min()),int(ys.min()),int(xs.max())+1,int(ys.max())+1
-        band = region[max(top,bottom-2):bottom].any(axis=0)
-        lobes = _intervals(band)
-        heel, forefoot = entry.get("heel"),entry.get("forefoot")
-        if not all(_point(p,size) and tracked[p[1],p[0]] and y+bottom-2 <= p[1] < y+bottom for p in (heel,forefoot)):
-            defects.append("HEEL_AND_FOREFOOT_MUST_TOUCH_ACTUAL_BOTTOM_BAND")
-        else:
-            expected_order = heel[0] < forefoot[0] if stance["facing"] == "right" else heel[0] > forefoot[0]
-            if not expected_order:
-                defects.append("CONTACT_LANDMARK_FACING")
-        merged_depth = None
-        if len(lobes) == 2:
-            gap = lobes[1][0]-lobes[0][1]
-            # Fixed, documented conservative sole-shape limits; never CLI knobs.
-            limit = min(math.ceil((bottom-top)*.20),math.ceil((right-left)*.12))
-            merged_depth = next((depth for depth in range(3,limit+1)
-                                 if len(_intervals(region[max(top,bottom-depth):bottom].any(axis=0))) == 1),None)
-            if gap > (right-left)*.30 or merged_depth is None:
-                defects.append("CONTACT_GAP_IS_NOT_A_SHALLOW_SOLE_ARCH")
-            if not defects:
-                contacts = sorted([heel[0]-x,forefoot[0]-x])
-                if not all(a <= p < b for p,(a,b) in zip(contacts,lobes)):
-                    defects.append("LANDMARKS_MUST_COVER_BOTH_CONTACT_LOBES")
-        elif len(lobes) != 1:
-            defects.append("UNSUPPORTED_CONTACT_TOPOLOGY")
-        observations.append({"frame":index,"lobeCount":len(lobes),"soleMergeDepth":merged_depth,
-                             "contactLobesX":[[a+x,b+x] for a,b in lobes],"issues":defects})
+        observation, defects = contact(entry,tracked,alpha[y:y+h,x:x+w],stance["box"],size,stance["facing"])
+        observations.append({"frame":index,**observation,"issues":defects})
         issues.extend(f"FRAME_{index}: {d}" for d in defects)
     return issues, observations
+
+
+def contact_track(candidate, observations):
+    """Upstream's travel formulas, applied to the measured leading contact edge.
+
+    Same pose-onset frames and timestamps, endpoint velocity, reversal/net-displacement
+    tests and RMSE tolerance as sprite-gen's stance candidate. Only the tracked x differs.
+    """
+    lead = {o["frame"]:o["leadingContactX"] for o in observations}
+    onsets = candidate.get("pose_onset_frames") or []
+    starts = {s["frame"]:s["time_seconds"] for s in candidate["samples"]}
+    if len(onsets) < 3 or any(f not in lead for f in onsets):
+        return None
+    xs = np.array([lead[f] for f in onsets],dtype=float)
+    times = np.array([starts[f] for f in onsets],dtype=float)
+    velocity = float(xs[-1]-xs[0])/float(times[-1]-times[0])
+    deltas = np.diff(xs)
+    residuals = xs-(xs[0]+velocity*(times-times[0]))
+    rmse, tolerance = float(np.sqrt(np.mean(residuals**2))), max(.5,float(np.ptp(xs))*.1)
+    reasons = []
+    if (deltas > .25).any() and (deltas < -.25).any():
+        reasons.append("leading contact: horizontal reversal")
+    if abs(float(xs[-1]-xs[0])) < 1:
+        reasons.append("leading contact: insufficient net horizontal displacement")
+    if rmse > tolerance:
+        reasons.append("leading contact: velocity is inconsistent across the declared stance")
+    return {"frames":onsets,"leadingContactX":xs.tolist(),"timesSeconds":times.tolist(),
+            "velocityPxPerSecond":velocity if math.isfinite(velocity) else None,
+            "fitRmsePx":rmse,"toleranceRmsePx":tolerance,"reasons":reasons}
 
 
 def inspect(sequence, foot, start, end, box, facing, evidence):
     stance = _stance(sequence,foot,start,end,box,facing)
     upstream = analyze_motion(sequence,contacts=[(start,end)],foot_box=box,facing=facing)
     issues, observations = validate_evidence(sequence,stance,evidence)
+    version = evidence.get("version") if isinstance(evidence,dict) and evidence.get("version") in ENGINES else 2
     result = copy.deepcopy(upstream)
     candidate = result["contact_candidates"][0]
     original_reasons = list(candidate["reasons"])
     # Never replace another failed check or use a reviewer-provided speed.
-    other_failures = [reason for reason in original_reasons if reason != LOBE_REASON]
-    speed = candidate.get("measured_velocity_candidate_px_per_second")
-    verified = (not issues and not other_failures and isinstance(speed,(int,float)) and math.isfinite(speed)
-                and (not original_reasons or original_reasons == [LOBE_REASON]))
-    candidate["reasons"] = other_failures + issues if verified else original_reasons + issues
+    track = None
+    if version == 1:
+        other_failures = [reason for reason in original_reasons if reason != LOBE_REASON]
+        resolvable = [LOBE_REASON]
+        speed = candidate.get("measured_velocity_candidate_px_per_second")
+        failures = other_failures
+    else:
+        other_failures = [reason for reason in original_reasons if reason not in SILHOUETTE_PROXY_REASONS]
+        resolvable = list(SILHOUETTE_PROXY_REASONS)
+        track = contact_track(candidate,observations) if not issues else None
+        speed = track["velocityPxPerSecond"] if track else None
+        failures = other_failures + (track["reasons"] if track else [])
+    verified = (not issues and not failures and isinstance(speed,(int,float)) and math.isfinite(speed)
+                and all(reason in resolvable for reason in original_reasons))
+    resolved = [reason for reason in original_reasons if reason in resolvable] if verified else []
+    candidate["reasons"] = [] if verified else original_reasons + (track["reasons"] if track else []) + issues
     candidate.update(status="verified" if verified else "needs-review",confidence=.9 if verified else 0.,
                      foot_velocity_px_per_second=speed if verified else None,
                      stride_px_per_second=abs(speed) if verified else None)
@@ -212,15 +315,19 @@ def inspect(sequence, foot, start, end, box, facing, evidence):
                   confidence=.9 if verified else 0.,foot_velocity_px_per_second=speed if verified else None,
                   stride_px_per_second=abs(speed) if verified else None)
     result["upstream_report"] = upstream
-    result["measurement_engine"] = ENGINE
+    result["measurement_engine"] = ENGINES[version]
     result["foot_evidence"] = {"status":"verified" if not issues else "unverified", "stance":stance,
                                "sequence":pixel_binding(sequence),"review":evidence.get("review") if isinstance(evidence,dict) else None,
                                "issues":issues,"observations":observations,"declaration":copy.deepcopy(evidence),
                                "resolvedReason":LOBE_REASON if verified and LOBE_REASON in original_reasons else None}
+    if version == 2:
+        result["foot_evidence"].update(resolvedReasons=resolved,contactTrack=track)
     result["warnings"] = ["Conditional on explicit reviewer-labelled complete anatomical feet; not automatic foot recognition."]
     if not verified:
         result["warnings"].append("Contact evidence or an upstream stance check failed; stride remains unverified.")
-    result["method"]["contact"] += " AI Fighter foot-evidence v1 checks both labelled foot outlines and shallow heel/forefoot arch evidence; upstream report retained."
+    result["method"]["contact"] += (" AI Fighter foot-evidence v1 checks both labelled foot outlines and shallow heel/forefoot arch evidence; upstream report retained."
+        if version == 1 else
+        " AI Fighter foot-evidence v2 checks both labelled foot outlines, groups shallow sole lobes of the one outlined foot, accepts a lifted heel with the forefoot on the bottom band, and measures travel at the leading contact edge with the upstream formulas; upstream report retained.")
     return result
 
 
@@ -234,6 +341,8 @@ def main():
     parser.add_argument("--foot",choices=("near","far"),required=True)
     parser.add_argument("--facing",choices=("left","right"),required=True)
     parser.add_argument("--foot-evidence",type=Path)
+    parser.add_argument("--evidence-version",type=int,choices=sorted(ENGINES),default=2,
+                        help="template only: 2 (default) also covers padded/hoofed soles and lifted heels; 1 is the boot-only rule")
     parser.add_argument("--out",type=Path,required=True)
     args=parser.parse_args()
     try:
@@ -249,7 +358,7 @@ def main():
         if args.command == "template":
             if output.exists():
                 raise ValueError("Template already exists; preserve the reviewer's evidence")
-            result=template(sequence,args.foot,start,end,box,args.facing)
+            result=template(sequence,args.foot,start,end,box,args.facing,args.evidence_version)
         else:
             if args.foot_evidence is None:
                 raise ValueError("inspect requires --foot-evidence; use official inspect-motion for the default route")

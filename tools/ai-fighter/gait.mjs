@@ -98,7 +98,8 @@ export function inspectGeometry(sequence, plan) {
 function contactEvidenceMatches(report, stance, sequence, facing) {
   const extended = report?.measurement_engine;
   if (stance.footEvidence === undefined && extended === undefined) return true;
-  if (typeof stance.footEvidence !== 'string' || !stance.footEvidence.trim() || extended !== 'ai-fighter-foot-evidence-v1') return false;
+  const version = { 'ai-fighter-foot-evidence-v1': 1, 'ai-fighter-foot-evidence-v2': 2 }[extended];
+  if (typeof stance.footEvidence !== 'string' || !stance.footEvidence.trim() || !version) return false;
   const proof = report.foot_evidence, binding = proof?.sequence;
   const expected = { foot: stance.foot, start: stance.start, end: stance.end, box: stance.box, facing };
   return proof?.status === 'verified' && proof.issues?.length === 0 &&
@@ -108,7 +109,7 @@ function contactEvidenceMatches(report, stance, sequence, facing) {
     binding?.size?.[0] === sequence.frames[0].width && binding?.size?.[1] === sequence.frames[0].height &&
     proof.observations?.length === stance.end - stance.start + 1 &&
     proof.observations.every((observation, i) => observation.frame === stance.start + i && observation.issues?.length === 0) &&
-    proof.declaration?.kind === 'ai-fighter-foot-evidence' && proof.declaration.version === 1 &&
+    proof.declaration?.kind === 'ai-fighter-foot-evidence' && proof.declaration.version === version &&
     proof.declaration.frames?.length === proof.observations.length && report.upstream_report !== undefined;
 }
 

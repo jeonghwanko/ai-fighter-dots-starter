@@ -32,10 +32,10 @@ test('explicit foot evidence: real inspector positive and adversarial geometry c
   assert.equal(result.status,0,result.stdout+result.stderr);
 });
 
-test('gait/pack gate requires matching fresh foot evidence; loop failure remains failure', {skip:!installed},async()=>{
+for(const version of [1,2])test(`gait/pack gate requires matching fresh foot evidence v${version}; loop failure remains failure`, {skip:!installed},async()=>{
   const dir=await mkdtemp(path.join(tmpdir(),'contact-evidence-'));
   try{
-    const generated=run(python,['test/contact_evidence_cases.py','--fixture-dir',dir]);
+    const generated=run(python,['test/contact_evidence_cases.py','--fixture-dir',dir,String(version)]);
     assert.equal(generated.status,0,generated.stderr);
     const tiles=[];
     for(let i=0;i<16;i++)tiles.push({input:path.join(dir,`${i}.png`),left:i*128,top:0});
@@ -52,6 +52,9 @@ test('gait/pack gate requires matching fresh foot evidence; loop failure remains
     const review=JSON.parse(await readFile(path.join(dir,'review/review.json'),'utf8'));
     assert.equal(review.status,'pass');assert.equal(review.stridePixels,128);
     assert.ok(review.stanceReports.every(r=>r.stride_verified&&!r.upstream_report.stride_verified));
+    assert.ok(review.stanceReports.every(r=>r.measurement_engine===`ai-fighter-foot-evidence-v${version}`));
+    const mismatched=structuredClone(review);mismatched.stanceReports[0].foot_evidence.declaration.version=3-version;
+    assert.throws(()=>requireReview(mismatched,seq,'walk'),/INCOMPLETE/);
     assert.equal(requireReview(review,seq,'walk'),review);
     const html=await readFile(path.join(dir,'review/preview.html'),'utf8');
     const calls=drawPreview(html);

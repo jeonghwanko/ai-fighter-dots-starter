@@ -85,7 +85,8 @@ This repository lets each user create their own fighter through Dot. Read
 - Follow `docs/GAIT-REVIEW.md`: keep one coordinate/scale reference, write the phase plan before generation,
   run `fighter:gait review` with both same-foot stance ROIs, and show its preview before registration.
   Missing or uncertain observations stay unverified. Bind gait reviews to the final game-pack pixels and durations.
-  Split heel/forefoot contacts may use docs/FOOT-EVIDENCE.md only with fresh per-frame outlines of both feet.
+  Split heel/forefoot contacts, padded/hoofed/clawed soles and lifted heels (digitigrade) may use docs/FOOT-EVIDENCE.md
+  only with fresh per-frame outlines of both feet; v2 evidence groups sole lobes per foot and tracks the leading ground contact.
   This is an explicit AI Fighter extension; retain the upstream report and every other rejection. Never fabricate foot identity.
 - For a requested generation-free gait experiment, use `gait-guide` (docs/GAIT-REVIEW.md).
   Render and review the authored phase/IK/foot-lock proxy before any new generation.
