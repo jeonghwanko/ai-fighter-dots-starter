@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
 import { createHandler } from '../api/handler.mjs';
+import { registerFileInputProbe } from './file-input-probe.mjs';
 import { Problem, UUID, bearerToken, readBody, sha256 } from '../api/http.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
@@ -28,15 +29,16 @@ const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(
 
 // Files come from the host's fileParams capability, never arbitrary URLs or VM paths.
 // Do not follow redirects: even an allowed origin must not redirect to a private network or another service.
-export function allowedFileUrl(value) {
+export function allowedFileUrl(value, additionalHosts = []) {
   try {
     const u = new URL(value);
     return u.protocol === 'https:' && !u.username && !u.password && !u.port && !u.hash &&
-      (u.hostname === 'files.oaiusercontent.com' || u.hostname.endsWith('.oaiusercontent.com') || u.hostname === 'files.openai.com');
+      (u.hostname === 'files.oaiusercontent.com' || u.hostname.endsWith('.oaiusercontent.com') ||
+        u.hostname === 'files.openai.com' || additionalHosts.includes(u.hostname));
   } catch { return false; }
 }
-export async function downloadHostFile(file, maximum, fetcher = fetch) {
-  if (!allowedFileUrl(file.download_url)) throw new Problem(400, 'unsupported-file-origin');
+export async function downloadHostFile(file, maximum, fetcher = fetch, additionalHosts = []) {
+  if (!allowedFileUrl(file.download_url, additionalHosts)) throw new Problem(400, 'unsupported-file-origin');
   const response = await fetcher(file.download_url, { redirect: 'error', signal: AbortSignal.timeout(20000), credentials: 'omit' });
   if (!response.ok) throw new Problem(400, 'file-download-unavailable');
   return readBody(response, maximum);
@@ -74,7 +76,7 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
       method, headers: { authorization: 'Bearer internal-request-identity', ...headers }, ...(body === undefined ? {} : { body }) }));
     return response.json();
   };
-  const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, files = [], profile = false, publicTool = false } = {}) => {
+  const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
     server.registerTool(name, { title, description, inputSchema,
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
       annotations: { ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish },
@@ -82,7 +84,11 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
         ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } }, async args => {
       if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
         _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${CLOUD_RESOURCE}/.well-known/oauth-protected-resource"`] } };
-      try { return output(await run(args)); }
+      try {
+        const result = output(await run(args));
+        // A diagnostic failure is useful data; keep it readable by hosts that throw away tool errors.
+        return diagnostic ? { ...result, isError: false } : result;
+      }
       catch (error) { return output({ ok: false, code: error instanceof Problem ? error.message : 'cloud-operation-unavailable' }); }
     });
   };
@@ -166,6 +172,7 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
     { submissionId: z.string().uuid() }, ({ submissionId }) => invoke(`submissions/${submissionId}`));
   register('get_registered_fighter', '등록된 캐릭터 확인', 'Read your registered fighter and immutable package identity.',
     { fighterId: z.string().uuid() }, ({ fighterId }) => invoke(`fighters/${fighterId}`));
+  registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   return server;
 }
 
