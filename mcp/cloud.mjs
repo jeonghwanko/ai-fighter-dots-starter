@@ -18,6 +18,30 @@ export function validCloudAudience(aud) {
   return aud.length === expected.length && aud.every(value => expected.includes(value));
 }
 export const CLOUD_ISSUER = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/auth/v1';
+/** ODDBOUT's arena function (the game's `oddbout-arena`): rankings, records, cups, bout records, and the agent calls behind its key. */
+export const ARENA_URL = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/oddbout-arena';
+/**
+ * Tools anyone may call without a connected account: the contract and ODDBOUT's public records. The agent tools (3단계, 2026-10-27) list only
+ * while the arena key is configured (`ODDBOUT_ARENA_AGENT_KEY`), so a release of this code alone does not change the published tool list.
+ */
+export const PUBLIC_TOOLS = new Set(['get_fighter_spec', 'get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout']);
+/**
+ * How a fighter's `combat.style` reads (the game contract's README, 싸우는 성격; values in `spec.combatStyle`). An agent translates the
+ * fighter's concept into these closed choices itself; the server only checks them. Grade 3 and missing values are the standard kit.
+ */
+export const STYLE_GUIDE = Object.freeze({
+  mix: 'How often each swing is chosen, slam/combo/fast 0-4 each: slam = one heavy blow, combo = a chained string, fast = a quick jab (counted half). At least one above 0; fast at most slam + combo.',
+  special: 'The swing (slam, combo or fast) used to chase an opponent who opens distance and to strike back while getting up.',
+  super: 'The move used as the super: slam, combo, fast or dash.',
+  distance: 'Fighting range 1-5: 1 swings up close, 5 from far.',
+  shockwave: 'true: the heavy blow sends a ground shockwave.',
+  summon: 'One summon called by the heavy-blow clip: crane, bolt, sportsCar or roadster.',
+  temper: 'Temperament 1-5 each: guard (blocking), retreat (backing off), measure (keeping distance), patience (waiting).',
+  exchanges: 'Exchange patterns 0-3 each: cross (crossing dash), pinball (rope bounces), rush (head-on clash). 0 never, 1 half, 2 standard, 3 double.',
+  extras: 'The skill clip, a summon and a shockwave together: at most two (STYLE_EXTRAS).',
+  skill: 'The unique skill comes from the optional skill clip (stretch, pincer, flight, feint, slide, counter, brace), fixed at registration; a style edit cannot add one.',
+  translate: 'Read the fighter\'s concept, moves and lines. Pick only the choices the character clearly implies; leave the rest out. Spar before and after a change and keep the version that fights like the character.',
+});
 const FILE = z.object({ download_url: z.string().max(8192), file_id: z.string().min(1).max(256),
   mime_type: z.string().max(128).optional(), file_name: z.string().max(512).optional() }).strict();
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
@@ -61,7 +85,7 @@ export async function authenticateCloud(db, request, now = Date.now) {
   return { owner: c.sub, email: c.email ?? '', claims: c };
 }
 
-export function cloudServer({ db, identity, fetcher = fetch }) {
+export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
     instructions: 'Create and register AI Fighter characters using the user’s own generation account. Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. Call this cloud connector’s check_creation_readiness before first generation, after a workspace restart and before registration. It checks account access; generation and display still require actual host evidence. Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. Require the user’s final registration request and preserve motion review boundaries. Use host file attachments for fighter.json and WebP assets. When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. A VM direct-network denial does not establish failure of the native connector; use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
   // The existing API runs in-process with an identity bound to this verified request. The shim cannot be
@@ -75,6 +99,12 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
     const response = await api(new Request(`https://internal.invalid/ai-fighter/${path}`, {
       method, headers: { authorization: 'Bearer internal-request-identity', ...headers }, ...(body === undefined ? {} : { body }) }));
     return response.json();
+  };
+  // Which agent made a submission (`af_record_submission_agent`, 2026-10-27): the roster shows a fighter's maker. Never fails the call.
+  const recordAgent = async submissionId => {
+    if (!identity || !UUID.test(submissionId ?? '')) return;
+    try { await db.rpc('af_record_submission_agent', { p_owner: identity.owner, p_submission: submissionId, p_client: identity.claims.client_id }); }
+    catch { /* the maker is a label, not a gate */ }
   };
   const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
     server.registerTool(name, { title, description, inputSchema,
@@ -150,6 +180,7 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
     { manifest: FILE, idempotencyKey: z.string().uuid() }, async ({ manifest, idempotencyKey }) => {
       const bytes = await downloadHostFile(manifest, spec.limits.jsonBytes, fetcher);
       const result = await invoke('submissions', 'POST', bytes, { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
+      if (result.ok) await recordAgent(result.submissionId);
       if (!result.ok || result.stage !== 'uploading') return result;
       const { data, error } = await db.from('af_submissions').select('manifest').eq('id', result.submissionId).eq('owner_id', identity.owner).single();
       if (error) throw new Problem(503, 'database-unavailable');
@@ -172,11 +203,79 @@ export function cloudServer({ db, identity, fetcher = fetch }) {
     { submissionId: z.string().uuid() }, ({ submissionId }) => invoke(`submissions/${submissionId}`));
   register('get_registered_fighter', '등록된 캐릭터 확인', 'Read your registered fighter and immutable package identity.',
     { fighterId: z.string().uuid() }, ({ fighterId }) => invoke(`fighters/${fighterId}`));
+  // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
+  if (arena?.url && arena?.key) registerAgentTools({ register, arena, db, identity, invoke, recordAgent });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   return server;
 }
 
-export function createCloudHandler({ db, fetcher = fetch }) {
+/** One arena call: a GET, or a POST with the agent key. A network failure or a body that is not JSON is `arena-unavailable`. */
+async function arenaCall(arena, path, body) {
+  let response;
+  try {
+    response = await (arena.fetcher ?? fetch)(`${arena.url}/${path}`, { method: body === undefined ? 'GET' : 'POST', redirect: 'error',
+      signal: AbortSignal.timeout(20000), headers: body === undefined ? {} : { 'content-type': 'application/json', 'x-arena-agent': arena.key },
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+  } catch { throw new Problem(503, 'arena-unavailable'); }
+  let value;
+  try { value = await response.json(); } catch { throw new Problem(503, 'arena-unavailable'); }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Problem(503, 'arena-unavailable');
+  return value;
+}
+
+function registerAgentTools({ register, arena, db, identity, invoke, recordAgent }) {
+  const call = (path, body) => arenaCall(arena, path, body);
+  const ID = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
+  register('get_style_guide', '싸우는 성격 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. Values and limits are the contract\'s (spec.combatStyle). This changes nothing.',
+    {}, async () => ({ ok: true, contract: spec.combatStyle, guide: STYLE_GUIDE }), { publicTool: true });
+  register('list_fighters', 'ODDBOUT 선수 명단', 'List ODDBOUT\'s fighters: the built-in roster and the listed registered fighters (id and name). Use the ids for records, spars and bouts.',
+    {}, async () => {
+      const builtins = await call('fighters');
+      if (!builtins.ok) return builtins;
+      const registered = [];
+      for (let cursor = null, page = 0; page < 5; page++) {
+        const list = await invoke(`roster${cursor ? `?after=${encodeURIComponent(cursor)}` : ''}`);
+        if (!list.ok) return list;
+        registered.push(...list.fighters.map(({ id, name, names }) => ({ id, name, ...(names ? { names } : {}) })));
+        if (!list.hasMore) break;
+        cursor = list.nextCursor;
+      }
+      return { ok: true, rules: builtins.rules, builtin: builtins.fighters, registered };
+    }, { publicTool: true });
+  register('get_rankings', 'ODDBOUT 순위', 'Read the cup rankings: built-in fighters by cup points, or registered fighters by cup win rate (a minimum number of bouts).',
+    { scope: z.enum(['builtin', 'registered']).default('builtin') }, ({ scope }) => call(scope === 'registered' ? 'rankings?scope=registered' : 'rankings'), { publicTool: true });
+  register('get_fighter_record', '선수 공개 기록', 'Read a fighter\'s public cup record: wins, losses, recent bouts (with each cup\'s seed for read_bout) and the rivals he met most.',
+    { fighterId: ID }, ({ fighterId }) => call(`fighter?id=${encodeURIComponent(fighterId)}`), { publicTool: true });
+  register('get_cup', '컵 결과', 'Read a cup by its id (one enter_cup returned, or a week\'s): its bracket, state and every played bout with its winner and finish.',
+    { cupId: z.string().uuid() }, ({ cupId }) => call(`cup?id=${cupId}`), { publicTool: true });
+  register('read_bout', '경기 기록 읽기', 'Fight a bout again and read its record: who won and how, HP left, hits landed and the highlights (super, air combo, throw, wall, big hit, comeback, KO, clutch) with their times. Give a played cup bout (cupId, round 0-3, slot) or a pair and seed (current packages). The page link plays it in the browser.',
+    { cupId: z.string().uuid().optional(), round: z.number().int().min(0).max(3).optional(), slot: z.number().int().min(0).max(7).optional(),
+      a: ID.optional(), b: ID.optional(), seed: z.number().int().min(0).max(0xffffffff).optional() },
+    async ({ cupId, round, slot, a, b, seed }) => {
+      if (cupId !== undefined && round !== undefined && slot !== undefined) return call(`bout?cup=${cupId}&round=${round}&slot=${slot}`);
+      if (a !== undefined && b !== undefined && seed !== undefined) return call(`bout?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&seed=${seed}`);
+      return { ok: false, code: 'invalid-bout' };
+    }, { publicTool: true });
+  register('spar', '스파링', 'Spar: one bout between two fighters on their current packages, read back with its record (as read_bout). Not ranked and not kept. Use it to see how a fighter fights, before and after a style change. Give a seed to fight the same bout again.',
+    { fighterId: ID, opponentId: ID, seed: z.number().int().min(0).max(0xffffffff).optional() },
+    ({ fighterId, opponentId, seed }) => call('agent/spar', { owner: identity.owner, a: fighterId, b: opponentId, ...(seed === undefined ? {} : { seed }) }));
+  register('enter_cup', '16강 컵 출전', 'Enter the connected user\'s registered fighter in a 16-fighter cup. The server draws the other fifteen from the built-in roster and fights every bout; the results count in the cup rankings. Requires the user\'s request. Read the results with get_cup.',
+    { fighterId: z.string().uuid() }, ({ fighterId }) => call('agent/cup', { owner: identity.owner, fighter: fighterId }), { write: true, openWorld: true });
+  register('update_fighter_style', '싸우는 성격 고치기', 'Change the connected user\'s registered fighter\'s fighting style (combat.style) without new art: an object replaces it, null removes it. Checked against the contract (get_style_guide). His next bouts fight the new style. Requires the user\'s approval of the change. Use a new UUID per change and the same UUID to retry it.',
+    { fighterId: z.string().uuid(), style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: z.string().uuid() },
+    async ({ fighterId, style, idempotencyKey }) => {
+      const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', identity.owner)
+        .is('deleted_at', null).maybeSingle();
+      if (error) throw new Problem(503, 'database-unavailable');
+      if (!fighter) throw new Problem(404, 'fighter-not-found');
+      const result = await invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: fighter.manifest_sha, style }),
+        { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
+      if (result.ok) await recordAgent(result.submissionId);
+      return result;
+    }, { write: true, publish: true, openWorld: true });
+}
+
+export function createCloudHandler({ db, fetcher = fetch, arena = null }) {
   return async request => {
     const url = new URL(request.url);
     // The Edge gateway may strip /functions/v1 and replace the origin before forwarding.
@@ -201,11 +300,11 @@ export function createCloudHandler({ db, fetcher = fetch }) {
     catch { return json({ error: 'invalid_request' }, 400); }
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
     let identity = null;
-    if (body.method === 'tools/call' && body.params?.name !== 'get_fighter_spec') {
+    if (body.method === 'tools/call' && !PUBLIC_TOOLS.has(body.params?.name)) {
       try { identity = await authenticateCloud(db, request); } catch { /* fail closed */ }
       if (!identity) return json({ error: 'invalid_token' }, 401, { 'www-authenticate': `Bearer resource_metadata="${metadataUrl}", scope="openid email profile"` });
     }
-    const server = cloudServer({ db, identity, fetcher });
+    const server = cloudServer({ db, identity, fetcher, arena });
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
       await server.connect(transport);

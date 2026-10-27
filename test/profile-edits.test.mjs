@@ -131,3 +131,32 @@ test('bout lines are edited like the rest of the profile and null removes them',
     assert.equal('lines' in (await f.sql.query('select profile from af_fighters where id=$1', [id])).rows[0].profile, false);
   } finally { await f.sql.close(); }
 });
+
+test('the fighting style is edited without new art; null removes it, and nothing else of combat moves with it', async () => {
+  const f = await profileFixture();
+  try {
+    const first = await f.register(), id = first.fighter_id;
+    const patch = (hash, body) => f.handle(new Request(`http://localhost/ai-fighter/fighters/${id}/profile`, { method: 'PATCH',
+      headers: { authorization: 'Bearer local-profile-test-token', 'idempotency-key': crypto.randomUUID(), 'content-type': 'application/json' },
+      body: JSON.stringify({ expectedManifestSha256: hash, ...body }) }));
+    const style = { mix: { slam: 2, combo: 1, fast: 0 }, distance: 2, temper: { guard: 4 } };
+    const set = await patch(first.manifest_sha, { style });
+    assert.equal(set.status, 200, await set.clone().text());
+    const saved = await set.json(), manifestOf = async submission => (await f.sql.query('select manifest from af_submissions where id=$1', [submission])).rows[0].manifest;
+    const styled = await manifestOf(saved.submissionId);
+    assert.deepEqual(styled.combat, { ...example.combat, style }); assert.deepEqual(styled.profile, example.profile);
+    assert.deepEqual(styled.assets, example.assets); assert.equal(f.uploads.length, 0);
+    // The contract checks the style (fast is at most slam + combo); a body edits the profile, the style or both, never nothing.
+    assert.equal((await patch(saved.manifestSha256, { style: { mix: { slam: 0, combo: 0, fast: 1 } } })).status, 422);
+    assert.equal((await patch(saved.manifestSha256, { style: [] })).status, 422);
+    assert.equal((await patch(saved.manifestSha256, {})).status, 422);
+    const both = await patch(saved.manifestSha256, { profile: { name: 'Styled fighter' }, style: null });
+    assert.equal(both.status, 200, await both.clone().text());
+    const cleared = await both.json(), plain = await manifestOf(cleared.submissionId);
+    assert.equal('style' in plain.combat, false); assert.equal(plain.profile.name, 'Styled fighter');
+    // The database lets only the style of combat change: the stats cannot ride along with it.
+    const stats = JSON.stringify({ ...example, combat: { ...example.combat, stats: { power: 5, toughness: 5, speed: 5 }, style } });
+    assert.equal((await f.rpc('af_update_fighter_profile', { p_owner: f.owner, p_key: crypto.randomUUID(), p_fighter: id, p_base: cleared.submissionId,
+      p_text: stats, p_sha: 'a'.repeat(64) })).error.message, 'profile-only-required');
+  } finally { await f.sql.close(); }
+});

@@ -161,3 +161,50 @@ test('owned list excludes deleted rows and owned lookup returns only a deletion 
   assert.deepEqual((await call(handle,'get_registered_fighter',{fighterId:fighter})).structuredContent,
     {ok:true,stage:'deleted',fighterId:fighter,deletedAt});
 });
+
+test('agent tools list only with the arena key; reads are public, spars and cups carry the verified owner and the key', async () => {
+  const calls = [], key = 'k'.repeat(64);
+  const arena = { url: 'https://arena.test/oddbout-arena', key, fetcher: async (url, init = {}) => {
+    calls.push({ url, method: init.method, headers: init.headers ?? {}, body: init.body ? JSON.parse(init.body) : undefined });
+    if (url.endsWith('/fighters')) return Response.json({ ok: true, rules: 39, fighters: [{ id: 'kuma', name: 'KUMA' }] });
+    if (url.includes('/agent/')) return Response.json({ ok: true, echo: JSON.parse(init.body) });
+    return Response.json({ ok: true, url });
+  } };
+  const names = async handle => (await (await handle(request('tools/list'))).json()).result.tools.map(t => t.name);
+  assert.equal((await names(createCloudHandler({ db: dbFor() }))).includes('spar'), false);
+  assert.equal((await names(createCloudHandler({ db: dbFor(), arena: { url: arena.url, key: null } }))).includes('spar'), false);
+  const listed = await names(createCloudHandler({ db: dbFor(), arena }));
+  for (const tool of ['get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout', 'spar', 'enter_cup', 'update_fighter_style'])
+    assert.ok(listed.includes(tool), tool);
+  // Public reads need no connected account and send no key.
+  const signedOut = createCloudHandler({ db: { auth: { getClaims: async () => ({ data: null }) }, rpc: async () => ({ data: false }) }, arena });
+  const guide = (await (await signedOut(request('tools/call', { name: 'get_style_guide', arguments: {} }))).json()).result.structuredContent;
+  assert.equal(guide.ok, true); assert.deepEqual(guide.contract.temper, ['guard', 'retreat', 'measure', 'patience']);
+  const bout = (await (await signedOut(request('tools/call', { name: 'read_bout', arguments: { a: 'kuma', b: 'yume', seed: 7 } }))).json()).result.structuredContent;
+  assert.equal(bout.url, 'https://arena.test/oddbout-arena/bout?a=kuma&b=yume&seed=7');
+  assert.equal(calls.at(-1).headers['x-arena-agent'], undefined);
+  assert.equal((await (await signedOut(request('tools/call', { name: 'spar', arguments: { fighterId: 'kuma', opponentId: 'yume' } }))).status), 401);
+  // Agent calls: the owner is the verified one, never an argument.
+  const handle = createCloudHandler({ db: dbFor(), arena });
+  const spar = (await call(handle, 'spar', { fighterId: 'kuma', opponentId: 'yume', seed: 3 })).structuredContent;
+  assert.deepEqual(spar.echo, { owner, a: 'kuma', b: 'yume', seed: 3 }); assert.equal(calls.at(-1).headers['x-arena-agent'], key);
+  const fighter = crypto.randomUUID();
+  assert.deepEqual((await call(handle, 'enter_cup', { fighterId: fighter })).structuredContent.echo, { owner, fighter });
+  assert.equal((await call(handle, 'read_bout', { cupId: fighter })).structuredContent.code, 'invalid-bout');
+  const failing = createCloudHandler({ db: dbFor(), arena: { ...arena, fetcher: async () => { throw new Error('down'); } } });
+  assert.equal((await call(failing, 'get_rankings', {})).structuredContent.code, 'arena-unavailable');
+});
+
+test('a style edit goes through the profile edit on the owner\'s current package', async () => {
+  const fighter = crypto.randomUUID(), filters = [];
+  const query = { select() { return this; }, eq(k, v) { filters.push([k, v]); return this; }, is(k, v) { filters.push([k, v]); return this; },
+    async maybeSingle() { return { data: { manifest_sha: 'c'.repeat(64) } }; } };
+  const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true }) };
+  const handle = createCloudHandler({ db: { ...dbFor(), from: () => query }, arena });
+  const tool = (await (await handle(request('tools/list'))).json()).result.tools.find(t => t.name === 'update_fighter_style');
+  assert.equal(tool.annotations.destructiveHint, true);
+  const result = (await call(handle, 'update_fighter_style', { fighterId: fighter, style: { distance: 2 }, idempotencyKey: crypto.randomUUID() })).structuredContent;
+  // The in-process API asks the database next; this stub has none, so it stops there — after reading only the owner's own fighter.
+  assert.equal(result.ok, false);
+  assert.ok(filters.some(([k, v]) => k === 'owner_id' && v === owner)); assert.ok(filters.some(([k, v]) => k === 'id' && v === fighter));
+});
