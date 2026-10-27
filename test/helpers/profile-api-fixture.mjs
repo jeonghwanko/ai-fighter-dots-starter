@@ -12,7 +12,7 @@ export async function profileFixture() {
     catch (error) { return { error: { message: error.message } }; }
   };
   const query = table => {
-    if (!['af_submissions','af_fighters'].includes(table)) throw Error('unsupported-test-table');
+    if (!['af_submissions','af_fighters','af_fighter_notes','af_fighter_canon','af_worlds'].includes(table)) throw Error('unsupported-test-table');
     const filters = [], values = []; let order = '', limit = '';
     const run = async () => {
       const { rows } = await sql.query(`select to_jsonb(t) as value from public.${table} t${filters.length ? ' where '+filters.join(' and ') : ''}${order}${limit}`,values);
@@ -33,10 +33,15 @@ export async function profileFixture() {
     const result = await rpc('af_create_submission', { p_owner: owner, p_key: key, p_text: text, p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: bytes, p_fighter: fighter });
     if (result.error) throw Error(result.error.message); return result.data;
   };
-  const register = async (text = JSON.stringify(example), fighter = null) => {
-    const row = await create(text,fighter);
-    for (const a of example.assets) await sql.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta',`${owner}/${row.id}/${a.id}.webp`,{size:a.bytes}]);
-    await sql.query('select public.af_submit($1,$2)', [owner,row.id]);
+  // `as`: another account's fighter (a test of two owners names its own user).
+  const createFor = async (user, text) => {
+    const result = await rpc('af_create_submission', { p_owner: user, p_key: crypto.randomUUID(), p_text: text, p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: bytes, p_fighter: null });
+    if (result.error) throw Error(result.error.message); return result.data;
+  };
+  const register = async (text = JSON.stringify(example), fighter = null, as = owner) => {
+    const row = as === owner ? await create(text,fighter) : await createFor(as, text);
+    for (const a of example.assets) await sql.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta',`${as}/${row.id}/${a.id}.webp`,{size:a.bytes}]);
+    await sql.query('select public.af_submit($1,$2)', [as,row.id]);
     const claim = value(await sql.query('select to_jsonb(public.af_claim($1)) as value',[row.id]));
     return value(await sql.query('select to_jsonb(public.af_finish($1,$2,$3,true,$4)) as value',[row.id,claim.lease_token,row.manifest_sha,{validatorVersion:VALIDATOR_VERSION,stage:'bytes-hashes-and-full-decode',errors:[]} ]));
   };
