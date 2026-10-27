@@ -13,7 +13,7 @@ export async function creationTool({ workspace, name, args = {}, contextRequest 
   // Registration belongs to the connected ODDBOUT account. Never inherit a CLI login or its tokens.
   const server = createServer({ root, contextRequest, registrationMode: 'cloud' });
   const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
-  const client = new Client({ name: 'oddbout-workspace', version: '0.4.0' });
+  const client = new Client({ name: 'oddbout-workspace', version: '0.5.0' });
   try {
     await server.connect(serverSide);
     await client.connect(clientSide);
