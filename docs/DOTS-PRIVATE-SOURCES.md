@@ -30,3 +30,29 @@ The source receipt proves stored bytes; the VM receipt proves received and decod
 Grok access, an actual media call, Library save, conversation display, visual acceptance or registration.
 If the host cannot deliver its native file input, report that limitation. Do not bypass the host's network
 policy, scrape protected sessions, extract browser credentials or regenerate an existing image.
+
+
+## VM previews through a private Page
+
+When local view_image cannot render in the parent conversation, use the host's supported Pages file
+bridge if available. This does not expose originals through a public bucket or signed URL in chat.
+
+1. Reuse the user's existing authorized private review Page, or create one private personal Page for
+   this creation. Read its content/guidance and verify owner-only access with get_page_sharing. Do not
+   change sharing or infer that a Page is private merely from its title.
+2. In the VM, call Pages write_page_reference with the actual local PNG/JPEG/GIF/WebP path and Page ID.
+   The host file-input bridge uploads it. Verify file_access_confirmed, byte_size and sha256 against
+   the local original; retain the returned reference and receipt. No synthetic file IDs or URLs.
+3. Insert only the returned native image Markdown using the Page's fresh edit guards, then read it
+   back. An uncertain upload must be reconciled using its receipt/existing reference before retrying.
+4. Use the returned Page/reference with the host's read_page_reference in the target conversation and
+   emit its image content. Inspect the actual target UI. Page rendering, a returned image block and
+   current-conversation rendering are separate observations; record each honestly.
+5. For appearance review, upload the unchanged full-body image and an actual crop of that same version.
+   A TEST fixture may establish transport only. It never establishes generation or character quality.
+
+The PNG route was exercised on the selected saved VM: 3,589 unchanged bytes, owner-only Page, native
+file reference, full Page image visibly loaded in the browser, and image content recovered in the
+parent conversation. A queued panel is not display evidence. Animation formats/playback still need
+verification when that review group is reached. Missing Pages capability is a delivery blocker, not
+permission for public storage, credential extraction or repeated generation.

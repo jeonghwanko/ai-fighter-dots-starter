@@ -53,8 +53,8 @@ The private-source migration is applied and MCP **v30** deployed. Production che
 16 MiB PNG bucket, owner checks, service-only table/RPC access and unauthenticated HTTP 401.
 The public tool list contains store_creator_source, get_creator_source and prepare_creator_source_download.
 The old VM catalog remains stale; after the official app refresh, a newly created Work task exposed all
-three with their input schemas. Native file ingress remains unverified.
-Local tests use migrated PostgreSQL (PGlite) and simulated Storage, not an actual user upload.
+three with their input schemas. The actual native file/private VM transfer trial is recorded below.
+Local security tests additionally use migrated PostgreSQL (PGlite) and simulated Storage.
 
 ## Published settings and actual VM installation
 
@@ -94,6 +94,51 @@ The saved environment draft now names this tested front door. Preparing its reus
 republishing still require the environment preparer, followed by a new-task and real-restart check.
 Direct installation in a running user's VM does not update the reusable saved image.
 
+## Current pinned runtime and launcher verification
+
+Runtime **52db965f7ad6f54b99e8920a6be2db14dc1e2756** installed successfully in the selected VM for
+/workspace/oddbout-gun-meme-cat. Creation readiness now verifies the immutable runtime marker, workspace
+binding, exact source/vendor commits and clean source instead of requiring a mutable branch or pull.
+The actual kit check returned ready. The existing acceptance workspace and engine pin were preserved.
+
+The first ordinary front-door resume failed because a child Node exited 0 with empty stdout. A bounded
+read-only probe reproduced this even with console.log of a fixed test string; direct CLI execution
+returned valid JSON. Path/realpath and main-guard comparisons matched, and no timeout or signal occurred.
+The managed host's underlying pipe behavior remains unexplained; this was not a generation failure.
+
+Front door **da4b05aff428a0e0bfe859a84e075237f40278ef** now imports the selected runtime's start function
+and returns its typed result directly. It still verifies the bound commit before loading the runtime.
+No automatic fallback, process-global environment rewrite or runtime upgrade was introduced.
+In the same real VM, ordinary resume and the subsequent --install each ran once and exited **0** with
+valid JSON. --install returned **installation: reused, steps: []**. HEAD, binding, install receipt and
+FETCH_HEAD hashes were unchanged; Git traces contained no fetch, pull or clone. The sole next action
+remained connect-grok-subscription / sign-in-required. Evidence is under
+/workspace/work/oddbout-v055-evidence/frontdoor-da4b05a/.
+
+Local readiness/startup/workspace/bundle regression tests after this change: **42 passed, 0 failed,
+3 platform skips**, 45 total. CI was not run. These tests and ordinary invocation are not a VM restart.
+
+## Actual private file transfer and display boundary
+
+A clearly labeled TEST PNG (not generated character artwork) completed official native file input,
+private account-scoped Storage, sealed VM grant and receive. Original and received files were both
+**3,589 bytes**, **256 x 128**, SHA-256
+**60cc68255b4c2e0ff31a7c519e87ed6683d9056cac785ea05eee71099c94c4e6**.
+The full PNG decoded and a repeated receive returned reused: true. Evidence is in
+/workspace/oddbout-v055-acceptance/output/transfer-test/verification.json, with the corrected copy in
+/workspace/work/oddbout-v055-evidence/runtime-52db965/TEST-transfer-verification.json.
+
+VM view_image plus image emission did not establish display: the actual browser UI showed image load
+failure. The host's designated /codex output mount was read-only and yielded no downloadable artifact.
+Originals and receipts remain intact. conversationDisplayed is false; no fabricated URLs, file IDs,
+base64 chat dumps or duplicate generation were used. The official Pages file bridge then stored the same TEST PNG in an owner-only personal Page. Its
+write_page_reference receipt returned file_access_confirmed: true, matching byte_size and sha256.
+The exact native Markdown was inserted/read back; the actual browser screenshot showed the complete
+yellow TEST / TRANSFER FIXTURE image. The parent's read_page_reference returned actual PNG pixels.
+The earlier VM local-image failure remains a separate failed route. Page display is verified; current
+conversation inline rendering and future animation playback must be observed separately. Neither
+private transfer nor a source receipt alone proves display.
+
 ## Related animation change
 
 [PR #38](https://github.com/jeonghwanko/ai-fighter-dots-starter/pull/38) is in this creator-kit repository,
@@ -103,13 +148,13 @@ bound to final frame pixels/durations, with missing/stale/failing reviews reject
 walk/run packaging but changes none of VM installation, login or private-file delivery.
 Its own documentation keeps Dot creation on reviewPolicy: required. That policy is retained here;
 engine-loop is not silently substituted for same-foot stance evidence. The current pinned runtime
-97890dd predates PR #38. Any later runtime integration needs its pack/gait and creation-policy checks
+52db965 predates PR #38. Any later runtime integration needs its pack/gait and creation-policy checks
 before a new immutable pin, without upgrading a character already in progress.
 
 ## Open acceptance gates
 
 The reviewed release remains a candidate. Still required: prepared saved-image publication, new-task verification and restart;
-official Grok login plus actual image/video entitlement; native original ingress and sealed VM transfer;
+official Grok login plus actual image/video entitlement;
 visible delivery to the current conversation; requested character creation, group review and final package.
 No successful actual generation, displayed VM output or complete fighter is claimed.
 
@@ -132,5 +177,6 @@ The old task title is not a version source: record actual kit manifest/version, 
 8. Continue authorized groups to eleven motions, actual gait review and validated packaging; registration
    requires the user's final registration request. Do not call an example fixture a generated fighter.
 
-The existing VM passed the related tests and the new selected VM passed direct installation/resume.
+The existing VM passed the related tests and the new selected VM passed direct installation/resume,
+immutable creation-readiness checks and private original transfer.
 The prepared saved image and complete creation path remain unverified. Main must not advertise this candidate as verified until that evidence exists. Publishing/Republishing the saved environment is a host operation outside the kit.

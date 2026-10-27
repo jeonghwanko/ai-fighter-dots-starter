@@ -17,7 +17,9 @@ If the user supplied a reference, follow [DOTS-PRIVATE-SOURCES.md](DOTS-PRIVATE-
 the original through the connected account's private source storage into this VM. Recover previously
 stored sources and jobs first. Check **VM-to-current-conversation preview display** separately as required
 by DELIVERY.md before dispatching a new local generation. If this host offers no supported display path,
-stop at that precise blocker; source download alone does not fix output delivery.
+use the documented private Pages file-reference route when available and verify its actual display.
+If no supported route is available, stop at that precise blocker; source download alone does not fix
+output delivery. Preserve returned Library references so another conversation can recover the same bytes.
 
 For an explicit creation request, continue with DOT-CREATION.md in the bound runtime after the action
 is resolved. Use Grok explicitly for images and video; use `npm run sprite --` and the existing workflow
