@@ -41,10 +41,13 @@ engine pin **0dc264ba257c0d417f86ef797bc503f933e1e142**.
   No HOME/GROK_HOME changes, authentication copying, source patches or login occurred.
 - Linux's original 12 Codex fixture failures came from running mock PC tests inside a marked Dots
   runtime. On a clean checkout, **107 passed, 1 failed** across the original 108 tests.
-  The remaining POSIX cleanup-hook order is fixed in the follow-up; Linux retest is pending.
-- The VM network policy lacks storage.googleapis.com and
+  The remaining POSIX cleanup-hook order was fixed. The follow-up at front-door 647483c / runtime
+  97890ddf399cbbaae9351ee6d11ac0776714d7b0 ran all 13 suites: **120 passed, 0 failed, 0 skipped**, exit 0.
+- The existing VM network policy lacks storage.googleapis.com and
   ztfxxhtmtrvxvuxlqmgz.supabase.co. The saved environment must be republished and a fresh VM
-  validated; neither repository code nor relogin changes this host policy.
+  validated; neither repository code nor relogin changes this host policy. The follow-up attempted a new
+  workspace install once: npm exit 0, sprite exit 1, front-door exit 1; nextAction correctly named
+  environment-preparer, repair-installation, network-connect-forbidden and storage.googleapis.com.
 
 The private-source migration is applied and MCP **v30** deployed. Production checks confirmed a private
 16 MiB PNG bucket, owner checks, service-only table/RPC access and unauthenticated HTTP 401.
