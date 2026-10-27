@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inspectTools, inspectRife, installImg2webp, toolEnv, toolsItem } from './sprite-tools.mjs';
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
 export const kitRoot = fileURLToPath(new URL('../', import.meta.url));
 export const spriteRoot = path.join(kitRoot, 'vendor', 'sprite-gen');
@@ -129,9 +130,9 @@ export async function requireMotionContract(args, cwd) {
   if (args[0] === 'gen-motion') {
     if (!option('--plan')) return; // the engine owns CLI errors/help
     const plan = JSON.parse(await readFile(path.resolve(cwd, option('--plan')), 'utf8'));
-    const expected = plan.motion === 'walk' ? 16 : plan.motion === 'run' ? 12 : null;
+    const expected = ['walk', 'run'].includes(plan.motion) ? spec.motions[plan.motion].frames : null;
     if (expected === null || plan.frames?.length !== expected)
-      throw Error(`AI Fighter pose plan needs ${expected ?? '16 walk / 12 run'} frames; diagnostic poses belong to that full plan`);
+      throw Error(`AI Fighter pose plan needs ${expected ?? `${spec.motions.walk.frames} walk / ${spec.motions.run.frames} run`} frames; diagnostic poses belong to that full plan`);
     if (option('--frame') && !args.includes('--reconcile') && plan.version !== 2)
       throw Error('POSE_BODY_CALIBRATION_REQUIRED: v5 generation needs a version 2 plan with observed original body landmarks; legacy runs remain available for inspection/reconciliation/export, not repeated uncalibrated generation');
     return;
@@ -146,8 +147,9 @@ export async function requireMotionContract(args, cwd) {
       throw Error(`MOTION_CONTRACT_REQUIRED: ${state}; use fighter:gait init and review key poses before a full GPT sequence`);
     if (locomotion && entry.motion.kind !== (locomotion[2].startsWith('walk') ? 'walk' : 'run'))
       throw Error(`Motion kind does not match state: ${state}`);
-    if (entry.motion?.stage === 'sequence' && entry.frames !== (entry.motion.kind === 'walk' ? 16 : 12))
-      throw Error(`AI Fighter full sequence needs ${entry.motion.kind === 'walk' ? 16 : 12} frames: ${state}`);
+    const sequenceFrames = spec.motions[entry.motion?.kind === 'walk' ? 'walk' : 'run'].frames;
+    if (entry.motion?.stage === 'sequence' && entry.frames !== sequenceFrames)
+      throw Error(`AI Fighter full sequence needs ${sequenceFrames} frames: ${state}`);
   }
 }
 

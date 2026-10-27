@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import sharp from 'sharp';
 import { walkPlan, loadSequence, combineReview, commonGameRequest, validatePlan, digest } from '../tools/ai-fighter/gait.mjs';
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const json = file => readFile(file, 'utf8').then(JSON.parse);
@@ -49,7 +50,7 @@ export async function init(out) {
     references: [{ role: 'phase-guide', file, sha256: digest(await readFile(file)) }] });
   const request = { version: 1,
     cell: { width: geometry.width, height: geometry.height, safe_margin_x: geometry.safeMarginX, safe_margin_y: geometry.safeMarginY },
-    style: 'Copy the accepted character identity, palette, line style, clothing, head size and limb lengths. Right-facing orthographic side view, camera elevation 16 degrees. No text, guides, shadows, effects or background scene.',
+    style: `Copy the accepted character identity, palette, line style, clothing, head size and limb lengths. Right-facing orthographic side view, camera elevation ${spec.input.cameraElevationDegrees} degrees. No text, guides, shadows, effects or background scene.`,
     fit: { resample: 'lanczos', align_x: 'centroid', align_y: 'bottom', ground_frames: false, pixel_unfake: false },
     states: { walk: { frames: plan.phases.length, fps: 12, loop: true, action, motion: await motion('sequence', plan.phases, guideFile) } } };
   await save(path.join(out, 'sprite-request.json'), request);

@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { inspectProjectedGround } from './projected-ground.mjs';
+import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
 export const digest = value => createHash('sha256').update(value).digest('hex');
 export const round = n => Math.round(n * 1000) / 1000;
@@ -65,7 +66,7 @@ export function walkPlan() {
 }
 export function validatePlan(plan, sequence) {
   if (plan.version !== 1 || !['walk', 'run'].includes(plan.motion) || !['right', 'left'].includes(plan.facing)) throw Error('Invalid gait plan');
-  const count = plan.motion === 'walk' ? 16 : 12;
+  const count = spec.motions[plan.motion].frames;
   if (!Array.isArray(plan.phases) || plan.phases.length !== count || plan.phases.some((p, i) =>
     p.index !== i || p.phase !== i / count || !Array.isArray(p.support) || new Set(p.support).size !== p.support.length ||
     p.support.some(f => !['near', 'far'].includes(f)) || (plan.motion === 'walk' && !p.support.length))) throw Error('Invalid gait phases');
@@ -79,7 +80,7 @@ export function validatePlan(plan, sequence) {
 export function inspectGeometry(sequence, plan) {
   validatePlan(plan, sequence);
   const errors = [], warnings = [], frames = sequence.frames.map((frame, index) => ({ index, bounds: alphaBounds(frame), sha256: digest(frame.data) }));
-  const expected = plan.motion === 'walk' ? 16 : 12;
+  const expected = spec.motions[plan.motion].frames;
   if (frames.length !== expected) errors.push({ code: 'FRAME_COUNT', actual: frames.length, expected });
   if (new Set(frames.map(f => f.sha256)).size !== frames.length) errors.push({ code: 'DUPLICATE_FRAME' });
   for (const frame of frames) {
@@ -198,7 +199,7 @@ export async function commonGameRequest(config, base) {
     if (sequence.frames.some(f => f.width !== frame.width || f.height !== frame.height)) throw Error('Coordinate space mismatch: ' + asset.id);
     if (!asset.source.state) throw Error('Common request expects a sprite-gen manifest state');
     assets.push({ id: asset.id, source: asset.source.file, state: asset.source.state, source_body_height: bodyHeight,
-      display: { body_height: 400 }, resample: config.resample ?? 'lanczos' });
+      display: { body_height: spec.input.bodyHeight }, resample: config.resample ?? 'lanczos' });
   }
   return { request: { version: 1, assets }, referenceBodyHeight: bodyHeight, referenceSequenceSha256: reference.sha256,
     note: 'One measured neutral reference scale. Shared canvas is checked; anatomical scale still needs visual review.' };

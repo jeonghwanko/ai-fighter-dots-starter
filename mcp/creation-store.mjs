@@ -9,6 +9,7 @@ import { makePackageValidator } from './package-access.mjs';
 import { withFileLock } from './file-lock.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { errorCode } from './error-code.mjs';
+import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 
 export const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const style = spec.combatStyle, range = ({ min, max }) => z.number().int().min(min).max(max);
@@ -34,7 +35,7 @@ export const changeSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('delegate'), groups: z.array(z.string()).max(5), feedback: note }).strict(),
   // Concept, names, bout lines, move names, duel grades and fighting style are optional; their limits are the contract's
   // (spec.json profileExtras / profileLines / combatStats / combatStyle). The style's extras budget also counts the skill clip: the package check has it.
-  z.object({ type: z.literal('profile'), name: z.string().min(1).max(100), description: z.string().max(2000),
+  z.object({ type: z.literal('profile'), name: z.string().min(1).max(profileLimits.name), description: z.string().max(profileLimits.description),
     language: z.enum(spec.profileExtras.languages).optional(), concept: z.string().trim().min(1).max(spec.profileExtras.conceptMaxLength).optional(),
     names: z.object(Object.fromEntries(spec.profileExtras.languages.map(language => [language, z.string().trim().min(1).max(spec.profileExtras.nameMaxLength).optional()])))
       .strict().refine(value => Object.keys(value).length > 0).optional(),
