@@ -41,8 +41,22 @@ export async function loadSequence(source, base = '.') {
     durations = state.durations_ms ?? cells.map(() => Math.round(1000 / state.fps));
   }
   if (!cells.length || durations?.length !== cells.length || !durations.every(positive)) throw Error('Invalid frame timing');
-  const frames = [];
+  // Decode each sheet once and copy cells out of it (a 16-frame walk used to decode its sheet 16 times). The bytes are
+  // the same as a per-cell extract, so reviews bound to sequenceHash still verify; other pixel formats keep the extract.
+  const pages = new Map(), frames = [];
+  const page = image => {
+    if (!pages.has(image)) pages.set(image, sharp(path.resolve(path.dirname(file), image)).ensureAlpha().raw().toBuffer({ resolveWithObject: true }));
+    return pages.get(image);
+  };
   for (const cell of cells) {
+    const { data: sheet, info: sheetInfo } = await page(cell.image);
+    const inside = cell.x >= 0 && cell.y >= 0 && cell.x + cell.w <= sheetInfo.width && cell.y + cell.h <= sheetInfo.height;
+    if (sheetInfo.channels === 4 && sheet.length === sheetInfo.width * sheetInfo.height * 4 && inside) {
+      const data = Buffer.allocUnsafe(cell.w * cell.h * 4);
+      for (let y = 0; y < cell.h; y++) sheet.copy(data, y * cell.w * 4, ((cell.y + y) * sheetInfo.width + cell.x) * 4, ((cell.y + y) * sheetInfo.width + cell.x + cell.w) * 4);
+      frames.push({ width: cell.w, height: cell.h, data });
+      continue;
+    }
     const { data, info } = await sharp(path.resolve(path.dirname(file), cell.image))
       .extract({ left: cell.x, top: cell.y, width: cell.w, height: cell.h }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     frames.push({ width: info.width, height: info.height, data });
