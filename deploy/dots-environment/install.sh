@@ -15,10 +15,37 @@ if [[ -n "${XAI_API_KEY:-}${OPENAI_API_KEY:-}${SUPABASE_SERVICE_ROLE_KEY:-}" ]];
   echo 'snapshot-has-service-keys: remove injected secrets before preparing the image' >&2; exit 1
 fi
 if [[ "$(uname -s)" != Linux ]]; then echo 'saved-linux-vm-required' >&2; exit 1; fi
-if [[ $(id -u) == 0 ]]; then as_root=(); else as_root=(sudo -n); fi
-"${as_root[@]}" apt-get update
-"${as_root[@]}" apt-get install -y --no-install-recommends ca-certificates curl git xz-utils python3 python3-venv python3-pip ffmpeg webp
-python3 -c 'import sys; assert sys.version_info >= (3,11), "python-3.11-required-use-a-newer-base-image"'
+# Managed Dots VMs already provide these tools and may have neither root nor sudo.
+# Reuse the base image when it is usable; Node, Grok and WebP install in workspace-owned folders.
+check_base_tools() {
+  missing=()
+  for tool in curl git xz tar sha256sum; do
+    if ! command -v "$tool" >/dev/null || ! "$tool" --version >/dev/null 2>&1; then missing+=("$tool"); fi
+  done
+  for tool in ffmpeg ffprobe; do
+    if ! command -v "$tool" >/dev/null || ! "$tool" -version >/dev/null 2>&1; then missing+=("$tool"); fi
+  done
+  if ! python3 -c 'import sys,ssl,venv,ensurepip; assert sys.version_info >= (3,11)' >/dev/null 2>&1; then
+    missing+=(python3.11-with-ssl-venv-ensurepip)
+  fi
+}
+check_base_tools
+if (( ${#missing[@]} )); then
+  if ! command -v apt-get >/dev/null; then
+    printf 'base-tools-required: %s; ask the environment preparer for a supported base image\n' "${missing[*]}" >&2; exit 1
+  fi
+  if [[ $(id -u) == 0 ]]; then as_root=()
+  elif command -v sudo >/dev/null && sudo -n true 2>/dev/null; then as_root=(sudo -n)
+  else
+    printf 'base-tools-required: %s; no supported package-install permission\n' "${missing[*]}" >&2; exit 1
+  fi
+  "${as_root[@]}" apt-get update
+  "${as_root[@]}" apt-get install -y --no-install-recommends ca-certificates curl git xz-utils python3 python3-venv python3-pip ffmpeg
+  check_base_tools
+  if (( ${#missing[@]} )); then printf 'base-tools-required-after-install: %s\n' "${missing[*]}" >&2; exit 1; fi
+else
+  printf '%s\n' 'Base tools verified; reusing the managed image without system package changes.'
+fi
 case "$(uname -m)" in
   x86_64) arch=x64; checksum=88fd1ce767091fd8d4a99fdb2356e98c819f93f3b1f8663853a2dee9b438068a ;;
   aarch64) arch=arm64; checksum=e9e1930fd321a470e29bb68f30318bf58e3ecb4acb4f1533fb19c58328a091fe ;;
