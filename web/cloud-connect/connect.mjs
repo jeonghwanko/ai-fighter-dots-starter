@@ -1,6 +1,36 @@
-export function safeClientRedirect(value) {
-  try { const u = new URL(value); return u.protocol === 'https:' && !u.username && !u.password && !u.port &&
-    ['chatgpt.com', 'chat.openai.com'].includes(u.hostname); } catch { return false; }
+/**
+ * The agents that may ask for a connection, by where they come back after consent (an approval hands its code only there), and the page
+ * each one's "return" link opens. Dots/ChatGPT may come back anywhere on its two hosts. Grok (grok.com custom connectors) and Grok Bot
+ * (Cursor's web connector) come back only on their published callback paths (2026-10-27; xAI does not document them — taken from their
+ * registrations). A desktop client's loopback or app-scheme callback is not accepted.
+ */
+const AGENTS = {
+  dots: { hosts: { 'chatgpt.com': null, 'chat.openai.com': null }, home: 'https://chatgpt.com/dots/home' },
+  grok: { hosts: { 'grok.com': ['/connectors-oauth-exchange-code'], 'www.cursor.com': ['/agents/mcp/oauth/callback', '/bot/mcp/oauth/callback'] },
+    home: 'https://grok.com/connectors' },
+};
+/** Which agent a callback address belongs to (`dots`, `grok`), or null for an address no agent may use. */
+export function agentOf(value) {
+  try {
+    const u = new URL(value);
+    if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
+    for (const [agent, { hosts }] of Object.entries(AGENTS)) {
+      if (!Object.hasOwn(hosts, u.hostname)) continue;
+      const paths = hosts[u.hostname];
+      if (paths === null || paths.some(path => u.pathname === path || u.pathname.startsWith(path + '/'))) return agent;
+    }
+    return null;
+  } catch { return null; }
+}
+export function safeClientRedirect(value) { return agentOf(value) !== null; }
+/** The agent's name in each language, with the Korean particles its sound takes; `any` before the request says who asked. */
+export const agentWords = {
+  ko: { dots: { name: 'Dots', to: 'Dots로', at: 'Dots에서', on: 'Dots에' }, grok: { name: 'Grok', to: 'Grok으로', at: 'Grok에서', on: 'Grok에' },
+    any: { name: '에이전트', to: '에이전트로', at: '에이전트에서', on: '에이전트에' } },
+  en: { dots: { name: 'Dots' }, grok: { name: 'Grok' }, any: { name: 'your agent' } },
+};
+export function fillAgent(text, words) {
+  return text.replace(/\{(name|to|at|on)\}/g, (_, key) => words[key] ?? words.name);
 }
 export function authorizationId(search, stored) {
   const id = new URLSearchParams(search).get('authorization_id') ?? stored;
@@ -11,28 +41,28 @@ export function connectionLocale(requested, saved, browser = '') {
 }
 export const copy = {
   ko: {
-    title:'ODDBOUT · Dots 연결', headline1:'나의 캐릭터,', headline2:'링 위로.',
-    lead:'Google 계정을 연결하고\nDots에서 캐릭터를 등록하세요.',
-    stepConnect:'계정 연결', stepConsent:'권한 확인', panelTitle:'계정을 선택하세요', consentTitle:'Dots에 연결할까요?', errorTitle:'연결을 다시 시작해 주세요',
+    title:'ODDBOUT · {name} 연결', headline1:'나의 캐릭터,', headline2:'링 위로.',
+    lead:'Google 계정을 연결하고\n{at} 캐릭터를 등록하세요.',
+    stepConnect:'계정 연결', stepConsent:'권한 확인', panelTitle:'계정을 선택하세요', consentTitle:'{on} 연결할까요?', errorTitle:'연결을 다시 시작해 주세요',
     google:'Google로 계속하기', permissions:'허용할 권한', permission1:'기본 프로필·이메일 확인', permission2:'내 캐릭터·등록 상태 조회', permission3:'내가 요청한 캐릭터 업로드·등록·삭제',
     permissionNote:'생성 구독이나 결제 권한은 포함되지 않습니다.', approve:'연결 승인', cancel:'취소', loginNote:'PC 설치 없이 연결됩니다.',
-    privacy:'개인정보', help:'도움말', returnDots:'Dots로 돌아가기', loading:'연결 요청을 확인하고 있습니다.',
-    login:'캐릭터를 소유할 계정으로 로그인하세요.', consent:'Dots에서 시작한 요청인지 확인해 주세요.',
+    privacy:'개인정보', help:'도움말', returnDots:'{to} 돌아가기', loading:'연결 요청을 확인하고 있습니다.',
+    login:'캐릭터를 소유할 계정으로 로그인하세요.', consent:'{at} 시작한 요청인지 확인해 주세요.',
     accountChoice:'이 계정으로 연결할까요?', continueAccount:'이 계정으로 계속', switchAccount:'다른 계정 사용', switchingAccount:'다른 계정으로 로그인할 준비를 하고 있습니다.',
-    noRequest:'Dots의 ODDBOUT 플러그인에서 연결을 시작해 주세요.', failed:'요청이 만료되었거나 연결할 수 없습니다. Dots에서 다시 시도해 주세요.',
+    noRequest:'{at} ODDBOUT 연결을 시작해 주세요.', failed:'요청이 만료되었거나 연결할 수 없습니다. {at} 다시 시도해 주세요.',
     unsafe:'지원하는 연결 요청이 아닙니다. 권한을 승인하지 않았습니다.', googleAccount:'ODDBOUT 계정', connecting:'Google 로그인으로 이동합니다.', approving:'연결을 마무리하고 있습니다.',
     emailOption:'이메일 계정으로 로그인', emailLabel:'이메일', passwordLabel:'비밀번호', emailSignIn:'로그인', emailConnecting:'로그인하고 있습니다.', emailFailed:'이메일 또는 비밀번호를 확인해 주세요.'
   },
   en: {
-    title:'ODDBOUT · Connect to Dots', headline1:'Your fighter.', headline2:'Into the ring.',
-    lead:'Connect with Google to register\nyour fighter from Dots.',
-    stepConnect:'CONNECT ACCOUNT', stepConsent:'REVIEW ACCESS', panelTitle:'Choose your account', consentTitle:'Connect to Dots?', errorTitle:'Start a new connection',
+    title:'ODDBOUT · Connect to {name}', headline1:'Your fighter.', headline2:'Into the ring.',
+    lead:'Connect with Google to register\nyour fighter from {name}.',
+    stepConnect:'CONNECT ACCOUNT', stepConsent:'REVIEW ACCESS', panelTitle:'Choose your account', consentTitle:'Connect to {name}?', errorTitle:'Start a new connection',
     google:'Continue with Google', permissions:'Access you allow', permission1:'Read your basic profile and email', permission2:'View your fighters and registration status', permission3:'Upload, register and delete fighters you request',
     permissionNote:'No access to generation subscriptions or payments.', approve:'Approve connection', cancel:'Cancel', loginNote:'No PC setup required.',
-    privacy:'Privacy', help:'Help', returnDots:'Return to Dots', loading:'Checking your connection request.',
-    login:'Use the account that will own your fighter.', consent:'Confirm that you started this request in Dots.',
+    privacy:'Privacy', help:'Help', returnDots:'Return to {name}', loading:'Checking your connection request.',
+    login:'Use the account that will own your fighter.', consent:'Confirm that you started this request in {name}.',
     accountChoice:'Connect with this account?', continueAccount:'Continue with this account', switchAccount:'Use another account', switchingAccount:'Preparing sign-in with another account.',
-    noRequest:'Start the connection from the ODDBOUT plugin in Dots.', failed:'This request expired or could not be completed. Start again from Dots.',
+    noRequest:'Start the ODDBOUT connection from {name}.', failed:'This request expired or could not be completed. Start again from {name}.',
     unsafe:'This connection request is not supported. No access was approved.', googleAccount:'ODDBOUT account', connecting:'Opening Google sign-in.', approving:'Completing your connection.',
     emailOption:'Sign in with an email account', emailLabel:'Email', passwordLabel:'Password', emailSignIn:'Sign in', emailConnecting:'Signing in.', emailFailed:'Check your email and password and try again.'
   }
@@ -44,9 +74,11 @@ export async function start({ document = globalThis.document, location = globalT
   let savedLanguage;
   try { savedLanguage = sessionStorage.getItem('oddbout-connect-language'); } catch {}
   let language = connectionLocale(new URLSearchParams(location.search).get('lang'), savedLanguage, navigator.language);
-  let mode = 'loading', statusKey = 'loading', accountEmail = null, clientLabel = '';
+  let mode = 'loading', statusKey = 'loading', accountEmail = null, clientLabel = '', agent = null;
   const render = () => {
-    const words = copy[language];
+    // The return link needs a place to go: an agent not yet known is Dots (where most requests start); the other words stay general.
+    const named = agentWords[language][agent ?? 'any'], back = agentWords[language][agent ?? 'dots'];
+    const words = Object.fromEntries(Object.entries(copy[language]).map(([key, text]) => [key, fillAgent(text, key === 'returnDots' ? back : named)]));
     document.documentElement.lang = language; document.title = words.title;
     document.querySelector('.languages').setAttribute('aria-label', language === 'ko' ? '언어' : 'Language');
     document.querySelector('.connection').setAttribute('aria-label', language === 'ko' ? '계정 연결' : 'Account connection');
@@ -63,6 +95,7 @@ export async function start({ document = globalThis.document, location = globalT
     byId('email-login').hidden = mode !== 'login';
     byId('login-note').hidden = mode !== 'login'; byId('retry-link').hidden = mode !== 'error';
     byId('account').textContent = accountEmail || words.googleAccount; byId('client').textContent = clientLabel;
+    byId('retry-link').href = AGENTS[agent ?? 'dots'].home;
     byId('privacy-link').href = '/cloud-plugin/privacy' + (language === 'ko' ? '.ko' : '') + '.html';
     byId('help-link').href = '/cloud-plugin/support' + (language === 'ko' ? '.ko' : '') + '.html';
     document.querySelector('.brand').href = '/?lang=' + language;
@@ -79,6 +112,9 @@ export async function start({ document = globalThis.document, location = globalT
   const key = 'oddbout-authorization-id', id = authorizationId(location.search, sessionStorage.getItem(key));
   if (!id) { state('error', 'noRequest'); return; }
   sessionStorage.setItem(key, id);
+  const agentKey = 'oddbout-connect-agent';
+  try { const [savedId, savedAgent] = String(sessionStorage.getItem(agentKey) ?? '').split(' '); if (savedId === id && Object.hasOwn(AGENTS, savedAgent)) { agent = savedAgent; render(); } } catch {}
+  const learn = value => { agent = agentOf(value) ?? agent; try { if (agent) sessionStorage.setItem(agentKey, `${id} ${agent}`); } catch {} };
   const auth = supabase.createClient('https://ztfxxhtmtrvxvuxlqmgz.supabase.co',
     'sb_publishable_6UkV7tRAQ1P4qss5cTYSwQ_kVxSIv_V', { auth: { flowType: 'pkce', storage: sessionStorage,
       storageKey: 'oddbout-cloud-consent', detectSessionInUrl: true, persistSession: true } }).auth;
@@ -137,8 +173,9 @@ export async function start({ document = globalThis.document, location = globalT
   if (details.error || !details.data) { fail(); return; }
   if (details.data.redirect_url) { go(details.data.redirect_url); return; }
   if (!safeClientRedirect(details.data.redirect_uri)) { state('error', 'unsafe'); return; }
+  learn(details.data.redirect_uri);
   accountEmail = session.user.email;
-  clientLabel = (details.data.client.name ?? 'ChatGPT') + ' · ' + new URL(details.data.redirect_uri).hostname;
+  clientLabel = (details.data.client.name ?? agentWords.en[agent].name) + ' · ' + new URL(details.data.redirect_uri).hostname;
   state('consent', 'consent');
   for (const action of ['approve', 'deny']) byId(action).onclick = async () => {
     byId('approve').disabled = byId('deny').disabled = true; statusKey = 'approving'; render();

@@ -1,8 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { start, copy } from '../web/cloud-connect/connect.mjs';
+import { start, copy, agentOf, fillAgent, agentWords } from '../web/cloud-connect/connect.mjs';
 
-function harness({ session = { user: { email: 'review@example.test', is_anonymous: false } }, language = 'en', signOutError = null } = {}) {
+function harness({ session = { user: { email: 'review@example.test', is_anonymous: false } }, language = 'en', signOutError = null,
+  details = { redirect_url: 'https://chatgpt.com/connector_platform/oauth/callback' }, approved = null } = {}) {
   const elements = new Map(), calls = [], redirects = [], values = new Map();
   const element = id => {
     if (!elements.has(id)) elements.set(id, { hidden: false, disabled: false, value: '', textContent: '', setAttribute() {} });
@@ -17,8 +18,9 @@ function harness({ session = { user: { email: 'review@example.test', is_anonymou
     oauth: {
       getAuthorizationDetails: async requestId => {
         calls.push(['details', requestId]);
-        return { data: { redirect_url: 'https://chatgpt.com/connector_platform/oauth/callback' }, error: null };
+        return { data: details, error: null };
       },
+      approveAuthorization: async () => ({ data: { redirect_url: approved }, error: null }),
     },
   };
   const env = {
@@ -76,4 +78,49 @@ test('fresh email login still resolves consent for the explicitly chosen new acc
   assert.deepEqual(h.calls, [['details', h.id]]);
   assert.equal(h.element('email-password').value, '');
   assert.equal(h.redirects.length, 1);
+});
+
+test('each agent comes back only to its own callback addresses', () => {
+  assert.equal(agentOf('https://chatgpt.com/connector_platform/oauth/callback'), 'dots');
+  assert.equal(agentOf('https://chat.openai.com/aip/oauth/callback?code=x'), 'dots');
+  assert.equal(agentOf('https://grok.com/connectors-oauth-exchange-code/?code=x&state=y'), 'grok');
+  assert.equal(agentOf('https://www.cursor.com/agents/mcp/oauth/callback'), 'grok');
+  assert.equal(agentOf('https://www.cursor.com/bot/mcp/oauth/callback?code=x'), 'grok');
+  for (const refused of ['https://grok.com/', 'https://grok.com/connectors-oauth-exchange-code-evil', 'http://grok.com/connectors-oauth-exchange-code/',
+    'https://www.cursor.com/settings', 'https://cursor.com/agents/mcp/oauth/callback', 'https://grok.com:8443/connectors-oauth-exchange-code/',
+    'https://user@grok.com/connectors-oauth-exchange-code/', 'http://localhost:8787/callback', 'cursor://anysphere.cursor-mcp/oauth/callback', 'not a url'])
+    assert.equal(agentOf(refused), null, refused);
+});
+
+test('the copy names the agent with the particles its sound takes', () => {
+  assert.equal(fillAgent(copy.ko.consentTitle, agentWords.ko.grok), 'Grok에 연결할까요?');
+  assert.equal(fillAgent(copy.ko.returnDots, agentWords.ko.grok), 'Grok으로 돌아가기');
+  assert.equal(fillAgent(copy.ko.returnDots, agentWords.ko.dots), 'Dots로 돌아가기');
+  assert.equal(fillAgent(copy.en.consentTitle, agentWords.en.any), 'Connect to your agent?');
+  for (const language of ['ko', 'en']) for (const text of Object.values(copy[language])) {
+    for (const words of Object.values(agentWords[language])) assert.doesNotMatch(fillAgent(text, words), /[{}]/);
+  }
+});
+
+test('a Grok request is consented as Grok, returns to Grok, and its approval goes back to Grok', async () => {
+  const h = harness({ language: 'ko', details: { redirect_uri: 'https://grok.com/connectors-oauth-exchange-code/', client: { name: 'Grok' } },
+    approved: 'https://grok.com/connectors-oauth-exchange-code/?code=abc&state=xyz' });
+  await start(h.env);
+  await h.element('continue-account').onclick();
+  assert.equal(h.element('consent').hidden, false);
+  assert.equal(h.element('panel-title').textContent, 'Grok에 연결할까요?');
+  assert.equal(h.element('client').textContent, 'Grok · grok.com');
+  assert.equal(h.element('retry-link').href, 'https://grok.com/connectors');
+  assert.equal(h.values.get('oddbout-connect-agent'), `${h.id} grok`);
+  await h.element('approve').onclick();
+  assert.deepEqual(h.redirects, ['https://grok.com/connectors-oauth-exchange-code/?code=abc&state=xyz']);
+});
+
+test('an unknown agent is refused and approves nothing', async () => {
+  const h = harness({ details: { redirect_uri: 'https://evil.example/callback', client: { name: 'Grok' } } });
+  await start(h.env);
+  await h.element('continue-account').onclick();
+  assert.equal(h.element('consent').hidden, true);
+  assert.equal(h.element('status').textContent, copy.en.unsafe);
+  assert.deepEqual(h.redirects, []);
 });
