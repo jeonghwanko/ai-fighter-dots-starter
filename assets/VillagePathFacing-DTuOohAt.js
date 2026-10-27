@@ -1,0 +1,1 @@
+function e(e,t){return Math.abs(e)>Math.abs(t)*2?e>0?`right`:`left`:Math.abs(t)>Math.abs(e)*2?t>0?`down`:`up`:t>0?e>0?`down-right`:`down-left`:e>0?`up-right`:`up-left`}export{e as t};
