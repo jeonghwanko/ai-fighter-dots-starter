@@ -8,6 +8,7 @@
 
 - 생성 결과를 대화에 보여주는 경로와 혼잡·한도 오류 중단 방침: [DELIVERY.md](DELIVERY.md)
 - 제작 단계와 피드백: [DOT-CREATION.md](DOT-CREATION.md)
+- 사용자 연결과 초기 환경 준비자 역할·오류별 다음 행동: [CONNECTION-READINESS.md](CONNECTION-READINESS.md)
 - GPT 계정·환경 프로필·네트워크 승인 연결: [ENVIRONMENT-ONBOARDING.md](ENVIRONMENT-ONBOARDING.md)
 
 ## 1. 기본 형태
@@ -27,14 +28,28 @@
 ### 요구 사항
 
 - Git, Node.js 22.12 이상, Python 3.11 이상(venv 지원), 셸 명령 실행.
-- 디스크: 설치에 약 300MB가 든다(2026-10-23 Windows 실측: sprite-gen 63MB, venv 100MB, node_modules 102MB).
+- 시스템 도구 `ffmpeg`·`ffprobe`(영상 → 프레임). 키트는 sudo를 실행하지 않으므로 **초기 환경 준비자가 미리 설치한다**:
+
+  | 플랫폼 | 명령 |
+  | --- | --- |
+  | Ubuntu·Debian | `sudo apt install ffmpeg` |
+  | macOS | `brew install ffmpeg` |
+  | Windows | `winget install --id Gyan.FFmpeg -e` (설치 뒤 새 터미널) |
+
+  Linux 서버에 GPU가 없으면 RIFE용 Vulkan도 넣는다: `sudo apt install libvulkan1 mesa-vulkan-drivers`(없어도 생성은 된다).
+- `img2webp`와 RIFE는 `sprite:setup`이 sudo 없이 받는다(아래). 준비자가 따로 설치하지 않는다.
+- 디스크: 설치에 약 340MB가 든다(2026-10-23 Windows 실측: sprite-gen 63MB, venv 100MB, node_modules 102MB, 그 위에 RIFE 약 35MB).
+  RIFE 압축 파일은 받는 동안 약 430MB를 임시로 쓴다.
   캐릭터 작업 폴더는 생성 원본, 시도 횟수, 영상 사용 여부에 따라 크게 달라진다. 여유 5GB 이상을 권장한다.
 - 외부 접속이 필요한 곳:
-  - 설치: `github.com`, `raw.githubusercontent.com`, npm 레지스트리, PyPI
+  - 설치: `github.com`, `raw.githubusercontent.com`, GitHub 릴리스 파일(`objects.githubusercontent.com`·`release-assets.githubusercontent.com`, RIFE),
+    `storage.googleapis.com`(libwebp), npm 레지스트리, PyPI
   - 생성: 사용자가 고른 생성 도구(Codex CLI, grok CLI 또는 xAI API)가 요구하는 주소
   - 등록: `deploy/creator-site.json`의 `apiBase`, `siteUrl`
   - 이 중 하나가 막힌 샌드박스에서는 설치나 생성이 중간에 실패한다.
-    시작 전에 접속을 확인하고, 막혀 있으면 사용자에게 그대로 알린다.
+    초기 환경 준비자가 시작 전에 접속과 호스트에 실제 제공된 설정을 확인한다. 일반 제작 사용자는 이 환경을 재사용한다.
+    기본 Dots/Work VM에 사용자 지정 Codex 환경의 허용목록·Republish 절차를 적용한다고 가정하지 않는다.
+    키트는 VM 네트워크 정책을 변경할 수 없다. 막히면 준비자에게 확인된 조치를 알리고 성공 처리하거나 우회하지 않는다.
 
 ### 설치와 버전 고정
 
@@ -47,23 +62,44 @@ npm run sprite:status
 ```
 
 - 브랜치는 `codex/creator-hosting`이다. GitHub ZIP은 submodule이 빠지므로 쓰지 않는다.
+- `sprite:setup`은 sprite-gen 설치 뒤 생성에 필요한 외부 도구를 갖춘다. 모두 사용자 권한이며 sudo나 유료 API를 쓰지 않는다.
+  - **img2webp:** 걷기·달리기 WebP 인코딩에 필수이고 `-exact`(libwebp 1.5 이상)가 있어야 한다.
+    Ubuntu 24.04의 `apt install webp`는 1.3.x라 sprite-gen이 거부한다. PATH에 `-exact`를 지원하는 img2webp가 없으면
+    공식 libwebp 1.6.0 바이너리를 SHA-256 고정으로 받아 `vendor/sprite-gen/.venv/bin`(Windows는 `Scripts`)에 넣는다.
+    `npm run sprite`는 이 폴더를 PATH 맨 앞에 두고 sprite-gen을 실행한다.
+  - **RIFE:** 걷기·달리기 루프 이음새를 고친다. sprite-gen의 `rife install`(rife-ncnn-vulkan 20221029, SHA-256 고정, 사용자 데이터 폴더)을
+    부르고, sprite-gen이 이미 찾는 RIFE가 있으면 건너뛴다. 확인 프레임이 실패하면(대개 Vulkan 없음) 설치를 실패시키지 않고 경고와 다음 명령을 남긴다.
+    RIFE가 없으면 루프는 촬영된 그대로 잘리고 경고가 남는다.
+  - **ffmpeg·ffprobe:** 점검만 하고, 없으면 위 표의 명령을 준비자 몫으로 알린다.
+  - 끝에 도구별 상태(`ok`·`missing`·`broken`)를 출력한다. 키트가 받는 도구(img2webp)를 받지 못했을 때만 종료 코드가 1이다.
 - 설치한 커밋 SHA를 작업 기록(`creation-notes.md`)에 남긴다.
 - **한 캐릭터를 만드는 동안 저장소를 업데이트하지 않는다.** 규격·패치가 바뀌면 이미 만든 결과의 해시와 검수 근거가 맞지 않게 된다.
   업데이트는 캐릭터와 캐릭터 사이에 하고, 업데이트 뒤 `npm run sprite:status`로 패치 적용 상태를 다시 확인한다.
 - 이미 설치된 작업 공간을 재사용할 때는 커밋, 작업 중 변경, 패치 상태를 확인한다.
   모르는 로컬 변경이 있으면 덮어쓰지 말고 새로 클론한다.
 - `npm run sprite:status` 통과는 설치 확인일 뿐이다. 로그인이나 구독 사용 가능 여부를 뜻하지 않는다.
-- **MCP `check_creation_readiness`** 를 캐릭터의 첫 생성 전, 작업 공간 재시작 뒤, 등록 전에 부른다. 세 항목을 한 번에 돌려준다.
+  JSON의 `tools`에 `ffmpeg`·`ffprobe`·`img2webp`·`rife`가 각각 `status`(`ok`·`missing`·`broken`)와 `install`(`actor`: `agent`면 에이전트가
+  `npm run sprite:setup`을 실행, `user`면 준비자가 실행할 명령)로 나온다. `tools.status`가 `ready`가 아니면 생성을 시작하지 않는다.
+- **MCP `check_creation_readiness`** 를 캐릭터의 첫 생성 전, 작업 공간 재시작 뒤, 등록 전에 부른다. 상태별 의미는 [연결 안내](CONNECTION-READINESS.md)를 따른다.
+  연결만 확인할 때 `purpose: "connection"`, 완성된 패키지 등록 때 `purpose: "registration"`을 지정한다.
+  두 목적은 생성 구독 질문·키트 업데이트·Python 설치를 생략한다. 새 생성 준비만 기본 `purpose: "generation"`이다.
+  연결 실행은 `connect_oddbout`의 `start` → 사용자 Google 승인 → `wait` 순서다. 로그인 후 MCP 재시작은 필요 없다.
   - **kit:** 버전·작업 기록이 아직 하나도 없을 때만 이 브랜치를 fast-forward하고 동작 패치를 적용한다.
     추적 파일에 로컬 변경이 있거나, 다른 브랜치이거나, 원격과 갈라졌으면 바꾸지 않고 `blocked`로 알린다.
     캐릭터가 진행 중이거나 작업 공간을 모르면 보고만 한다.
     돌려준 `nextCommands`를 모두 실행하고, `restartRequired`면 호스트를 다시 시작한다.
+  - **tools:** `sprite:status`의 `tools`와 같은 형식이다. ffmpeg·ffprobe·img2webp(`-exact`)가 `ok`여야 `kitAndAccountReady`가 참이 된다.
+    RIFE는 `warnings`로만 알린다. `nextCommands`는 에이전트가 실행하고, `nextAction`(actor `user`)의 sudo 명령은 준비자에게 전한다.
   - **account:** 사용자가 대화에서 실제로 말한 계정만 넘긴다. 없으면 호스트가 지원할 때 선택 양식(MCP elicitation)을 띄우고,
     지원하지 않으면 돌려준 고정 선택지를 번호로 보여준다.
-  - **login:** ODDBOUT 로그인 상태와 명령을 돌려준다(7절).
+  - **infrastructure:** 등록 API·홈페이지 접속과 환경 준비자 조치를 분리한다. Library helper는 실제 점검 전까지 미검증이다.
+  - **login:** ODDBOUT 연결 행동, 저장된 세션·승인 대기와 인증된 서버 계정 조회를 구분한다(7절).
+  - **generation / delivery:** 실제 생성 접근과 부모 대화 전달을 별도로 보고한다. 이 도구에서는 호출·표시하지 않으므로 미검증이다.
 
-  이 도구는 준비 조건만 확인한다. `readyForWorkflow`는 설치·계정 선택 준비이고, `readyForGeneration`은
-  연결 환경의 로그인·호스트 네트워크 관찰·접속·전달 사전 조건 기록까지 요구한다. 둘 다 실제 생성 접근의 검증값이 아니다.
+  `kitAndAccountReady`는 키트와 생성 계정 선택만 확인한다. 이 도구는 생성·전달을 확인하지 않아 `readyForGeneration`은 false다.
+  요청된 첫 생성은 [DELIVERY.md](DELIVERY.md)의 실제 사전 조건을 별도로 확인한다. 확인용 새 생성은 하지 않는다.
+  `environment`은 이 작업 공간에 기록된 생성 환경(로그인·호스트 네트워크·전달 사전 조건)을 보여 주지만,
+  기록일 뿐이라 `readyForGeneration`을 true로 만들지 않는다. 연결 방법은 [ENVIRONMENT-ONBOARDING.md](ENVIRONMENT-ONBOARDING.md).
   로그인 파일 존재도 유효한 서버 세션이나 사용자 계정 동일성의 증거로 확대하지 않는다.
   생성 접근, 이 대화에서의 실제 표시, 동작 품질은 실제 결과로만 확인된다.
   `creation:delivery`는 기록의 누락·모순을 검사할 뿐 표시를 증명하지 않는다.
@@ -108,7 +144,7 @@ npm run sprite:status
 
 - 작업 공간 하나에 사용자 한 명이다. 체크아웃, venv, 로그인, `output/`을 사용자끼리 공유하지 않는다.
 - 캐릭터 하나에 작업 폴더 하나(`output/<localId>-work/`)다. 같은 작업 폴더에서 에이전트 둘이 동시에 작업하지 않는다.
-  sprite-gen의 run 폴더 잠금(`.sprite-gen.lock`)과 패치 잠금이 걸려 있으면 강제로 풀지 않는다.
+  sprite-gen의 run 폴더 잠금(`.sprite-gen.lock`)이 걸려 있으면 강제로 풀지 않는다.
   먼저 실행 중인 작업이 있는지 확인한다.
 - 같은 사용자 계정으로 생성 호출을 동시에 여러 개 보내지 않는다. 한도 소진과 결과 혼동을 막기 위해서다.
 - 사용자에게 기본 작업 공간 위치(`AI_FIGHTER_ROOT`)를 하나 정해 두고, MCP 연결도 그 위치를 가리키게 한다.
@@ -154,7 +190,7 @@ npm run sprite:status
   다른 기기의 사용자 브라우저에서 그 VM의 loopback 주소에 직접 닿는다고 가정하지 않는다.
   - 현재 CLI의 `--paste` / `--finish`는 수동 콜백 교환 기능이며 보안 전달 채널 자체가 아니다.
     `--finish`는 인자가 없으면 이 작업 공간의 터미널에서 주소를 읽는다. 그 터미널에 사용자가 직접 입력할 수 있을 때만 쓴다.
-    `check_creation_readiness`는 이 명령을 제안하지 않는다. 다른 기기 브라우저는 `blocked-no-secure-route`로 보고한다.
+    `check_creation_readiness`는 이 명령을 제안하지 않는다. 다른 기기 브라우저는 아래 기기 연결 지원이 확인되지 않으면 `blocked-no-secure-route`로 보고한다.
     **콜백 주소를 대화에 붙여넣도록 요청하지 않는다**.
     주소에는 인증 코드·토큰이 포함될 수 있다. PKCE·일회성·만료는 대화 기록에 남겨도 안전하다는 뜻이 아니다.
   - VM에서는 공식적으로 지원되는 secure handoff 또는 기기 연결 경로가 있는지 먼저 확인한다.
@@ -175,6 +211,7 @@ npm run sprite:status
 
     요청은 10분 뒤 만료된다. 폴링은 5초 간격이며 너무 빠르면 늦춘다. 승인은 사용자당 시간당 10회로 제한된다.
     `--device-wait --timeout <초>`는 아직 승인 전이면 요청을 유지한 채 끝난다.
+    전송 장애도 기존 요청을 보존하고 멈춘다. 복구 후 같은 `--device-wait`로 재개하며 새 `--device` 요청을 만들지 않는다.
 
 ## 8. 종료와 정리
 
@@ -191,6 +228,7 @@ npm run sprite:status
 | 상황 | 에이전트의 행동 |
 | --- | --- |
 | 설치 중 네트워크·DNS 실패 | 어느 주소가 막혔는지 알린다. 다른 경로로 우회 설치하지 않는다. |
+| VM CONNECT/tunnel 403 | 서비스 인증 실패와 구분하고 [호스트별 설정과 재검사](CONNECTION-READINESS.md#초기-환경-준비자-단계)를 따른다. Work 설정이 이미 ON이면 켜기·Republish를 반복 안내하지 않는다. 일반 사용자에게 재로그인·반복 설치를 시키지 않는다. |
 | Python·Node 버전 미달 | 작업 공간에서 설치할 수 있으면 설치한다. 없으면 제한을 알린다. |
 | 로그인 안 됨·만료 | 사용자에게 로그인을 요청한다. 다른 계정이나 API 키로 대체하지 않는다. |
 | 모델 혼잡(`Selected model is at capacity`) | 생성 전 오류인지 확인한다. [DELIVERY.md](DELIVERY.md)의 사용자 중단 방침을 따른다. 모델 변경은 사용자 승인 후에만 한다. |
@@ -219,4 +257,5 @@ npm run sprite:status
 - [ ] 보존 기간과 삭제 절차가 정해져 있고, 사용자에게 안내된다.
 - [ ] 등록용 Google 로그인은 지원되는 보안 경로로 확인했다. 봇 VM에서는 콜백 주소를 대화에 복사하지 않으며,
   지원 경로가 없거나 실제 로그인을 실행하지 않았다면 미검증·차단 상태로 남긴다.
-- [ ] `check_creation_readiness`가 새 작업 공간에서 kit·account·login 세 항목을 돌려주고, 호스트가 선택 양식을 띄우는지(또는 번호 선택지로 대체되는지) 확인했다.
+- [ ] `check_creation_readiness`가 kit·infrastructure·account·login·generation·delivery를 분리하고,
+  호스트가 ODDBOUT 연결 선택을 표시하는지(버튼 미지원이면 선택지·링크로 대체) 확인했다. 키트 검사만으로 Dots UI 검증을 대신하지 않는다.

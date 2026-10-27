@@ -17,7 +17,16 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 The kit includes sprite-gen, creation workflows, validation tools, and an MCP server for connecting your assistant to the game. The game engine is maintained separately.
 
-## Create your fighter
+## Register from Dots without a PC
+
+Connect the hosted **ODDBOUT** MCP in ChatGPT Plugins, sign in with Google, then select
+`@ODDBOUT` in your Dots conversation. The cloud connector handles account checks,
+file transfer and registration; no local MCP installation, API key or callback copying is needed.
+See [cloud connection instructions](docs/CLOUD-MCP.md) for the endpoint and first-time setup.
+Image generation, previews and package review still use the selected host and your own generation account.
+The setup below is for running the creation kit in a workspace; it is not required to authenticate the cloud connector.
+
+## Create with the local kit
 
 Use the **ODDBOUT** plugin for creation, review and registration from a PC or a supported Dots workspace.
 The same connected ODDBOUT account registers the result in either environment. A second AI Fighter Creator
@@ -40,7 +49,7 @@ Your assistant handles setup, generation, packaging, and file checks. You choose
 | Your own generation account | Image and motion generation use your own supported accounts and subscriptions. The assistant checks actual image/video access and preview delivery before starting. |
 | A Google account for registration | Sign in when you want to upload and register your fighter. No invitation or manual approval is required. |
 
-Making a character takes local setup and several rounds of review. Time, usage limits, and costs depend on your provider and how many changes you make. You choose the provider with your assistant. Switching providers or using a paid API needs your agreement. A browser-only chat needs a connected execution environment for the full workflow.
+Using the local kit takes setup and several rounds of review. Time, usage limits, and costs depend on your provider and how many changes you make. You choose the provider with your assistant. Switching providers or using a paid API needs your agreement. A browser-only chat needs a connected execution environment for the full workflow.
 
 ### Make and review, one group at a time
 
@@ -68,7 +77,9 @@ npm run sprite:setup
 npm run sprite:status
 ```
 
-Setup downloads the pinned sprite-gen source into this checkout and installs it in a dedicated Python environment. Use Git clone; the GitHub source ZIP does not contain the submodule files. The status command checks installation, not generation access or quota. Keep an in-progress character workspace in place and avoid pulling repository updates during creation.
+Setup downloads the pinned sprite-gen source into this checkout and installs it in a dedicated Python environment. Use Git clone; the GitHub source ZIP does not contain the submodule files. The status command checks installation, not generation access or quota.
+
+Setup also fetches the outside tools sprite-gen needs, without sudo: `img2webp` with `-exact` (libwebp 1.6.0, SHA-256 pinned, placed in the kit's environment when your system has none or an older one such as Ubuntu 24.04's 1.3.x) and RIFE for smooth walk and run loops (`sprite-gen rife install`, about 430 MB download). Install `ffmpeg` yourself first: `sudo apt install ffmpeg` (Ubuntu/Debian), `brew install ffmpeg` (macOS) or `winget install --id Gyan.FFmpeg -e` (Windows). Setup and `sprite:status` list each tool as `ok`, `missing` or `broken` with the command that fixes it. A Linux machine without a GPU also needs `sudo apt install libvulkan1 mesa-vulkan-drivers` for RIFE; without RIFE, loops are cut as filmed with a warning. Keep an in-progress character workspace in place and avoid pulling repository updates during creation.
 
 To connect the tools, follow the [local Codex plugin guide](docs/LOCAL-PLUGIN.md). For a manual MCP connection, run `node scripts/print-install.mjs` and follow the printed installation command. Other local hosts can connect `mcp/stdio.mjs` with `AI_FIGHTER_ROOT` set to the checkout.
 
@@ -90,6 +101,7 @@ Bug reports, clearer setup instructions, and reproducible examples are welcome. 
 
 | Resource | Use it for |
 | --- | --- |
+| [Cloud connection](docs/CLOUD-MCP.md) · [Connection recovery](docs/CONNECTION-READINESS.md) | Google sign-in, account checks, and cloud registration |
 | [Authoring guide](docs/AUTHORING.md) | Fighter files and the package contract |
 | [Creation UX](docs/CREATION-UX.md) | Character intake, feedback, and version selection |
 | [Game creation context](docs/GAME-CREATION-CONTEXT.md) | Current motions, controls, and timing |
@@ -110,4 +122,4 @@ The sparring-bot example is a geometric test fixture. These checks do not genera
 
 ## License
 
-The creator kit is [MIT-licensed](LICENSE). The bundled [sprite-gen](vendor/sprite-gen) submodule has its own Apache-2.0 LICENSE and NOTICE. Generation providers have their own account and usage terms.
+The creator kit is [MIT-licensed](LICENSE). The bundled [sprite-gen](vendor/sprite-gen) submodule is [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent), our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen), with its own Apache-2.0 LICENSE and NOTICE. Generation providers have their own account and usage terms.

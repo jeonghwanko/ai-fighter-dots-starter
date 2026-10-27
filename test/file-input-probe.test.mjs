@@ -6,7 +6,7 @@ import { FILE_PROBE_LIMIT } from '../mcp/file-input-probe.mjs';
 
 const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
-const owner = '882ac105-ce5c-4dc1-8a72-4cbc5c10be2a';
+const owner = '11111111-1111-4111-8111-111111111111';
 const claims = { iss: CLOUD_ISSUER, aud: CLOUD_RESOURCE, role: 'af_mcp', sub: owner,
   client_id: '00000000-0000-4000-8000-000000000001', session_id: '00000000-0000-4000-8000-000000000002',
   is_anonymous: false, exp: Math.floor(Date.now() / 1000) + 3600, af_mcp: 'registration-v1' };

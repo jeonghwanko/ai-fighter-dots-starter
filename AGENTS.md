@@ -16,6 +16,8 @@ This repository lets each user create their own fighter through Dot. Read
 
 - Creation is conversational in meaningful review groups: appearance (concept/idle), locomotion
   (fightIdle/walk/run), attacks (combo/slam/dash), defense and reactions (block/hit/groggy/fall), then final review.
+  When the game context lists the optional style group (skill/entrance/victory clips and the fighting style), offer it once
+  after defense and skip it when the user declines; it never blocks final, but each optional clip a package carries needs a selected, checked version.
   Complete the agreed group autonomously, show its actual previews together, and wait for feedback at the
   group boundary, not after every motion. A positive response advances to the next group without another
   permission question. Only skip review boundaries when the user explicitly delegates those groups.
@@ -55,7 +57,10 @@ This repository lets each user create their own fighter through Dot. Read
   workspace, the user's own login only, no service API keys in the environment, work folders and attempt
   records preserved across sessions, and no pulls of this repository while a character is in progress.
   Call MCP `check_creation_readiness` before a character's first generation, after a workspace restart and before
-  registration. Run its kit `nextCommands` (restart when told), pass `account` only as the user stated it (else let
+  registration. Use purpose `generation` only for generation setup; `connection` and `registration` must not
+  ask for generation subscriptions or install/update the engine. Use `connect_oddbout` start/wait for the
+  supported device connection; retain pending requests and adopt the new session without a login-only restart.
+  Run its kit `nextCommands` (restart when told), pass `account` only as the user stated it (else let
   the host form or numbered options ask). Use login commands only with a supported secure handoff or device
   connection. Callback URLs can contain codes/tokens: never ask users to paste them into ordinary chat or
   describe that as safe, even if tool output suggests paste mode. For a browser on another device, use the
@@ -63,6 +68,12 @@ This repository lets each user create their own fighter through Dot. Read
   which requires the deployed server to advertise registration.deviceLogin "v1". The link and pairing code are
   public; tell the user to approve only a request they started and whose code matches. If no secure route is
   supported, report the authentication blocker; do not implement a bypass or assume a planned flow already exists.
+- Follow `docs/CONNECTION-READINESS.md`: present the ODDBOUT connection action, then the user's Google sign-in
+  and device approval. Reuse the existing device flow; no callback secrets in chat. Keep ODDBOUT API/account,
+  generation access and parent delivery separate. A saved session is not a server-verified account.
+  VM CONNECT/network blocks belong to the initial environment preparer; ordinary creators reuse that workspace.
+  The kit cannot change VM host allowlists or Republish. Report that limitation without claiming success.
+  After recovery inspect existing sessions/jobs and pending device approval before any new action.
 - Design the default customer flow for one already-owned generation subscription.
   Separate actual image/video/editor capabilities from subscription names and API billing.
   Do not make a second subscription or self-hosted VACE/ComfyUI GPU server a hidden requirement.
@@ -76,13 +87,14 @@ This repository lets each user create their own fighter through Dot. Read
 - Follow `docs/GAIT-REVIEW.md`: keep one coordinate/scale reference, write the phase plan before generation,
   run `fighter:gait review` with both same-foot stance ROIs, and show its preview before registration.
   Missing or uncertain observations stay unverified. Bind gait reviews to the final game-pack pixels and durations.
-  Split heel/forefoot contacts may use docs/FOOT-EVIDENCE.md only with fresh per-frame outlines of both feet.
+  Split heel/forefoot contacts, padded/hoofed/clawed soles and lifted heels (digitigrade) may use docs/FOOT-EVIDENCE.md
+  only with fresh per-frame outlines of both feet; v2 evidence groups sole lobes per foot and tracks the leading ground contact.
   This is an explicit AI Fighter extension; retain the upstream report and every other rejection. Never fabricate foot identity.
 - For a requested generation-free gait experiment, use `gait-guide` (docs/GAIT-REVIEW.md).
   Render and review the authored phase/IK/foot-lock proxy before any new generation.
   Proxy joints, depth and contacts are design ground truth, never observations of generated artwork.
   Show actual normal/slow previews and keep visible part masks distinct from X-ray joints.
-- GPT locomotion uses this kit's hash-bound sprite-gen motion patch. Run through `npm run sprite --`.
+- GPT locomotion uses the motion engine in the pinned sprite-gen-agent. Run through `npm run sprite --`.
   If the user chooses authored joint pose guidance, use the v5 measured `gen-motion` route documented in
   `docs/GAIT-REVIEW.md` and `vendor/sprite-gen/docs/pose-motion.md`: one whole-body pose per call,
   target guide + immutable appearance-only identity + reviewed anchors, 16/12-frame plans, then pose and cycle review.
@@ -126,7 +138,7 @@ This repository lets each user create their own fighter through Dot. Read
   Never overwrite a registered immutable package.
 - Preserve unrelated working-tree changes. Run only relevant tests. Do not run CI unless explicitly requested.
 
-The sprite-gen gitlink pins the upstream revision. Keep its Apache-2.0 LICENSE and NOTICE.
-Do not update the pin or modify vendor code as part of ordinary character creation.
-The reviewed `patches/sprite-gen-gpt-motion.json` is applied by the kit at setup/run time and included in plugin builds.
-Its hashes must match; never overwrite an unknown upstream/local change to force the patch to apply.
+`vendor/sprite-gen` pins a commit of [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent),
+our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen) that carries the motion engine.
+Keep its Apache-2.0 LICENSE and NOTICE. Do not update the pin or modify vendor code as part of ordinary character creation.
+Engine changes are committed to sprite-gen-agent first; then move the pin. Setup and bundling refuse local vendor edits.

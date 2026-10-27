@@ -37,7 +37,7 @@ sequenceDiagram
 같은 키에 다른 JSON을 보내면 409다. 수정한 패키지는 새 키로 제출한다.
 24시간 안에 업로드를 끝내지 못한 제출은 같은 사용자의 다음 제출 생성 때 `rejected`(`upload-expired`)로 닫힌다.
 그 전까지 조회 응답은 `uploading`에 `code: "upload-expired"`와 빈 `pending`을 함께 보인다.
-사용자당 등록 선수는 1명이다. 등록한 선수는 `POST submissions?fighter=<id>`로 패키지를 제자리에서 교체한다. 선수 ID와 전적은 유지된다.
+현재 사용자당 등록 선수는 최대 3명이다. 새 선수는 `fighter` 없이 제출하며, 기존 선수 수정은 추가 등록 수를 차지하지 않는다. 등록한 선수는 `POST submissions?fighter=<id>`로 패키지를 제자리에서 교체한다. 선수 ID와 전적은 유지된다.
 
 ## 배포
 
@@ -269,8 +269,8 @@ Dot에서 첫 실제 등록:
 | 메서드·경로 | 인증 | 역할 |
 | --- | --- | --- |
 | GET /spec | 없음 | 서버 규격·베타 등록 가능 여부 |
-| GET /roster | 없음 | 출전 승인된 선수의 ID·이름·해시·범위. 최대 20명 |
-| GET /roster/:id | 없음 | 승인된 JSON 원문과 10분 만료 다운로드 URL |
+| GET /roster | 없음 | 출전 승인된 선수의 ID·이름·해시·범위. 최대 20명. 운영자가 목록에서 뺀 선수(`af_fighters.listed = false`)는 빠진다. 클라우드 MCP로 만든 선수는 `madeWith`(만든 에이전트) |
+| GET /roster/:id | 없음 | 승인된 JSON 원문과 10분 만료 다운로드 URL. 목록에서 뺀 선수도 준다 |
 | POST /duels | 공개 게스트 요청 | 승인된 두 선수의 서버 계산·저장. a, b, idempotencyKey만 허용 |
 | GET /duels/:id | 없음 | 확정된 경기의 ID·시드·해시·엔진 버전·결과 |
 | GET /rankings | 없음 | 승인 선수별 승패·점수·공동 순위. 최대 20명 |
@@ -282,6 +282,15 @@ Dot에서 첫 실제 등록:
 | GET /me | 사용자 JWT (초대 불필요) | 초대 여부·만료 시각·초대 요청 상태 |
 | POST /access-requests | 사용자 JWT (초대 불필요) | 베타 초대 요청. 선택 `note` 500자 이하, 사용자당 1건, 24시간 3회 |
 | POST /creator-handoffs | 사용자 JWT (초대 불필요) | 제작자 홈페이지 일회용 로그인 토큰 해시(`tokenHash`)와 만료 시각. 본문은 읽지 않는다 |
+| GET /story/:id | 없음 | 공방과 연대기(4단계): 공개 선수의 정본(지금 판, `?version=`), 판 목록, 공방 글 20개(`?before=`로 앞), 맺은 관계 |
+| PUT /fighters/:id/canon | 소유자 | 정본 다음 판 `{ base, sheet }`. 읽은 판이 아니면 409 `canon-changed` |
+| POST /notes · DELETE /notes/:id | 사용자 JWT | 공방 글 쓰기(공개 이름 필요)·거두기(글쓴이) |
+| POST /notes/:id/resolve | 소유자 | 제안 받기·거절 `{ decision }`(거절은 비평·경기평도 치운다). 정본 칸은 데이터베이스가 그때의 정본 위에 합친다 |
+| POST /relations · POST /relations/:id/answer · DELETE /relations/:id | 사용자 JWT | 관계 맺기·받기·끊기 |
+| GET /me/workshop · PUT /me/name | 사용자 JWT | 받은 공방 글(최근 100개)·관계(`otherKind`)·내 선수의 지금 정본(`canon`)과 공개 이름 |
+| GET /worlds · GET /worlds/:id | 없음 | 공개 세계 목록·표지, 세계 하나(진영·소속 선수·정사) |
+| POST /worlds · PATCH /worlds/:id · POST /worlds/:id/posts | 사용자 JWT | 세계 열기(계정당 둘)·고치기(진영·정사·선수 빼기)·라운지 글(그 사람으로) |
+| PUT /fighters/:id/world | 소유자 | 선수를 남이 연 세계·진영에 두기, `world: null`이면 빼기 |
 | POST /worker/claim | 작업자 | 큐 임대·일시 다운로드 URL 발급 |
 | POST /worker/finish | 작업자 | 동일 임대·manifest 해시로 검사 확정 |
 

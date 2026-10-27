@@ -3,10 +3,12 @@ import { createHandler } from '../../../api/handler.mjs';
 import { createRegistrationAnalytics } from '../../../api/registration-analytics.mjs';
 import { createCreatorLink } from '../../../api/creator-link.mjs';
 import { simulateDuel, engineVersion } from './duel-engine.mjs';
+import { engines } from './duel-engines.mjs';
+import { release } from './release.mjs';
 
 const url = Deno.env.get('SUPABASE_URL');
 const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
 if (!url || !secret) throw new Error('Missing server credentials');
 const db = createClient(url, secret, { auth: { persistSession: false, autoRefreshToken: false } });
-Deno.serve(createHandler({ db, simulateDuel, engineVersion, creatorLink: createCreatorLink({ db }),
+Deno.serve(createHandler({ db, simulateDuel, engineVersion, engines, release, creatorLink: createCreatorLink({ db }),
   analytics: createRegistrationAnalytics({ db, measurementId: Deno.env.get('GA4_MEASUREMENT_ID'), apiSecret: Deno.env.get('GA4_API_SECRET') }) }));

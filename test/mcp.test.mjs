@@ -27,7 +27,8 @@ test('real stdio initialize, tools/list and tools/call cover authoring end to en
     const catalog = await client.listTools();
     assert.deepEqual(catalog.tools.map(t => t.name).sort(), ['get_fighter_spec', 'review_creation_progress', 'validate_fighter_manifest', 'validate_fighter_package',
       'list_creation_sessions', 'create_creation_session', 'get_creation_session', 'update_creation_session',
-      'prepare_creation_job', 'get_creation_job', 'cancel_creation_job', 'resolve_creation_job', 'check_creation_readiness',
+      'prepare_creation_job', 'get_creation_job', 'cancel_creation_job', 'resolve_creation_job', 'check_creation_readiness', 'connect_oddbout',
+      'submit_fighter_package', 'update_fighter_profile', 'open_creator_homepage', 'get_fighter_submission', 'get_registered_fighter',
       'get_creation_environment', 'update_creation_environment', 'prepare_generation_login'].sort());
     assert.ok(catalog.tools.every(t => t.outputSchema));
     assert.ok(catalog.tools.filter(t => t.name.startsWith('validate_')).every(t => t.annotations.readOnlyHint));
@@ -64,7 +65,13 @@ test('real stdio initialize, tools/list and tools/call cover authoring end to en
 });
 test('no configured root means no filesystem tool', async () => {
   const client = await connect(false);
-  try { assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), ['check_creation_readiness', 'get_fighter_spec', 'review_creation_progress', 'validate_fighter_manifest']); }
+  try {
+    assert.deepEqual((await client.listTools()).tools.map(t => t.name).sort(), ['check_creation_readiness', 'connect_oddbout',
+      'get_fighter_spec', 'get_fighter_submission', 'get_registered_fighter', 'open_creator_homepage',
+      'review_creation_progress', 'update_fighter_profile', 'validate_fighter_manifest']);
+    const result = await client.callTool({ name: 'get_registered_fighter', arguments: { fighterId: crypto.randomUUID() } });
+    assert.equal(result.structuredContent.code, 'client-sign-in-required');
+  }
   finally { await client.close(); }
 });
 test('local paths reject traversal, Windows devices, URLs and absolute paths', async () => {
@@ -126,6 +133,33 @@ test('a package with concept, move names or grades is not uploaded to a server t
     assert.deepEqual(requests.map(r => r.route), ['spec']);
   } finally { await client.close(); }
 });
+test('a package with bout lines, a fighting style or optional clips is uploaded only to a server that lists them', async () => {
+  const temporary = await realpath(await mkdtemp(path.join(tmpdir(), 'fighter-style-')));
+  try {
+    await cp(new URL('../examples/sparring-bot/', import.meta.url), path.join(temporary, 'styled'), { recursive: true });
+    // Metadata only: the entrance replays the guard sheet already in the package, so every asset stays the validated file.
+    const styled = structuredClone(example);
+    styled.profile.lines = { challenge: 'Ready.', win: 'Format kept.' };
+    styled.combat.style = { mix: { slam: 2, combo: 2, fast: 1 }, distance: 2, temper: { patience: 4 } };
+    styled.clips.entrance = { ...structuredClone(example.clips.fightIdle), loop: false };
+    await writeFile(path.join(temporary, 'styled', 'fighter.json'), JSON.stringify(styled));
+    const args = { manifestPath: 'styled/fighter.json', idempotencyKey: crypto.randomUUID() };
+    const old = recordingRemote(['profile-extras-1', 'combat-stats-1']), before = await connectInProcess({ root: temporary, remote: old.remote });
+    try {
+      const refused = (await before.callTool({ name: 'submit_fighter_package', arguments: args })).structuredContent;
+      assert.equal(refused.code, 'server-feature-missing', JSON.stringify(refused));
+      assert.deepEqual(refused.errors, ['profile-lines-1', 'combat-style-1', 'extra-clips-1']);
+      assert.deepEqual(old.requests.map(r => r.route), ['spec']);
+    } finally { await before.close(); }
+    const current = recordingRemote(['profile-extras-1', 'combat-stats-1', 'profile-lines-1', 'combat-style-1', 'extra-clips-1']);
+    const after = await connectInProcess({ root: temporary, remote: current.remote });
+    try {
+      const queued = (await after.callTool({ name: 'submit_fighter_package', arguments: args })).structuredContent;
+      assert.equal(queued.stage, 'queued', JSON.stringify(queued));
+      assert.deepEqual(JSON.parse(current.requests.find(r => r.route === 'submissions').body), styled);
+    } finally { await after.close(); }
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+});
 test('validate and submit share one serial decoder; a busy or invalid package is never uploaded', async () => {
   const { requests, remote } = recordingRemote(), client = await connectInProcess({ remote });
   try {
@@ -169,6 +203,11 @@ test('one motion of the schema or example is a small read', async () => {
     const walk = (await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'example', motion: 'walk' } })).structuredContent.data;
     assert.equal(walk.clip.frames.length, 16); assert.equal(walk.asset.id, walk.clip.assetId);
     assert.equal((await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'schema', motion: 'hp' } })).isError, true);
+    // An optional clip has its schema (the skill's kind and marks) but no fixture example.
+    const skill = (await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'schema', motion: 'skill' } })).structuredContent.data;
+    assert.deepEqual(skill.clip.properties.skill.required, ['kind']);
+    const victory = (await client.callTool({ name: 'get_fighter_spec', arguments: { section: 'example', motion: 'victory' } })).structuredContent;
+    assert.equal(victory.ok, true); assert.equal(victory.data.clip, null);
   } finally { await client.close(); }
 });
 
@@ -189,4 +228,27 @@ test('profile edits need no local files and issue one metadata PATCH with stable
   const old=await connectInProcess({root:null,remote:{request:async()=>({data:{registration:{}}})}});
   try { assert.equal((await old.callTool({name:'update_fighter_profile',arguments:args})).structuredContent.code,'server-feature-missing'); }
   finally { await old.close(); }
+});
+
+test('bout lines edits need profile-lines-1; null removes them and the schema bounds each line', async () => {
+  const fighterId=crypto.randomUUID(), args=lines=>({fighterId,idempotencyKey:crypto.randomUUID(),expectedManifestSha256:'a'.repeat(64),profile:{lines}});
+  const server=features=>{const calls=[];return {calls,remote:{request:async(route,options={})=>{calls.push({route,...options});
+    return route==='spec'?{data:{registration:{profileUpdate:'v1'},features}}:{ok:true,stage:'registered',fighterId,manifestSha256:'b'.repeat(64)};}}};};
+  const current=server(['profile-names-1','profile-lines-1']), client=await connectInProcess({root:null,remote:current.remote});
+  try {
+    for(const lines of [{challenge:'Ready.',lose:'Next time.'},null]) {
+      assert.equal((await client.callTool({name:'update_fighter_profile',arguments:args(lines)})).structuredContent.stage,'registered');
+      assert.deepEqual(JSON.parse(current.calls.at(-1).body).profile,{lines});
+    }
+    const writes=current.calls.filter(c=>c.method==='PATCH').length;
+    for(const lines of [{},{taunt:'x'},{win:'x'.repeat(41)},{win:''}])
+      assert.equal((await client.callTool({name:'update_fighter_profile',arguments:args(lines)})).isError,true,JSON.stringify(lines));
+    assert.equal(current.calls.filter(c=>c.method==='PATCH').length,writes);
+  } finally { await client.close(); }
+  const old=server(['profile-names-1']), before=await connectInProcess({root:null,remote:old.remote});
+  try {
+    assert.equal((await before.callTool({name:'update_fighter_profile',arguments:args({win:'Done.'})})).structuredContent.code,'server-feature-missing');
+    assert.equal((await before.callTool({name:'update_fighter_profile',arguments:{...args(null),profile:{name:'Still editable'}}})).structuredContent.stage,'registered');
+    assert.deepEqual(old.calls.filter(c=>c.method).map(c=>JSON.parse(c.body).profile),[{name:'Still editable'}]);
+  } finally { await before.close(); }
 });

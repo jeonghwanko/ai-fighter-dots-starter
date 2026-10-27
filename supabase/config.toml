@@ -4,3 +4,8 @@ project_id = "ai-fighter-dots-starter"
 # The handler verifies Supabase Auth users and separately scoped worker credentials on every request.
 verify_jwt = false
 entrypoint = "./functions/ai-fighter/index.ts"
+
+[functions.ai-fighter-mcp]
+# Public discovery; every private tool verifies a scoped OAuth JWT and its active grant/session itself.
+verify_jwt = false
+entrypoint = "./functions/ai-fighter-mcp/index.ts"

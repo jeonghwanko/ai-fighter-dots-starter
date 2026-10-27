@@ -39,6 +39,11 @@
 횟수나 경직 수치가 아니다. 사용자가 바꾸는 것은 자세·무게감·표정·준비·접촉·회수의 표현이다.
 접촉 박자는 게임 어댑터에 맞춘다. 실제 조작 잠금·취소·히트스톱은 게임이 정하며 패키지가 덮어쓰지 않는다.
 
+`optional: true`인 묶음(현재 `style`: `skill`·`entrance`·`victory`와 싸우는 성격)은 통째로 건너뛸 수 있다.
+그 동작은 `contract.optionalMotions`에 있고, `review_creation_progress`의 차단 사유가 되지 않는다.
+사용자가 고른 선택 동작은 다른 동작처럼 버전·검수·선택을 기록하며, 미완료 상태는 `optionalPending`에 보인다.
+패키지에 넣는 선택 동작은 고르고 검수한 현재 버전이어야 한다(`package-optional-clip-unreviewed`).
+
 ## 현재 대화의 상태
 
 `creation-session.json`은 제출할 `fighter.json`과 별개다. 여기에는 현재 대화에서 실제로 받은 답만 기록한다.

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { resolveManifest } from './package-access.mjs';
 import { creatorLink } from './creator-handoff.mjs';
 
@@ -45,7 +46,7 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
   const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: /^[a-z0-9-]+$/.test(error.message) ? error.message : 'remote-operation-failed' }); } };
   if (validatePackage) {
     server.registerTool('submit_fighter_package', {
-      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically. For text-only edits use update_fighter_profile without uploading assets. To change a registered fighter later (concept, move names, stats or art), pass its fighterId — the package is replaced in place and the fighter keeps its ID and duel record. Omit fighterId only for the first registration.',
+      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically. For text-only edits use update_fighter_profile without uploading assets. Each account may register up to three fighters: to update an existing fighter (concept, move names, bout lines, stats, fighting style or art), pass its fighterId — the package is replaced in place and the fighter keeps its ID and duel record. Omit fighterId to register a new fighter while the account has fewer than three.',
       inputSchema: { manifestPath: z.string().min(1).max(512), idempotencyKey: z.string().uuid(), fighterId: z.string().uuid().optional() }, outputSchema,
       annotations: { ...read, readOnlyHint: false },
     }, safe(async ({ manifestPath, idempotencyKey, fighterId }) => {
@@ -63,9 +64,13 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
       if (!parsed.ok || !validateFighter(parsed.data).ok) throw new Error(CHANGED);
       const directory = path.dirname(after.location);
       if ((await lstat(path.join(directory, 'assets'))).isSymbolicLink()) throw new Error(CHANGED);
-      // A server older than this kit's contract rejects the optional profile extras and duel grades; say so before uploading.
-      const { profile, combat } = parsed.data, used = [
-        ...(['language', 'concept', 'moves'].some(key => key in profile) ? ['profile-extras-1'] : []), ...('stats' in combat ? ['combat-stats-1'] : [])];
+      // A server older than this kit's contract rejects the optional profile extras, names and bout lines, duel grades, fighting style
+      // and optional clips; say so before uploading.
+      const { profile, combat, clips } = parsed.data, used = [
+        ...(['language', 'concept', 'moves'].some(key => key in profile) ? ['profile-extras-1'] : []), ...('names' in profile ? ['profile-names-1'] : []),
+        ...('lines' in profile ? ['profile-lines-1'] : []),
+        ...('stats' in combat ? ['combat-stats-1'] : []), ...('style' in combat ? ['combat-style-1'] : []),
+        ...(Object.keys(spec.optionalClips).some(key => key in clips) ? ['extra-clips-1'] : [])];
       if (used.length) {
         const features = (await remote.request('spec'))?.data?.features ?? [];
         const missing = used.filter(feature => !features.includes(feature));
@@ -82,14 +87,21 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
     }));
   }
   server.registerTool('update_fighter_profile', {
-    description: 'Edit your registered fighter name, description, language, concept or move text without local image files or image uploads. Requires user intent to edit. Read get_registered_fighter first and pass its manifest_sha as expectedManifestSha256. Keeps the fighter ID and duel record; revisions do not consume the five initial-submission attempts. Reuse one idempotencyKey and identical arguments for retries. A fighter-changed response requires reading the latest profile before a new edit.',
+    description: 'Edit your registered fighter name, per-language display names (names.ko / names.en; null removes them), bout lines (lines.challenge / lines.win / lines.lose; null removes them), description, language, concept or move text without local image files or image uploads. Requires user intent to edit. Read get_registered_fighter first and pass its manifest_sha as expectedManifestSha256. Keeps the fighter ID and duel record; revisions do not consume the five initial-submission attempts. Reuse one idempotencyKey and identical arguments for retries. A fighter-changed response requires reading the latest profile before a new edit.',
     inputSchema: { fighterId: z.string().uuid(), idempotencyKey: z.string().uuid(), expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
       profile: z.object({ name: z.string().min(1).max(40).optional(), description: z.string().min(1).max(600).optional(),
         language: z.enum(['en','ko']).optional(), concept: z.string().min(1).max(800).optional(),
+        names: z.object({ ko: z.string().min(1).max(40).optional(), en: z.string().min(1).max(40).optional() }).strict()
+          .refine(value => Object.keys(value).length > 0).nullable().optional(),
+        lines: z.object(Object.fromEntries(spec.profileLines.keys.map(key => [key, z.string().min(1).max(spec.profileLines.maxLength).optional()]))).strict()
+          .refine(value => Object.keys(value).length > 0).nullable().optional(),
         moves: z.object(Object.fromEntries(['combo','slam','dash','block'].map(key => [key, z.object({ name: z.string().min(1).max(24), description: z.string().min(1).max(160) }).strict()]))).strict().optional()
       }).strict().refine(value => Object.keys(value).length > 0) }, outputSchema, annotations: { ...read, readOnlyHint: false },
   }, safe(async ({ fighterId, idempotencyKey, expectedManifestSha256, profile }) => {
-    if ((await remote.request('spec'))?.data?.registration?.profileUpdate !== 'v1')
+    const remoteSpec = (await remote.request('spec'))?.data;
+    // A server older than these keys rejects them; per-language names and bout lines each need their own /spec feature.
+    if (remoteSpec?.registration?.profileUpdate !== 'v1' || [['names', 'profile-names-1'], ['lines', 'profile-lines-1']]
+      .some(([key, feature]) => key in profile && !remoteSpec?.features?.includes(feature)))
       return { ok: false, stage: 'remote-spec', code: 'server-feature-missing' };
     return remote.request(`fighters/${fighterId}/profile`, { method: 'PATCH',
       headers: { 'content-type': 'application/json', 'idempotency-key': idempotencyKey }, body: JSON.stringify({ expectedManifestSha256, profile }) });

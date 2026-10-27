@@ -30,7 +30,12 @@ ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 �
   이 이름은 사람의 심사를 뜻하지 않는다. 자동 공개 근거는 `open-registration` 정책과 서버 검사 결과다.
 - 로그인 확인, 소유권, RLS, 불변 파일, 요청 속도·파일 용량·저장소 한도는 유지한다.
   신규 등록 시도는 계정당 누적 5회다. 기존 선수의 수정은 이 횟수에 포함하지 않는다.
-  파일 합계 10 MB와 전체 예약 저장소 100 MB 한도, 배포 환경의 선수 수 제한은 유지한다.
+  파일 합계 10 MB와 전체 예약 저장소 100 MB 한도, 계정당 선수 최대 3명 제한은 유지한다.
+  이미지와 소개만 먼저 공개하는 `profile` 상태도 같은 3명 한도에 포함된다. 서비스 전용
+  `af_register_character_profile`로 등록하며, 전투 승인·패키지 해시·검증 제출을 만들지 않는다.
+  공개 목록은 RLS와 열 권한이 적용된 `af_public_character_profiles` 뷰로 읽는다.
+  전투 동작을 완성하면 같은 선수 ID를 지정해 기존 패키지 검증 절차를 통과한다.
+  이때 `registered`로 전환되며 세계관 연결과 계정 슬롯은 유지된다.
   이는 사전 심사 제도가 아니며 비용을 제한하는 기술적 상한이다.
 
 운영 변경은 [공개 이용 마이그레이션](../supabase/migrations/20261021092001_ai_fighter_open_registration.sql),
@@ -40,8 +45,9 @@ ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 �
 
 제작자 페이지의 선수 상세 화면에서 이름과 소개를 저장할 수 있다. 그림을 다시 올리지 않는다.
 제작 도구에서는 `get_registered_fighter`로 현재 버전을 읽고 `update_fighter_profile`을 호출한다.
-이 경로는 로컬 패키지나 이미지 파일이 없어도 동작한다. 이름·소개·언어·컨셉·기술 설명만 바꿀 수 있다.
-그림·애니메이션·능력치 수정은 기존 `submit_fighter_package(fighterId)` 검증 경로를 사용한다.
+이 경로는 로컬 패키지나 이미지 파일이 없어도 동작한다. 이름·언어별 이름·소개·언어·컨셉·기술 설명·경기 대사만 바꿀 수 있다.
+언어별 이름(`names`)과 경기 대사(`lines`)는 `null`을 보내면 지운다. 서버 `/spec`에 각각 `profile-names-1`·`profile-lines-1`이 있어야 한다.
+그림·애니메이션·능력치·싸우는 성격 수정은 기존 `submit_fighter_package(fighterId)` 검증 경로를 사용한다.
 
 - API: `PATCH /fighters/:id/profile`, 인증 헤더와 UUID `Idempotency-Key`가 필요하다.
 - 본문: `{ "expectedManifestSha256": "현재 해시", "profile": { "name": "새 이름" } }`. 생략한 필드는 유지한다.
@@ -50,6 +56,7 @@ ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 �
 - `asset_source_submission`은 실제 파일이 저장된 원래 제출을 참조한다. 원본 파일·행은 참조가 남아 있는 동안 보존한다.
 - 소유권·요청 속도·계정 제한·서비스 일시 중지·사후 조치·진행 중 업로드 검사는 계속 적용한다.
 
-변경의 소유자는 [프로필 수정 마이그레이션](../supabase/migrations/20261024022222_ai_fighter_profile_edits.sql)과
+변경의 소유자는 [프로필 수정 마이그레이션](../supabase/migrations/20261024022222_ai_fighter_profile_edits.sql)
+(수정 가능한 키는 [경기 대사 마이그레이션](../supabase/migrations/20261027130000_ai_fighter_profile_lines.sql)이 마지막으로 정한다)과
 [프로필 API](../api/fighter-profile.mjs)다. API의 `registration.profileUpdate: "v1"`은 지원 여부를 표시한다.
 마이그레이션을 먼저 적용하고 API를 갱신한 뒤 제작자 페이지·MCP 도구를 공개한다. 로컬 검증은 배포가 아니다.

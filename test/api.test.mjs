@@ -47,6 +47,17 @@ test("?fighter= targets the caller's fighter for an in-place update; a malformed
   assert.equal((await send('?fighter=not-a-uuid')).status, 422);
   assert.ok(!calls.some(([name]) => name === 'af_create_submission'));
 });
+test('the registration API returns the database fighter limit as a conflict', async () => {
+  const handle = createHandler({ db: {
+    auth: { getUser: async () => ({ data: { user: { id: crypto.randomUUID() } } }) },
+    rpc: async name => name === 'af_authorize' ? { data: true } : { error: { message: 'fighter-quota' } },
+  } });
+  const response = await handle(new Request('https://test/ai-fighter/submissions', { method: 'POST',
+    headers: { authorization: 'Bearer signed-user-token-for-test', 'idempotency-key': crypto.randomUUID() }, body: JSON.stringify(example) }));
+  assert.equal(response.status, 409);
+  assert.equal((await response.json()).code, 'fighter-quota');
+});
+
 test('text that Postgres jsonb cannot store is rejected with 422 before any write', async () => {
   const owner = crypto.randomUUID(), calls = [];
   const handle = createHandler({ db: { auth: { getUser: async () => ({ data: { user: { id: owner } } }) },
@@ -90,4 +101,18 @@ test('a verifiable JWT is checked locally; the Auth server is not called', async
   const anonymous = { getClaims: async () => ({ data: { claims: { sub: owner, is_anonymous: true } } }) };
   assert.equal((await createHandler({ db: { auth: anonymous } })(new Request('https://test/ai-fighter/submissions', {
     method: 'POST', headers: { authorization: 'Bearer signed-user-token-for-test' }, body: '{}' }))).status, 401);
+});
+test('the creator page may call every submission route from a browser, including its errors', async () => {
+  const handle = createHandler({ db: {} });
+  for (const path of ['submissions', `submissions/${crypto.randomUUID()}`, `submissions/${crypto.randomUUID()}/submit`, `submissions/${crypto.randomUUID()}/assets/idle`]) {
+    const preflight = await handle(new Request(`https://test/ai-fighter/${path}`, { method: 'OPTIONS' }));
+    assert.equal(preflight.status, 200);
+    assert.equal(preflight.headers.get('access-control-allow-origin'), '*');
+    assert.match(preflight.headers.get('access-control-allow-methods'), /PUT/);
+    assert.match(preflight.headers.get('access-control-allow-headers'), /Idempotency-Key/);
+  }
+  // A browser must be able to read the refusal, or the page cannot say why.
+  const refused = await handle(new Request('https://test/ai-fighter/submissions', { method: 'POST', body: '{}' }));
+  assert.equal(refused.status, 401); assert.equal(refused.headers.get('access-control-allow-origin'), '*');
+  assert.equal((await handle(new Request('https://test/ai-fighter/worker/claim', { method: 'OPTIONS' }))).headers.get('access-control-allow-origin'), null);
 });

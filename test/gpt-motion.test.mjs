@@ -6,8 +6,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { init, bindKeyposes } from '../scripts/gait.mjs';
-import { ensureSpritePatch, inspectSpritePatch } from '../scripts/sprite-patch.mjs';
-import { spriteRoot, spritePython, requireMotionContract } from '../scripts/sprite-gen.mjs';
+import { spriteRoot, spritePython, requireMotionContract, inspectSpriteEngine } from '../scripts/sprite-gen.mjs';
 
 const hash = text => createHash('sha256').update(text).digest('hex');
 async function directory(t) {
@@ -15,19 +14,6 @@ async function directory(t) {
   t.after(async () => { assert.ok(path.resolve(dir).startsWith(path.resolve(tmpdir()) + path.sep)); await rm(dir,{recursive:true,force:true}); });
   return dir;
 }
-
-test('patch application is reproducible, idempotent and refuses local edits', async t => {
-  const dir=await directory(t), file=path.join(dir,'sample.py');
-  await writeFile(file,'old\r\n');
-  const manifest={files:[{path:'sample.py',before:hash('old\n'),after:hash('new\n'),hunks:[{start:0,remove:1,insert:['new']}]},
-    {path:'new.py',before:null,after:hash('added\n'),hunks:[{start:0,remove:1,insert:['added','']}]}]};
-  assert.equal((await ensureSpritePatch(dir,manifest)).applied,true);
-  assert.equal(await readFile(file,'utf8'),'new\n');
-  assert.equal((await ensureSpritePatch(dir,manifest)).applied,true);
-  await writeFile(file,'user edit');
-  await assert.rejects(ensureSpritePatch(dir,manifest),/SOURCE_CHANGED/);
-  assert.equal(await readFile(file,'utf8'),'user edit');
-});
 
 test('initializer creates gated requests and binding rejects an incomplete review', async t => {
   const dir=await directory(t), out=path.join(dir,'walk');
@@ -53,17 +39,6 @@ test('initializer creates gated requests and binding rejects an incomplete revie
   await assert.rejects(requireMotionContract(['gen-set','--run-dir',out],dir),/needs 16 frames/);
 });
 
-test('reviewed patch upgrades accept only the known previous bytes', async t => {
-  const dir=await directory(t), file=path.join(dir,'new.py');
-  const manifest={files:[{path:'new.py',before:null,after:hash('v3\n'),hunks:[{start:0,remove:1,insert:['v3','']}],
-    upgrades:[{before:hash('v2\n'),hunks:[{start:0,remove:2,insert:['v3','']}]}]}]};
-  await writeFile(file,'v2\n');
-  assert.equal((await ensureSpritePatch(dir,manifest)).applied,true);
-  assert.equal(await readFile(file,'utf8'),'v3\n');
-  await writeFile(file,'unknown edit\n');
-  await assert.rejects(ensureSpritePatch(dir,manifest),/SOURCE_CHANGED/);
-});
-
 const installed=await access(spritePython).then(()=>true,()=>false);
 test('pose route requires full AI Fighter frame plans while allowing internal diagnostic generation', async t => {
   const dir=await directory(t), plan=path.join(dir,'pose.json');
@@ -82,8 +57,8 @@ test('v5 blocks new uncalibrated calls without blocking legacy recovery', async 
   await requireMotionContract(['gen-motion','--plan',plan,'--prepare-only'],dir);
   await requireMotionContract(['gen-motion','--plan',plan,'--export'],dir);
 });
-test('real patched engine preserves flight and enforces reference gates without generation', {skip:!installed}, async () => {
-  assert.equal((await inspectSpritePatch(spriteRoot)).applied,true);
+test('real sprite-gen-agent engine preserves flight and enforces reference gates without generation', {skip:!installed}, async () => {
+  assert.equal((await inspectSpriteEngine(spriteRoot)).motion,true);
   const result=spawnSync(spritePython,['test/gpt_motion_cases.py'],{encoding:'utf8',windowsHide:true,env:{...process.env,PYTHONUTF8:'1'}});
   assert.equal(result.status,0,result.stdout+'\n'+result.stderr);
   assert.match(result.stderr,/Ran 13 tests/);

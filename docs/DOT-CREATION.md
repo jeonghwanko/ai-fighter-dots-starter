@@ -14,6 +14,7 @@ Dot은 외형을 실제로 보여준 뒤 선택된 원화로 애니메이션을 
 결과에 영향을 주는 충돌만 확인한다. 테스트 예시를 실제 사용자 선택으로 기록하지 않는다.
 
 **기본은 외형 → 대기·이동 → 공격 → 방어·피격 → 최종 확인의 다섯 묶음이다.**
+게임 문맥에 선택 묶음 `style`(싸우는 성격·고유 기술)이 있으면 방어·피격 뒤에 한 번 제안하고, 사용자가 원하지 않으면 건너뛴다.
 현재 호스트가 지원하는 범위에서 같은 제작 원칙을 따른다. 로컬 생성·패키징에는 로컬 도구가 필요하다.
 묶음은 사용자가 하나의 감각을 함께 판단할 수 있는 범위로 나눈다. 묶음 안의 생성·검수는 이어서 처리하고,
 끝에서 결과를 함께 보여주며 피드백을 받는다. 동작마다 별도의 진행 허락을 요구하지 않는다.
@@ -24,9 +25,12 @@ Dot은 외형을 실제로 보여준 뒤 선택된 원화로 애니메이션을 
 | 2. 대기·이동 | `fightIdle`, `walk` 16프레임, `run` 12프레임 | 가벼운지 묵직한지, 자세·보폭·상하 움직임이 어울리는가 | 대기·걷기·달리기를 같은 크기로 함께 재생 |
 | 3. 공격 | `combo`, `slam`, `dash`와 준비·회수 자세 | 연타·강타·돌진의 박자와 힘주는 표현이 어울리는가 | 공격 세 가지를 준비부터 회수까지 모아보기 |
 | 4. 방어·피격 | `block`, `hit`, `groggy`, `fall`과 기상 자세 | 막기·맞기·비틀거림·쓰러짐이 자연스럽고 캐릭터다운가 | 방어와 반응을 상태별로 고르거나 연속해서 재생 |
-| 5. 최종 확인 | 선택한 11개 동작의 패키지, 이름·소개·초상, 검사 결과 | 전체 외형·크기·움직임이 일관되고 이름·소개가 맞는가 | 최종 파일에서 재생한 전체 동작과 프로필 |
+| (선택) 싸우는 성격 | `skill`·`entrance`·`victory` 가운데 사용자가 원하는 것, `combat.style` 선택 | 기술·등장·승리 자세와 싸우는 방식이 캐릭터다운가 | 고른 선택 동작과 성격 요약 |
+| 5. 최종 확인 | 선택한 11개 동작(과 고른 선택 동작)의 패키지, 이름·소개·초상·경기 대사, 검사 결과 | 전체 외형·크기·움직임이 일관되고 이름·소개가 맞는가 | 최종 파일에서 재생한 전체 동작과 프로필 |
 
 1~4의 입력 동작 합계는 필수 11개다. 초상은 별도 캐릭터를 다시 생성하지 않고 같은 원화에서 얻는다.
+선택 묶음은 다음 묶음과 최종 확인을 막지 않는다. 다만 패키지에 넣는 선택 동작은 각각 현재 버전을 고르고 검수해야 패키지를 기록할 수 있다
+(`package-optional-clip-unreviewed`). 넣지 않기로 한 선택 동작은 패키지 계획에서 뺀다.
 기상은 `fall`의 보조 자세로 규격에 맞춰 연결한다. 묶음은 제작·피드백 단위이며, 제출 규격이나 게임의 공격 수치가 아니다.
 
 ### 묶음 진행 규칙
@@ -124,6 +128,17 @@ GitHub ZIP에는 서브모듈 내용이 없으므로 Git clone을 사용한다.
 `sprite:setup`은 `vendor/sprite-gen/.venv`에 도구를 설치한다. 전역 sprite-gen이나 운영자 PC 경로에 의존하지 않는다.
 Python 탐지가 필요한 호스트는 `AI_FIGHTER_BOOTSTRAP_PYTHON`에 Python 실행 파일 경로를 지정한다.
 해당 변수는 venv 생성에만 쓴다. 생성과 추출은 항상 포함된 도구의 venv에서 실행한다.
+
+`sprite:setup`은 이어서 외부 도구를 갖춘다(sudo 없음, 상세는 [실행 환경 2절](EXECUTION-HOST.md#2-작업-공간-준비)):
+
+| 도구 | 쓰임 | 설치 |
+| --- | --- | --- |
+| `img2webp`(`-exact`, libwebp 1.5+) | 걷기·달리기 WebP, 필수 | 없거나 오래되면 키트가 libwebp 1.6.0을 SHA-256 고정으로 venv에 받는다 |
+| RIFE | 루프 이음새 보정, 선택 | 키트가 `sprite-gen rife install`을 부른다. 확인 프레임 실패는 경고 |
+| `ffmpeg`·`ffprobe` | 영상 → 프레임, 필수 | 사용자·준비자가 설치: `sudo apt install ffmpeg` / `brew install ffmpeg` / `winget install --id Gyan.FFmpeg -e` |
+
+`sprite:status`의 `tools`가 `ready`가 아니면 생성을 시작하지 않는다. `install.actor`가 `agent`면 `npm run sprite:setup`을 실행하고,
+`user`면 그 명령을 사용자에게 전한다. sudo 명령을 에이전트가 대신 실행하지 않는다.
 
 ## 2. Dot이 읽을 규칙과 계정 선택
 
@@ -274,6 +289,30 @@ npm run sprite -- game-pack --request game.json --out-dir pack
 쓰러짐을 재생한 뒤 다시 일어서거나 다시 눕는 구간을 fall에 붙이지 않는다. 실제 fall 재생은 누움으로 끝나고,
 기상은 getUp을 사용하는 상황에서만 재생되는지 최종 미리보기에서 별도로 확인한다.
 
+#### 선택 동작·대사·싸우는 성격
+
+계획의 `profile`에는 `language`·`concept`·`names`·`lines`·`moves`·`stats`·`style`도 넣을 수 있다.
+`stats`·`style`은 fighter.json의 `combat.stats`·`combat.style`, 나머지는 같은 이름의 `profile` 필드가 된다.
+`motions`에는 필수 11개 밖에 선택 동작 `skill`·`entrance`·`victory`를 더할 수 있다([선택 동작](AUTHORING.md#선택-동작)).
+다음 숫자·이름은 구조 예시다.
+
+```json
+"profile": { "name": "파란 고양이", "description": "파란 갑옷의 고양이 복서",
+  "lines": { "challenge": "한 판 붙자!", "win": "역시 내가 이겼군." },
+  "style": { "mix": { "slam": 1, "combo": 3, "fast": 1 }, "distance": 2, "temper": { "patience": 4 } } },
+"motions": {
+  "skill": { "animation": "cat/claw", "hitSequenceIndices": [6], "skill": { "kind": "pincer" } },
+  "entrance": { "animation": "cat/entrance" },
+  "victory": { "animation": "cat/victory" }
+}
+```
+
+- 선택 동작은 필수 전투 동작과 같이 포장한다. 시트·프레임·기준점·접지·해시는 그림에서 잰다.
+- `skill.kind`와 표식(돌진의 `windupTo`·`recoverFrom`·`run`·`launch`·`struck`, 자세의 `windowFrom`·`windowTo`·`strikeFrom`·`strikeTo`)은
+  접촉 단계처럼 game-pack 재생 단계 번호다. `skill`은 skill 동작에만 쓴다.
+- 기술의 접촉·예고 시간·자세 창 길이, 공격 섞기, `skill` 클립·`summon`·`shockwave` 두 개 한도는 계약 검사가 확인한다. 실패하면 아무것도 쓰지 않는다.
+- 제출 전 서버 `/spec`에 `profile-lines-1`·`combat-style-1`·`extra-clips-1`이 있어야 한다. 없으면 제출 도구가 업로드 전에 멈춘다.
+
 `fighter:pack`이 그림에서 재는 값:
 
 - **크기.** idle 몸높이를 재서 400px가 아니면(2% 초과) 모든 동작을 같은 비율로 다시 맞춘다. 게임은 `actor 높이 / bodyHeight`로
@@ -315,5 +354,6 @@ ODDBOUT 통합 플러그인은 PC와 Dots 모두 현재 대화의 연결된 계�
 > 외형이 정해지면 대기·이동, 공격, 방어·피격 묶음으로 보여주고 묶음마다 내 피드백을 반영해줘.
 > 최종 동작이 정해지면 fighter.json과 WebP를 검사해 내 계정에 등록하고 결과를 이 대화에서 알려줘.
 
-sprite-gen은 [공식 저장소](https://github.com/aldegad/sprite-gen)의 고정 커밋을 서브모듈로 포함한다.
+sprite-gen은 Alex Kim의 [sprite-gen](https://github.com/aldegad/sprite-gen)을 포크해 모션 엔진을 더한
+[sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent)의 고정 커밋을 서브모듈로 포함한다.
 원본 Apache-2.0 [LICENSE](../vendor/sprite-gen/LICENSE)와 [NOTICE](../vendor/sprite-gen/NOTICE)를 보존한다.

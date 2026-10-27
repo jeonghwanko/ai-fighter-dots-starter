@@ -6,6 +6,7 @@ import { createDeviceLoginHandler } from './device-login.mjs';
 import { createAdminHandler } from './admin.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
+import { createWorkshopHandler, workshopRoute } from './workshop.mjs';
 import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, unstorableTextPath, verifiedUserId } from './http.mjs';
 
 export { Problem, readBody, sha256 } from './http.mjs';
@@ -34,8 +35,12 @@ function check(error) {
   if (['byte-budget-mismatch','profile-only-required'].includes(error.message)) throw new Problem(422, error.message);
   throw new Problem(503, 'database-unavailable');
 }
-export function createHandler({ db, simulateDuel = null, engineVersion = null, creatorLink = null, analytics = null }) {
-  const duelHandler = createDuelHandler({db,simulateDuel,engineVersion});
+/**
+ * `agentClient` (공방과 연대기, 2026-10-27): the cloud MCP's OAuth client for its in-process calls — the workshop labels notes and canon
+ * versions with that agent's name. The public Edge handler never sets it.
+ */
+export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null }) {
+  const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release});
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
   const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink });
@@ -47,6 +52,14 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
     check(error); return view(row, data);
   }
   /** One Storage call signs every asset of a submission, in manifest order. */
+  // The agent that made each fighter (`af_fighter_agents`, 2026-10-27). Not knowing it never fails a roster read.
+  async function madeWith(ids) {
+    if (!ids.length) return new Map();
+    try {
+      const { data, error } = await db.from('af_fighter_agents').select('fighter_id,client_name').in('fighter_id', ids);
+      return error || !Array.isArray(data) ? new Map() : new Map(data.map(row => [row.fighter_id, row.client_name]));
+    } catch { return new Map(); }
+  }
   async function signedUrls(row, seconds) {
     const paths = row.manifest.assets.map(asset => objectKey(row, asset));
     const { data, error } = await db.storage.from(BUCKET).createSignedUrls(paths, seconds);
@@ -72,6 +85,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
     await rpc('af_authorize', { p_owner: owner });
     return owner;
   }
+  const workshopHandler = createWorkshopHandler({ db, authenticate: request => authenticate(request, false), rpc, agentClient });
   async function ownSubmission(owner, id) {
     const { data, error } = await db.from('af_submissions').select('*').eq('id', requireId(id)).eq('owner_id', owner).maybeSingle();
     check(error); if (!data) throw new Problem(404, 'not-found'); return data;
@@ -87,7 +101,14 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
         cors = { methods: 'PATCH, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
         if (method === 'OPTIONS') return json({ ok: true });
       }
+      // The creator page registers a package picked in the browser (2026-10-26): create, upload, submit and poll.
+      // Bearer auth only, no cookies, so any origin may call it the way the kit's CLI does.
+      if (parts[0] === 'submissions') {
+        cors = { methods: 'GET, POST, PUT, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
+        if (method === 'OPTIONS') return json({ ok: true });
+      }
       if (parts[0] === 'admin') return adminHandler(request, parts);
+      if (workshopRoute(parts)) return workshopHandler(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
       // Device-connection sign-in: start and poll are unauthenticated; approve verifies the user itself.
@@ -104,6 +125,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
         let query = db.from('af_fighters').select('id,created_at,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha')
           .eq('runtime_approved', true).eq('runtime_scope', 'arena-player-v1').eq('review_state', 'approved');
         if (parts.length === 1) {
+          // An unlisted fighter (`listed`, 2026-10-27) is left out of the list only: his own address below still serves him.
+          query = query.eq('listed', true);
           const cursor = new URL(request.url).searchParams.get('after');
           if (cursor !== null) {
             // Strictly validate both parts before placing them in PostgREST filter syntax.
@@ -114,11 +137,11 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
           }
           query = query.order('created_at', { ascending: false }).order('id');
           const { data, error } = await query.limit(21); check(error);
-          const last = data[19], hasMore = data.length > 20;
+          const last = data[19], hasMore = data.length > 20, shown = data.slice(0, 20).filter(f => f.runtime_manifest_sha === f.manifest_sha);
+          const makers = await madeWith(shown.map(f => f.id));
           return reply({ ok: true, hasMore, nextCursor: hasMore ? `${last.created_at}|${last.id}` : null,
-            fighters: data.slice(0, 20).filter(f => f.runtime_manifest_sha === f.manifest_sha)
-            .map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, runtimeScope: f.runtime_scope,
-              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha })) });
+            fighters: shown.map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, ...(f.profile.names ? { names: f.profile.names } : {}), runtimeScope: f.runtime_scope,
+              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha, ...(makers.has(f.id) ? { madeWith: makers.get(f.id) } : {}) })) });
         }
         if (parts.length !== 2 || !UUID.test(parts[1])) return reply({ ok: false, code: 'not-found' }, 404);
         const { data: fighter, error } = await query.eq('id', parts[1]).maybeSingle(); check(error);
@@ -126,11 +149,11 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
         const { data: row, error: readError } = await db.from('af_submissions').select('*').eq('id', fighter.submission_id).eq('status', 'registered').maybeSingle();
         check(readError);
         if (!row || row.manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
-        const urls = await signedUrls(row, 600);
+        const urls = await signedUrls(row, 600), maker = (await madeWith([fighter.id])).get(fighter.id);
         const files = row.manifest.assets.map((asset, index) => ({ id: asset.id, downloadUrl: urls[index] }));
         return reply({ ok: true, fighterId: fighter.id, manifestSha256: fighter.manifest_sha, runtimeApproved: true,
           runtimeScope: fighter.runtime_scope, duelApproved: fighter.duel_approved === true && fighter.duel_manifest_sha === fighter.manifest_sha,
-          manifestText: row.manifest_text, files });
+          manifestText: row.manifest_text, files, ...(maker ? { madeWith: maker } : {}) });
       }
       if (parts.join('/') === 'analytics/context' && request.method === 'OPTIONS' && analytics) return analytics.preflight();
       const isWorker = parts[0] === 'worker';
@@ -142,7 +165,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
       }
       if (method === 'POST' && parts.join('/') === 'submissions') {
         const key = requireId(request.headers.get('idempotency-key'));
-        // ?fighter=<id> replaces the package of the caller's own fighter in place (2026-10-23); absent, it is a first registration.
+        // ?fighter=<id> replaces the package of the caller's own fighter in place (2026-10-23); absent, it registers another fighter within the account quota.
         const target = new URL(request.url).searchParams.get('fighter');
         if (target !== null && !UUID.test(target)) throw new Problem(422, 'invalid-fighter');
         let text;
@@ -184,8 +207,16 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, c
         }
       }
       if (method === 'GET' && parts[0] === 'fighters' && parts.length === 2) {
-        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at,moderation_reason').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
-        check(error); if (!data) throw new Problem(404, 'not-found'); return json({ ok: true, stage: 'registered', fighter: data });
+        const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at,moderation_reason,deleted_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
+        check(error); if (!data) throw new Problem(404, 'not-found');
+        if (data.deleted_at) return json({ ok: true, stage: 'deleted', fighterId: data.id, deletedAt: data.deleted_at });
+        // His current combat (2026-10-27): the stats, the fighting style and the skill clip's kind — what a style edit starts from.
+        const { data: current, error: currentError } = await db.from('af_submissions').select('manifest').eq('id', data.submission_id)
+          .eq('owner_id', owner).maybeSingle();
+        check(currentError);
+        const manifest = current?.manifest;
+        return json({ ok: true, stage: 'registered', fighter: { ...data, ...(manifest ? { combat: { stats: manifest.combat?.stats ?? null,
+          style: manifest.combat?.style ?? null, skill: manifest.clips?.skill?.skill?.kind ?? null } } : {}) } });
       }
       if (isWorker && method === 'POST') {
         let body;

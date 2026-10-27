@@ -11,11 +11,13 @@ import { fetchCreationContext, reviewCreationProgress } from './creation-context
 import { spriteStatus } from '../scripts/sprite-gen.mjs';
 import { registerCreatorTools } from './creator-tools.mjs';
 import { checkReadiness } from './creation-readiness.mjs';
+import { registerConnectionTool } from './connect-oddbout.mjs';
 import { identifier } from './creation-store.mjs';
 import { accountChoice, registerEnvironmentTools } from './creation-environment.mjs';
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
-const MOTIONS = /** @type {[string, ...string[]]} */ (Object.keys(spec.motions));
+// The required motions, then the optional clips (skill, entrance, victory) a package may add.
+const MOTIONS = /** @type {[string, ...string[]]} */ ([...Object.keys(spec.motions), ...Object.keys(spec.optionalClips)]);
 const outputSchema = { ok: z.boolean(), stage: z.string(), data: z.unknown().optional(), errors: z.array(z.unknown()).optional(),
   pending: z.array(z.string()).optional(), assetBytes: z.number().optional(), decodedPixels: z.number().optional(), errorCount: z.number().optional(),
   code: z.string().optional() };
@@ -34,7 +36,7 @@ function respond(result) {
     ...(result.errors.length > 50 ? { errorCount: result.errors.length } : {}) } : result;
   return { isError: !bounded.ok, structuredContent: bounded, content: [{ type: 'text', text: JSON.stringify(bounded) }] };
 }
-export function createServer({ root, remote, creatorPage, contextRequest, registrationMode = 'local' } = {}) {
+export function createServer({ root, remote, creatorPage, contextRequest, connectionOptions = {}, registrationMode = 'local' } = {}) {
   if (!['local', 'cloud'].includes(registrationMode) || registrationMode === 'cloud' && remote)
     throw Error('inconsistent-registration-route');
   const server = new McpServer({ name: 'ai-fighter-authoring', version: '0.2.0' }, {
@@ -43,6 +45,7 @@ export function createServer({ root, remote, creatorPage, contextRequest, regist
       'Read get_fighter_spec context at entry and each group. The game owns current motions, controls and timing. Preserve context revision and item/version selections; review_creation_progress checks the group boundary. A link starts intake directly; detail choices never approve the whole appearance.',
       'Read get_fighter_spec overview and creation first, including its interactionGuide. Process evaluation and forwarded test examples do not authorize character generation.',
       'Create in review groups: appearance; locomotion/stance; attacks; defense/reactions; final review. Finish each agreed group autonomously and show its actual previews together. Do not ask permission per motion.',
+      'When the context lists an optional group (style: skill, entrance and victory clips plus the fighting style), offer it once after defense and skip it when the user declines. It never blocks final; each optional clip a package carries still needs its own selected, checked version.',
       'Interpret the full feedback and prior selections by motion and version. A revision request is not acceptance. Praise of one motion accepts only that version; if all other current versions were already selected and required checks pass, advance without asking again. Otherwise wait only for missing feedback.',
       'Skip review only for explicitly delegated groups, after any earlier non-delegated group is accepted. A create/register request alone does not waive group feedback. Revise affected assets only and preserve selected versions; ask for feedback after showing the revision.',
       'Honor explicit reference roles and requested changes before asking about unresolved conflicts. Reuse confirmed choices. Distinguish image access from video access, and prepare only the access needed for the current stage.',
@@ -56,9 +59,9 @@ export function createServer({ root, remote, creatorPage, contextRequest, regist
     ].join(' '),
   });
   server.registerTool('get_fighter_spec', {
-    description: 'Read context first for game-owned current motions, frames, controls, timing and group gates; refresh at each new group and preserve its revision. Optional group narrows context motions. Read overview and creation for the package workflow and sprite-gen setup. Read guide, schema and example for the package contract; motion narrows schema/example. Example art is a format fixture.',
+    description: 'Read context first for game-owned current motions, frames, controls, timing and group gates; refresh at each new group and preserve its revision. Optional group narrows context motions. Read overview and creation for the package workflow and sprite-gen setup. Read guide, schema and example for the package contract; motion narrows schema/example (the optional clips skill, entrance and victory have no example clip). Example art is a format fixture.',
     inputSchema: { section: z.enum(['overview', 'creation', 'guide', 'schema', 'example', 'context']).default('overview'),
-      group: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'final']).optional(),
+      group: z.enum(['appearance', 'locomotion', 'attacks', 'defense', 'style', 'final']).optional(),
       motion: z.enum(MOTIONS).optional() }, outputSchema, annotations,
   }, async ({ section, motion, group }) => {
     if (section === 'context') {
@@ -68,8 +71,8 @@ export function createServer({ root, remote, creatorPage, contextRequest, regist
     if (motion && section === 'schema')
       return respond({ ok: true, stage: 'public-contract', data: { motion, clip: schema.properties.clips.properties[motion], definitions: schema.definitions } });
     if (motion && section === 'example') {
-      const clip = example.clips[motion];
-      return respond({ ok: true, stage: 'public-contract', data: { motion, clip, asset: example.assets.find(asset => asset.id === clip.assetId) } });
+      const clip = example.clips[motion] ?? null;
+      return respond({ ok: true, stage: 'public-contract', data: { motion, clip, asset: clip && example.assets.find(asset => asset.id === clip.assetId) } });
     }
     if (section === 'creation') return respond({ ok: true, stage: 'creation-kit', data: {
       tool: await spriteStatus(), packageRoot: root ?? null, registrationMode,
@@ -107,19 +110,27 @@ export function createServer({ root, remote, creatorPage, contextRequest, regist
   const validatePackage = root ? makePackageValidator(root) : undefined;
   const records = root ? registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) : {};
   const environment = root ? registerEnvironmentTools(server, { root, respond, outputSchema }) : undefined;
+  if (registrationMode !== 'cloud') registerConnectionTool(server, { remote, page: creatorPage, ...connectionOptions, respond, outputSchema });
   server.registerTool('check_creation_readiness', {
-    description: 'Call before the first generation of a character, after a workspace restart, and before registration. readyForWorkflow means kit and selection only. readyForGeneration also requires the configured environment preconditions; neither certifies a generated/displayed result. Use get_creation_environment to resolve missing connection steps. Reports items with fixed options: '
-      + '(1) kit: before any version/job exists it fast-forwards this checkout on codex/creator-hosting and applies the hash-bound sprite-gen motion patch; run every nextCommands entry and restart the host when restartRequired; while a character is in progress it changes nothing. '
+    description: 'Call before the first generation of a character, after a workspace restart, and before registration. environment reports this workspace\'s recorded generation environment (get_creation_environment resolves it); it never makes readyForGeneration true. Set purpose=connection for sign-in only, purpose=registration for an existing final package; these skip generation account questions, engine installs and kit updates. Default purpose=generation. Reports separate setup/connection/generation/delivery states: '
+      + '(1) kit: before any version/job exists it fast-forwards this checkout on codex/creator-hosting, whose pinned sprite-gen-agent submodule carries the motion engine; run every nextCommands entry and restart the host when restartRequired; while a character is in progress it changes nothing. '
+      + 'tools: ffmpeg, ffprobe and img2webp with -exact are required, RIFE only warns; run tools.nextCommands (npm run sprite:setup fetches img2webp and RIFE without sudo) and give tools.nextAction commands to the person preparing the workspace instead of running sudo. '
       + '(2) account: pass account only when the user actually stated it; otherwise the host may show a choice form, else present options as numbered choices. Never infer, switch provider or use a paid API. Access and preview display stay unverified until an actual result is shown in this conversation; creation:delivery checks records only. '
       + (registrationMode === 'cloud' ? '(3) registration: use the connected ODDBOUT get_profile and check_creation_readiness tools. This workspace never reads a saved registration account or offers local login. Cloud connection and generation remain separately unverified.' : '(3) login: ODDBOUT sign-in. Use routes.sameDevice only when the user\'s browser runs on this workspace. For a browser on another device (a bot VM), '
       + 'use routes.otherDevice only when its status is available: run start, give the user the link and pairing code (not secrets), and run wait after they approve on the homepage. '
-      + 'If it is blocked, report the sign-in blocker. Never ask the user to paste a callback address or token into chat, never call that safe, and do not work around a block.'),
-    inputSchema: { sessionId: identifier.optional(), account: accountChoice.optional(), checkRemote: z.boolean().default(true) },
+      + 'Use login.action labelled ODDBOUT 연결 as the connection choice, not an automatic login. Resume an existing pending device request instead of starting another. ')
+      + 'Infrastructure CONNECT failures belong to the environment preparer; distinguish default Work cloud network settings from custom Codex environment publishing. The kit cannot change host network settings. Do not ask ordinary creators to repeat setup or sign in to fix a network block. '
+      + 'Generation access and parent-conversation delivery have separate unverified states; kitAndAccountReady, saved sessions and records are not live proof. '
+      + 'If blocked, report the named actor and next action. Never ask for a callback address/token in chat or work around a block. After recovery read existing sessions/jobs; do not regenerate or resubmit.',
+    inputSchema: { sessionId: identifier.optional(), purpose: z.enum(['generation', 'connection', 'registration']).default('generation'),
+      account: accountChoice.optional(), checkRemote: z.boolean().default(true) },
     outputSchema, annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true },
-  }, async ({ sessionId, account, checkRemote }) => {
+  }, async ({ sessionId, purpose, account, checkRemote }) => {
     try {
-      return respond({ ok: true, stage: 'creation-readiness', data: await checkReadiness({ ...records, sessionId, account, environment,
-        remoteActive: Boolean(remote), registrationMode, lowLevelServer: server.server, kit: { fetchRemote: checkRemote }, login: { checkServer: checkRemote } }) });
+      return respond({ ok: true, stage: 'creation-readiness', data: await checkReadiness({ ...records, sessionId, purpose, account, environment,
+        remoteActive: Boolean(remote), registrationMode, lowLevelServer: server.server, kit: { fetchRemote: checkRemote },
+        login: { root: connectionOptions.root, sessionPath: connectionOptions.sessionPath, probe: connectionOptions.probe,
+          checkServer: checkRemote, request: remote?.request } }) });
     } catch (error) {
       return respond({ ok: false, stage: 'creation-readiness', code: /^[a-z][a-z0-9-]+$/.test(error.message) ? error.message
         : error.code === 'ENOENT' ? 'record-or-file-not-found' : 'readiness-check-failed' });

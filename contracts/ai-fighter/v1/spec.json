@@ -107,9 +107,36 @@
       "purpose": "넘어짐·착지·누움. 일어서기 프레임도 명시."
     }
   },
+  "optionalClips": {
+    "skill": {
+      "kind": "action",
+      "loop": false,
+      "minHits": 0,
+      "maxHits": 1,
+      "purpose": "고유 기술 한 동작: 예고·접촉(또는 돌진, 자세 창)·회수. 종류는 skill.kind."
+    },
+    "entrance": {
+      "kind": "action",
+      "loop": false,
+      "minHits": 0,
+      "maxHits": 0,
+      "purpose": "경기 시작 전 제자리 등장 동작."
+    },
+    "victory": {
+      "kind": "action",
+      "loop": true,
+      "minHits": 0,
+      "maxHits": 0,
+      "purpose": "이긴 뒤 승리 자세 반복."
+    }
+  },
   "features": [
     "profile-extras-1",
-    "combat-stats-1"
+    "combat-stats-1",
+    "profile-names-1",
+    "combat-style-1",
+    "extra-clips-1",
+    "profile-lines-1"
   ],
   "profileExtras": {
     "languages": [
@@ -125,6 +152,8 @@
     ],
     "moveNameMaxLength": 24,
     "moveDescriptionMaxLength": 160,
+    "nameMaxLength": 40,
+    "names": "선택. profile.names.ko·en 은 그 언어 화면에 띄울 이름(각 40자). 없는 언어는 profile.name 을 띄운다.",
     "note": "컨셉과 기술 이름·설명은 표시용 소개 텍스트다. 기술 이름은 표준 키트의 고정 동작에 붙는다. 새 동작이나 AI 지시가 아니다."
   },
   "combatStats": {
@@ -139,10 +168,89 @@
     "default": 3,
     "note": "제작자는 등급 배분만 제출한다. 모든 등급의 합은 budget과 같아야 한다. 없으면 모두 default다. 서버가 등급을 자체 수치로 바꾼다."
   },
+  "combatStyle": {
+    "skillKinds": [
+      "stretch",
+      "pincer",
+      "flight",
+      "feint",
+      "slide",
+      "counter",
+      "brace"
+    ],
+    "strikeKinds": [
+      "stretch",
+      "pincer"
+    ],
+    "stanceKinds": [
+      "counter",
+      "brace"
+    ],
+    "actions": [
+      "slam",
+      "combo",
+      "fast"
+    ],
+    "supers": [
+      "slam",
+      "combo",
+      "fast",
+      "dash"
+    ],
+    "summons": [
+      "crane",
+      "bolt",
+      "sportsCar",
+      "roadster"
+    ],
+    "mix": {
+      "min": 0,
+      "max": 4
+    },
+    "grade": {
+      "min": 1,
+      "max": 5
+    },
+    "temper": [
+      "guard",
+      "retreat",
+      "measure",
+      "patience"
+    ],
+    "exchanges": {
+      "keys": [
+        "cross",
+        "pinball",
+        "rush"
+      ],
+      "min": 0,
+      "max": 3
+    },
+    "extrasBudget": 2,
+    "tellFloorMs": {
+      "strike": 360,
+      "run": 240,
+      "stance": 100
+    },
+    "stanceWindowMs": {
+      "min": 200,
+      "max": 1000
+    },
+    "note": "선택. 싸우는 성격을 닫힌 선택지와 작은 등급으로만 고른다(공격 섞기·특수·필살기·교전 거리·충격파·소환물·기질·교전 성향). 서버가 각 값을 자체 수치로 바꾼다. 공격 섞기는 하나 이상이 0보다 크고 fast 는 slam + combo 이하다. 기술은 skill 클립(skill.kind)이 정한다. 기술 클립·소환물·충격파 가운데 extrasBudget 개까지. 없으면 표준 키트 그대로다."
+  },
+  "profileLines": {
+    "keys": [
+      "challenge",
+      "win",
+      "lose"
+    ],
+    "maxLength": 40,
+    "note": "선택. 경기 전 도전 대사와 경기 뒤 승리·패배 대사(각 40자). 화면 표시용이다."
+  },
   "combatKits": [
     {
       "id": "standard-duel",
-      "description": "서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다. 능력치 등급 배분(combat.stats)만 고른다.",
+      "description": "서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다. 능력치 등급 배분(combat.stats)과 싸우는 성격(combat.style)만 고른다.",
       "integration": "pending-game-integration",
       "currentConsumers": {
         "player": "FighterFightSkin / Lupin rules",

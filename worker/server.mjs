@@ -4,6 +4,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validProjectUrl } from '../api/client.mjs';
 import { makePackageValidator } from '../mcp/package-access.mjs';
 import { runWithConfig } from './run.mjs';
+import { cloudGateway } from './cloud-gateway.mjs';
 
 /** HTTP-triggered worker. Supabase owns the durable queue and five-minute leases. */
 export function createWorkerServer({ wakeToken, run, log = console.log, commit = null }) {
@@ -24,7 +25,8 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
       }
     } while (requested && !stopping);
   }
-  const server = createServer((req, res) => {
+  const server = createServer(async (req, res) => {
+    if (await cloudGateway(req, res)) return;
     const reply = (status, body) => {
       res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
       res.end(JSON.stringify(body));

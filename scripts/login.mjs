@@ -20,6 +20,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createClient } from '@supabase/supabase-js';
 import { apiRequest, validProjectUrl, withSessionLock, writeSessionFile } from '../api/client.mjs';
+import { isTransportCode, connectionAction } from '../api/connection-errors.mjs';
+import { runtimeFetch } from '../api/runtime-fetch.mjs';
 import { PUBLIC_CREATOR_PAGE, creatorPage } from '../mcp/creator-handoff.mjs';
 
 export const DEFAULT_LOGIN_PORT = 47821;
@@ -125,7 +127,7 @@ export async function login({ argv = process.argv.slice(2), log = console.error,
   // The user already in the session file. An operator-issued beta session may be its only copy.
   const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
   const state = randomBytes(16).toString('hex'), redirectTo = `http://127.0.0.1:${port}/callback/${state}`;
-  const auth = createAuthClient(url, publishableKey, { auth: { flowType: 'pkce', storage: memoryStorage(), persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
+  const auth = createAuthClient(url, publishableKey, { global: { fetch: runtimeFetch }, auth: { flowType: 'pkce', storage: memoryStorage(), persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
   const linkedUser = link ? await adoptExistingSession(auth, sessionPath, url, publishableKey) : null;
   const options = { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } };
   const { data, error } = link ? await auth.auth.linkIdentity({ provider: 'google', options })
@@ -166,7 +168,7 @@ async function saveSignIn({ session, link = false, linkedUser = null, replace, p
     log(problem.message === 'route-not-found' ? '서버가 계정 상태 조회를 지원하지 않습니다. 제출할 때 다시 확인합니다.'
       : '계정 상태를 확인하지 못했습니다. 제출할 때 다시 확인합니다.');
   }
-  log('Dot 앱이 이미 실행 중이었다면 앱을 다시 시작하세요.');
+  log('ODDBOUT 연결 상태를 다시 확인하면 현재 MCP에서 바로 이어서 사용할 수 있습니다.');
   return { sessionPath, userId: session.user.id };
 }
 
@@ -180,7 +182,7 @@ export async function startPasteLogin({ argv = [], log = console.error, createAu
   const { url, publishableKey, port } = await projectSettings({ argv, sessionPath });
   const state = randomBytes(16).toString('hex'), redirectTo = `http://127.0.0.1:${port}/callback/${state}`;
   const storage = memoryStorage();
-  const auth = createAuthClient(url, publishableKey, { auth: { flowType: 'pkce', storage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
+  const auth = createAuthClient(url, publishableKey, { global: { fetch: runtimeFetch }, auth: { flowType: 'pkce', storage, persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
   const { data, error } = await auth.auth.signInWithOAuth({ provider: 'google', options: { redirectTo, skipBrowserRedirect: true, queryParams: { prompt: 'select_account' } } });
   if (error || !data?.url) throw new Error('oauth-start-failed');
   await mkdir(path.dirname(pendingPath), { recursive: true, mode: 0o700 });
@@ -207,15 +209,25 @@ const devicePost = (url, publishableKey, route, body) => apiRequest(url, publish
  * Device-connection sign-in, step 1: for a workspace whose 127.0.0.1 callback the user's browser cannot reach.
  * The secret device code stays in a 0600 file here; the printed link carries only the public pairing code.
  */
-export async function startDeviceLogin({ argv = [], log = console.error, post = devicePost, page = PUBLIC_CREATOR_PAGE } = {}) {
+export async function startDeviceLogin({ argv = [], log = console.error, post = devicePost, page = PUBLIC_CREATOR_PAGE,
+  sessionPath = defaultSessionPath() } = {}) {
   if (argv.includes('--link')) throw new Error('device-link-unsupported');
-  const sessionPath = defaultSessionPath(), pendingPath = pendingDeviceLoginPath(sessionPath);
+  const pendingPath = pendingDeviceLoginPath(sessionPath);
+  // A second start must not replace the only copy of a request that may already be approved.
+  let existing;
+  try { existing = JSON.parse(await readFile(pendingPath, 'utf8')); }
+  catch (error) { if (error.code !== 'ENOENT') throw new Error('pending-device-login-invalid'); }
+  if (existing !== undefined) {
+    if (existing?.version !== 1 || !Number.isFinite(Date.parse(existing.expiresAt))) throw new Error('pending-device-login-invalid');
+    if (Date.parse(existing.expiresAt) > Date.now()) throw new Error('device-login-already-pending');
+  }
   const { url, publishableKey } = await projectSettings({ argv, sessionPath });
   let started;
   try { started = await post(url, publishableKey, 'device-logins'); }
   catch (error) {
     // A server without the route predates device login: report it, never fall back to pasting a callback.
     if (error.status === 404 || ['not-found', 'route-not-found'].includes(error.message)) throw new Error('device-login-unavailable');
+    if (isTransportCode(error.message)) throw error;
     throw new Error(error.message === 'rate-limit' ? 'device-login-rate-limit' : 'device-login-start-failed');
   }
   if (!DEVICE_CODE.test(started?.deviceCode ?? '') || !USER_CODE.test(started?.userCode ?? '') || !Number.isFinite(Date.parse(started?.expiresAt))
@@ -237,8 +249,9 @@ export async function startDeviceLogin({ argv = [], log = console.error, post = 
  * Stops at `timeoutSeconds` while still pending (the request stays open for another wait), or at expiry.
  */
 export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.error, post = devicePost, request = apiRequest,
+  sessionPath = defaultSessionPath(),
   createAuthClient = createClient, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
-  const sessionPath = defaultSessionPath(), pendingPath = pendingDeviceLoginPath(sessionPath);
+  const pendingPath = pendingDeviceLoginPath(sessionPath);
   const pending = await readSession(pendingPath);
   if (!pending || pending.version !== 1 || !DEVICE_CODE.test(pending.deviceCode ?? '') || !validProjectUrl(pending.url)
     || !isPublishableKey(pending.publishableKey)) throw new Error('pending-device-login-missing');
@@ -254,15 +267,19 @@ export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.erro
     } catch (error) {
       if (['device-login-expired', 'device-login-consumed', 'device-login-not-found'].includes(error.message)) { await close(); throw new Error(error.message); }
       if (error.message === 'slow-down') interval += 5000;
-      else if (error.message !== 'api-unreachable') throw error;
+      else throw error; // Keep the pending file; connectivity recovery resumes this request, never a new login.
     }
     if (answer) break;
-    if (now() + interval > deadline) throw new Error(now() + interval > expiry ? 'device-login-expired' : 'device-login-pending');
+    if (now() + interval > deadline) {
+      const error = new Error(now() + interval > expiry ? 'device-login-expired' : 'device-login-pending');
+      error.retryAfterSeconds = Math.ceil(interval / 1000);
+      throw error;
+    }
     await sleep(interval);
   }
   await close(); // the approval is spent on the server either way
   if (typeof answer.tokenHash !== 'string' || !/^[a-f0-9]{40,128}$/.test(answer.tokenHash)) throw new Error('invalid-api-response');
-  const auth = createAuthClient(pending.url, pending.publishableKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+  const auth = createAuthClient(pending.url, pending.publishableKey, { global: { fetch: runtimeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
   const verified = await auth.auth.verifyOtp({ type: 'email', token_hash: answer.tokenHash });
   const session = verified.data?.session;
   if (verified.error || !session?.access_token || !session.refresh_token || !session.user?.id) throw new Error('device-login-redeem-failed');
@@ -295,7 +312,7 @@ export async function finishPasteLogin({ pasted, log = console.error, createAuth
   if (!validProjectUrl(pending.url) || !isPublishableKey(pending.publishableKey)) throw new Error('pending-login-missing');
   // A wrong paste keeps the pending login so the user can paste the right address.
   const code = parsePastedCallback(pasted, pending);
-  const auth = createAuthClient(pending.url, pending.publishableKey, { auth: { flowType: 'pkce', storage: memoryStorage(pending.storage),
+  const auth = createAuthClient(pending.url, pending.publishableKey, { global: { fetch: runtimeFetch }, auth: { flowType: 'pkce', storage: memoryStorage(pending.storage),
     persistSession: true, autoRefreshToken: false, detectSessionInUrl: false } });
   const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
   try {
@@ -318,7 +335,7 @@ export async function logout({ log = console.error, createAuthClient = createCli
     let ended = false;
     if (saved && validProjectUrl(saved.url) && isPublishableKey(saved.publishableKey) && typeof saved.accessToken === 'string') {
       try {
-        const auth = createAuthClient(saved.url, saved.publishableKey, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
+        const auth = createAuthClient(saved.url, saved.publishableKey, { global: { fetch: runtimeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
         let token = saved.accessToken;
         if ((jwtPayload(token)?.exp ?? 0) * 1000 <= Date.now() + 5000 && typeof saved.refreshToken === 'string') {
           const refreshed = await auth.auth.refreshSession({ refresh_token: saved.refreshToken });
@@ -331,8 +348,8 @@ export async function logout({ log = console.error, createAuthClient = createCli
     return ended;
   });
   log(`${sessionPath}를 지웠습니다.`);
-  log(revoked ? '서버의 세션도 끝냈습니다. 실행 중인 Dot 앱을 다시 시작하세요.'
-    : '서버의 세션을 끝내지 못했습니다. 이미 끝났거나 연결할 수 없습니다. 실행 중인 Dot 앱을 닫아야 세션 파일이 다시 생기지 않습니다.');
+  log(revoked ? '서버의 세션도 끝냈습니다. 다음 MCP 요청부터 로그아웃이 반영됩니다.'
+    : '서버의 세션을 끝내지 못했습니다. 로컬 연결은 해제했으며 다음 MCP 요청부터 로그인이 필요합니다.');
 }
 
 const messages = {
@@ -357,6 +374,8 @@ const messages = {
   'device-login-unavailable': '서버가 기기 연결 로그인을 아직 지원하지 않습니다. 로그인이 막혔다고 알리세요. 콜백 주소를 대화로 옮기는 방식으로 대신하지 않습니다.',
   'device-login-rate-limit': '기기 연결 요청이 너무 많습니다. 몇 분 뒤 다시 시작하세요.',
   'device-login-start-failed': '기기 연결 로그인을 시작하지 못했습니다. 잠시 후 다시 실행하세요.',
+  'device-login-already-pending': '기존 기기 연결 요청이 남아 있습니다. 새 요청을 만들지 말고 사용자가 승인한 뒤 npm run login -- --device-wait 로 이어가세요.',
+  'pending-device-login-invalid': '기존 기기 연결 기록을 판독할 수 없어 보존했습니다. 기록과 서버 상태를 확인하기 전에는 새 로그인 요청을 만들지 않습니다.',
   'pending-device-login-missing': '진행 중인 기기 연결 로그인이 없습니다. npm run login -- --device 부터 다시 실행하세요.',
   'device-login-pending': '아직 승인되지 않았습니다. 사용자가 승인한 뒤 npm run login -- --device-wait 를 다시 실행하세요.',
   'device-login-expired': '기기 연결 요청이 만료되었습니다. npm run login -- --device 부터 다시 실행하세요.',
@@ -391,5 +410,6 @@ if (isEntry()) {
     : finish >= 0 ? (argv.length > finish + 1 ? Promise.resolve(argv.slice(finish + 1).join(' ')) : readTerminalLine('로그인 후 주소창 주소: '))
       .then(pasted => finishPasteLogin({ pasted }))
     : argv.includes('--paste') ? startPasteLogin({ argv }) : login({ argv });
-  run.catch(error => { console.error(messages[error.message] ?? `로그인 실패: ${error.message}`); process.exitCode = 1; });
+  run.catch(error => { console.error(isTransportCode(error.message) ? connectionAction(error.message).message
+    : messages[error.message] ?? `로그인 실패: ${error.message}`); process.exitCode = 1; });
 }

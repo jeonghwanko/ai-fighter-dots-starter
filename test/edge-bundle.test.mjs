@@ -15,7 +15,8 @@ test('the Edge bundle holds every module the entry imports and nothing Node-only
   const files = await edgeFiles();
   for (const required of ['api/handler.mjs', 'api/http.mjs', 'api/duels.mjs', 'api/fighter-statistics.mjs', 'api/account.mjs', 'api/creator-link.mjs',
     'contracts/ai-fighter/validate.mjs', 'contracts/ai-fighter/v1/spec.json', 'contracts/ai-fighter/v1/fighter.schema.json',
-    'supabase/functions/ai-fighter/duel-engine.mjs']) assert.ok(files.includes(required), required);
+    'supabase/functions/ai-fighter/duel-engine.mjs', 'supabase/functions/ai-fighter/duel-engines.mjs', 'supabase/functions/ai-fighter/release.mjs'])
+    assert.ok(files.includes(required), required);
   assert.ok(files.every(file => !/^(server|mcp|scripts|worker)\//.test(file)), JSON.stringify(files));
   for (const file of files) await access(path.join(repository, file));
 });

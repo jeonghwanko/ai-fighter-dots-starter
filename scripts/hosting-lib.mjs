@@ -15,7 +15,7 @@ export function publicSiteText(text) {
     .replaceAll('./league.html', './')
     .replace(/((?:\\)?["'])league\.html(?=(?:\\)?["'])/g, '$1');
 }
-export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'about.html', 'docs.html', 'privacy.html', 'admin.html', 'world.html'];
+export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'fighters.html', 'about.html', 'docs.html', 'privacy.html', 'credits.html', 'admin.html', 'world.html'];
 
 // The kit has its own immutable release/fingerprint. Restore it only after verifying
 // a newly built site's own artifact, then prove its staged Git objects are unchanged.

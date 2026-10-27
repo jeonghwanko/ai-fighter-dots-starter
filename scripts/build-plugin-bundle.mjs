@@ -4,28 +4,27 @@ import { cp, lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { localPath } from '../mcp/creation-store.mjs';
-import { ensureSpritePatch, patchFile } from './sprite-patch.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
 const runtimeFiles = [
-  'LICENSE', 'AGENTS.md', 'package-lock.json', 'api/client.mjs', 'server/ai-fighter-package.mjs',
+  'LICENSE', 'AGENTS.md', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'api/runtime-fetch.mjs', 'server/ai-fighter-package.mjs',
   'deploy/creation-context-source.json', 'deploy/creator-site.json',
   'deploy/creation-environments.json', 'deploy/creation-environment-trust.json', 'scripts/connect-generation.mjs', 'docs/ENVIRONMENT-ONBOARDING.md',
   'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/run-creation-job.mjs', 'scripts/creation-tool.mjs',
-  'scripts/sprite-patch.mjs', 'patches/sprite-gen-gpt-motion.json', 'patches/README.md',
+  'scripts/sprite-tools.mjs',
   'scripts/login.mjs', 'scripts/gait.mjs', 'scripts/contact.mjs', 'scripts/creation-context.mjs',
-  'scripts/check-creation-delivery.mjs', 'docs/DELIVERY.md',
+  'scripts/check-creation-delivery.mjs', 'scripts/check-connection.mjs', 'docs/DELIVERY.md',
   'tools/ai-fighter/gait.mjs', 'tools/ai-fighter/contact_evidence.py', 'tools/ai-fighter/validate-package.mjs',
   'docs/DOT-CREATION.md', 'docs/AUTHORING.md', 'docs/CREATION-UX.md', 'docs/GAIT-REVIEW.md',
   'docs/FOOT-EVIDENCE.md', 'docs/LOCAL-PLUGIN.md', 'docs/GAME-CREATION-CONTEXT.md', 'docs/OPEN-REGISTRATION.md',
-  'docs/EXECUTION-HOST.md', 'docs/ODDBOUT-PLUGIN.md',
+  'docs/EXECUTION-HOST.md', 'docs/CONNECTION-READINESS.md', 'docs/ODDBOUT-PLUGIN.md',
 ];
 const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
-  'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:run', 'creation:tool'];
+  'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run', 'creation:tool'];
 
 // Presentation media in the upstream documentation is not runtime/package data.
-// Keep all source, package assets, workflow text, licenses and the reviewed patch.
+// Keep all source, package assets, workflow text and licenses.
 export const bundlePolicy = Object.freeze({ id: 'source-without-doc-media-v1', omittedVendorPrefixes: ['docs/assets/'] });
 export const includeVendorFile = relative => !bundlePolicy.omittedVendorPrefixes.some(prefix => relative.startsWith(prefix));
 
@@ -65,14 +64,12 @@ export async function buildPluginBundle(destination) {
   // Read the pinned tree; never include the checkout venv, credentials, caches or untracked outputs.
   const pinned = (await run('git', ['ls-tree', 'HEAD', 'vendor/sprite-gen'], { capture: true })).match(/^160000 commit ([a-f0-9]{40})\s/)[1];
   const vendor = path.join(root, 'vendor', 'sprite-gen');
-  const patch = await ensureSpritePatch(vendor);
-  const spriteGenPatch = { id: patch.manifest.id, sha256: sha(await readFile(patchFile)) };
-  if ((await run('git', ['rev-parse', 'HEAD'], { cwd: vendor, capture: true })).trim() !== pinned || pinned !== patch.manifest.baseCommit)
-    throw Error('Use the pinned sprite-gen commit with the reviewed AI Fighter patch before bundling.');
-  const changes = (await run('git', ['diff', 'HEAD', '--name-only', '--no-ext-diff'], { cwd: vendor, capture: true })).trim().split('\n').filter(Boolean);
-  if (changes.some(file => !patch.files.some(entry => entry.path === file.trim()))) throw Error('Unrelated sprite-gen edits cannot be bundled.');
+  const spriteGenSource = (await run('git', ['config', '-f', '.gitmodules', 'submodule.vendor/sprite-gen.url'], { capture: true })).trim();
+  if ((await run('git', ['rev-parse', 'HEAD'], { cwd: vendor, capture: true })).trim() !== pinned)
+    throw Error('Check out the pinned sprite-gen-agent commit (npm run sprite:setup) before bundling.');
+  if ((await run('git', ['status', '--porcelain', '--untracked-files=no'], { cwd: vendor, capture: true })).trim())
+    throw Error('Local sprite-gen edits cannot be bundled; commit them to sprite-gen-agent and move the pin.');
   const vendorFiles = (await run('git', ['ls-files', '-z'], { cwd: vendor, capture: true })).split('\0').filter(Boolean);
-  for (const entry of patch.files) if (!vendorFiles.includes(entry.path)) vendorFiles.push(entry.path);
   if (!vendorFiles.includes('LICENSE') || !vendorFiles.includes('NOTICE')) throw Error('Missing upstream license or notice');
   const plugin = path.join(out, 'plugins', 'ai-fighter');
   await mkdir(path.dirname(plugin), { recursive: true });
@@ -97,8 +94,13 @@ export async function buildPluginBundle(destination) {
   const hashes = {};
   for (const file of await files(runtime)) hashes[file] = sha(await readFile(path.join(runtime, file)));
   await writeFile(path.join(plugin, 'runtime-manifest.json'), JSON.stringify({ schemaVersion: 1,
-    distribution: 'source', platform: 'any', arch: 'any', spriteGenCommit: pinned, spriteGenPatch,
+    distribution: 'source', platform: 'any', arch: 'any', spriteGenCommit: pinned, spriteGenSource,
     bundlePolicy, files: hashes }, null, 2) + '\n');
+  await writeFile(path.join(plugin, 'mcp.json'), JSON.stringify({
+    $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json', mcpServers: {
+      'ai-fighter-creator': { type: 'stdio', command: 'node', args: ['${PLUGIN_ROOT}/launcher.mjs'], cwd: '${PLUGIN_ROOT}' },
+    },
+  }, null, 2) + '\n');
   const metadata = JSON.parse(await readFile(path.join(plugin, 'plugin.json'), 'utf8'));
   const marketDir = path.join(out, '.agents', 'plugins'); await mkdir(marketDir, { recursive: true });
   await writeFile(path.join(marketDir, 'marketplace.json'), JSON.stringify({ name: 'ai-fighter-local',
@@ -111,7 +113,7 @@ export async function buildPluginBundle(destination) {
   const zipBytes = await readFile(zip);
   if (zipBytes.length > 20_000_000) throw Error('Source bundle exceeds the 20 MB distribution budget; review contents before publishing.');
   const report = { version: metadata.version, distribution: 'source', builtOn: `${process.platform}-${process.arch}`, plugin, marketplace: out,
-    zip, bytes: zipBytes.length, sha256: sha(zipBytes), runtimeFiles: Object.keys(hashes).length, spriteGenCommit: pinned, spriteGenPatch,
+    zip, bytes: zipBytes.length, sha256: sha(zipBytes), runtimeFiles: Object.keys(hashes).length, spriteGenCommit: pinned, spriteGenSource,
     bundlePolicy, omittedVendorFiles,
     listingURLs: Object.fromEntries(['websiteURL', 'supportURL', 'privacyPolicyURL', 'termsOfServiceURL']
       .map(key => [key, metadata.extensions['com.openai'].interface[key]])),

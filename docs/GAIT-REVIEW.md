@@ -1,7 +1,7 @@
 # 보행 설계와 등록 전 검수
 
-sprite-gen은 이 저장소의 `vendor/sprite-gen` 고정 커밋과 `patches/sprite-gen-gpt-motion.json`의 검토된 패치로 설치된다.
-`npm run sprite:setup`과 `npm run sprite --`가 원본/수정본 해시를 확인해 적용한다. 알 수 없는 로컬 수정은 덮어쓰지 않는다.
+sprite-gen은 이 저장소의 `vendor/sprite-gen`에 고정된 [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent) 커밋으로 설치된다.
+모션 엔진은 그 커밋에 들어 있다. `npm run sprite:setup`은 고정 커밋을 받아 설치하며, 알 수 없는 로컬 수정은 덮어쓰지 않는다.
 설치만으로 모든 검수가 자동 실행되는 것은 아니다.
 추출·아틀라스 검사, `qa-motion.md`의 시각 검수 절차, `inspect-motion`의 조건부 접지 측정이 각각 있다.
 이 저장소의 `fighter:gait`는 이 결과를 한 흐름으로 연결하고, `fighter:pack`은 기본적으로 현재 walk/run과 일치하는 검수 결과를 요구한다.
@@ -257,7 +257,8 @@ walk의 보폭은 이 근거에서 받아오므로 `stridePixels`를 수기로 �
 `reviewPolicy: "format-only"`는 형식 테스트 fixture용 명시적 예외이며 결과 보고서에 시각 품질 미검증을 남긴다.
 이를 일반 캐릭터의 검수 통과 우회로로 쓰지 않는다. 서버 계약은 이 로컬 검수 결과를 보안 인증서로 신뢰하지 않는다.
 
-부츠 굽·앞창의 분리된 접촉면 때문에 공식 검사만 미검증인 경우 [명시적 양발 윤곽 근거](FOOT-EVIDENCE.md)를 사용할 수 있다.
+부츠 굽·앞창, 동물 발의 패드·발굽·발톱처럼 갈라진 접촉면이나 발가락 보행의 들린 뒤꿈치 때문에 공식 검사만 미검증인 경우
+[명시적 양발 윤곽 근거](FOOT-EVIDENCE.md)를 사용할 수 있다. v2 근거는 갈래를 발 단위로 묶고 이동을 앞쪽 접지 끝에서 잰다.
 이것은 AI Fighter가 유지하는 선택적 검사 확장이며 공식 검사 결과도 함께 보존한다. 다른 실패나 시각 검수를 대신하지 않는다.
 
 ## 달리기 공중 프레임 보존 계약

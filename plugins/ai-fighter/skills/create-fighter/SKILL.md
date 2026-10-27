@@ -23,7 +23,8 @@ do not require a PC or leave the user's chosen VM scope. Packaging still uses th
    this user's runtime kit root (`tool.repositoryRoot`), workspace (`packageRoot`), sprite-gen skill path,
    and the full creation/interaction guides. In a portable installation the kit and workspace differ.
    Read those guides, `docs/AUTHORING.md` and `vendor/sprite-gen/SKILL.md` in the returned kit root.
-   If the Python environment is missing, run `npm run sprite:setup` with cwd set to that kit root.
+   If generation is needed and the Python environment is missing, run `npm run sprite:setup` with cwd set to that kit root.
+   Connecting or registering an already-built package does not require generation setup.
    Keep all project inputs and outputs in the returned workspace. Run prepared jobs with their exact
    returned cwd/env. Do not put assets, sessions, or a Python venv in the plugin cache.
    Game data owns motions, frame counts and timing. Refresh it on resume and before each new group.
@@ -41,10 +42,23 @@ do not require a PC or leave the user's chosen VM scope. Packaging still uses th
    evidence, keep unknown backend/account identity unknown, and treat `creation:delivery` as a record check only.
    Local/Library saves and child-only or queued previews do not prove parent display. Recover existing results
    before retries; delivery failures do not authorize regeneration.
+5. Use `check_creation_readiness` and `docs/CONNECTION-READINESS.md` for the ODDBOUT connection action.
+   Set `purpose: connection` for sign-in checks and `purpose: registration` for an existing final package;
+   only `purpose: generation` prepares the generation engine or asks about generation access.
+   Use `connect_oddbout(action: start)` within a connection/registration request; show its public link/code,
+   then `action: wait` after the user approves. Repeated start returns the same pending link. Respect
+   retryAfterSeconds. Current runtimes adopt login without an MCP restart. If these tools are absent,
+   run `npm run creation:check -- connection` in the kit and follow its supported CLI route.
+   Keep authenticated registration API access, generation access and parent delivery separate. A saved session
+   is unverified until GET /me succeeds. Environment-preparer actions (VM host allowlist/Republish) are initial
+   workspace setup, not repeated creator steps; the kit cannot perform those settings changes.
+   Reuse pending device approval and preserved sessions/jobs after recovery. Do not claim a Dots-native button
+   was installed: hosts may render the action as a button, choice or official link.
 
 ## Work in review groups
 
 Complete appearance, locomotion, attacks, defense, and final review in the game's order.
+Offer the optional style group (skill, entrance and victory clips, fighting style) once after defense when the context lists it; skip it if the user declines.
 Finish the agreed group autonomously, show its actual images/animations together, and wait for feedback.
 Positive feedback advances when all other current versions are already accepted and checks pass.
 Praise plus a requested change is a revision. Later delegation does not waive an earlier pending group.
@@ -98,7 +112,7 @@ record their actual outputs as versions/evidence; do not claim they received man
 
 Follow `docs/GAIT-REVIEW.md`: one coordinate/scale reference, phase plan before generation,
 both same-foot stance ROIs, final game-pack pixels/durations, actual previews and verified contacts.
-For GPT walk/run, use the kit CLI and its hash-bound motion patch. Generate diagnostic key poses first;
+For GPT walk/run, use the kit CLI and the pinned sprite-gen-agent motion engine. Generate diagnostic key poses first;
 review both physical legs, their hip attachments, contacts and body continuity before binding that image.
 Full sequences require the actual phase guide and reviewed key-pose reference, not only a layout guide.
 Use painted extraction with `ground_frames: false` to retain source flight height. Generation OK is not
