@@ -4,7 +4,7 @@
 이 문서에는 게임이 직접 생성한 현재 규격이 아래 JSON으로 포함되어 있습니다.
 다른 안내만 읽고 규격을 읽었다고 간주하지 마세요. 첫 응답 전에 아래 JSON의
 revision, workflow, contract, controls, timing을 읽고 이번 대화의 기준으로 저장하세요.
-첫 응답에는 “게임 규격 1472d05d2b4e 기준”이라고 출처를 짧게 밝히고,
+첫 응답에는 “게임 규격 6e78a912c3f0 기준”이라고 출처를 짧게 밝히고,
 캐릭터 설명이나 참고 이미지를 요청하세요. 사용자에게 기술 수치를 고르라고 하지 마세요.
 
 ## 이번 대화의 범위
@@ -32,7 +32,7 @@ review_creation_progress가 연결되어 있으면 선택 상태를 검사하고
 
 ## 자료 갱신
 
-이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: 1472d05d2b4eee158de257e0f62b1f9c8d5ab8954d7ebdd7322179eca434d1d5
+이 문서는 게임 소스에서 자동 생성한 시작 시점의 스냅샷입니다. 현재 revision: 6e78a912c3f0500e9030ee444f82fbd98f2763997edfb69d2bb05503e0100203
 새 묶음·재개·패키징 전에 [현재 게임 JSON](https://raw.githubusercontent.com/jeonghwanko/ai-fighter-dots-starter/refs/heads/codex/game-context/creation-context.json)을 다시 읽고 revision을 비교하세요.
 바뀌면 이전 자료·선택을 보관하고 영향을 받은 항목만 설명·재검토하세요. 가져오지 못하면 그 사실을 말하고,
 외형 상담만 계속할 수 있습니다. 규격에 의존하는 묶음으로 진행하거나 수치를 추정하지 마세요.
@@ -153,6 +153,29 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
         "purpose": "넘어짐·착지·누움. 일어서기 프레임도 명시."
       }
     },
+    "optionalMotions": {
+      "skill": {
+        "kind": "action",
+        "loop": false,
+        "minHits": 0,
+        "maxHits": 1,
+        "purpose": "고유 기술 한 동작: 예고·접촉(또는 돌진, 자세 창)·회수. 종류는 skill.kind."
+      },
+      "entrance": {
+        "kind": "action",
+        "loop": false,
+        "minHits": 0,
+        "maxHits": 0,
+        "purpose": "경기 시작 전 제자리 등장 동작."
+      },
+      "victory": {
+        "kind": "action",
+        "loop": true,
+        "minHits": 0,
+        "maxHits": 0,
+        "purpose": "이긴 뒤 승리 자세 반복."
+      }
+    },
     "frameRules": {
       "imageFrames": "0-based row-major; image frame index and sequence step index are different",
       "gaitDurationMs": "per image frame; cycle = durationMs * frame count",
@@ -189,6 +212,18 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
         "contact = landing",
         "lieSequenceIndex",
         "getUp"
+      ],
+      "skill": [
+        "skill.kind",
+        "strike (stretch, pincer): hitSequenceIndices (1), contact start >= 360 ms",
+        "run (flight, feint, slide): windupTo < recoverFrom, optional run [a, b], launch, struck; windupTo start >= 240 ms",
+        "stance (counter, brace): hitSequenceIndices (1), windowFrom < windowTo <= strikeFrom <= contact < strikeTo; windowFrom start >= 100 ms; window 200..1000 ms"
+      ],
+      "entrance": [
+        "no contact; played in place before the bout"
+      ],
+      "victory": [
+        "loop, no contact; played under the winner light"
       ]
     }
   },
@@ -264,6 +299,28 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
         ]
       },
       {
+        "id": "style",
+        "label": "싸우는 성격·고유 기술(선택)",
+        "motions": [
+          "skill",
+          "entrance",
+          "victory"
+        ],
+        "auxiliaries": [],
+        "editable": [
+          "기술 종류·표식",
+          "등장 동작",
+          "승리 자세",
+          "공격 섞기",
+          "특수·필살기",
+          "교전 거리",
+          "충격파·소환물",
+          "기질",
+          "교전 성향"
+        ],
+        "optional": true
+      },
+      {
         "id": "final",
         "label": "최종 확인",
         "motions": [],
@@ -273,6 +330,7 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
           "소개",
           "컨셉",
           "능력치 배분",
+          "경기 대사",
           "전체 일관성"
         ]
       }
@@ -283,13 +341,17 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
       "partial": "Accept only named current items. Preserve previous selections. When the last pending item is accepted, advance without reconfirmation.",
       "revision": "A change creates a pending version only for affected items. Praise plus a change is not whole-group acceptance.",
       "membership": "Use group motion IDs exactly. Extra controls or character personality cannot replace/add required clips.",
-      "evidence": "Dialogue-only choices are hypothetical, never real previews, validation, provider access, or registration authorization."
+      "evidence": "Dialogue-only choices are hypothetical, never real previews, validation, provider access, or registration authorization.",
+      "optional": "An optional group may be skipped as a whole (the standard kit). Offer it once after defense; add its clips and style only when the user agrees, and never hold the required groups or final on it."
     },
     "profileExtras": {
       "features": [
         "profile-extras-1",
         "combat-stats-1",
-        "profile-names-1"
+        "profile-names-1",
+        "combat-style-1",
+        "extra-clips-1",
+        "profile-lines-1"
       ],
       "concept": 800,
       "conceptStep": "Draft the concept (origin, why the fighter fights, manner) from the intake description during appearance; confirm it in final.",
@@ -313,7 +375,88 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
       },
       "statsStep": "In final, ask for the grade allocation: power = damage dealt, toughness = damage taken cut, speed = shorter rest between attacks. Every grade min..max, the sum exactly budget; skipped = every grade default. Only AI duels between registered fighters use them.",
       "language": "Record the language the user wrote the concept and move names in (profile.language).",
-      "update": "An account can register up to three fighters. Omit fighterId for a new fighter. To change an existing fighter's concept, move names, stats or art, repack and submit with its fighterId: it keeps its ID and duel record without using another slot."
+      "style": {
+        "skillKinds": [
+          "stretch",
+          "pincer",
+          "flight",
+          "feint",
+          "slide",
+          "counter",
+          "brace"
+        ],
+        "strikeKinds": [
+          "stretch",
+          "pincer"
+        ],
+        "stanceKinds": [
+          "counter",
+          "brace"
+        ],
+        "actions": [
+          "slam",
+          "combo",
+          "fast"
+        ],
+        "supers": [
+          "slam",
+          "combo",
+          "fast",
+          "dash"
+        ],
+        "summons": [
+          "crane",
+          "bolt",
+          "sportsCar",
+          "roadster"
+        ],
+        "mix": {
+          "min": 0,
+          "max": 4
+        },
+        "grade": {
+          "min": 1,
+          "max": 5
+        },
+        "temper": [
+          "guard",
+          "retreat",
+          "measure",
+          "patience"
+        ],
+        "exchanges": {
+          "keys": [
+            "cross",
+            "pinball",
+            "rush"
+          ],
+          "min": 0,
+          "max": 3
+        },
+        "extrasBudget": 2,
+        "tellFloorMs": {
+          "strike": 360,
+          "run": 240,
+          "stance": 100
+        },
+        "stanceWindowMs": {
+          "min": 200,
+          "max": 1000
+        },
+        "note": "선택. 싸우는 성격을 닫힌 선택지와 작은 등급으로만 고른다(공격 섞기·특수·필살기·교전 거리·충격파·소환물·기질·교전 성향). 서버가 각 값을 자체 수치로 바꾼다. 공격 섞기는 하나 이상이 0보다 크고 fast 는 slam + combo 이하다. 기술은 skill 클립(skill.kind)이 정한다. 기술 클립·소환물·충격파 가운데 extrasBudget 개까지. 없으면 표준 키트 그대로다."
+      },
+      "styleStep": "In the optional style group, translate the concept into combat.style picks (mix, special, super, distance, shockwave or summon, temper and exchange grades) and one skill kind for a skill clip. The skill clip, a summon and the shockwave together count against extrasBudget. Never promise damage or speed; the server sets the numbers.",
+      "lines": {
+        "keys": [
+          "challenge",
+          "win",
+          "lose"
+        ],
+        "maxLength": 40,
+        "note": "선택. 경기 전 도전 대사와 경기 뒤 승리·패배 대사(각 40자). 화면 표시용이다."
+      },
+      "linesStep": "In final, offer a challenge, a win and a loss line in the character's voice, each at most the max length. They are shown in the arena only.",
+      "update": "An account can register up to three fighters. Omit fighterId for a new fighter. To change an existing fighter's concept, move names, stats, fighting style or art, repack and submit with its fighterId: it keeps its ID and duel record without using another slot."
     },
     "state": {
       "fields": [
@@ -507,14 +650,14 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
     "onChange": "Keep previous context and selections, report only affected requirements, recheck affected items. Never silently mix revisions.",
     "unavailable": "Appearance consultation may continue. Do not invent controls/timing, advance a rules-dependent group, generate or package against an unverified current contract."
   },
-  "revision": "1472d05d2b4eee158de257e0f62b1f9c8d5ab8954d7ebdd7322179eca434d1d5",
+  "revision": "6e78a912c3f0500e9030ee444f82fbd98f2763997edfb69d2bb05503e0100203",
   "provenance": {
-    "sourceCommit": "1f6b7833e402c8de344440722242e1e0c2b525f6",
+    "sourceCommit": "ef1075e7917a0934b8aa2b40f3307122a6a2b9b4",
     "sourceDirty": false,
     "sourceFiles": {
-      "tools/ai-fighter/creation-context.mjs": "b5fab4d1b72085919ea772dae7f5628350c6bf729716f718640852466316c798",
+      "tools/ai-fighter/creation-context.mjs": "985c90423c990dcc7236e03783a9a867cb606a3836c1f21a4d2a87a14d19bc49",
       "tools/ai-fighter/export-creation-context.mjs": "fcad318b37dae57a352b4c8ee509a1b03dd143a83f0518d726b06ff53df6d30d",
-      "contracts/ai-fighter/v1/contract-source.mjs": "4260f9643fdffd87c98424e3516bf12b42fd7e349094a415516cfaf46c536092",
+      "contracts/ai-fighter/v1/contract-source.mjs": "c99a9ecce14629ea88462eeaa75ddf5fc88a2ac79b55f2ba5cf294e84d564173",
       "src/world/native-city-combat.json": "0eb2dea149253f08ddc7067b0f3388f9f10dfe3cae9c8485d2e13a9aefa632be",
       "src/app/InputBindings.ts": "024ee9d2e11706deeb350b28a91d545763f789bdc7229289fbef0d19c9892127",
       "src/render/scenes/village/NativeCityFightInputController.ts": "0aa2e10401626e0017b3613bd00a91e4ada5ae6b33e060f2d8783324ade02a14",
