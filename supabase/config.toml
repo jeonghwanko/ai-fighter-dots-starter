@@ -9,3 +9,8 @@ entrypoint = "./functions/ai-fighter/index.ts"
 # Public discovery; every private tool verifies a scoped OAuth JWT and its active grant/session itself.
 verify_jwt = false
 entrypoint = "./functions/ai-fighter-mcp/index.ts"
+
+[functions.client-ip-probe]
+# Temporary: echoes the caller's own address headers so AI_FIGHTER_CLIENT_IP_SOURCE can be chosen. Delete after use.
+verify_jwt = false
+entrypoint = "./functions/client-ip-probe/index.ts"
