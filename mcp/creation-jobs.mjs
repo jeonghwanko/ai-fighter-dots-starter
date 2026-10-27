@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-import { lstat, readdir } from 'node:fs/promises';
+import { lstat, readdir, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -18,7 +18,12 @@ export const jobPlanSchema = z.object({
   inputs: z.array(z.string().min(1).max(512)).max(64),
   outputs: z.array(z.string().min(1).max(512)).min(1).max(64),
   workflowArgs: args.optional(),
+  // How long the runner lets the engine work before stopping it (default DEFAULT_TIMEOUT_MINUTES).
+  timeoutMinutes: z.number().int().min(1).max(720).optional(),
 }).strict();
+// Generous so a long video run finishes; a hung provider no longer leaves a job running forever.
+export const DEFAULT_TIMEOUT_MINUTES = 240;
+const STOP_POLL_MS = 2000;
 const jobIdSchema = z.string().uuid();
 const terminal = new Set(['succeeded', 'failed', 'needs-input', 'resolved', 'cancelled']);
 
@@ -144,29 +149,56 @@ export function createJobStore(store) {
       return write(id, saved);
     });
   }
+  // An unstarted job is cancelled. A running one gets a stop request its runner acts on within STOP_POLL_MS; the job then
+  // ends `unknown` (a generation may have been billed) or `failed` (packing, preflight), never as a confirmed non-run.
   async function cancel(id, jobId) {
     return store.lock(id, async () => {
       const job = await read(id, jobId);
       if (job.status === 'cancelled') return job;
-      if (job.status !== 'prepared') fail('only-unstarted-job-can-be-cancelled');
+      if (job.status === 'running') {
+        try { process.kill(job.runnerPid, 0); } catch { fail('runner-not-running-inspect-job'); }
+        await writeFile(await stopFile(id, jobId), JSON.stringify({ requestedAt: new Date().toISOString() }), { mode: 0o600 });
+        return { ...job, stopRequested: true };
+      }
+      if (job.status !== 'prepared') fail('only-unstarted-or-running-job-can-be-cancelled');
       job.status = 'cancelled'; return write(id, job);
     });
   }
-  return { read, list, prepare, inspect, resolve, cancel, gate, write };
+  const stopFile = (id, jobId) => { jobIdSchema.parse(jobId); return store.fileFor(id, `jobs/${jobId}.stop`); };
+  return { read, list, prepare, inspect, resolve, cancel, gate, write, stopFile };
 }
 
-/** No shell, provider fallback, retry, or credential mutation. Run through the host's normal execution approval. */
-export function executeEngine(root, engine, argv) {
+/** Stops the engine with the processes it started (sprite-gen runs Python under a Node wrapper). */
+function stopTree(child) {
+  if (process.platform === 'win32') spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).once('error', () => child.kill());
+  else { try { process.kill(-child.pid, 'SIGTERM'); } catch { child.kill('SIGTERM'); } }
+}
+/**
+ * No shell, provider fallback, retry, or credential mutation. Run through the host's normal execution approval.
+ * `signal` stops the engine and everything it started; the result then carries `stopped`.
+ */
+export function executeEngine(root, engine, argv, { signal } = {}) {
   const entry = fileURLToPath(new URL(engine === 'sprite' ? '../scripts/sprite-gen.mjs' : '../scripts/pack-fighter.mjs', import.meta.url));
   return new Promise(resolve => {
-    const child = spawn(process.execPath, [entry, ...argv], { cwd: root, shell: false, windowsHide: true,
+    // Its own process group off Windows, so a stop reaches the engine's children too.
+    const child = spawn(process.execPath, [entry, ...argv], { cwd: root, shell: false, windowsHide: true, detached: process.platform !== 'win32',
       stdio: 'inherit', env: { ...process.env, INIT_CWD: root } });
-    child.once('error', () => resolve({ code: null, notStarted: true }));
-    child.once('exit', (code, signal) => resolve({ code, signal }));
+    let stopped = null;
+    const stop = () => { if (!stopped) { stopped = signal?.reason ?? 'stopped'; stopTree(child); } };
+    // The runner's own interrupt (Ctrl-C) must not orphan a detached engine.
+    const interrupted = () => stop();
+    signal?.addEventListener('abort', stop, { once: true });
+    process.once('SIGINT', interrupted); process.once('SIGTERM', interrupted);
+    const done = value => {
+      signal?.removeEventListener('abort', stop); process.off('SIGINT', interrupted); process.off('SIGTERM', interrupted);
+      resolve(stopped ? { ...value, stopped } : value);
+    };
+    child.once('error', () => done({ code: null, notStarted: true }));
+    child.once('exit', (code, exitSignal) => done({ code, signal: exitSignal }));
   });
 }
 
-export async function runCreationJob(store, id, jobId, { execute = executeEngine } = {}) {
+export async function runCreationJob(store, id, jobId, { execute = executeEngine, timeoutMs } = {}) {
   const jobs = createJobStore(store);
   let job = await store.lock(id, async () => {
     const current = await jobs.read(id, jobId);
@@ -191,10 +223,16 @@ export async function runCreationJob(store, id, jobId, { execute = executeEngine
   try { const claim = await open(claimFile, 'wx', 0o600); await claim.close(); }
   catch (e) { if (e.code === 'EEXIST') return jobs.read(id, jobId); throw e; }
   let result, stage = 'execute';
+  // A time limit and a stop request (cancel_creation_job on a running job) both stop the engine through this signal.
+  const control = new AbortController(), stopPath = await jobs.stopFile(id, jobId);
+  const timer = setTimeout(() => control.abort('runner-timeout'), timeoutMs ?? (job.plan.timeoutMinutes ?? DEFAULT_TIMEOUT_MINUTES) * 60_000);
+  const poll = setInterval(() => lstat(stopPath).then(() => control.abort('stopped-by-request'), () => {}), STOP_POLL_MS);
+  const options = { signal: control.signal };
   try {
     if (job.plan.workflowArgs) {
-      stage = 'preflight'; result = await execute(store.root, 'sprite', job.plan.workflowArgs);
-      if (result.code !== 0) job.status = result.notStarted ? 'failed' : 'needs-input';
+      stage = 'preflight'; result = await execute(store.root, 'sprite', job.plan.workflowArgs, options);
+      // A stopped preflight generated nothing: it failed, it is not a choice waiting for the user.
+      if (result.code !== 0) job.status = result.notStarted || result.stopped ? 'failed' : 'needs-input';
     }
     if (job.status === 'running') {
       // The user may revise or stop the agreed work while access checks are running.
@@ -204,7 +242,7 @@ export async function runCreationJob(store, id, jobId, { execute = executeEngine
       }
     }
     if (job.status === 'running') {
-      stage = 'execute'; result = await execute(store.root, job.plan.engine, job.plan.args);
+      stage = 'execute'; result = await execute(store.root, job.plan.engine, job.plan.args, options);
       job.status = result.notStarted ? 'failed' : result.code === 75 ? 'needs-input'
         : result.code === 0 ? 'succeeded' : generating.has(job.plan.args[0]) ? 'unknown' : 'failed';
       if (job.status === 'succeeded') {
@@ -213,6 +251,8 @@ export async function runCreationJob(store, id, jobId, { execute = executeEngine
       }
     }
   } catch { job.status = 'unknown'; job.reason = 'runner-interrupted-or-unexpected-error'; }
+  finally { clearTimeout(timer); clearInterval(poll); await rm(stopPath, { force: true }); }
+  if (result?.stopped && job.status !== 'succeeded') job.reason = result.stopped;
   job.stage = stage; job.exitCode = result?.code ?? null; job.signal = result?.signal ?? null;
   job.finishedAt = new Date().toISOString();
   // A finished (possibly paid) run must not be lost to a concurrent tool call: wait for the lock instead of failing.

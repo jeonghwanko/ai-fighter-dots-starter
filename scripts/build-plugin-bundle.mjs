@@ -125,6 +125,8 @@ export async function buildPluginBundle(destination) {
   }
   const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   pkg.scripts = Object.fromEntries(runtimeScripts.map(key => [key, pkg.scripts[key]]));
+  // The runtime reports the kit's version (plugin.json), not a separate package number.
+  pkg.version = JSON.parse(await readFile(path.join(root, 'plugins', 'ai-fighter', 'plugin.json'), 'utf8')).version;
   await writeFile(path.join(runtime, 'package.json'), JSON.stringify(pkg, null, 2) + '\n', { flag: 'wx' });
   await checkRuntimeImports(runtime);
   // Source-only: native Node packages are installed in the user's writable runtime on that host.

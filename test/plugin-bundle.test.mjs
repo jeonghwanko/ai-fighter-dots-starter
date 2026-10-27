@@ -70,3 +70,9 @@ test('a built runtime with a missing module or an undeclared package fails befor
   await writeFile(path.join(undeclared, 'a.mjs'), "import 'node:fs';\nimport { z } from 'zod';\nimport sharp from 'sharp';\nexport const a = [z, sharp];\n");
   await assert.rejects(checkRuntimeImports(undeclared), /does not depend on: sharp/);
 });
+
+test('the repository package version is the kit version', async () => {
+  const pkg = JSON.parse(await readFile(path.join(repository, 'package.json'), 'utf8'));
+  const plugin = JSON.parse(await readFile(path.join(repository, 'plugins/ai-fighter/plugin.json'), 'utf8'));
+  assert.equal(pkg.version, plugin.version, 'bump package.json together with plugins/ai-fighter/plugin.json');
+});
