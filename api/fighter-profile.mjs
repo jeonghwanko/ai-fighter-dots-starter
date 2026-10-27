@@ -10,6 +10,11 @@ export async function updateFighterProfile({ request, owner, id, key, db, rpc })
     if (!parsed.ok) throw new Error('invalid-json');
     body = parsed.data;
   } catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
+  return applyFighterEdit({ body, owner, id, key, db, rpc });
+}
+
+/** A parsed edit (the PATCH body). The workshop applies an accepted style proposal through it too, the note's id as its key. */
+export async function applyFighterEdit({ body, owner, id, key, db, rpc }) {
   // `style` (2026-10-27): the fighting style (`combat.style`) — an object replaces it, null removes it. A body edits the profile, the style or both.
   const profileOk = body?.profile === undefined || body.profile && typeof body.profile === 'object' && !Array.isArray(body.profile)
     && Object.keys(body.profile).length && Object.keys(body.profile).every(k => editable.has(k));

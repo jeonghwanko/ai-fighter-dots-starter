@@ -282,6 +282,15 @@ Dot에서 첫 실제 등록:
 | GET /me | 사용자 JWT (초대 불필요) | 초대 여부·만료 시각·초대 요청 상태 |
 | POST /access-requests | 사용자 JWT (초대 불필요) | 베타 초대 요청. 선택 `note` 500자 이하, 사용자당 1건, 24시간 3회 |
 | POST /creator-handoffs | 사용자 JWT (초대 불필요) | 제작자 홈페이지 일회용 로그인 토큰 해시(`tokenHash`)와 만료 시각. 본문은 읽지 않는다 |
+| GET /story/:id | 없음 | 공방과 연대기(4단계): 공개 선수의 정본(지금 판, `?version=`), 판 목록, 공방 글 20개(`?before=`로 앞), 맺은 관계 |
+| PUT /fighters/:id/canon | 소유자 | 정본 다음 판 `{ base, sheet }`. 읽은 판이 아니면 409 `canon-changed` |
+| POST /notes · DELETE /notes/:id | 사용자 JWT | 공방 글 쓰기(공개 이름 필요)·거두기(글쓴이) |
+| POST /notes/:id/resolve | 소유자 | 제안 받기·거절 `{ decision }` |
+| POST /relations · POST /relations/:id/answer · DELETE /relations/:id | 사용자 JWT | 관계 맺기·받기·끊기 |
+| GET /me/workshop · PUT /me/name | 사용자 JWT | 받은 공방 글·관계와 공개 이름 |
+| GET /worlds · GET /worlds/:id | 없음 | 공개 세계 목록·표지, 세계 하나(진영·소속 선수·정사) |
+| POST /worlds · PATCH /worlds/:id · POST /worlds/:id/posts | 사용자 JWT | 세계 열기(계정당 둘)·고치기(진영·정사·선수 빼기)·라운지 글(그 사람으로) |
+| PUT /fighters/:id/world | 소유자 | 선수를 남이 연 세계·진영에 두기, `world: null`이면 빼기 |
 | POST /worker/claim | 작업자 | 큐 임대·일시 다운로드 URL 발급 |
 | POST /worker/finish | 작업자 | 동일 임대·manifest 해시로 검사 확정 |
 

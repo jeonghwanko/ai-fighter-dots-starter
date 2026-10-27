@@ -6,6 +6,7 @@ import { createDeviceLoginHandler } from './device-login.mjs';
 import { createAdminHandler } from './admin.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
+import { createWorkshopHandler, workshopRoute } from './workshop.mjs';
 import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, unstorableTextPath, verifiedUserId } from './http.mjs';
 
 export { Problem, readBody, sha256 } from './http.mjs';
@@ -34,7 +35,11 @@ function check(error) {
   if (['byte-budget-mismatch','profile-only-required'].includes(error.message)) throw new Problem(422, error.message);
   throw new Problem(503, 'database-unavailable');
 }
-export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null }) {
+/**
+ * `agentClient` (공방과 연대기, 2026-10-27): the cloud MCP's OAuth client for its in-process calls — the workshop labels notes and canon
+ * versions with that agent's name. The public Edge handler never sets it.
+ */
+export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null }) {
   const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release});
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
@@ -80,6 +85,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
     await rpc('af_authorize', { p_owner: owner });
     return owner;
   }
+  const workshopHandler = createWorkshopHandler({ db, authenticate: request => authenticate(request, false), rpc, agentClient });
   async function ownSubmission(owner, id) {
     const { data, error } = await db.from('af_submissions').select('*').eq('id', requireId(id)).eq('owner_id', owner).maybeSingle();
     check(error); if (!data) throw new Problem(404, 'not-found'); return data;
@@ -102,6 +108,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         if (method === 'OPTIONS') return json({ ok: true });
       }
       if (parts[0] === 'admin') return adminHandler(request, parts);
+      if (workshopRoute(parts)) return workshopHandler(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
       // Device-connection sign-in: start and poll are unauthenticated; approve verifies the user itself.
