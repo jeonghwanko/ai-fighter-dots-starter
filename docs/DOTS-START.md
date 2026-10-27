@@ -10,7 +10,9 @@ An explicit creation request authorizes its routine preparation and requested st
    selected versions, raw files and input/output hashes. Do not update an active project's kit or vendor.
 3. Only a new workspace that needs installation uses `bootstrap --install`. Missing system tools belong
    to the environment preparer. A bootstrap success or credential status never establishes image capability.
-4. Honor the Dots output-contract blocker, including indirect Codex calls. No protected session reads,
+4. Honor the Codex output-contract blocker, including selected Codex redraws inside video-set. Explicit
+   Grok routes retain their own engine checks; video-resume retrieves an existing request without a new POST.
+   Ambiguous image calls must name their provider; never switch it to make a check pass. No protected session reads,
    CODEX_HOME relocation, auth copying, API-key fallback or provider/model substitution. Use only a verified
    official host generation/file route within the request, or report the specific missing capability.
 5. Verify provider access, original file receipt/decode and parent display separately under DELIVERY.md.

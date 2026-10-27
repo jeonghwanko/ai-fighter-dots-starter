@@ -8,7 +8,9 @@ This repository lets each user create their own fighter through Dot. Read
   Inspect existing sessions/jobs before installing. Never run the generation readiness tool as a
   supposedly read-only doctor: its kit path may fetch/fast-forward. Keep source and reviewed bundle
   layouts distinct; launcher `--status` is read-only and `--install` requires the reviewed manifest hash.
-  Dots-managed generation with an unaudited output contract is blocked, including indirect Codex calls.
+  Block unaudited Codex image-output paths, including an actual Codex still redraw inside video-set.
+  Explicit Grok image/video commands retain their own engine checks; video-resume retrieves an existing request.
+  Do not infer Codex use merely from a video command or require Codex readiness for a Grok route.
   Never read/delete protected sessions, relocate CODEX_HOME, or claim an invented stdout/file adapter.
   Keep the initial official exec wait at 30000 ms, then recover the same session/cell until completion;
   an unknown outcome must not cause another dispatch. Explicit creation requests authorize routine

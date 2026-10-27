@@ -110,15 +110,24 @@ Grok has no official status adapter in this doctor, so it remains unknown rather
 The previously inspected vendor pin `38bddef764183fe2044bc85c764b0572409a6b15` reads and normally deletes
 Codex rollout files. The service pin `0dc264ba257c0d417f86ef797bc503f933e1e142` was unavailable locally
 during this change; its implementation remains unverified. Doctor inspects only provider source, never
-session contents. Dots-managed engine generation is blocked **before workflow probes or dispatch**, including
-indirect motion/video paths that can call Codex. Even source without that signature remains unverified
+session contents. Commands that actually select Codex image output are blocked **before workflow probes or dispatch**.
+Explicit Grok `gen`/`gen-set`, Grok `video` and existing-request `video-resume` retain their own provider checks
+without inspecting Codex source. `video-set` is Grok; only front/back walk with `--walk-start redraw` (the default)
+also uses an image provider. Its explicit `--still-provider`, then `SPRITE_GEN_DEFAULT_PROVIDER`, selects that
+redraw route. Side-facing vision is Grok. `--walk-start as-given` performs no redraw. Do not alter these choices
+to bypass a blocker. Missing image provider selection gives a specific error rather than invoking a fallback.
+CLI provider names remain `codex`/`grok`, not account labels such as GPT. `--provider=grok` is also accepted;
+duplicate/abbreviated route flags are rejected. Managed Grok `gen-set` uses matching image/Grok workflow
+preflight; the existing Codex sprite/`gpt-rows` preflight remains required for Codex rows.
+Doctor reports only the selected provider: Grok capability remains unverified without imposing a Codex gate.
+Even Codex source without the protected-session signature remains unverified
 until an audited official host-file adapter exists. This change does not modify vendor code or invent that
 adapter. Do not relocate CODEX_HOME, read protected sessions or enable an unrestricted sandbox to work around it.
 Official `exec --json` events and `--output-last-message` are supported output mechanisms, but a final
 message is not image bytes. A future adapter must bind actual tool completion to a supported original file.
 
 `AI_FIGHTER_EXECUTION_HOST=dots`, the new bootstrap runtime marker, or a workspace environment record
-with `host: dots` activates this boundary. These are application guards, not an OS sandbox. Use the host's
+with `host: dots` activates this provider-specific boundary. These are application guards, not an OS sandbox. Use the host's
 security policy as well; do not bypass the wrapper by running vendor commands directly.
 
 ODDBOUT's connected cloud tools own registration auth. Verify that account with `get_profile` and cloud
