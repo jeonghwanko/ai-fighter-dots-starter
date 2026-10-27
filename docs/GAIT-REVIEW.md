@@ -306,8 +306,10 @@ npm run fighter:gait -- loop-review <config.json> <loop-review.json>
 ```
 
 - config: `motion`(walk·run), `source`(최종 game-pack 애니메이션), `strip`(그 고리를 자른 `video-loop`·`video-cycle-align`의 strip.json),
-  `verdict`(시각 판정 JSON: identity·anatomy·alternation·loop가 pass/fail, notes), `judge`(판정한 쪽), `stridePixels`(걷기만, 생성기가 발에서 잰 값).
-- 기록은 최종 프레임과 시간에 묶인다(`sequenceSha256`). 엔진이 남긴 다시 찍기 사유가 하나라도 있거나, 판정 하나라도 fail이거나,
-  걷기 보폭이 없으면 `status: fail`이고 `fighter:pack`이 받지 않는다.
+  `verdict`(시각 판정 JSON: identity·anatomy·loop가 pass/fail, notes), `judge`(판정한 쪽), `stridePixels`(걷기만, 생성기가 발에서 잰 값).
+- 발 교대는 판정이 아니라 엔진 기록이다. `video-cycle-align`이 두 착지에 서로 다른 발 이름(`cycle_align.foot.feet`)을 붙여야 한다.
+  같은 색 다리를 옆에서 본 고리는 시각 판정 모델이 교대를 가리지 못했다(엔진이 교대로 읽은 걷기를 같은 다리로 판정).
+- 기록은 최종 프레임과 시간에 묶인다(`sequenceSha256`). 엔진이 남긴 다시 찍기 사유가 하나라도 있거나, 발 이름이 없거나 같거나,
+  판정 하나라도 fail이거나, 걷기 보폭이 없으면 `status: fail`이고 `fighter:pack`이 받지 않는다.
 - 같은 발 측정을 했다고 주장하지 않는다. `pack-report.json`의 `review`와 `motions.walk.stride.source`(`loop-review`)가 그 사실을 남긴다.
 - Dot 제작 경로는 그대로 `required`다(`creation:run`의 패키지 작업은 `required`가 아닌 정책을 거절한다).

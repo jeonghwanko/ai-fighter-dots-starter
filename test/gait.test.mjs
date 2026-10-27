@@ -126,16 +126,22 @@ test('a game-pack sequence decodes each sheet once and keeps the exact per-cell 
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
-test('a loop review fails on an engine retake reason, a failing verdict or an unmeasured walk stride, and binds to the frames', () => {
-  const seq = sequence(), verdicts = { identity: 'pass', anatomy: 'pass', alternation: 'pass', loop: 'pass', notes: 'Clean loop.' };
-  const pass = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: { from: 27 } }, visual: verdicts, judge: 'test', stridePixels: 90 });
-  assert.equal(pass.status, 'pass');
+test('a loop review fails on an engine retake reason, unnamed feet, a failing verdict or an unmeasured walk stride, and binds to the frames', () => {
+  const seq = sequence(), verdicts = { identity: 'pass', anatomy: 'pass', loop: 'pass', notes: 'Clean loop.' };
+  const aligned = { from: 27, strikes: [0, 8], foot: { feet: ['left', 'right'], margin: 0.13 } };
+  const pass = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: aligned }, visual: verdicts, judge: 'test', stridePixels: 90 });
+  assert.equal(pass.status, 'pass', JSON.stringify(pass.errors));
+  assert.deepEqual(pass.engine.feet, ['left', 'right']);
   assert.equal(requireLoopReview(pass, seq, 'walk'), pass);
-  const retake = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: { retake: { reason: 'broken-beat', reasons: ['broken-beat'] } } },
+  const retake = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: { ...aligned, retake: { reason: 'broken-beat', reasons: ['broken-beat'] } } },
     visual: verdicts, judge: 'test', stridePixels: 90 });
   assert.deepEqual(retake.errors.map(e => e.code), ['ENGINE_RETAKE']);
-  const judged = loopReview({ motion: 'walk', sequence: seq, strip: {}, visual: { ...verdicts, alternation: 'fail' }, judge: 'test' });
-  assert.deepEqual(judged.errors.map(e => e.code), ['VISUAL_ALTERNATION', 'STRIDE_UNMEASURED']);
+  // The alignment could not tell the feet apart (a low shade margin), or named one foot twice.
+  for (const foot of [undefined, { feet: [null, null] }, { feet: ['left', 'left'] }])
+    assert.deepEqual(loopReview({ motion: 'run', sequence: { ...seq, frames: seq.frames.slice(0, 12), durations: seq.durations.slice(0, 12) },
+      strip: { cycle_align: { ...aligned, foot } }, visual: verdicts, judge: 'test' }).errors.map(e => e.code), ['ENGINE_FEET_UNNAMED']);
+  const judged = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: aligned }, visual: { ...verdicts, anatomy: 'fail' }, judge: 'test' });
+  assert.deepEqual(judged.errors.map(e => e.code), ['VISUAL_ANATOMY', 'STRIDE_UNMEASURED']);
   assert.throws(() => requireLoopReview(judged, seq, 'walk'), /LOOP_REVIEW_REQUIRED/);
   const changed = { ...seq, durations: seq.durations.map((ms, i) => i ? ms : ms + 1) };
   assert.throws(() => requireLoopReview(pass, changed, 'walk'), /LOOP_REVIEW_STALE/);

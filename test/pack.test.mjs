@@ -393,8 +393,9 @@ test('hosted loops pack with loop reviews: engine checks, judge verdicts and the
   for (const motion of ['walk', 'run']) {
     const sequence = await loadSequence({ file: 'game-pack.json', animation: `bot/${motion}` }, directory);
     // Fixture evidence exercises binding and packaging only, not a claim that the sample bot walks well.
-    const review = loopReview({ motion, sequence, strip: { kind: 'periodic', cycle_align: { from: 27, seam_ratio: 0.9, beat: { jolt: 0.2 } } },
-      visual: { identity: 'pass', anatomy: 'pass', alternation: 'pass', loop: 'pass', notes: 'Fixture verdicts.' }, judge: 'fixture',
+    const review = loopReview({ motion, sequence, strip: { kind: 'periodic', cycle_align: { from: 27, seam_ratio: 0.9, beat: { jolt: 0.2 },
+      strikes: [0, 8], foot: { feet: ['left', 'right'], margin: 0.13 } } },
+      visual: { identity: 'pass', anatomy: 'pass', loop: 'pass', notes: 'Fixture verdicts.' }, judge: 'fixture',
       stridePixels: 111 });
     assert.equal(review.status, 'pass', JSON.stringify(review.errors));
     await writeFile(path.join(directory, `${motion}-loop.json`), JSON.stringify(review));

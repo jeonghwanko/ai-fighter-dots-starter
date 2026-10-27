@@ -145,7 +145,7 @@ async function review(planFile, out, annotationsFile) {
 /**
  * The hosted generation's walk/run record (reviewPolicy engine-loop). Config, paths relative to it: { motion, source: { file, animation }
  * (the final game pack), strip (the cut's strip.json from video-loop / video-cycle-align), verdict (the judge's JSON: identity, anatomy,
- * alternation, loop, notes), judge (who judged), stridePixels (walk) }.
+ * loop, notes), judge (who judged), stridePixels (walk) }.
  */
 async function writeLoopReview(configFile, out) {
   const config = await json(configFile), base = path.dirname(path.resolve(configFile));
