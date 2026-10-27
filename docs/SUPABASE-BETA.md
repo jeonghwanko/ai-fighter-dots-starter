@@ -54,6 +54,15 @@ Storage bucket은 비공개 `ai-fighter-beta`다. 기존 게임 테이블·로�
 기존 프로젝트를 CLI에 연결할 때는 **그 프로젝트의 기존 마이그레이션 이력도 먼저 가져와 대조**한다.
 이 샘플 하나만으로 기존 프로젝트에 `db reset` 또는 무검토 `db push`를 실행하지 않는다.
 
+새 마이그레이션 작성 규칙(`test/migration-rules.test.mjs`가 검사한다):
+
+- 함수를 바꾸면 `create or replace function` 전체를 다시 쓴다. `pg_get_functiondef` 결과를 `replace()`로 고치는
+  방식은 쓰지 않는다. 결과 본문이 파일에 남지 않아 앞의 마이그레이션을 모두 따라가야 읽을 수 있다.
+  이미 운영에 적용된 두 파일(`20261024022222`, `20261024104406`)만 예외다.
+- 버전(앞 14자리)은 파일마다 하나다. `20261021090000`을 두 파일이 함께 쓰던 것을 2026-10-27에
+  `20261021090001_ai_fighter_worker_dispatch.sql`로 바꿨다(순서 동일). 운영은 `db push`를 쓰지 않고 파일별로
+  적용하므로 운영 DB에는 영향이 없다. 운영 이력을 맞추려면 `migration repair --status applied 20261021090001`이 필요하다.
+
 Supabase CLI에서 계정 로그인·프로젝트 선택 후:
 
 ```sh
@@ -326,7 +335,10 @@ npm run worker:watch
 
 **판정과 인프라 실패를 구분한다.** 패키지 결함(계약 위반·해시·디코딩·빈 프레임)만 `rejected`로 확정한다.
 다운로드 실패·저장소 바이트 불일치·작업 시간 초과·검사 프로세스 오류는 확정하지 않고 `retry-later`로 끝낸다.
-임대가 끝나면 다른 실행이 다시 가져간다. 세 번 모두 실패하면 서버가 `worker-attempt-limit`로 반려한다.
+작업자는 자기 임대로 `worker/release`(`af_release`)를 호출해 작업을 바로 대기열로 돌려준다. 이때 시도 횟수는
+돌려주고 `infra_failures`만 하나 늘린다. 인프라 실패가 연속 10번이면 검사기를 매번 멈추게 하는 패키지로 보고
+`worker-infrastructure-limit`로 반려한다. 돌려주기에 실패하면(옛 API·장애) 예전처럼 임대가 끝난 뒤 다시 가져가며
+시도를 센다. 세 번 모두 실패하면 서버가 `worker-attempt-limit`로 반려한다.
 따라서 일시적인 네트워크 오류가 제작자의 제출 횟수를 쓰지 않는다.
 
 **검사기 버전.** 작업자는 `VALIDATOR_VERSION`을 영수증에 적고 서버는 `af_settings.validator_versions`에 있는 값만 받는다.
@@ -349,6 +361,30 @@ V8 힙·픽셀 예산은 네이티브 메모리의 OS 강제 격리를 대신하
 패키지 10 MB, 단일 파일 4 MB, 사용자 요청 120회/분이다.
 전체 제출 예약은 **100 MB**로 제한한다. 20명 모두 최대 10 MB를 제출할 수 있다는 보장은 아니다.
 반려·만료 파일도 예약 용량에 포함한다. 기존 프로젝트의 다른 사용량은 별도 합산한다.
+
+**호출자별 제한(2026-10-28).** 로그인 없는 경기 요청(`POST /duels`)과 기기 연결 시작(`POST /device-logins`)은
+전체 한도(하루 100경기, 10분에 120회)만 있어 한 사람이 모두의 몫을 쓸 수 있었다. 이제 호출자 주소의 키 해시로
+호출자별 제한(경기 하루 25회, 기기 연결 10분에 10회)을 둔다(`api/client-limit.mjs`, `af_rate_hits`).
+주소 원문은 저장하지 않는다. 서버 비밀로 만든 HMAC-SHA256(구분·UTC 날짜·주소)만 하루 보관하고, 날짜가 들어가 날마다 다른 키가 된다.
+첫 `X-Forwarded-For` 값은 클라이언트가 직접 쓸 수 있으므로 쓰지 않는다
+([Supabase discussion #34647](https://github.com/orgs/supabase/discussions/34647)).
+
+켜는 순서(모두 운영자 승인 후):
+
+1. 마이그레이션 `20261028090000_ai_fighter_client_rate_limits.sql`을 적용한다.
+2. 임시 함수 `client-ip-probe`를 배포하고 `node scripts/probe-client-ip.mjs https://<ref>.supabase.co/functions/v1/client-ip-probe`로
+   위조 헤더를 보낸다. `trusted: true`인 출처만 쓴다. 확인 후 함수를 삭제한다.
+3. Edge 비밀 `AI_FIGHTER_CLIENT_LIMIT_SECRET`(32자 이상 무작위)과 `AI_FIGHTER_CLIENT_IP_SOURCE`(`cf-connecting-ip` 또는
+   `forwarded-last`)를 넣고 `ai-fighter` 함수를 배포한다. 둘 중 하나라도 없으면 제한은 꺼진 채로 전체 한도만 동작한다.
+4. 개인정보 처리방침에 이 처리를 적는다(초안은 PR에 있다).
+
+제한 기록 조회가 실패하면 요청을 막지 않고 전체 한도로 넘긴다.
+
+2026-10-27 운영 반영: 마이그레이션 적용 뒤 프로브로 확인했다. 클라이언트가 보낸 `CF-Connecting-IP`는 Cloudflare가 403(`error code: 1000`)으로
+막아 함수에 닿지 않는다. 함수가 받는 `CF-Connecting-IP`는 호출자의 공인 IP와 같았다. `X-Forwarded-For`는 호출자 IP 두 번과 내부 프록시
+주소이고, 클라이언트가 보낸 값은 지워진다. 그래서 `forwarded-last`는 모든 호출자가 같은 키가 되어 쓸 수 없다.
+`AI_FIGHTER_CLIENT_IP_SOURCE=cf-connecting-ip`와 무작위 `AI_FIGHTER_CLIENT_LIMIT_SECRET`을 넣었다. 재배포 없이 적용되어 다음 기기 연결 시작이
+`af_rate_hits`에 한 줄을 남겼다. 프로브 함수는 지웠다. 비밀 값은 따로 보관하지 않는다. 잃으면 새 값으로 바꾸면 되고, 그날의 키만 새로 시작한다.
 
 자동 파일 정리는 아직 없다. 업로드 만료 후에도 기록과 용량 예약이 유지되며 운영자가 정리해야 한다.
 운영자는 `af_settings.paused`로 새 제출을 멈추고, 초대·작업자 `enabled`로 접근을 취소할 수 있다.

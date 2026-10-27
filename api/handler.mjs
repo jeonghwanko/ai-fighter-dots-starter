@@ -39,11 +39,11 @@ function check(error) {
  * `agentClient` (공방과 연대기, 2026-10-27): the cloud MCP's OAuth client for its in-process calls — the workshop labels notes and canon
  * versions with that agent's name. The public Edge handler never sets it.
  */
-export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null }) {
-  const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release});
+export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null, limiter = null }) {
+  const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release,limiter});
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
-  const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink });
+  const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink, limiter });
   const adminHandler = createAdminHandler({ db });
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
   async function present(row) {
@@ -216,6 +216,13 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
             p_sha: body.manifestSha256, p_passed: body.passed, p_result: body.result });
           try { await analytics?.registered(completed); } catch { /* Analytics must never break registration. */ }
           return json(await present(completed));
+        }
+        // An infrastructure failure under the caller's own lease: requeue without spending one of the package's attempts.
+        if (parts.join('/') === 'worker/release') {
+          requireId(body.submissionId); requireId(body.leaseToken);
+          if (!/^[a-z0-9-]{1,64}$/.test(body.code ?? '')) throw new Problem(400, 'invalid-release-code');
+          const released = await rpc('af_release', { p_id: body.submissionId, p_lease: body.leaseToken, p_code: body.code });
+          return json({ ok: true, stage: released.status === 'queued' ? 'requeued' : 'rejected' });
         }
       }
       throw new Problem(404, 'route-not-found');

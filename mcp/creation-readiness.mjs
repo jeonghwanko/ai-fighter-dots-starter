@@ -65,6 +65,7 @@ async function installedSpriteGen(spriteRoot) {
     environment: await exists(path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')) };
 }
 
+const FETCH_INTERVAL_MS = 5 * 60_000, lastFetch = new Map();
 async function checkKitCore({ progress, present, fetchRemote = true, git = runGit, root = kitRoot, spriteRoot,
   inspectEngine = inspectSpriteEngine }) {
   const result = { status: 'ready', branch: null, behind: null, ahead: null, remoteChecked: false, engine: null,
@@ -79,7 +80,13 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
   if (result.branch !== KIT_BRANCH) return { ...result, status: 'blocked', reason: 'wrong-branch' };
   // Edits inside the submodule are checked below; here only tracked edits in this checkout or a moved gitlink count.
   const dirty = (await git(['status', '--porcelain', '--untracked-files=no', '--ignore-submodules=dirty'], { cwd: root })).stdout;
-  if (fetchRemote) result.remoteChecked = (await git(['fetch', '--quiet', 'origin', KIT_BRANCH], { cwd: root, timeout: 60000 })).code === 0;
+  // A long-running MCP process re-checks the published branch at most every FETCH_INTERVAL_MS (real git only).
+  const fresh = git === runGit && Date.now() - (lastFetch.get(root) ?? -Infinity) < FETCH_INTERVAL_MS;
+  if (fetchRemote && fresh) result.remoteChecked = true;
+  else if (fetchRemote) {
+    result.remoteChecked = (await git(['fetch', '--quiet', 'origin', KIT_BRANCH], { cwd: root, timeout: 60000 })).code === 0;
+    if (result.remoteChecked && git === runGit) lastFetch.set(root, Date.now());
+  }
   if (result.remoteChecked) {
     const counts = (await git(['rev-list', '--left-right', '--count', `HEAD...origin/${KIT_BRANCH}`], { cwd: root })).stdout.split(/\s+/).map(Number);
     [result.ahead, result.behind] = counts.length === 2 && counts.every(Number.isInteger) ? counts : [null, null];
@@ -101,8 +108,9 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
     if (changed('package.json') || changed('package-lock.json')) result.nextCommands.push('npm ci --ignore-scripts');
     if (changed('vendor/sprite-gen') || !present.source) result.nextCommands.push('npm run sprite:setup');
     result.nextCommands.push('npm run sprite:status');
-    // This MCP process still runs the code it started with.
-    result.restartRequired = result.changedFiles.some(f => /^(mcp|api|contracts|scripts)\//.test(f) || /^package(-lock)?\.json$/.test(f));
+    // This MCP process still runs the code it started with, while what it forks or spawns (server/ validator, tools/
+    // gait, scripts) loads the new code: restart so both sides agree. deploy/ JSON is read once at startup.
+    result.restartRequired = result.changedFiles.some(f => /^(mcp|api|contracts|scripts|server|deploy|tools)\//.test(f) || /^package(-lock)?\.json$/.test(f));
     return { ...result, status: 'updated' };
   }
   if (!present.source) return result; // checkKit adds the install commands
@@ -208,21 +216,24 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   if (needsGeneration && !choice) ({ method: elicitation, choice } = await elicitAccount(lowLevelServer));
   const notRequired = { status: 'not-required', reason: 'no-generation-in-this-step', nextCommands: [] };
   // A cloud workspace registers through the connected ODDBOUT tools; it never reads or offers a local account.
-  const { infrastructure, ...connection } = registrationMode === 'cloud'
+  const loginItem = registrationMode === 'cloud'
     ? { infrastructure: { status: 'not-required', reason: 'cloud-registration-route' }, status: 'connector-verification-required', userId: null,
       route: 'oddbout-cloud', nextTools: ['get_profile', 'check_creation_readiness'],
       note: 'Use the connected ODDBOUT tools in this conversation. Verify its account and readiness there. Do not run workspace login or transfer credentials. This result does not verify that connection.' }
-    : await checkLogin({ remoteActive, ...login });
+    : checkLogin({ remoteActive, ...login });
   const spriteRoot = kit.spriteRoot ?? path.join(kit.root ?? kitRoot, 'vendor', 'sprite-gen');
-  const items = { kit: needsGeneration ? await checkKit({ progress, ...kit }) : notRequired,
+  // The kit, its tools, the login and the workspace record are independent checks: run them together.
+  const [{ infrastructure, ...connection }, kitItem, toolsItem, environmentItem] = await Promise.all([loginItem,
+    needsGeneration ? checkKit({ progress, ...kit }) : notRequired,
     // ffmpeg, ffprobe and img2webp -exact are required; RIFE only warns (loops cut as filmed).
-    tools: needsGeneration ? await checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools }) : notRequired,
-    infrastructure, login: connection,
-    account: needsGeneration ? accountItem(choice) : notRequired, ...unverifiedCreation(choice) };
-  // Recorded environment preconditions are reported for the agent to resolve; they do not make generation ready here.
-  items.environment = !needsGeneration ? notRequired : workspace
-    ? { ...await workspace.inspect(), matchesChoice: saved?.account === choice, certifiesGeneration: false }
-    : { status: 'workspace-required', readyForGeneration: false, certifiesGeneration: false };
+    needsGeneration ? checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools }) : notRequired,
+    // Recorded environment preconditions are reported for the agent to resolve; they do not make generation ready here.
+    !needsGeneration ? notRequired : workspace
+      ? workspace.inspect().then(found => ({ ...found, matchesChoice: saved?.account === choice, certifiesGeneration: false }))
+      : { status: 'workspace-required', readyForGeneration: false, certifiesGeneration: false },
+  ]);
+  const items = { kit: kitItem, tools: toolsItem, infrastructure, login: connection,
+    account: needsGeneration ? accountItem(choice) : notRequired, ...unverifiedCreation(choice), environment: environmentItem };
   const ready = ['ready', 'updated'].includes(items.kit.status) && !items.kit.restartRequired && items.kit.nextCommands.length === 0
     && items.tools.status === 'ready' && items.account.status === 'chosen-unverified';
   return { purpose, kitAndAccountReady: ready, readyForGeneration: false,

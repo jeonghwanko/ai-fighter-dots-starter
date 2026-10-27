@@ -10,18 +10,25 @@ import { cloudGateway } from './cloud-gateway.mjs';
 export function createWorkerServer({ wakeToken, run, log = console.log, commit = null }) {
   if (!/^[a-f0-9]{64}$/.test(wakeToken ?? '')) throw new Error('invalid-wake-token');
   let active = null, stopping = false, requested = false;
+  // The last queue outcome, for /health. A rejected worker credential cannot recover by retrying, so it is
+  // reported distinctly instead of as an ordinary retry (the token expires; see docs/CREATOR-HOSTING.md).
+  let queue = { status: 'unknown', since: null };
+  const observe = status => { if (queue.status !== status) queue = { status, since: new Date().toISOString() }; };
   async function drain() {
     do {
       requested = false;
       try {
         while (!stopping) {
           const result = await run();
+          observe('ok');
           // Never log credentials, signed URLs or package contents.
           log(JSON.stringify({ stage: result.stage, submissionId: result.submissionId }));
           if (result.stage === 'idle' || result.stage === 'retry-later') break;
         }
-      } catch {
-        log(JSON.stringify({ stage: 'retry-later' }));
+      } catch (error) {
+        const rejected = error?.status === 401 || error?.status === 403;
+        observe(rejected ? 'credential-rejected' : 'api-unavailable');
+        log(JSON.stringify({ stage: rejected ? 'worker-credential-rejected' : 'retry-later' }));
       }
     } while (requested && !stopping);
   }
@@ -32,7 +39,9 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
       res.end(JSON.stringify(body));
     };
     if (req.method === 'GET' && req.url === '/health') {
-      return reply(stopping ? 503 : 200, { ok: !stopping, commit: /^[a-f0-9]{40}$/.test(commit ?? '') ? commit : null });
+      // Stays 200 while the queue is degraded: this instance also serves the MCP gateway, and a failing
+      // health check would restart it without fixing a credential. Monitor `queue.status` instead.
+      return reply(stopping ? 503 : 200, { ok: !stopping, commit: /^[a-f0-9]{40}$/.test(commit ?? '') ? commit : null, queue });
     }
     if (req.method !== 'POST' || req.url !== '/wake') return reply(404, { ok: false });
     const timestamp = req.headers['x-ai-fighter-time'];

@@ -1,6 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { setTimeout as delay } from 'node:timers/promises';
 import { apiRequest, transferTimeoutMs, validProjectUrl } from '../api/client.mjs';
 import { readBody, sha256, VALIDATOR_VERSION } from '../api/handler.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
@@ -9,11 +10,13 @@ import { makePackageValidator } from '../mcp/package-access.mjs';
 // The server lease is five minutes. Downloads stop at four, so validation (20 s) and finish fit inside it.
 const JOB_DEADLINE_MS = 4 * 60 * 1000;
 const DOWNLOADS_AT_ONCE = 4;
+const FINISH_RETRY_MS = [1000, 3000];
 
 /**
  * An infrastructure failure: a download, the deadline or the validator process. It says nothing about the
- * package, so the worker does not finish the job. The lease expires and af_claim retries it; after three
- * attempts the server rejects it as worker-attempt-limit.
+ * package, so the worker does not finish the job. It hands the job back (worker/release): the attempt is refunded
+ * and counted as an infrastructure failure, which the server limits separately. If the hand-back fails, the
+ * lease expires and af_claim retries it, counting the attempt (three, then worker-attempt-limit).
  */
 class RetryLater extends Error {}
 
@@ -77,7 +80,11 @@ export async function runWithConfig(config, submissionId) {
         throw new RetryLater(String(result.errors?.[0]?.code ?? 'validator-unavailable').toLowerCase().replaceAll('_', '-'));
     }
   } catch (error) {
-    return { ok: false, stage: 'retry-later', submissionId: job.submissionId, code: error instanceof RetryLater ? error.message : 'worker-error' };
+    if (!(error instanceof RetryLater)) return { ok: false, stage: 'retry-later', submissionId: job.submissionId, code: 'worker-error' };
+    // Best effort: an older API or an outage leaves the lease to expire as before.
+    const requeued = await send('worker/release', { submissionId: job.submissionId, leaseToken: job.leaseToken, code: error.message })
+      .then(() => true, () => false);
+    return { ok: false, stage: 'retry-later', submissionId: job.submissionId, code: error.message, requeued };
   } finally {
     const relative = path.relative(base, directory);
     if (!relative || relative.startsWith('..') || path.isAbsolute(relative)) throw new Error('unsafe-cleanup');
@@ -87,8 +94,10 @@ export async function runWithConfig(config, submissionId) {
     checkedAssetCount: job.files.length, manifestSha256: job.manifestSha256 };
   const finish = { submissionId: job.submissionId, leaseToken: job.leaseToken, manifestSha256: job.manifestSha256, passed: result.ok, result: receipt };
   // Same lease receipt is retryable; a stale lease can never finalize a new worker's job.
+  // Back off (1 s, then 3 s) so a brief outage does not discard a finished validation; both fit inside the lease.
   for (let attempt = 0; ; attempt++) {
     try { return await send('worker/finish', finish); } catch (error) { if (attempt >= 2 || error.status < 500) throw error; }
+    await delay(FINISH_RETRY_MS[attempt]);
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

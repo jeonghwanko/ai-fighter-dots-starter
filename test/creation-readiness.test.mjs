@@ -46,6 +46,11 @@ test('before a character starts, a behind checkout fast-forwards and names slow 
   const pinned = await checkKit({ progress: { inProgress: false }, installed, git: fakeGit({ changed: 'vendor/sprite-gen' }).git,
     inspectEngine: engineState(true) });
   assert.deepEqual(pinned.nextCommands, ['npm run sprite:setup', 'npm run sprite:status']);
+  // The forked validator (server/), spawned tools and startup JSON (deploy/) change what this process works with too.
+  for (const file of ['server/ai-fighter-package.mjs', 'deploy/creation-context-source.json', 'tools/ai-fighter/gait.mjs'])
+    assert.equal((await checkKit({ progress: { inProgress: false }, installed, git: fakeGit({ changed: file }).git, inspectEngine: engineState(true) })).restartRequired, true, file);
+  assert.equal((await checkKit({ progress: { inProgress: false }, installed, git: fakeGit({ changed: 'docs/START-HERE.md' }).git,
+    inspectEngine: engineState(true) })).restartRequired, false, 'a docs-only update needs no restart');
 });
 
 test('a character in progress, unknown progress, local edits, a wrong branch or divergence never update', async () => {

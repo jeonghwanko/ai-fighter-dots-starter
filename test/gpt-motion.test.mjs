@@ -59,7 +59,7 @@ test('v5 blocks new uncalibrated calls without blocking legacy recovery', async 
 });
 test('real sprite-gen-agent engine preserves flight and enforces reference gates without generation', {skip:!installed}, async () => {
   assert.equal((await inspectSpriteEngine(spriteRoot)).motion,true);
-  const result=spawnSync(spritePython,['test/gpt_motion_cases.py'],{encoding:'utf8',windowsHide:true,env:{...process.env,PYTHONUTF8:'1'}});
+  const result=spawnSync(spritePython,['test/gpt_motion_cases.py'],{encoding:'utf8',windowsHide:true,timeout:120_000,env:{...process.env,PYTHONUTF8:'1'}});
   assert.equal(result.status,0,result.stdout+'\n'+result.stderr);
   assert.match(result.stderr,/Ran 13 tests/);
 });

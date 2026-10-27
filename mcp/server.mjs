@@ -14,6 +14,7 @@ import { checkReadiness } from './creation-readiness.mjs';
 import { registerConnectionTool } from './connect-oddbout.mjs';
 import { identifier } from './creation-store.mjs';
 import { accountChoice, registerEnvironmentTools } from './creation-environment.mjs';
+import { errorCode } from './error-code.mjs';
 
 const annotations = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 // The required motions, then the optional clips (skill, entrance, victory) a package may add.
@@ -66,7 +67,7 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
   }, async ({ section, motion, group }) => {
     if (section === 'context') {
       try { return respond({ ok: true, stage: 'game-creation-context', data: await fetchCreationContext({ request: contextRequest, group }) }); }
-      catch { return respond({ ok: false, stage: 'game-creation-context', code: 'creation-context-unavailable', pending: ['fetch-current-game-context'] }); }
+      catch (error) { return respond({ ok: false, stage: 'game-creation-context', code: errorCode(error, 'creation-context-unavailable', { prefix: 'creation-context-' }), pending: ['fetch-current-game-context'] }); }
     }
     if (motion && section === 'schema')
       return respond({ ok: true, stage: 'public-contract', data: { motion, clip: schema.properties.clips.properties[motion], definitions: schema.definitions } });
@@ -83,7 +84,7 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
       // Authoring continues offline: the local contract reports registration.available=false, and code says why.
       try { return respond(await remote.request('spec')); }
       catch (error) { return respond({ ok: true, stage: 'public-contract', data: spec,
-        code: /^[a-z0-9-]+$/.test(error.message) ? error.message : 'remote-spec-unavailable' }); }
+        code: errorCode(error, 'remote-spec-unavailable') }); }
     }
     const data = section === 'schema' ? schema : section === 'example' ? example : section === 'guide'
       ? await readFile(new URL('../docs/AUTHORING.md', import.meta.url), 'utf8') : spec;
@@ -97,7 +98,7 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
       const context = await fetchCreationContext({ request: contextRequest });
       const decision = reviewCreationProgress(context, JSON.parse(stateJson));
       return respond({ ok: true, stage: 'group-review', data: decision });
-    } catch { return respond({ ok: false, stage: 'group-review', code: 'creation-context-or-state-invalid' }); }
+    } catch (error) { return respond({ ok: false, stage: 'group-review', code: errorCode(error, 'creation-context-or-state-invalid', { prefix: 'creation-context-' }) }); }
   });
   server.registerTool('validate_fighter_manifest', {
     description: 'Validate raw fighter.json text. Reject duplicates, unknown fields, invalid references and over-budget data. Does not read files or grant registration.',
@@ -132,8 +133,7 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
         login: { root: connectionOptions.root, sessionPath: connectionOptions.sessionPath, probe: connectionOptions.probe,
           checkServer: checkRemote, request: remote?.request } }) });
     } catch (error) {
-      return respond({ ok: false, stage: 'creation-readiness', code: /^[a-z][a-z0-9-]+$/.test(error.message) ? error.message
-        : error.code === 'ENOENT' ? 'record-or-file-not-found' : 'readiness-check-failed' });
+      return respond({ ok: false, stage: 'creation-readiness', code: errorCode(error, 'readiness-check-failed', { missing: 'record-or-file-not-found' }) });
     }
   });
   if (validatePackage) {

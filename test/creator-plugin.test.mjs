@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { cp, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -132,6 +132,33 @@ test('job retries are immutable and execute once, also across new store instance
   assert.equal(calls, 2);
   await f.put(p.outputs[0], 'edited');
   assert.equal((await f.jobs.inspect(sessionId, jobId)).observedStatus, 'outputs-changed');
+});
+
+test('a finished job is recorded even while another process holds the session lock', async t => {
+  const f = await fixture(t), jobId = randomUUID(), p = plan();
+  await f.jobs.prepare(sessionId, 1, jobId, p);
+  const lockFile = await f.store.fileFor(sessionId, 'creation.lock');
+  const result = await runCreationJob(f.store, sessionId, jobId, { execute: async (_root, _engine, argv) => {
+    if (argv[0] === 'workflow') return { code: 0 };
+    await f.put(p.outputs[0], 'synthetic output');
+    // Another MCP process takes the lock as the run ends and keeps it for a moment.
+    await writeFile(lockFile, JSON.stringify({ pid: 0, token: 'other-process' }));
+    setTimeout(() => rm(lockFile, { force: true }), 400);
+    return { code: 0 };
+  } });
+  assert.equal(result.status, 'succeeded');
+  assert.equal((await f.jobs.inspect(sessionId, jobId)).observedStatus, 'succeeded');
+});
+
+test('session history keeps recent entries; the full trail is append-only beside it', async t => {
+  const f = await fixture(t);
+  for (let n = 0; n < 105; n++) await f.change({ type: 'profile', name: `Name ${n}`, description: 'D', feedback: `Edit ${n}` });
+  const state = await f.store.read(sessionId);
+  assert.equal(state.history.length, 100);
+  assert.equal(state.history.at(-1).revision, state.revision);
+  const trail = (await readFile(await f.store.fileFor(sessionId, 'creation-history.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(trail.length, 105);
+  assert.deepEqual(trail.slice(-100), state.history);
 });
 
 test('unknown outcome blocks even a new request ID; resolving requires evidence and never reruns', async t => {
@@ -347,4 +374,56 @@ test('workspace CLI preserves projects and revision guards across calls and reje
   assert.equal((await call('submit_fighter_package', { manifestPath: 'fixture/fighter.json', idempotencyKey: randomUUID() })).isError, true);
   assert.equal((await call('validate_fighter_package', { manifestPath: '../outside/fighter.json' })).isError, true);
   await assert.rejects(creationTool({ workspace: '.' }), /absolute-workspace-required/);
+});
+
+test('a version whose copy was interrupted can be recorded again instead of failing on leftover files', async t => {
+  const f = await fixture(t);
+  const file = await f.put('input/idle-v1.txt', 'new bytes');
+  // What a killed copy leaves: part of the version folder, but no version in the session.
+  await f.put(`output/${sessionId}-work/versions/idle/v1/files/input/idle-v1.txt`, 'partial');
+  await f.put(`output/${sessionId}-work/versions/idle/v1/files/stray.txt`, 'from the interrupted attempt');
+  await f.change({ type: 'version', item: 'idle', version: 'v1', files: [file], note: 'Retry after an interrupted copy' });
+  const state = await f.store.read(sessionId);
+  assert.equal(state.items.idle.versions.v1.files[0].sourcePath, file);
+  const copied = await localPath(f.root, `output/${sessionId}-work/versions/idle/v1/files/input/idle-v1.txt`);
+  assert.equal(await readFile(copied, 'utf8'), 'new bytes');
+  await assert.rejects(readFile(await localPath(f.root, `output/${sessionId}-work/versions/idle/v1/files/stray.txt`)), /ENOENT/);
+  await assert.rejects(f.change({ type: 'version', item: 'idle', version: 'v1', files: [file], note: 'again' }), /version-already-exists/);
+});
+
+// An engine stub that runs until the runner's signal stops it, as executeEngine reports a stop.
+const untilStopped = (started = () => {}) => async (_root, _engine, argv, { signal } = {}) => {
+  if (argv[0] === 'workflow') return { code: 0 };
+  started();
+  return new Promise(resolve => signal.addEventListener('abort', () => resolve({ code: null, signal: 'SIGTERM', stopped: signal.reason }), { once: true }));
+};
+
+test('a running job stops at its time limit and is left unknown, never as a confirmed non-run', async t => {
+  const f = await fixture(t), jobId = randomUUID();
+  await f.jobs.prepare(sessionId, 1, jobId, plan({ timeoutMinutes: 30 }));
+  const result = await runCreationJob(f.store, sessionId, jobId, { execute: untilStopped(), timeoutMs: 50 });
+  assert.deepEqual([result.status, result.reason, result.stage], ['unknown', 'runner-timeout', 'execute']);
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan()), /needs-inspection/);
+});
+
+test('cancelling a running job stops its engine and leaves the generation unknown', async t => {
+  const f = await fixture(t), jobId = randomUUID();
+  await f.jobs.prepare(sessionId, 1, jobId, plan());
+  let started;
+  const running = new Promise(resolve => { started = resolve; });
+  const run = runCreationJob(f.store, sessionId, jobId, { execute: untilStopped(started) });
+  await running;
+  const requested = await f.jobs.cancel(sessionId, jobId);
+  assert.deepEqual([requested.status, requested.stopRequested], ['running', true]);
+  const result = await run;
+  assert.deepEqual([result.status, result.reason], ['unknown', 'stopped-by-request']);
+  await assert.rejects(lstat(await f.jobs.stopFile(sessionId, jobId)), /ENOENT/, 'the stop request is cleared');
+  await assert.rejects(f.jobs.cancel(sessionId, jobId), /only-unstarted-or-running-job-can-be-cancelled/);
+});
+
+test('a stopped step that generates nothing (extract, packing) ends failed', async t => {
+  const f = await fixture(t), extractId = randomUUID();
+  await f.jobs.prepare(sessionId, 1, extractId, plan({ args: ['extract'], workflowArgs: undefined, outputs: [`output/${sessionId}-work/artifacts/idle/v1/frames.png`] }));
+  const extracted = await runCreationJob(f.store, sessionId, extractId, { execute: untilStopped(), timeoutMs: 50 });
+  assert.deepEqual([extracted.status, extracted.reason], ['failed', 'runner-timeout']);
 });

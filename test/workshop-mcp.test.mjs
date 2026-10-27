@@ -36,6 +36,10 @@ test('workshop tools: story from the API and the arena, a named note made with t
     assert.equal((await call('update_fighter_canon', { fighterId: fighter, baseVersion: 0, sheet: { personality: '말없는 수문장', taboos: ['약자를 치지 않는다'] } })).version, 1);
     // A note needs a public name; nickname sets it in the same call. Its maker is the verified client's name, never an argument.
     assert.equal((await call('post_workshop_note', { fighterId: fighter, kind: 'critique', body: '거리 재기만 한다.' })).code, 'nickname-required');
+    // A note or relation the API would refuse is refused before the public name is set (it sets once).
+    assert.equal((await call('post_workshop_note', { fighterId: fighter, kind: 'review', body: '근거 없는 평.', nickname: '실수' })).code, 'invalid-evidence');
+    assert.equal((await call('set_fighter_relation', { action: 'propose', fighterId: fighter, kind: 'rival', nickname: '실수' })).code, 'invalid-relation');
+    assert.equal((await call('post_workshop_note', { fighterId: fighter, kind: 'critique', body: '거리 재기만 한다.' })).code, 'nickname-required');
     const posted = await call('post_workshop_note', { fighterId: fighter, kind: 'proposal', body: '말투를 더 거칠게.', nickname: '감독',
       proposal: { canon: { voice: '반말' } }, evidence: [{ a: 'kuma', b: fighter, seed: 7 }] });
     assert.equal(posted.note.madeWith, 'ChatGPT');

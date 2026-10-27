@@ -60,6 +60,35 @@ test('Postgres enforces open registration, immutability, queue, leases, unique r
   } finally { await db.close(); }
 });
 
+test('an infrastructure hand-back requeues under the caller lease without spending attempts, up to its own limit', async () => {
+  const db = await migratedDatabase();
+  try {
+    const owner = crypto.randomUUID();
+    await db.query('insert into auth.users values($1)', [owner]);
+    await db.query('insert into public.af_creators(owner_id) values($1)', [owner]);
+    const text = JSON.stringify(example), sha = await sha256(new TextEncoder().encode(text)), bytes = example.assets.reduce((sum, a) => sum + a.bytes, 0);
+    const row = (await db.query('select to_jsonb(public.af_create_submission($1,$2,$3,$4,$5)) as value', [owner, crypto.randomUUID(), text, sha, bytes])).rows[0].value;
+    await db.query("update public.af_submissions set status='queued' where id=$1", [row.id]);
+    const value = result => result.rows[0].value;
+    const claim = async () => value(await db.query('select to_jsonb(public.af_claim($1)) as value', [row.id]));
+    const release = (lease, code = 'download-failed') => db.query('select to_jsonb(public.af_release($1,$2,$3)) as value', [row.id, lease, code]).then(value);
+    const first = await claim();
+    assert.equal(first.attempts, 1);
+    await assert.rejects(release(crypto.randomUUID()), /stale-validation/, 'only the current lease holder');
+    await assert.rejects(release(first.lease_token, 'Not A Code'), /invalid-release-code/);
+    const requeued = await release(first.lease_token);
+    assert.deepEqual([requeued.status, requeued.attempts, requeued.infra_failures, requeued.lease_token], ['queued', 0, 1, null]);
+    await assert.rejects(release(first.lease_token), /stale-validation/, 'a released lease cannot be released again');
+    // Ten hand-backs in a row stop a package that crashes the validator every time.
+    for (let n = 2; n < 10; n++) assert.equal((await release((await claim()).lease_token)).status, 'queued');
+    const stopped = await release((await claim()).lease_token, 'validator-timeout');
+    assert.deepEqual([stopped.status, stopped.infra_failures, stopped.validation], ['rejected', 10, { code: 'worker-infrastructure-limit', lastFailure: 'validator-timeout' }]);
+    await db.exec(`set role authenticated; set request.jwt.claim.sub='${owner}';`);
+    await assert.rejects(db.query('select public.af_release($1,$2,$3)', [row.id, crypto.randomUUID(), 'x']), /permission denied/);
+    await db.exec('reset role');
+  } finally { await db.close(); }
+});
+
 test('three fighters share an account; a fourth is refused and updates preserve the other fighters', async () => {
   const db = await migratedDatabase();
   try {

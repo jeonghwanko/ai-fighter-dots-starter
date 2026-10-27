@@ -20,14 +20,18 @@ before(async () => {
 after(async () => { globalThis.fetch = realFetch; await rm(directory, { recursive: true, force: true }); });
 
 /** A claimed job served by a stub API. `download(id)` returns the asset response or throws. */
-async function serve(download, text = manifestText) {
-  const calls = { finish: null, inFlight: 0, maxInFlight: 0 };
+async function serve(download, text = manifestText, { finishFailures = 0, release = 200 } = {}) {
+  const calls = { finish: null, finishAttempts: 0, release: null, inFlight: 0, maxInFlight: 0 };
   const manifestSha256 = await sha256(new TextEncoder().encode(text));
   globalThis.fetch = async (target, init) => {
     const route = String(target);
     if (route.endsWith('/worker/claim')) return Response.json({ ok: true, stage: 'validating', submissionId: crypto.randomUUID(), leaseToken: crypto.randomUUID(),
       manifestText: text, manifestSha256, files: manifest.assets.map(a => ({ ...a, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/${a.id}.webp?token=t` })) });
-    if (route.endsWith('/worker/finish')) { calls.finish = JSON.parse(init.body); return Response.json({ ok: true, stage: calls.finish.passed ? 'registered' : 'rejected' }); }
+    if (route.endsWith('/worker/finish')) {
+      if (calls.finishAttempts++ < finishFailures) return Response.json({ ok: false, code: 'service-unavailable' }, { status: 503 });
+      calls.finish = JSON.parse(init.body); return Response.json({ ok: true, stage: calls.finish.passed ? 'registered' : 'rejected' });
+    }
+    if (route.endsWith('/worker/release')) { calls.release = JSON.parse(init.body); return Response.json({ ok: release === 200, stage: 'requeued' }, { status: release }); }
     const id = new URL(route).pathname.split('/').at(-1).replace('.webp', '');
     calls.inFlight++; calls.maxInFlight = Math.max(calls.maxInFlight, calls.inFlight);
     try { await new Promise(resolve => setTimeout(resolve, 5)); return await download(id); }
@@ -52,9 +56,24 @@ test('infrastructure failures leave the job for a retry instead of rejecting the
   ]) {
     const calls = await serve(download);
     const result = await runOnce(config);
-    assert.deepEqual([result.stage, result.code], ['retry-later', expected]);
+    assert.deepEqual([result.stage, result.code, result.requeued], ['retry-later', expected, true]);
     assert.equal(calls.finish, null);
+    // Handed back under its own lease, so the failure does not spend one of the package's attempts.
+    assert.deepEqual([calls.release.code, calls.release.submissionId.length, calls.release.leaseToken.length], [expected, 36, 36]);
   }
+});
+test('if the hand-back fails, the job still waits for its lease to expire', async () => {
+  const calls = await serve(id => id === 'walk' ? new Response('server error', { status: 500 }) : ok(id), manifestText, { release: 404 });
+  const result = await runOnce(config);
+  assert.deepEqual([result.stage, result.code, result.requeued], ['retry-later', 'download-failed', false]);
+  assert.equal(calls.finish, null);
+});
+test('a brief API outage at finish is retried with backoff instead of discarding the validation', async () => {
+  const calls = await serve(ok, manifestText, { finishFailures: 1 });
+  const started = Date.now();
+  assert.equal((await runOnce(config)).stage, 'registered');
+  assert.equal(calls.finishAttempts, 2);
+  assert.ok(Date.now() - started >= 900, 'waited before retrying');
 });
 test('a manifest that fails the contract is a verdict and is finished as rejected', async () => {
   const broken = JSON.stringify({ ...manifest, localId: 'Not Valid' });

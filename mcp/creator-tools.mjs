@@ -2,6 +2,7 @@ import { z } from 'zod';
 import { fileURLToPath } from 'node:url';
 import { changeSchema, createCreationStore, identifier } from './creation-store.mjs';
 import { createJobStore, jobPlanSchema } from './creation-jobs.mjs';
+import { errorCode } from './error-code.mjs';
 
 export function registerCreatorTools(server, { root, contextRequest, respond, outputSchema, validatePackage }) {
   const store = createCreationStore(root, { contextRequest, validatePackage }), jobs = createJobStore(store);
@@ -13,7 +14,7 @@ export function registerCreatorTools(server, { root, contextRequest, respond, ou
     { description, inputSchema, outputSchema, annotations }, async input => {
       try { return respond({ ok: true, stage: name, data: await fn(input) }); }
       catch (error) { return respond({ ok: false, stage: name,
-        code: /^[a-z][a-z0-9-]+$/.test(error.message) ? error.message : error.code === 'ENOENT' ? 'record-or-file-not-found' : 'invalid-input-or-local-operation-failed' }); }
+        code: errorCode(error, 'invalid-input-or-local-operation-failed', { missing: 'record-or-file-not-found' }) }); }
     });
   register('list_creation_sessions', 'List local fighter projects to resume. Does not create or generate anything.', {}, read, () => store.list());
   register('create_creation_session', 'Start a local project from actual user intent; dialogue-only sessions cannot execute jobs. Does not generate or confirm provider access.',
@@ -33,7 +34,7 @@ export function registerCreatorTools(server, { root, contextRequest, respond, ou
     { ...session, jobId: z.string().uuid().optional() }, read,
     async ({ sessionId, jobId }) => jobId ? jobs.inspect(sessionId, jobId)
       : Promise.all((await jobs.list(sessionId)).map(job => jobs.inspect(sessionId, job.jobId))));
-  register('cancel_creation_job', 'Cancel an unstarted reservation, for example after changing its inputs. Does not stop a running provider request or erase its evidence.',
+  register('cancel_creation_job', 'Cancel an unstarted reservation, for example after changing its inputs. For a running job, ask its runner to stop the engine (within seconds); the job then ends unknown for generation, since a provider request may already be billed, or failed for packing. Never erases evidence or reruns.',
     job, { ...write, idempotentHint: true }, ({ sessionId, jobId }) => jobs.cancel(sessionId, jobId));
   // Readiness reads the same records to tell whether a character is already in progress.
   const stores = { store, jobs };

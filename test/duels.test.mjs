@@ -1,25 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,readdir} from 'node:fs/promises';
-import {PGlite} from '@electric-sql/pglite';
 import {createHandler,sha256} from '../api/handler.mjs';
+import {applyMigration,migrationNames,supabasePlatform} from './helpers/fighter-database.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with {type:'json'};
 
 /** Two duel-approved fighters in a migrated PGlite, and a db adapter shaped like the Supabase client. */
 async function duelFixture() {
-  const sql=new PGlite();
-  await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin;
-    create schema auth; create table auth.users(id uuid primary key,email text);
-    create function auth.uid() returns uuid language sql as 'select null::uuid'; create function auth.jwt() returns jsonb language sql as 'select null::jsonb';
-    create table auth.sessions(id uuid primary key,user_id uuid,oauth_client_id uuid,not_after timestamptz,scopes text);
-    create table auth.oauth_clients(id uuid primary key,deleted_at timestamptz);
-    create table auth.oauth_consents(user_id uuid,client_id uuid,revoked_at timestamptz,scopes text);
-    grant usage on schema auth to authenticated,service_role; create schema storage; create schema cron; create function cron.schedule(text,text,text) returns bigint language sql as 'select 1::bigint';
-    create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
-    create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
-    grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
-  const dir=new URL('../supabase/migrations/',import.meta.url);
-  for(const file of (await readdir(dir)).filter(x=>x.endsWith('.sql') && !x.includes('dispatch')).sort()) await sql.exec(await readFile(new URL(file,dir),'utf8'));
+  // The shared platform stand-in, so a migration needing a new auth column (client_name) is added once.
+  const sql=await supabasePlatform();
+  for(const name of await migrationNames()) await applyMigration(sql,name);
   const ids=[]; const manifestText=JSON.stringify(example),hash=await sha256(new TextEncoder().encode(manifestText));
   for(const name of ['A','B']) {
     const owner=crypto.randomUUID(),sub=crypto.randomUUID(),id=crypto.randomUUID();ids.push(id);
@@ -135,5 +124,22 @@ test('a page plays the engine it names when the server keeps it; any other name 
     const key=crypto.randomUUID(),body=JSON.stringify({a:ids[0],b:ids[1],idempotencyKey:key});
     await handle(new Request('https://test/ai-fighter/duels?engine=test-v0',{method:'POST',body}));
     assert.equal(await engineOf(await handle(new Request('https://test/ai-fighter/duels',{method:'POST',body}))),'test-v0');
+  } finally {await sql.close();}
+});
+
+test('an abandoned reservation stops holding the duel budget; a recent unfinished one still counts',async t=>{
+  // The pair budget counts today's matches (UTC); a six-minute-old reservation is still today only after 00:06.
+  const now=new Date();
+  if(now.getUTCHours()===0 && now.getUTCMinutes()<6) return t.skip('within six minutes of UTC midnight');
+  const {sql,ids}=await duelFixture();
+  try {
+    const reserve=()=>sql.query('select (af_reserve_duel($1,$2,$3,$4)).id',[crypto.randomUUID(),ids[0],ids[1],'test-v1']);
+    // Twenty reservations whose Edge run was killed before it completed or failed.
+    for(let i=0;i<20;i++) await reserve();
+    await assert.rejects(reserve(),/duel-budget/,'in flight within five minutes: the pair budget is held');
+    await sql.query("update af_duels set created_at=now()-interval '6 minutes'");
+    await reserve(); // Abandoned after five minutes: no longer in flight.
+    assert.equal((await sql.query('select count(*)::int as n from af_duels where result is null and failed_at is null')).rows[0].n,21,
+      'abandoned rows are kept for their key retries, only uncounted');
   } finally {await sql.close();}
 });

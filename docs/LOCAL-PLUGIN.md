@@ -152,10 +152,11 @@ does not suffice. Resolution is labeled agent-reported and never validates the e
 reruns a job. Inspect and record recovered output instead of generating again. To revise an unstarted
 plan after a session/input change, cancel it and reserve a new ID.
 
-If a process dies while holding `creation.lock`, reads work but mutations report
-`session-busy-or-interrupted-lock`. Inspect its PID/time and existing jobs/output. Only after confirming
-there is no active writer, remove that exact lock file. Never erase the session, jobs or claim markers,
-or infer a failed generation from an interrupted lock.
+Calls on one session queue for `creation.lock`; another process's writer is waited for up to 10 seconds,
+then mutations report `session-busy-or-interrupted-lock` (retry later). The holder refreshes the lock while it
+works, so a lock left by a killed process goes stale after 60 seconds and the next call reclaims it; do not
+delete lock files by hand. Never erase the session, jobs or claim markers, or infer a failed generation from an
+interrupted lock.
 
 ## Verification
 

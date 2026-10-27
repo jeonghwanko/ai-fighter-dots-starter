@@ -4,10 +4,15 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+// The game's Edge deploy (crashbang-heroes `npm run fighter:edge`) stages this file alone, so it imports no other
+// repository module; scripts/import-graph.mjs reuses this parser for the plugin bundle (test/edge-bundle.test.mjs).
+const SPECIFIER = /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|(?:^|[\s;])import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+/** Module specifiers a source imports: static, re-exported, side-effect and literal dynamic imports. */
+export const importSpecifiers = source => [...source.matchAll(SPECIFIER)].map(match => match[1] ?? match[2] ?? match[3]);
+
 const REPOSITORY = fileURLToPath(new URL('../', import.meta.url));
 const ENTRY = 'supabase/functions/ai-fighter/index.ts';
 const IMPORT_MAP = 'supabase/functions/ai-fighter/deno.json', LOCK = 'supabase/functions/ai-fighter/deno.lock';
-const STATIC_IMPORT = /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]/g;
 
 /**
  * Repository-relative files reachable from the Edge entry. A bare specifier must be in the Deno import map:
@@ -21,7 +26,7 @@ export async function edgeFiles({ root = REPOSITORY, entry = ENTRY, importMap = 
     if (seen.has(file)) continue;
     seen.add(file);
     if (file.endsWith('.json')) continue;
-    for (const [, specifier] of (await readFile(path.join(root, file), 'utf8')).matchAll(STATIC_IMPORT)) {
+    for (const specifier of importSpecifiers(await readFile(path.join(root, file), 'utf8'))) {
       if (!specifier.startsWith('.')) {
         if (!(specifier in mapped)) throw new Error(`${file} imports ${specifier}, which the Edge import map does not provide`);
         continue;

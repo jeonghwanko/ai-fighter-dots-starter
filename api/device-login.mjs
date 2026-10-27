@@ -1,4 +1,5 @@
 import { Problem, bearerToken, jsonResponse, readBody, sha256, verifiedUserId } from './http.mjs';
+import { CLIENT_LIMITS } from './client-limit.mjs';
 
 // Device-connection sign-in (RFC 8628 style) for a workspace the user's browser cannot reach.
 //   POST /device-logins          workspace, no auth: secret deviceCode + public userCode
@@ -26,7 +27,7 @@ function userCode(random) {
   return code;
 }
 
-export function createDeviceLoginHandler({ db, creatorLink = null, random = n => crypto.getRandomValues(new Uint8Array(n)) }) {
+export function createDeviceLoginHandler({ db, creatorLink = null, limiter = null, random = n => crypto.getRandomValues(new Uint8Array(n)) }) {
   async function call(name, args) {
     const { data, error } = await db.rpc(name, args);
     if (error) {
@@ -44,7 +45,10 @@ export function createDeviceLoginHandler({ db, creatorLink = null, random = n =>
     } catch { /* below */ }
     throw new Problem(400, 'invalid-body');
   }
-  async function start() {
+  async function start(request) {
+    // Unauthenticated: one caller is braked by a keyed hash of their address, under the global 120 per 10 minutes.
+    const { bucket, limit, windowSeconds } = CLIENT_LIMITS.deviceLogin;
+    if (limiter && !await limiter.allow(request, bucket, limit, windowSeconds)) throw new Problem(429, 'rate-limit');
     const deviceCode = `afd_${Array.from(random(32), b => b.toString(16).padStart(2, '0')).join('')}`;
     const hash = await sha256(new TextEncoder().encode(deviceCode));
     for (let attempt = 0; ; attempt++) {
@@ -87,7 +91,7 @@ export function createDeviceLoginHandler({ db, creatorLink = null, random = n =>
       if (!['device-logins', 'device-logins/approve', 'device-logins/token'].includes(route)) return reply({ ok: false, code: 'not-found' }, 404);
       if (request.method === 'OPTIONS' && cors) return reply({ ok: true });
       if (request.method !== 'POST') return reply({ ok: false, code: 'method-not-allowed' }, 405);
-      if (route === 'device-logins') return reply(await start());
+      if (route === 'device-logins') return reply(await start(request));
       if (route === 'device-logins/approve') return reply(await approve(request));
       const [value, status] = await token(request);
       return reply(value, status);

@@ -4,9 +4,13 @@ import { cp, lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { localPath } from '../mcp/creation-store.mjs';
+import { importClosure, packageName } from './import-graph.mjs';
+import { bootstrapPython } from './bootstrap-python.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
+// Entry points, data and docs. Modules they import are added from the import graph (`runtimeFileList`),
+// so a new relative import cannot be left out of the kit (0.5.0 shipped without tools/ai-fighter/projected-ground.mjs).
 const runtimeFiles = [
   'LICENSE', 'AGENTS.md', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'api/runtime-fetch.mjs', 'server/ai-fighter-package.mjs',
   'deploy/creation-context-source.json', 'deploy/creator-site.json',
@@ -20,6 +24,9 @@ const runtimeFiles = [
   'docs/FOOT-EVIDENCE.md', 'docs/LOCAL-PLUGIN.md', 'docs/GAME-CREATION-CONTEXT.md', 'docs/OPEN-REGISTRATION.md',
   'docs/EXECUTION-HOST.md', 'docs/CONNECTION-READINESS.md', 'docs/ODDBOUT-PLUGIN.md',
 ];
+const runtimeDirectories = ['mcp', 'contracts/ai-fighter'];
+// The cloud MCP and its file-input probe run only in the Edge function (supabase/functions/ai-fighter-mcp) and import the server API.
+const edgeOnlyFiles = ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs'];
 const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
   'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run', 'creation:tool'];
 
@@ -35,7 +42,8 @@ function run(command, args, { cwd = root, capture = false } = {}) {
     let stdout = '', stderr = '';
     if (capture) { child.stdout.on('data', chunk => stdout += chunk); child.stderr.on('data', chunk => stderr += chunk); }
     child.once('error', reject);
-    child.once('exit', code => code === 0 ? resolve(stdout) : reject(Error(`${path.basename(command)} exited ${code}: ${stderr.trim()}`)));
+    // 'close', not 'exit': captured output is complete only after the pipes close (git ls-files drives the file list).
+    child.once('close', code => code === 0 ? resolve(stdout) : reject(Error(`${path.basename(command)} exited ${code}: ${stderr.trim()}`)));
   });
 }
 async function files(directory, prefix = '') {
@@ -57,6 +65,34 @@ async function copy(relative, sourceRoot, targetRoot) {
   await cp(source, target, { errorOnExist: true, force: false });
 }
 
+/** Every repository file the runtime ships: the declared files and directories plus their import closure. */
+export async function runtimeFileList({ sourceRoot = root } = {}) {
+  const declared = [...runtimeFiles];
+  // Tracked files only: editor leftovers and untracked experiments in these directories never ship.
+  const tracked = await run('git', ['ls-files', '-z', '--', ...runtimeDirectories], { cwd: sourceRoot, capture: true });
+  declared.push(...tracked.split('\0').filter(Boolean));
+  const { files: closure } = await importClosure(sourceRoot, declared.filter(file => !edgeOnlyFiles.includes(file)));
+  const leaked = closure.filter(file => edgeOnlyFiles.includes(file));
+  if (leaked.length) throw Error(`The local runtime imports Edge-only modules: ${leaked.join(', ')}`);
+  return closure;
+}
+/** The kit must be reproducible from its recorded commit: refuse uncommitted, untracked or deleted shipped paths. */
+export async function assertCommitted(paths, { sourceRoot = root } = {}) {
+  const dirty = (await run('git', ['status', '--porcelain', '--', ...paths], { cwd: sourceRoot, capture: true })).trimEnd();
+  if (dirty) throw Error(`Commit runtime changes before bundling:\n${dirty}`);
+}
+/**
+ * Fails unless every module in a built runtime resolves there: relative imports to bundled files,
+ * bare imports to the runtime package.json dependencies. Runs on the copied files, so it checks what ships.
+ */
+export async function checkRuntimeImports(runtime) {
+  const { dependencies = {} } = JSON.parse(await readFile(path.join(runtime, 'package.json'), 'utf8'));
+  const scripts = (await files(runtime)).filter(file => !file.startsWith('vendor/') && /\.(?:mjs|js)$/.test(file));
+  const { bare } = await importClosure(runtime, scripts);
+  const missing = bare.map(packageName).filter(name => name && !(name in dependencies));
+  if (missing.length) throw Error(`Runtime imports packages it does not depend on: ${[...new Set(missing)].join(', ')}`);
+}
+
 export async function buildPluginBundle(destination) {
   if (!destination.startsWith('output/')) throw Error('plugin-output-must-be-under-output');
   const out = await localPath(root, destination);
@@ -71,13 +107,14 @@ export async function buildPluginBundle(destination) {
     throw Error('Local sprite-gen edits cannot be bundled; commit them to sprite-gen-agent and move the pin.');
   const vendorFiles = (await run('git', ['ls-files', '-z'], { cwd: vendor, capture: true })).split('\0').filter(Boolean);
   if (!vendorFiles.includes('LICENSE') || !vendorFiles.includes('NOTICE')) throw Error('Missing upstream license or notice');
+  const shipped = await runtimeFileList();
+  await assertCommitted([...shipped, 'package.json', 'plugins/ai-fighter']);
+  const sourceCommit = (await run('git', ['rev-parse', 'HEAD'], { capture: true })).trim();
   const plugin = path.join(out, 'plugins', 'ai-fighter');
   await mkdir(path.dirname(plugin), { recursive: true });
   await cp(path.join(root, 'plugins', 'ai-fighter'), plugin, { recursive: true, force: false, errorOnExist: true });
   const runtime = path.join(plugin, 'runtime'); await mkdir(runtime);
-  for (const file of runtimeFiles) await copy(file, root, runtime);
-  for (const directory of ['mcp', 'contracts/ai-fighter'])
-    for (const file of await files(path.join(root, directory))) await copy(`${directory}/${file}`, root, runtime);
+  for (const file of shipped) await copy(file, root, runtime);
   const omittedVendorFiles = [];
   for (const file of vendorFiles) {
     if (includeVendorFile(file)) await copy(file, vendor, path.join(runtime, 'vendor', 'sprite-gen'));
@@ -88,7 +125,10 @@ export async function buildPluginBundle(destination) {
   }
   const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   pkg.scripts = Object.fromEntries(runtimeScripts.map(key => [key, pkg.scripts[key]]));
+  // The runtime reports the kit's version (plugin.json), not a separate package number.
+  pkg.version = JSON.parse(await readFile(path.join(root, 'plugins', 'ai-fighter', 'plugin.json'), 'utf8')).version;
   await writeFile(path.join(runtime, 'package.json'), JSON.stringify(pkg, null, 2) + '\n', { flag: 'wx' });
+  await checkRuntimeImports(runtime);
   // Source-only: native Node packages are installed in the user's writable runtime on that host.
   // Bundling Windows node_modules would break Dots/Linux and make the plugin desktop-only again.
   const hashes = {};
@@ -103,12 +143,12 @@ export async function buildPluginBundle(destination) {
       source: { source: 'local', path: './plugins/ai-fighter' },
       policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' }, category: 'Productivity' }] }, null, 2) + '\n');
   const zip = path.join(out, `${metadata.name}-${metadata.version}.zip`);
-  const python = process.env.AI_FIGHTER_BOOTSTRAP_PYTHON || 'python';
+  const python = bootstrapPython();
   await run(python, [path.join(root, 'scripts', 'zip-plugin.py'), plugin, zip]);
   const zipBytes = await readFile(zip);
   if (zipBytes.length > 20_000_000) throw Error('Source bundle exceeds the 20 MB distribution budget; review contents before publishing.');
   const report = { version: metadata.version, distribution: 'source', builtOn: `${process.platform}-${process.arch}`, plugin, marketplace: out,
-    zip, bytes: zipBytes.length, sha256: sha(zipBytes), runtimeFiles: Object.keys(hashes).length, spriteGenCommit: pinned, spriteGenSource,
+    zip, bytes: zipBytes.length, sha256: sha(zipBytes), runtimeFiles: Object.keys(hashes).length, sourceCommit, spriteGenCommit: pinned, spriteGenSource,
     bundlePolicy, omittedVendorFiles,
     listingURLs: Object.fromEntries(['websiteURL', 'supportURL', 'privacyPolicyURL', 'termsOfServiceURL']
       .map(key => [key, metadata.extensions['com.openai'].interface[key]])),

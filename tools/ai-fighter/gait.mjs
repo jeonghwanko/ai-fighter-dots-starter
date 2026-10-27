@@ -4,6 +4,7 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
 import { inspectProjectedGround } from './projected-ground.mjs';
+import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
 export const digest = value => createHash('sha256').update(value).digest('hex');
 export const round = n => Math.round(n * 1000) / 1000;
@@ -40,8 +41,22 @@ export async function loadSequence(source, base = '.') {
     durations = state.durations_ms ?? cells.map(() => Math.round(1000 / state.fps));
   }
   if (!cells.length || durations?.length !== cells.length || !durations.every(positive)) throw Error('Invalid frame timing');
-  const frames = [];
+  // Decode each sheet once and copy cells out of it (a 16-frame walk used to decode its sheet 16 times). The bytes are
+  // the same as a per-cell extract, so reviews bound to sequenceHash still verify; other pixel formats keep the extract.
+  const pages = new Map(), frames = [];
+  const page = image => {
+    if (!pages.has(image)) pages.set(image, sharp(path.resolve(path.dirname(file), image)).ensureAlpha().raw().toBuffer({ resolveWithObject: true }));
+    return pages.get(image);
+  };
   for (const cell of cells) {
+    const { data: sheet, info: sheetInfo } = await page(cell.image);
+    const inside = cell.x >= 0 && cell.y >= 0 && cell.x + cell.w <= sheetInfo.width && cell.y + cell.h <= sheetInfo.height;
+    if (sheetInfo.channels === 4 && sheet.length === sheetInfo.width * sheetInfo.height * 4 && inside) {
+      const data = Buffer.allocUnsafe(cell.w * cell.h * 4);
+      for (let y = 0; y < cell.h; y++) sheet.copy(data, y * cell.w * 4, ((cell.y + y) * sheetInfo.width + cell.x) * 4, ((cell.y + y) * sheetInfo.width + cell.x + cell.w) * 4);
+      frames.push({ width: cell.w, height: cell.h, data });
+      continue;
+    }
     const { data, info } = await sharp(path.resolve(path.dirname(file), cell.image))
       .extract({ left: cell.x, top: cell.y, width: cell.w, height: cell.h }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
     frames.push({ width: info.width, height: info.height, data });
@@ -65,7 +80,7 @@ export function walkPlan() {
 }
 export function validatePlan(plan, sequence) {
   if (plan.version !== 1 || !['walk', 'run'].includes(plan.motion) || !['right', 'left'].includes(plan.facing)) throw Error('Invalid gait plan');
-  const count = plan.motion === 'walk' ? 16 : 12;
+  const count = spec.motions[plan.motion].frames;
   if (!Array.isArray(plan.phases) || plan.phases.length !== count || plan.phases.some((p, i) =>
     p.index !== i || p.phase !== i / count || !Array.isArray(p.support) || new Set(p.support).size !== p.support.length ||
     p.support.some(f => !['near', 'far'].includes(f)) || (plan.motion === 'walk' && !p.support.length))) throw Error('Invalid gait phases');
@@ -79,7 +94,7 @@ export function validatePlan(plan, sequence) {
 export function inspectGeometry(sequence, plan) {
   validatePlan(plan, sequence);
   const errors = [], warnings = [], frames = sequence.frames.map((frame, index) => ({ index, bounds: alphaBounds(frame), sha256: digest(frame.data) }));
-  const expected = plan.motion === 'walk' ? 16 : 12;
+  const expected = spec.motions[plan.motion].frames;
   if (frames.length !== expected) errors.push({ code: 'FRAME_COUNT', actual: frames.length, expected });
   if (new Set(frames.map(f => f.sha256)).size !== frames.length) errors.push({ code: 'DUPLICATE_FRAME' });
   for (const frame of frames) {
@@ -198,7 +213,7 @@ export async function commonGameRequest(config, base) {
     if (sequence.frames.some(f => f.width !== frame.width || f.height !== frame.height)) throw Error('Coordinate space mismatch: ' + asset.id);
     if (!asset.source.state) throw Error('Common request expects a sprite-gen manifest state');
     assets.push({ id: asset.id, source: asset.source.file, state: asset.source.state, source_body_height: bodyHeight,
-      display: { body_height: 400 }, resample: config.resample ?? 'lanczos' });
+      display: { body_height: spec.input.bodyHeight }, resample: config.resample ?? 'lanczos' });
   }
   return { request: { version: 1, assets }, referenceBodyHeight: bodyHeight, referenceSequenceSha256: reference.sha256,
     note: 'One measured neutral reference scale. Shared canvas is checked; anatomical scale still needs visual review.' };

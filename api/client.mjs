@@ -1,7 +1,8 @@
-import { readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createClient } from '@supabase/supabase-js';
 import { transportCode } from './connection-errors.mjs';
 import { runtimeFetch } from './runtime-fetch.mjs';
+import { withFileLock } from '../mcp/file-lock.mjs';
 
 export function validProjectUrl(url) {
   return typeof url === 'string' && /^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(url);
@@ -35,40 +36,27 @@ function tokenSubject(token) {
 }
 const REFRESH_MARGIN_MS = 60000, LOCK_STALE_MS = 30000, LOCK_WAIT_MS = 15000;
 
-/** Run `task` while holding `<configPath>.lock`. Only one process refreshes or replaces a session file at a time. */
-export async function withSessionLock(configPath, task) {
-  const lock = `${configPath}.lock`, started = Date.now();
-  for (;;) {
-    try { await writeFile(lock, String(process.pid), { flag: 'wx', mode: 0o600 }); break; }
-    catch (error) {
-      if (error.code !== 'EEXIST') throw error;
-      const modified = await stat(lock).then(info => info.mtimeMs, () => null);
-      if (modified !== null && Date.now() - modified > LOCK_STALE_MS) {
-        // Serialize stale-lock reclamation: two waiters must not delete a freshly acquired lock.
-        const reaper = `${lock}.reap`;
-        const claimed = await writeFile(reaper, String(process.pid), { flag: 'wx', mode: 0o600 })
-          .then(() => true, error => { if (error.code === 'EEXIST') return false; throw error; });
-        if (claimed) {
-          try {
-            const current = await stat(lock).then(info => info.mtimeMs, () => null);
-            if (current !== null && Date.now() - current > LOCK_STALE_MS) await rm(lock, { force: true });
-          } finally { await rm(reaper, { force: true }); }
-          continue;
-        }
-      }
-      if (Date.now() - started > LOCK_WAIT_MS) throw new Error('session-refresh-busy');
-      await new Promise(resolve => setTimeout(resolve, 100));
-    }
-  }
-  try { return await task(); } finally { await rm(lock, { force: true }); }
-}
+/**
+ * Run `task` while holding `<configPath>.lock`. Only one process refreshes or replaces a session file at a time.
+ * The same lock as creation sessions (mcp/file-lock.mjs): queued in this process, a killed holder's lock reclaimed once stale.
+ */
+export const withSessionLock = (configPath, task) =>
+  withFileLock(`${configPath}.lock`, task, { busy: 'session-refresh-busy', waitMs: LOCK_WAIT_MS, staleMs: LOCK_STALE_MS });
 /** Replace the session file atomically: a partial write would lose the only valid session. Call under withSessionLock. */
 export async function writeSessionFile(configPath, config) {
   const temporary = `${configPath}.${process.pid}.tmp`;
   try {
     await rm(temporary, { force: true });
     await writeFile(temporary, JSON.stringify(config, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
-    await rename(temporary, configPath);
+    // Windows virus scanners can briefly hold the just-written file; retry the same rename. Giving up here after a
+    // token refresh would lose the rotated refresh token, the only valid one (creation-store atomicJson does the same).
+    for (let attempt = 0; ; attempt++) {
+      try { await rename(temporary, configPath); break; }
+      catch (error) {
+        if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= 6) throw error;
+        await new Promise(resolve => setTimeout(resolve, 25 * (attempt + 1)));
+      }
+    }
   } catch (error) { await rm(temporary, { force: true }); throw error; }
 }
 
