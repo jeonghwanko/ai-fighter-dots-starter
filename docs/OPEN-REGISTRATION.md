@@ -3,9 +3,11 @@
 Google 로그인 → Dot에서 제작 → 업로드 → 자동 파일 검사 → 등록·미리보기·게임 이용 순서다.
 베타 초대, 신청 심사, 별도 게임 사용 승인은 필요하지 않다. 과거 초대 거절·만료도 가입과 업로드를 막지 않는다.
 
-`deploy/creator-site.json`의 공개 설정을 읽고 홈페이지와 같은 Google 계정으로 로그인한다.
-로그인 도구에는 `apiBase`의 origin을 URL로, `publishableKey`를 키로 전달한다.
-생성은 사용자 자신의 생성 계정으로 로컬에서 진행한다. 추가 비용이나 제공자 변경은 먼저 확인한다.
+ODDBOUT 통합 플러그인은 연결된 Google 계정을 PC와 Dots 등록에 공통으로 사용한다.
+`get_profile`과 클라우드 `check_creation_readiness`로 확인하며 작업 공간의 별도 로그인을 요구하지 않는다.
+예전 독립 CLI만 `deploy/creator-site.json`의 `apiBase` origin과 `publishableKey`로 로그인한다.
+생성은 사용자 자신의 생성 계정으로 PC 또는 사용자별 Dots 작업 공간에서 진행한다.
+추가 비용이나 제공자 변경은 먼저 확인한다. [통합 플러그인 안내](ODDBOUT-PLUGIN.md)를 참고한다.
 
 파일 형식·해시·용량·전체 WebP 디코딩 검사는 계속 수행한다. 실패한 파일은 오류를 고쳐 다시 제출한다.
 `registered`, `fighterId`, `runtimeApproved: true`를 확인하고 홈페이지에서 실제 애니메이션을 확인한다.

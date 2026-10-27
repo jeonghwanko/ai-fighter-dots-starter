@@ -1,4 +1,8 @@
-# ODDBOUT · AI Fighter Creator
+# ODDBOUT
+
+**ODDBOUT 플러그인 하나로 제작·검토·등록을 진행합니다.** 사용자 PC 또는 지원되는 Dots 작업 공간에서
+제작하고 같은 연결 계정으로 등록합니다. 별도 AI Fighter Creator 플러그인은 필요하지 않습니다.
+[통합 플러그인 설치·전환 안내](docs/ODDBOUT-PLUGIN.md)를 참고하세요.
 
 [English](README.md) | **한국어**
 

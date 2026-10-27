@@ -1,4 +1,68 @@
-# AI Fighter Creator distribution
+# ODDBOUT distribution
+
+**Current release: 0.4.0.** Use [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md). `plugin:bundle` now produces a
+source-only ODDBOUT ZIP with the creation skill and existing cloud account mapping; it no longer embeds
+Windows node_modules or starts a local MCP. Install locked dependencies in the extracted writable runtime.
+The 0.2.x Windows bundle details below are historical and do not describe the current bundle or install ID.
+
+## Current source distribution and VM delivery
+
+The source bundle omits only `vendor/sprite-gen/docs/assets/` documentation demonstration media.
+The pinned upstream source, package assets, workflow text and Apache-2.0 LICENSE/NOTICE remain included.
+Upstream Markdown image links into the omitted directory are not offline previews; use the upstream
+repository at the pinned revision if those examples are needed. The builder records every omission,
+recomputes the runtime manifest, and enforces a 20 MB bundle budget (a product budget, not a universal ChatGPT limit).
+
+```sh
+npm run plugin:bundle -- output/new-source-bundle
+npm run kit:release -- output/new-source-bundle output/new-kit-release
+```
+
+`kit:release` verifies the actual ZIP and produces an additive `public/creator-kit/<version>/<content-id>/`
+tree with three files: the ZIP, `release.json`, and `fetch-creator-kit.py`. The private `release-report.json`
+contains the reviewed manifest/helper hashes, a download-only network plan, and explicit untested states.
+Paths include both archive and helper content identity. Nothing is published, installed or logged in by this command.
+Do not use the whole-site `site:publish` command with this partial tree; it does not accept partial kit releases.
+Publishing must preserve the existing site and older immutable release paths, then verify all three public files.
+
+Use the additive publisher after reviewing the manifest hash. The first command performs local and remote
+read-only checks. Supply a fresh attempt directory for each run; preserve failed/unknown attempts and inspect
+the remote ref before retrying. Publication is authorized separately from artifact preparation.
+
+```sh
+node scripts/publish-creator-kit.mjs output/new-kit-release output/kit-publish-check <reviewed-manifest-sha256>
+node scripts/publish-creator-kit.mjs output/new-kit-release output/kit-publish-run <reviewed-manifest-sha256> --publish
+```
+
+The publisher uses the current Pages tree as its base, verifies all existing Git objects remain unchanged
+(apart from parent directory trees required for the new path), and adds only the three reviewed files.
+It rejects immutable-path collisions and concurrent branch changes, never forces a ref, and verifies actual
+public bytes plus the unchanged site entry documents after publication. It leaves the site's `deployment.json`
+unchanged; `publication-result.json` records this separate kit release. A later whole-site publisher restores
+the existing `creator-kit/` tree after verifying the new site's own artifact and blocks staged changes or deletions
+to those releases. Do not combine a new kit payload into a whole-site artifact.
+
+Use a trusted copy of `scripts/fetch-creator-kit.py` (or verify a downloaded helper against the independently
+reviewed report before executing it). The agent, not the user, supplies actual reviewed hashes and paths:
+
+```sh
+python3 fetch-creator-kit.py download --manifest-url <reviewed-release-url> --manifest-sha256 <reviewed-sha256> --destination <new-absolute-directory>
+```
+
+For offline validation, replace `--manifest-url` with `--manifest-file <local-release.json>` and add
+`--archive <local-zip>`. The script requires HTTPS on the approved origin for network reads, preserves
+host proxy/CA policy, rejects redirects and unsafe archives, and never overwrites an existing destination.
+It verifies both complete archive identity and runtime inventory before extraction. Failure records remain
+in the attempt directory. It performs no dependency installation, login, generation, registration or policy changes.
+
+The ZIP has `launcher.mjs` at its root; this helper extracts it as `<destination>/plugin/launcher.mjs`.
+Initialize a separate per-user runtime/workspace and run `--status`, then install locked dependencies explicitly.
+The existing `check-plugin-bundle.mjs <destination>/plugin` exercises an isolated install without generation.
+Windows/local extraction is not evidence of a successful Dots VM download or Library recovery.
+See [ENVIRONMENT-ONBOARDING.md](ENVIRONMENT-ONBOARDING.md#library-전송-장애-이후의-전달-계획-2026-10-26)
+for the phased plan and the separate, not-yet-implemented private user-file path.
+
+## Previous Windows-only distribution (0.2.x–0.3.x)
 
 The local checkout plugin is installed separately from a public directory listing. Version 0.2.0 adds
 a self-contained **Windows x64 Node MCP bundle**. Node.js 22.12+ must be on PATH. Python 3.11+ and

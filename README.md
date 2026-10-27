@@ -1,4 +1,4 @@
-# ODDBOUT · AI Fighter Creator
+# ODDBOUT
 
 **English** | [한국어](README.ko.md)
 
@@ -18,6 +18,10 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 The kit includes sprite-gen, creation workflows, validation tools, and an MCP server for connecting your assistant to the game. The game engine is maintained separately.
 
 ## Create your fighter
+
+Use the **ODDBOUT** plugin for creation, review and registration from a PC or a supported Dots workspace.
+The same connected ODDBOUT account registers the result in either environment. A second AI Fighter Creator
+plugin is no longer required. See [the unified plugin and migration guide](docs/ODDBOUT-PLUGIN.md).
 
 Send the [start link](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md) to a new chat with an assistant that can run local commands and access files, such as a supported Dot, Codex, or Claude setup. Add an idea or a reference image. For example:
 
@@ -68,7 +72,7 @@ Setup downloads the pinned sprite-gen source into this checkout and installs it 
 
 To connect the tools, follow the [local Codex plugin guide](docs/LOCAL-PLUGIN.md). For a manual MCP connection, run `node scripts/print-install.mjs` and follow the printed installation command. Other local hosts can connect `mcp/stdio.mjs` with `AI_FIGHTER_ROOT` set to the checkout.
 
-The [Windows bundle guide](docs/PLUGIN-DISTRIBUTION.md) covers a portable package. A local plugin installation does not mean the plugin is listed in a public directory.
+The [unified plugin guide](docs/ODDBOUT-PLUGIN.md) covers the portable source package. A local plugin installation does not mean the plugin is installed in Dots or listed in a public directory.
 
 ## Register and play
 

@@ -1,8 +1,13 @@
-# AI Fighter local Codex plugin
+# ODDBOUT plugin and workspace tools
 
-For a standalone desktop ZIP and public submission prerequisites, see [PLUGIN-DISTRIBUTION.md](PLUGIN-DISTRIBUTION.md).
+**0.4.0 uses one ODDBOUT plugin for PC and supported Dots workspaces.** Follow
+[ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md) for installation and migration. Registration uses the existing
+connected ODDBOUT account. The project tool APIs below are also available through `creation:tool`;
+they do not require a second local MCP plugin. The old stdio integration remains for compatibility.
 
-This version packages the creation skill and existing local MCP server. It adds persistent projects,
+For the source ZIP and distribution boundaries, see [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md).
+
+This version packages the creation skill, cloud connection and workspace command tools. It retains persistent projects,
 immutable version snapshots, group gates, and a managed CLI job ledger. Generation, gait inspection
 and packaging continue to use the pinned sprite-gen and existing fighter tools. Credentials are not
 included in the plugin; each creator uses their own accounts.
@@ -14,28 +19,29 @@ From a checkout with Node 22.12+ and `npm ci --ignore-scripts` completed:
 ```sh
 npm run plugin:build
 codex plugin marketplace add /absolute/path/printed/as/marketplace
-codex plugin add ai-fighter-creator@ai-fighter-local
+codex plugin add oddbout@ai-fighter-local
 ```
 
 The builder prints the paths and exact marketplace arguments. On Windows, quote the printed path in
-PowerShell. The last command installs the plugin; alternatively install it from **AI Fighter Local** in
-the desktop Plugins Directory. Open a new local chat. Restart the desktop app if it has not appeared. Invoke
+PowerShell. The last command installs the plugin; alternatively install it from **ODDBOUT** in
+the desktop Plugins Directory. Open a new chat. Restart the desktop app if it has not appeared. Invoke
 `$create-fighter`, or describe the fighter you want to make.
 
-The generated marketplace is under `output/ai-fighter-marketplace/`. It contains portable `plugin.json`
-and `mcp.json` manifests, the skill and a local marketplace catalog. MCP settings point to **this user's
-existing checkout and Node executable**. Keep the checkout in place. Rebuild on each computer; do not
+The generated marketplace is under `output/ai-fighter-marketplace/`. It contains `plugin.json`, the
+existing cloud `.app.json` mapping, the skill and a local marketplace catalog. `kit-location.json` points to
+**this user's existing checkout and workspace**. Keep the checkout in place. Rebuild on each computer; do not
 publish the generated directory as a standalone distributable. The builder does not change host settings.
 
 For updates, build into a fresh directory (`npm run plugin:build -- output/ai-fighter-marketplace-v2`),
 register that source and refresh/reinstall the plugin. Existing build output is never overwritten.
-After changing checkout code, restart the MCP session. An existing manual AI Fighter MCP connection
-may remain, but use one namespace consistently. Locks protect writers across connections.
+After changing a plugin, open a new chat for its updated skill. An existing manual AI Fighter MCP connection
+may remain for compatibility. Use the workspace CLI for unified creation and the connected ODDBOUT tools
+for registration; do not select a different saved account. Locks protect writers across connections.
 
 Generation runtime setup is separate: `npm run sprite:setup` needs Python 3.11+ and installs the pinned
 source in its venv. `npm run sprite:status` reports installation, not login or quota. Public plugin
-publication and web-only execution are outside this local package. This version shows actual generated
-media in the conversation; a dedicated comparison UI is not included.
+publication and a host without execution/file delivery are outside this local package. Actual generated
+media must be shown in the current conversation; a dedicated comparison UI is not included.
 
 ## Project tools and evidence
 

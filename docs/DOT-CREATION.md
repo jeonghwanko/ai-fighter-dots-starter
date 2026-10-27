@@ -298,7 +298,12 @@ npm run sprite -- game-pack --request game.json --out-dir pack
 ## 4. 자기 계정으로 등록
 
 Google 로그인 후 누구나 제작·업로드할 수 있다. **초대나 사전 승인은 없다.** [현재 운영 정책](OPEN-REGISTRATION.md)을 따른다.
-사용자 본인의 로그인 세션 파일을 `AI_FIGHTER_CLIENT_CONFIG`로 연결한 뒤 `submit_fighter_package`를 호출한다.
+ODDBOUT 통합 플러그인은 PC와 Dots 모두 현재 대화의 연결된 계정을 사용한다. `get_profile`로 계정을 확인하고
+클라우드 `check_creation_readiness`, `prepare_fighter_registration`, `upload_fighter_asset`,
+`submit_fighter_registration`, `get_fighter_submission`의 실제 스키마와 응답을 따른다.
+작업 공간에 등록용 CLI 로그인을 요구하지 않는다. [통합 경로](ODDBOUT-PLUGIN.md)를 참고한다.
+예전 독립 stdio 클라이언트에만 `AI_FIGHTER_CLIENT_CONFIG`와 `submit_fighter_package` 경로가 남아 있다.
+연결된 클라우드 등록 실패를 다른 로컬 계정으로 자동 대체하지 않는다.
 `registered`와 `fighterId`를 실제로 확인한다. 파일 검사 후 자동으로 게임에서 이용할 수 있다. 작업자가 꺼져 있으면 자동 검증 대기로 남는다.
 기존 선수의 불변 파일을 덮어쓰지 않는다. 부적절한 선수는 사후 조치로 공개 목록에서 내려갈 수 있다.
 

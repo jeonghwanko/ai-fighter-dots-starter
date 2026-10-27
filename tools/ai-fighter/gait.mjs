@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import sharp from 'sharp';
+import { inspectProjectedGround } from './projected-ground.mjs';
 
 export const digest = value => createHash('sha256').update(value).digest('hex');
 export const round = n => Math.round(n * 1000) / 1000;
@@ -122,6 +123,15 @@ export function combineReview(sequence, plan, annotations, stanceReports = []) {
     else if (verdict !== 'pass') missing.push('Visual review: ' + item);
   }
   const stances = current?.stances ?? [];
+  const projectedGround = current?.projectedGround === undefined ? null
+    : inspectProjectedGround(sequence, plan, current.projectedGround, stances);
+  if (projectedGround) {
+    // Retain the scalar diagnostic verbatim; replace only its known perspective assumption.
+    if (projectedGround.status === 'pass') {
+      for (let i = errors.length - 1; i >= 0; i--) if (errors[i].code === 'GROUND_OFFSET') errors.splice(i, 1);
+    }
+    errors.push(...projectedGround.errors); missing.push(...projectedGround.missing);
+  }
   for (const foot of ['near', 'far']) if (!stances.some(s => s.foot === foot)) missing.push('Isolated stance: ' + foot);
   if (!stances.length || stanceReports.length !== stances.length) missing.push('Fresh sprite-gen contact measurements');
   const speeds = [];
@@ -145,6 +155,8 @@ export function combineReview(sequence, plan, annotations, stanceReports = []) {
   return { kind: 'ai-fighter-gait-review', version: 1, motion: plan.motion, facing: plan.facing, status, sequenceSha256: sequence.sha256,
     durationSeconds, geometry: plan.geometry, phases: plan.phases, errors, missing, warnings: geometry.warnings,
     frames: geometry.frames, visual: current?.visual ?? null, stances, stanceReports,
+    ...(projectedGround ? { geometryEngine: 'ai-fighter-projected-ground-v1', scalarGeometry: geometry,
+      projectedGround: { ...projectedGround, declaration: current.projectedGround } } : {}),
     speedPixelsPerSecond: speed === null ? null : round(speed), stridePixels: speed === null ? null : round(speed * durationSeconds),
     measurementScope: 'Conditional on reviewer-declared same-foot identity and stance ROIs; not calibrated automatic pose recognition.' };
 }
@@ -160,6 +172,15 @@ export function requireReview(review, sequence, motion) {
     review.stanceReports?.length !== review.stances?.length || !review.stanceReports.every((r, i) => r.stride_verified &&
       contactEvidenceMatches(r, review.stances[i], sequence, review.facing))) throw Error('GAIT_REVIEW_INCOMPLETE: ' + motion);
   if (!positive(review.stridePixels)) throw Error('GAIT_STRIDE_UNVERIFIED: ' + motion);
+  if (review.geometryEngine !== undefined || review.projectedGround !== undefined) {
+    const current = { ...sequence, sha256: sequenceHash(sequence) };
+    const checked = combineReview(current, review, { sequenceSha256: current.sha256,
+      visual: review.visual, stances: review.stances, projectedGround: review.projectedGround?.declaration }, review.stanceReports);
+    if (review.geometryEngine !== 'ai-fighter-projected-ground-v1' || checked.status !== 'pass' ||
+        checked.stridePixels !== review.stridePixels || checked.speedPixelsPerSecond !== review.speedPixelsPerSecond ||
+        JSON.stringify(checked.projectedGround?.baselines) !== JSON.stringify(review.projectedGround?.baselines))
+      throw Error('GAIT_PROJECTED_GROUND_UNVERIFIED: ' + motion);
+  }
   return review;
 }
 

@@ -15,7 +15,22 @@ export function publicSiteText(text) {
     .replaceAll('./league.html', './')
     .replace(/((?:\\)?["'])league\.html(?=(?:\\)?["'])/g, '$1');
 }
-export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'about.html', 'docs.html', 'privacy.html', 'admin.html'];
+export const siteEntries = ['creator.html', 'fighter.html', 'league.html', 'about.html', 'docs.html', 'privacy.html', 'admin.html', 'world.html'];
+
+// The kit has its own immutable release/fingerprint. Restore it only after verifying
+// a newly built site's own artifact, then prove its staged Git objects are unchanged.
+export function restoreCreatorKitReleases(checkout) {
+  const entry = git(checkout, 'ls-tree', 'HEAD', '--', 'creator-kit');
+  if (!entry) return 0;
+  if (!/^040000 tree [a-f0-9]{40}\tcreator-kit$/.test(entry)) throw Error('Unexpected creator-kit object in hosting branch');
+  git(checkout, 'checkout', 'HEAD', '--', 'creator-kit');
+  return git(checkout, 'ls-tree', '-r', '--name-only', 'HEAD', '--', 'creator-kit').split('\n').filter(Boolean).length;
+}
+
+export function assertCreatorKitsUnchanged(checkout) {
+  if (git(checkout, 'diff', '--cached', '--name-only', 'HEAD', '--', 'creator-kit'))
+    throw Error('A whole-site deployment must preserve existing creator-kit releases; use the additive kit publisher.');
+}
 
 function assertPublicContent(data, path) {
   if (!['sb_secret_', 'afw_', 'AI_FIGHTER_WAKE_TOKEN', 'PRIVATE KEY', 'api.render.com', 'eyJ'].some(value => data.includes(value))) return;

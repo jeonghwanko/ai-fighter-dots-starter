@@ -1,4 +1,4 @@
 interface:
-  display_name: "AI Fighter Creator"
-  short_description: "Create fighters with grouped reviews and resumable local jobs"
-  default_prompt: "Use $create-fighter to create or resume my AI Fighter character."
+  display_name: "ODDBOUT"
+  short_description: "Create, review and register fighters from PC or Dots"
+  default_prompt: "Use $create-fighter to create or resume my ODDBOUT fighter and register the result I approve."

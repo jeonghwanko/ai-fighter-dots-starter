@@ -3,10 +3,10 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { cp, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
-import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import { creationTool } from '../scripts/creation-tool.mjs';
 import { createCreationStore, localPath } from '../mcp/creation-store.mjs';
 import { createJobStore, executeEngine, runCreationJob } from '../mcp/creation-jobs.mjs';
 import { createServer } from '../mcp/server.mjs';
@@ -251,25 +251,40 @@ test('MCP exposes structured mutations and resume state without invoking generat
   assert.equal(conflict.structuredContent.code, 'session-revision-conflict');
 });
 
-test('built local marketplace starts its MCP from a different cwd and carries no account config', async t => {
+test('one ODDBOUT plugin resolves the existing workspace without a local MCP or inherited registration account', async t => {
   const scratch = await temporary('fighter plugin ');
   t.after(() => rm(scratch, { recursive: true, force: true }));
   // Build into a fresh real checkout output, not a hidden/global app configuration.
   const relative = `output/plugin-test-${randomUUID()}`;
   const built = await buildLocalPlugin(relative, { workspace: scratch });
   t.after(() => rm(built.marketplace, { recursive: true, force: true }));
-  const manifest = JSON.parse(await readFile(path.join(built.plugin, 'mcp.json'), 'utf8'));
-  const config = manifest.mcpServers['ai-fighter-creator'];
-  assert.deepEqual(config.env, { AI_FIGHTER_ROOT: scratch });
-  assert.equal(config.cwd, await realpath(kitRoot));
-  const home = path.join(scratch, 'empty-home'); await mkdir(home);
-  const client = new Client({ name: 'built-plugin-test', version: '1' });
-  await client.connect(new StdioClientTransport({ command: config.command, args: config.args, cwd: scratch,
-    env: { ...config.env, HOME: home, USERPROFILE: home }, stderr: 'pipe' }));
-  try {
-    assert.ok((await client.listTools()).tools.some(t => t.name === 'create_creation_session'));
-    const result = await client.callTool({ name: 'list_creation_sessions', arguments: {} });
-    assert.deepEqual(result.structuredContent.data, []);
-  } finally { await client.close(); }
+  const manifest = JSON.parse(await readFile(path.join(built.plugin, 'plugin.json'), 'utf8'));
+  assert.equal(manifest.name, 'oddbout');
+  assert.notEqual(manifest.extensions['com.openai'].requires_local_executor, true);
+  assert.equal(manifest.extensions['com.openai'].apps, './.app.json');
+  await assert.rejects(readFile(path.join(built.plugin, 'mcp.json')), { code: 'ENOENT' });
+  const { initialize } = await import(pathToFileURL(path.join(built.plugin, 'launcher.mjs')).href);
+  const location = await initialize({ base: path.join(scratch, 'user-data'), workspace: scratch });
+  assert.equal(location.runtime, await realpath(kitRoot));
+  assert.equal(location.root, scratch);
+  const tools = (await creationTool({ workspace: scratch })).tools;
+  assert.ok(tools.some(t => t.name === 'create_creation_session'));
+  assert.ok(!tools.some(t => t.name === 'submit_fighter_package'));
+  assert.deepEqual((await creationTool({ workspace: scratch, name: 'list_creation_sessions' })).structuredContent.data, []);
   await assert.rejects(buildLocalPlugin(relative), /output-exists/);
+});
+
+test('workspace CLI preserves projects and revision guards across calls and rejects registration or unsafe paths', async t => {
+  const f = await fixture(t);
+  const call = (name, args = {}) => creationTool({ workspace: f.root, name, args, contextRequest: request });
+  const changed = (await call('update_creation_session', { sessionId, expectedRevision: 1,
+    change: { type: 'profile', name: 'ODDBOUT fixture', description: 'Test only', feedback: 'Chosen name' } })).structuredContent;
+  assert.equal(changed.ok, true);
+  assert.equal((await call('get_creation_session', { sessionId })).structuredContent.data.state.profile.name, 'ODDBOUT fixture');
+  const stale = await call('update_creation_session', { sessionId, expectedRevision: 1, change: { type: 'advance' } });
+  assert.equal(stale.isError, true);
+  assert.equal(stale.structuredContent.code, 'session-revision-conflict');
+  assert.equal((await call('submit_fighter_package', { manifestPath: 'fixture/fighter.json', idempotencyKey: randomUUID() })).isError, true);
+  assert.equal((await call('validate_fighter_package', { manifestPath: '../outside/fighter.json' })).isError, true);
+  await assert.rejects(creationTool({ workspace: '.' }), /absolute-workspace-required/);
 });

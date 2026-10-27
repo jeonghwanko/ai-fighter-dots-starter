@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { ensureSpritePatch, inspectSpritePatch } from '../scripts/sprite-patch.mjs';
 import { defaultSessionPath, jwtPayload } from '../scripts/login.mjs';
+import { createEnvironmentStore } from './creation-environment.mjs';
 
 export const KIT_BRANCH = 'codex/creator-hosting';
 const kitRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -14,6 +15,7 @@ const kitRoot = fileURLToPath(new URL('../', import.meta.url));
 export const ACCOUNT_OPTIONS = [
   { id: 'gpt', label: '내 GPT(ChatGPT) 구독으로 진행', provider: 'codex' },
   { id: 'grok', label: '내 Grok 구독으로 진행', provider: 'grok' },
+  { id: 'both', label: 'GPT 원화 + Grok 동작으로 진행', provider: 'codex' },
   { id: 'stop', label: '지금은 생성하지 않고 멈춤', provider: null },
 ];
 
@@ -170,7 +172,9 @@ export function accountItem(choice) {
   if (!option) return { status: 'choice-required', options: ACCOUNT_OPTIONS.map(({ id, label }) => ({ id, label })), verification };
   if (option.id === 'stop') return { status: 'stopped', choice: option.id, verification };
   return { status: 'chosen-unverified', choice: option.id, provider: option.provider, verification,
-    nextCommands: [`npm run sprite -- workflow --kind image --confirmed-access ${option.provider}`,
+    imageProvider: option.provider, motionMethod: choice === 'gpt' ? 'gpt-rows' : 'grok-video',
+    // Choosing a provider is not a statement that its image/video entitlement was checked.
+    nextCommands: [`npm run sprite -- workflow --kind image --image-provider ${option.provider}`,
       'npm run creation:delivery -- preflight output/<sessionId>-work/delivery-check.json <현재-대화-ID>'] };
 }
 
@@ -188,13 +192,21 @@ export async function elicitAccount(lowLevelServer) {
   } catch { return { method: 'unsupported', choice: null }; }
 }
 
-export async function checkReadiness({ store, jobs, sessionId, account, remoteActive, lowLevelServer, kit = {}, login = {} } = {}) {
+export async function checkReadiness({ store, jobs, sessionId, account, remoteActive, lowLevelServer, kit = {}, login = {}, registrationMode = 'local', environment } = {}) {
   const progress = await creationProgress({ store, jobs, sessionId });
-  let choice = account ?? null, elicitation = 'not-needed';
+  const connection = environment ?? (store?.root ? createEnvironmentStore(store.root) : null);
+  const saved = connection ? await connection.read() : null;
+  let choice = account ?? saved?.account ?? null, elicitation = saved?.account && !account ? 'saved-environment' : 'not-needed';
   if (!choice) ({ method: elicitation, choice } = await elicitAccount(lowLevelServer));
-  const items = { kit: await checkKit({ progress, ...kit }), account: accountItem(choice), login: await checkLogin({ remoteActive, ...login }) };
-  const ready = ['ready', 'updated', 'patched'].includes(items.kit.status) && !items.kit.restartRequired && items.kit.nextCommands.length === 0
+  const items = { kit: await checkKit({ progress, ...kit }), account: accountItem(choice),
+    login: registrationMode === 'cloud' ? { status: 'connector-verification-required', userId: null,
+      route: 'oddbout-cloud', nextTools: ['get_profile', 'check_creation_readiness'],
+      note: 'Use the connected ODDBOUT tools in this conversation. Verify its account and readiness there. Do not run workspace login or transfer credentials. This result does not verify that connection.' }
+      : await checkLogin({ remoteActive, ...login }) };
+  items.environment = connection ? await connection.inspect() : { status: 'workspace-required', readyForGeneration: false };
+  const workflowReady = ['ready', 'updated', 'patched'].includes(items.kit.status) && !items.kit.restartRequired && items.kit.nextCommands.length === 0
     && items.account.status === 'chosen-unverified';
-  return { readyForGeneration: ready, readyForRegistration: items.login.status === 'signed-in', progress, elicitation, items,
+  const ready = workflowReady && items.environment.readyForGeneration && items.environment.account === choice;
+  return { readyForWorkflow: workflowReady, readyForGeneration: Boolean(ready), readyForRegistration: items.login.status === 'signed-in', progress, elicitation, items,
     meaning: 'Readiness preconditions only. Generation access, preview display and motion quality still need actual results.' };
 }

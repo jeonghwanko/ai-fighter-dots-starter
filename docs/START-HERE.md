@@ -101,7 +101,9 @@ GPT만 사용 가능하면 둘 다 GPT로 제안한다. 사용자가 지정한 �
 
 ### 등록
 
-사용자가 등록을 요청하면 `deploy/creator-site.json`의 공개 설정으로 본인의 Google 로그인을 진행한다.
+사용자가 등록을 요청하면 ODDBOUT 통합 플러그인의 연결 계정을 `get_profile`과 클라우드
+`check_creation_readiness`로 확인한다. PC와 Dots 모두 같은 prepare/upload/submit/status 도구를 사용한다.
+클라우드 등록에 작업 공간 CLI 로그인을 요구하지 않는다. 기존 독립 CLI만 `deploy/creator-site.json`으로 로그인한다.
 최종 결과 선택과 파일 검사가 끝난 뒤 제출한다. 같은 패키지 재시도에는 같은 idempotencyKey를 쓴다.
 `registered`, `fighterId`, 이용 가능 상태를 실제 응답으로 확인해 이 대화에 알려준다.
 홈페이지는 사용자가 원할 때 열 수 있다. 가입·등록 방법은 [이용 안내](OPEN-REGISTRATION.md)를 따른다.
