@@ -375,3 +375,18 @@ test('workspace CLI preserves projects and revision guards across calls and reje
   assert.equal((await call('validate_fighter_package', { manifestPath: '../outside/fighter.json' })).isError, true);
   await assert.rejects(creationTool({ workspace: '.' }), /absolute-workspace-required/);
 });
+
+test('a version whose copy was interrupted can be recorded again instead of failing on leftover files', async t => {
+  const f = await fixture(t);
+  const file = await f.put('input/idle-v1.txt', 'new bytes');
+  // What a killed copy leaves: part of the version folder, but no version in the session.
+  await f.put(`output/${sessionId}-work/versions/idle/v1/files/input/idle-v1.txt`, 'partial');
+  await f.put(`output/${sessionId}-work/versions/idle/v1/files/stray.txt`, 'from the interrupted attempt');
+  await f.change({ type: 'version', item: 'idle', version: 'v1', files: [file], note: 'Retry after an interrupted copy' });
+  const state = await f.store.read(sessionId);
+  assert.equal(state.items.idle.versions.v1.files[0].sourcePath, file);
+  const copied = await localPath(f.root, `output/${sessionId}-work/versions/idle/v1/files/input/idle-v1.txt`);
+  assert.equal(await readFile(copied, 'utf8'), 'new bytes');
+  await assert.rejects(readFile(await localPath(f.root, `output/${sessionId}-work/versions/idle/v1/files/stray.txt`)), /ENOENT/);
+  await assert.rejects(f.change({ type: 'version', item: 'idle', version: 'v1', files: [file], note: 'again' }), /version-already-exists/);
+});

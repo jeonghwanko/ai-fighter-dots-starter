@@ -284,3 +284,40 @@ test('device connection transport failure preserves the pending request and reco
   assert.equal(calls.filter(call => call.route === 'device-logins').length, 1);
   assert.equal(await readFile(pendingPath, 'utf8'), original);
 });
+
+test('an approved device login survives a failed redeem or a needed --replace without a second approval', async () => {
+  const sessionPath = path.join(directory, 'device-resume', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  await startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: deviceApi([]) });
+  const pendingPath = pendingDeviceLoginPath(sessionPath), calls = [], verified = [];
+  const session = user => ({ data: { session: { access_token: jwt({ sub: user, exp: 9999999999 }), refresh_token: `refresh-${user}`, user: { id: user } } } });
+  const auth = answer => () => ({ auth: { verifyOtp: async args => { verified.push(args); return answer(); } } });
+  const options = { request: async () => ({ ok: true, account: { invited: true } }), sleep: async () => {}, log: () => {} };
+  // Auth unreachable after approval: the token is kept, and the server is not asked again.
+  const offline = Object.assign(new Error('fetch failed'), { name: 'AuthRetryableFetchError', status: 0 });
+  await assert.rejects(waitDeviceLogin({ ...options, post: deviceApi([{ ok: true, status: 'approved', tokenHash: HASH }], calls), createAuthClient: auth(() => ({ error: offline })) }),
+    /device-login-redeem-retry/);
+  assert.equal((await saved(pendingPath)).tokenHash, HASH);
+  await assert.rejects(startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: deviceApi([]) }), /device-login-already-pending/);
+  // Another user's session is in the file: the redeemed session waits in the pending file for --replace.
+  await writeFile(sessionPath, JSON.stringify({ url: URL_, publishableKey: KEY, accessToken: jwt({ sub: 'someone-else', exp: 9999999999 }), refreshToken: 'r' }));
+  await assert.rejects(waitDeviceLogin({ ...options, post: deviceApi([], calls), createAuthClient: auth(() => session('user-9')) }), /session-user-differs/);
+  assert.equal((await saved(pendingPath)).session.user.id, 'user-9');
+  assert.equal((await saved(pendingPath)).tokenHash, undefined, 'the spent token is not kept');
+  const result = await waitDeviceLogin({ ...options, replace: true, post: deviceApi([], calls), createAuthClient: auth(() => assert.fail('never redeemed twice')) });
+  assert.equal(result.userId, 'user-9');
+  assert.equal((await saved(sessionPath)).refreshToken, 'refresh-user-9');
+  await assert.rejects(saved(pendingPath), /ENOENT/);
+  assert.equal(verified.length, 2, 'one failed and one successful redeem, no third');
+  assert.equal(calls.filter(call => call.route === 'device-logins/token').length, 1, 'the approval was polled once');
+});
+
+test('a refused device-login token ends the request so a new approval can start', async () => {
+  const sessionPath = path.join(directory, 'device-refused', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  await startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: deviceApi([]) });
+  const refused = Object.assign(new Error('Token has expired or is invalid'), { name: 'AuthApiError', status: 403 });
+  await assert.rejects(waitDeviceLogin({ post: deviceApi([{ ok: true, status: 'approved', tokenHash: HASH }]), sleep: async () => {}, log: () => {},
+    createAuthClient: () => ({ auth: { verifyOtp: async () => ({ error: refused }) } }) }), /device-login-redeem-failed/);
+  await assert.rejects(saved(pendingDeviceLoginPath(sessionPath)), /ENOENT/);
+});

@@ -220,15 +220,22 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
           if (!decision.canAdvance) fail('previous-group-pending');
         }
         const source = await snapshots(event.files), recorded = [];
-        for (const file of source) {
-          // Keep relative layout between declared metadata and assets; never rewrite their bytes.
-          const relative = `${prefix(id)}/versions/${event.item}/${event.version}/files/${file.path}`;
-          const destination = await localPath(root, relative, { createParents: true });
-          await copyFile(await localPath(root, file.path), destination, constants.COPYFILE_EXCL);
-          const copied = await fingerprint(root, relative);
-          if (copied.sha256 !== file.sha256) fail('source-changed-during-snapshot');
-          recorded.push({ ...copied, sourcePath: file.path });
-        }
+        // This version is not recorded, so a folder for it is what an interrupted copy left: start it over. A failed
+        // copy removes its partial files too, so the same version can be retried instead of failing on EEXIST.
+        const versionFolder = `${prefix(id)}/versions/${event.item}/${event.version}`;
+        const clear = async () => rm(await localPath(root, versionFolder), { recursive: true, force: true });
+        await clear();
+        try {
+          for (const file of source) {
+            // Keep relative layout between declared metadata and assets; never rewrite their bytes.
+            const relative = `${versionFolder}/files/${file.path}`;
+            const destination = await localPath(root, relative, { createParents: true });
+            await copyFile(await localPath(root, file.path), destination, constants.COPYFILE_EXCL);
+            const copied = await fingerprint(root, relative);
+            if (copied.sha256 !== file.sha256) fail('source-changed-during-snapshot');
+            recorded.push({ ...copied, sourcePath: file.path });
+          }
+        } catch (error) { await clear(); throw error; }
         item.versions[event.version] = { files: recorded, basis: basisFor(state, event.item), note: event.note,
           createdAt: new Date().toISOString() };
         item.version = event.version; state.items[event.item] = item;

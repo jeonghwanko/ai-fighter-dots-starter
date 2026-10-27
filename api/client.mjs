@@ -68,7 +68,15 @@ export async function writeSessionFile(configPath, config) {
   try {
     await rm(temporary, { force: true });
     await writeFile(temporary, JSON.stringify(config, null, 2) + '\n', { mode: 0o600, flag: 'wx' });
-    await rename(temporary, configPath);
+    // Windows virus scanners can briefly hold the just-written file; retry the same rename. Giving up here after a
+    // token refresh would lose the rotated refresh token, the only valid one (creation-store atomicJson does the same).
+    for (let attempt = 0; ; attempt++) {
+      try { await rename(temporary, configPath); break; }
+      catch (error) {
+        if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= 6) throw error;
+        await new Promise(resolve => setTimeout(resolve, 25 * (attempt + 1)));
+      }
+    }
   } catch (error) { await rm(temporary, { force: true }); throw error; }
 }
 
