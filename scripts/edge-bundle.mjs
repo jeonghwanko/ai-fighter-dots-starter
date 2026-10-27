@@ -3,11 +3,11 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
+import { importSpecifiers } from './import-graph.mjs';
 
 const REPOSITORY = fileURLToPath(new URL('../', import.meta.url));
 const ENTRY = 'supabase/functions/ai-fighter/index.ts';
 const IMPORT_MAP = 'supabase/functions/ai-fighter/deno.json', LOCK = 'supabase/functions/ai-fighter/deno.lock';
-const STATIC_IMPORT = /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]/g;
 
 /**
  * Repository-relative files reachable from the Edge entry. A bare specifier must be in the Deno import map:
@@ -21,7 +21,7 @@ export async function edgeFiles({ root = REPOSITORY, entry = ENTRY, importMap = 
     if (seen.has(file)) continue;
     seen.add(file);
     if (file.endsWith('.json')) continue;
-    for (const [, specifier] of (await readFile(path.join(root, file), 'utf8')).matchAll(STATIC_IMPORT)) {
+    for (const specifier of importSpecifiers(await readFile(path.join(root, file), 'utf8'))) {
       if (!specifier.startsWith('.')) {
         if (!(specifier in mapped)) throw new Error(`${file} imports ${specifier}, which the Edge import map does not provide`);
         continue;

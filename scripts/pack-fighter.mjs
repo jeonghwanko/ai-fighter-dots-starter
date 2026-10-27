@@ -391,18 +391,21 @@ export async function packFighter(planFile) {
       review: plan.reviewPolicy === 'format-only' ? 'FORMAT ONLY: gait quality is unverified. This mode is for format fixtures; it is not visual approval.'
         : 'Walk/run evidence matches input pixels and durations. All actions still need visual review; file validation is not universal animation approval.' };
     if (!contract.ok) return { ok: false, stage: contract.stage, errors: contract.errors, report };
-    // Stage beside the target, then publish with one rename.
+    // Stage beside the target, validate the staged files (decoded pixels, crops, alpha), then publish with one rename.
+    // A failing package never reaches `out`, so a corrected plan can retry into the same folder.
     const staging = path.join(path.dirname(out), `.${path.basename(out)}.pack-${process.pid}`);
     await rm(staging, { recursive: true, force: true });
+    let checked;
     try {
       await mkdir(path.join(staging, 'assets'), { recursive: true });
       for (const name of clips) await writeFile(path.join(staging, packed[name].asset.path), packed[name].bytes, { flag: 'wx' });
       await writeFile(path.join(staging, 'fighter.json'), JSON.stringify(fighter, null, 2) + '\n', { flag: 'wx' });
       await writeFile(path.join(staging, 'pack-report.json'), JSON.stringify(report, null, 2) + '\n', { flag: 'wx' });
+      checked = await validateFighterPackage(path.join(staging, 'fighter.json'));
+      if (!checked.ok) { await rm(staging, { recursive: true, force: true }); return { ...checked, report }; }
       if (await lstat(out).then(() => true, () => false)) fail('OUT_EXISTS', `${out} exists; choose a new folder`);
       await rename(staging, out);
     } catch (error) { await rm(staging, { recursive: true, force: true }); throw error; }
-    const checked = await validateFighterPackage(path.join(out, 'fighter.json'));
     return { ...checked, out, report: path.join(out, 'pack-report.json') };
   } catch (error) {
     if (error instanceof PackError) return { ok: false, stage: 'pack', errors: [{ code: error.message, path: '', detail: error.detail }] };

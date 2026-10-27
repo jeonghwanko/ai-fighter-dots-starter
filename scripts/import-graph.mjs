@@ -1,0 +1,35 @@
+// Module specifiers a JavaScript source imports: static, re-exported, side-effect and literal dynamic imports.
+// Shared by the Edge and plugin bundles so a file list derived from imports cannot miss a module form.
+import { access, readFile } from 'node:fs/promises';
+import path from 'node:path';
+
+const SPECIFIER = /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|(?:^|[\s;])import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+const SCRIPT = /\.(?:mjs|js|ts)$/;
+
+export const importSpecifiers = source => [...source.matchAll(SPECIFIER)].map(match => match[1] ?? match[2] ?? match[3]);
+/** The npm package a bare specifier names (`@scope/name/sub` → `@scope/name`), or null for `node:` builtins. */
+export const packageName = specifier => specifier.startsWith('node:') ? null
+  : specifier.split('/').slice(0, specifier.startsWith('@') ? 2 : 1).join('/');
+
+/**
+ * Every repository-relative file reachable from `entries` through relative imports, entries included.
+ * Non-script entries (docs, JSON, Python) are kept as given. Returns the sorted closure and the bare specifiers seen.
+ * A relative import that leaves `root` or names a missing file fails here, before anything is copied or deployed.
+ */
+export async function importClosure(root, entries) {
+  const seen = new Set(), bare = new Set(), pending = [...entries];
+  while (pending.length) {
+    const file = pending.pop();
+    if (seen.has(file)) continue;
+    seen.add(file);
+    if (!SCRIPT.test(file)) continue;
+    for (const specifier of importSpecifiers(await readFile(path.join(root, file), 'utf8'))) {
+      if (!specifier.startsWith('.')) { bare.add(specifier); continue; }
+      const target = path.posix.normalize(path.posix.join(path.posix.dirname(file), specifier));
+      if (target.startsWith('../')) throw Error(`${file} imports ${specifier} from outside the bundle root`);
+      await access(path.join(root, target)).catch(() => { throw Error(`${file} imports ${specifier}, which does not exist`); });
+      pending.push(target);
+    }
+  }
+  return { files: [...seen].sort(), bare: [...bare].sort() };
+}
