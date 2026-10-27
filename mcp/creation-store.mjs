@@ -104,15 +104,23 @@ export async function atomicJson(file, data) {
   } finally { await rm(temp, { force: true }); }
 }
 
+// Inspecting a session re-checks every version, evidence and output file. A file whose size, mtime, ctime and inode are
+// all unchanged has the same bytes, so its hash is reused; rewriting a file changes its ctime even if mtime is restored.
+const HASH_CACHE_LIMIT = 5000, hashCache = new Map();
 export async function fingerprint(root, relative) {
   const file = await localPath(root, relative);
   const handle = await open(file, 'r');
   try {
     const info = await handle.stat();
     if (!info.isFile() || info.size > 256 * 1024 * 1024) fail('asset-not-regular-or-too-large');
+    const stamp = `${info.size}:${info.mtimeMs}:${info.ctimeMs}:${info.ino}`, cached = hashCache.get(file);
+    if (cached?.stamp === stamp) return { path: relative, bytes: info.size, sha256: cached.sha256 };
     const hash = createHash('sha256');
     for await (const chunk of handle.createReadStream({ autoClose: false })) hash.update(chunk);
-    return { path: relative, bytes: info.size, sha256: hash.digest('hex') };
+    const sha256 = hash.digest('hex');
+    hashCache.delete(file); hashCache.set(file, { stamp, sha256 });
+    if (hashCache.size > HASH_CACHE_LIMIT) hashCache.delete(hashCache.keys().next().value);
+    return { path: relative, bytes: info.size, sha256 };
   } finally { await handle.close(); }
 }
 export async function unchanged(root, records) {
