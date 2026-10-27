@@ -2,24 +2,35 @@
 <html lang="en"><head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#071923"><meta name="referrer" content="no-referrer">
 <title>Create your fighter · ODDBOUT Docs</title><meta name="description" content="A detailed guide to creating a fighter with Dot: setup, concept art, animation, review, registration, and troubleshooting."><meta property="og:title" content="Create your fighter · ODDBOUT Docs"><meta property="og:description" content="A detailed guide to creating a fighter with Dot: setup, concept art, animation, review, registration, and troubleshooting."><meta property="og:type" content="website"><meta property="og:image" content="https://oddbout.com/og-image.jpg"><meta property="og:image:type" content="image/jpeg"><meta property="og:image:width" content="1200"><meta property="og:image:height" content="630"><meta property="og:url" content="https://oddbout.com/docs.html"><link rel="canonical" href="https://oddbout.com/docs.html"><link rel="icon" href="/favicon.ico" sizes="32x32"><link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="apple-touch-icon" href="/apple-touch-icon.png">
-  <script type="module" crossorigin src="/assets/docs-TQcIOzLm.js"></script>
+<script>
+// Korean readers: hide the English source copy until infoPage.ts puts the Korean in (league.html does the reverse).
+try {
+  const requested = new URLSearchParams(location.search).get("lang"), saved = localStorage.getItem("ai-fighter.creator.locale.v1");
+  if ((requested === "en" || requested === "ko" ? requested : saved) === "ko") {
+    document.documentElement.classList.add("translating");
+    setTimeout(() => document.documentElement.classList.remove("translating"), 3000);
+  }
+} catch {}
+</script>
+  <script type="module" crossorigin src="/assets/docs-CyZYhOhw.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/storageKeys-Lf7lfo-I.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
   <link rel="modulepreload" crossorigin href="/assets/oddboutSession-BLfvyrde.js">
-  <link rel="modulepreload" crossorigin href="/assets/accountControl-CiCTQRBQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountControl-Ds71Fs4Q.js">
   <link rel="modulepreload" crossorigin href="/assets/fighterCreatorLocale-Bh29uOe8.js">
-  <link rel="modulepreload" crossorigin href="/assets/portraitLock-DYcks80K.js">
+  <link rel="modulepreload" crossorigin href="/assets/portraitLock-D87EknFu.js">
   <link rel="modulepreload" crossorigin href="/assets/OddboutCommunity-yZWAEfH9.js">
-  <link rel="modulepreload" crossorigin href="/assets/siteChrome-udC2jkEc.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteChrome-C5-e4drx.js">
   <link rel="modulepreload" crossorigin href="/assets/siteLinks-Cb1kHGko.js">
-  <link rel="modulepreload" crossorigin href="/assets/infoPage-zy05-0Zj.js">
-  <link rel="stylesheet" crossorigin href="/assets/accountControl-CM8krToR.css">
-  <link rel="stylesheet" crossorigin href="/assets/portraitLock-wH03GdfC.css">
-  <link rel="stylesheet" crossorigin href="/assets/siteChrome-0JukJQ6r.css">
-  <link rel="stylesheet" crossorigin href="/assets/infoPage-3AVXp6ft.css">
+  <link rel="modulepreload" crossorigin href="/assets/infoPage-vq6VoeSF.js">
+  <link rel="stylesheet" crossorigin href="/assets/accountControl-VJz_K6KY.css">
+  <link rel="stylesheet" crossorigin href="/assets/portraitLock-CWuP8ucL.css">
+  <link rel="stylesheet" crossorigin href="/assets/siteChrome-B2CWFBx3.css">
+  <link rel="stylesheet" crossorigin href="/assets/siteBase-Q85EwuBo.css">
+  <link rel="stylesheet" crossorigin href="/assets/infoPage-DDfLwIfF.css">
 </head><body class="docs-page">
 <a class="skip" href="#page-content" data-ui="skip">Skip to content</a>
-<header class="club-header" data-club-header><a class="club-brand" href="./?lang=en" aria-label="ODDBOUT home"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a><nav class="club-nav" aria-label="Main navigation"><a href="./fighters.html?lang=en">Fighters</a><a href="./creator.html?lang=en#view=rankings">Rank</a><a href="./docs.html?lang=en">Docs</a><a class="club-create" href="./creator.html?lang=en">Create your fighter</a></nav><div class="club-languages" aria-label="Language"><a href="?lang=ko" lang="ko">한국어</a><a href="?lang=en" lang="en">EN</a></div></header>
+<header class="club-header" data-club-header><a class="club-brand" href="./" aria-label="ODDBOUT home"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a></header>
 <main id="page-content"><div class="docs-heading content-wrap"><h1>Make your fighter.</h1><p class="lead">From the first idea to the first fight. A practical guide to creating a fighter with Dot and the local creator toolkit.</p></div><div class="docs-layout content-wrap"><aside class="docs-sidebar"><details class="toc" open><summary>On this page</summary><nav aria-label="Guide sections"><a href="#start">Quick start</a><a href="#prepare">What you need</a><a href="#setup">Set up the tools</a><a href="#concept">Create the look</a><a href="#motion">Make it move</a><a href="#review">Review & package</a><a href="#publish">Register your fighter</a><a href="#revisions">Revise & resume</a><a href="#troubleshooting">Troubleshooting</a><a href="#reference">Technical reference</a></nav></details><a class="sidebar-start text-link" href="./creator.html" data-destination="creator.html">My fighters →</a></aside><article class="docs-article"><section id="start" class="doc-section"><h2>Quick start</h2><p>You make the creative choices. Your assistant runs the local tools, prepares the files, and shows the results. You do not need to write a character manifest by hand.</p><ol><li>Open a new conversation in Dot, Codex, or another assistant that can access local files and run tools on your computer.</li><li>Paste the prompt below. Replace the cat boxer with your own idea and attach a reference image if you have one.</li><li>Review the first concept before making animations. A browser-only chat without local tool access cannot complete this workflow.</li></ol><div class="code-block"><p class="code-label">Starter prompt</p><button type="button" class="copy-button" data-copy-target="code-1" aria-label="Copy Starter prompt">Copy</button><pre id="code-1"><code>Read https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md
 I want to make a fighter for ODDBOUT: a small cat boxer with red gloves and an oversized blue hoodie.
 Use the current game requirements and the bundled creation workflow. Check which image and animation tools I can use with my own accounts.

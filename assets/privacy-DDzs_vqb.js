@@ -1,0 +1,1 @@
+import"./accountControl-Ds71Fs4Q.js";import{r as e}from"./siteChrome-C5-e4drx.js";e(`en`,`privacy`);

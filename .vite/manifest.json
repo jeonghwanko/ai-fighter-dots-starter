@@ -1,36 +1,19 @@
 {
-  "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs": {
-    "file": "assets/dist-BziIhgZ3.js",
-    "name": "dist",
-    "src": "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs",
-    "isDynamicEntry": true,
-    "imports": [
-      "_dist-CuSK8MRy.js"
-    ]
-  },
-  "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
-    "file": "assets/basis_transcoder-o4Hde_L7.js",
-    "src": "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.js"
-  },
-  "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm": {
-    "file": "assets/basis_transcoder-VXdx5NbI.wasm",
-    "src": "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
-  },
   "_ArenaBoutLink-CHN2seHZ.js": {
     "file": "assets/ArenaBoutLink-CHN2seHZ.js",
     "name": "ArenaBoutLink"
   },
-  "_ArenaGoldDropView-BwZnE6FB.js": {
-    "file": "assets/ArenaGoldDropView-BwZnE6FB.js",
+  "_ArenaGoldDropView-sRGcUnjQ.js": {
+    "file": "assets/ArenaGoldDropView-sRGcUnjQ.js",
     "name": "ArenaGoldDropView",
     "imports": [
       "_rolldown-runtime-B0Z9INg1.js",
       "_storageKeys-Lf7lfo-I.js",
       "_oddboutSession-BLfvyrde.js",
-      "_palette-CoCtOR9y.js",
       "_city-tournament-azouTl3-.js",
-      "_NativeCityOttoEncounter-DHxdWWyc.js",
-      "_PauseMenuScene-BudSCuNV.js"
+      "_NativeCityOttoEncounter-DSlpOHKX.js",
+      "_PauseMenuScene-C5HYCe0N.js",
+      "_palette-CoCtOR9y.js"
     ]
   },
   "_AttackMoves-B-lq5s5T.js": {
@@ -45,12 +28,12 @@
     "file": "assets/Locale-BoqNfY5_.js",
     "name": "Locale"
   },
-  "_NativeCityBuildingGrade-CjHp4-jS.js": {
-    "file": "assets/NativeCityBuildingGrade-CjHp4-jS.js",
+  "_NativeCityBuildingGrade-DSC2-S_a.js": {
+    "file": "assets/NativeCityBuildingGrade-DSC2-S_a.js",
     "name": "NativeCityBuildingGrade",
     "imports": [
-      "_palette-CoCtOR9y.js",
       "_CityEnvironment-AhQf9g8O.js",
+      "_palette-CoCtOR9y.js",
       "_native-city-art-finish-BZDHQ1na.js"
     ]
   },
@@ -66,18 +49,18 @@
       "assets/basis_transcoder-o4Hde_L7.js"
     ]
   },
-  "_NativeCityFloorDecal-CLXmUPnr.js": {
-    "file": "assets/NativeCityFloorDecal-CLXmUPnr.js",
+  "_NativeCityFloorDecal-CJ9eiVbO.js": {
+    "file": "assets/NativeCityFloorDecal-CJ9eiVbO.js",
     "name": "NativeCityFloorDecal",
     "imports": [
       "_preload-helper-Czpn1I53.js",
-      "_palette-CoCtOR9y.js",
-      "_NativeCityOttoEncounter-DHxdWWyc.js",
+      "_NativeCityOttoEncounter-DSlpOHKX.js",
       "_CityEnvironment-AhQf9g8O.js",
+      "_palette-CoCtOR9y.js",
       "_NativeCityKtx2Files-B34WNJFX.js",
       "_NativeCityTreeShadow-BmTBhg-P.js",
       "_native-city-art-finish-BZDHQ1na.js",
-      "_NativeCityBuildingGrade-CjHp4-jS.js",
+      "_NativeCityBuildingGrade-DSC2-S_a.js",
       "_three.core-Dt6LFlTl.js",
       "_NativeCityShopLightmap-Dq9ySLfR.js"
     ],
@@ -106,14 +89,14 @@
       "_VillagePathFacing-DTuOohAt.js"
     ]
   },
-  "_NativeCityOttoEncounter-DHxdWWyc.js": {
-    "file": "assets/NativeCityOttoEncounter-DHxdWWyc.js",
+  "_NativeCityOttoEncounter-DSlpOHKX.js": {
+    "file": "assets/NativeCityOttoEncounter-DSlpOHKX.js",
     "name": "NativeCityOttoEncounter",
     "imports": [
       "_rolldown-runtime-B0Z9INg1.js",
       "_Locale-BoqNfY5_.js",
-      "_palette-CoCtOR9y.js",
-      "_CityEnvironment-AhQf9g8O.js"
+      "_CityEnvironment-AhQf9g8O.js",
+      "_palette-CoCtOR9y.js"
     ],
     "assets": [
       "assets/handsome-actions-v2-20261014-CFtOpSc4.webp",
@@ -145,13 +128,13 @@
       "_NativeCityWallRelief-DgaUovU8.js"
     ]
   },
-  "_NativeCityTownKitView-CbE_HjBw.js": {
-    "file": "assets/NativeCityTownKitView-CbE_HjBw.js",
+  "_NativeCityTownKitView-CkGJfNQk.js": {
+    "file": "assets/NativeCityTownKitView-CkGJfNQk.js",
     "name": "NativeCityTownKitView",
     "imports": [
       "_palette-CoCtOR9y.js",
       "_native-city-art-finish-BZDHQ1na.js",
-      "_NativeCityBuildingGrade-CjHp4-jS.js",
+      "_NativeCityBuildingGrade-DSC2-S_a.js",
       "_three.core-Dt6LFlTl.js",
       "_NativeCityWallRelief-DgaUovU8.js",
       "_NativeCityPaintedFacePlan-Bd27WAXL.js"
@@ -177,8 +160,8 @@
     "file": "assets/OddboutCommunity-yZWAEfH9.js",
     "name": "OddboutCommunity"
   },
-  "_PauseMenuScene-BudSCuNV.js": {
-    "file": "assets/PauseMenuScene-BudSCuNV.js",
+  "_PauseMenuScene-C5HYCe0N.js": {
+    "file": "assets/PauseMenuScene-C5HYCe0N.js",
     "name": "PauseMenuScene",
     "imports": [
       "_rolldown-runtime-B0Z9INg1.js",
@@ -187,10 +170,10 @@
       "_preload-helper-Czpn1I53.js",
       "_arena-concept-runtime-BHN1CmLz.js",
       "_VillagePathFacing-DTuOohAt.js",
-      "_palette-CoCtOR9y.js",
       "_city-tournament-azouTl3-.js",
-      "_NativeCityOttoEncounter-DHxdWWyc.js",
+      "_NativeCityOttoEncounter-DSlpOHKX.js",
       "_AttackMoves-B-lq5s5T.js",
+      "_palette-CoCtOR9y.js",
       "_WebGl2Support-hZXjXmi-.js"
     ],
     "dynamicImports": [
@@ -205,14 +188,14 @@
       "_AttackMoves-B-lq5s5T.js"
     ]
   },
-  "_TournamentBracketScene-OlFSkA_y.js": {
-    "file": "assets/TournamentBracketScene-OlFSkA_y.js",
+  "_TournamentBracketScene-CAbjwB50.js": {
+    "file": "assets/TournamentBracketScene-CAbjwB50.js",
     "name": "TournamentBracketScene",
     "imports": [
       "_rolldown-runtime-B0Z9INg1.js",
-      "_palette-CoCtOR9y.js",
-      "_NativeCityOttoEncounter-DHxdWWyc.js",
-      "_PauseMenuScene-BudSCuNV.js"
+      "_NativeCityOttoEncounter-DSlpOHKX.js",
+      "_PauseMenuScene-C5HYCe0N.js",
+      "_palette-CoCtOR9y.js"
     ]
   },
   "_VillagePathFacing-DTuOohAt.js": {
@@ -223,23 +206,23 @@
     "file": "assets/WebGl2Support-hZXjXmi-.js",
     "name": "WebGl2Support"
   },
-  "_accountControl-CM8krToR.css": {
-    "file": "assets/accountControl-CM8krToR.css",
-    "src": "_accountControl-CM8krToR.css"
-  },
-  "_accountControl-CiCTQRBQ.js": {
-    "file": "assets/accountControl-CiCTQRBQ.js",
+  "_accountControl-Ds71Fs4Q.js": {
+    "file": "assets/accountControl-Ds71Fs4Q.js",
     "name": "accountControl",
     "imports": [
       "_oddboutSession-BLfvyrde.js"
     ],
     "css": [
-      "assets/accountControl-CM8krToR.css"
+      "assets/accountControl-VJz_K6KY.css"
     ],
     "assets": [
       "assets/GoogleSans-Medium-CeUKoFDv.ttf",
       "assets/g-logo-CpxN0HWb.png"
     ]
+  },
+  "_accountControl-VJz_K6KY.css": {
+    "file": "assets/accountControl-VJz_K6KY.css",
+    "src": "_accountControl-VJz_K6KY.css"
   },
   "_arena-concept-runtime-BHN1CmLz.js": {
     "file": "assets/arena-concept-runtime-BHN1CmLz.js",
@@ -257,27 +240,27 @@
     "file": "assets/city-tournament-azouTl3-.js",
     "name": "city-tournament"
   },
-  "_communityRoster-Bh9nuYLP.js": {
-    "file": "assets/communityRoster-Bh9nuYLP.js",
+  "_communityRoster-CM2Fh51h.css": {
+    "file": "assets/communityRoster-CM2Fh51h.css",
+    "src": "_communityRoster-CM2Fh51h.css"
+  },
+  "_communityRoster-DBAImfb2.js": {
+    "file": "assets/communityRoster-DBAImfb2.js",
     "name": "communityRoster",
     "imports": [
-      "_fighterStory-T8x-XogQ.js",
+      "_fighterStory-ui6srrdo.js",
       "_registeredFighters-cV5wg83O.js"
     ],
     "css": [
       "assets/communityRoster-CM2Fh51h.css"
     ]
   },
-  "_communityRoster-CM2Fh51h.css": {
-    "file": "assets/communityRoster-CM2Fh51h.css",
-    "src": "_communityRoster-CM2Fh51h.css"
-  },
   "_dist-CuSK8MRy.js": {
     "file": "assets/dist-CuSK8MRy.js",
     "name": "dist"
   },
-  "_fighterCreator-CRj2x9oa.js": {
-    "file": "assets/fighterCreator-CRj2x9oa.js",
+  "_fighterCreator-B5d3PY3n.js": {
+    "file": "assets/fighterCreator-B5d3PY3n.js",
     "name": "fighterCreator",
     "imports": [
       "_fighterLines-DQuiabXv.js",
@@ -301,22 +284,22 @@
     "file": "assets/fighterLines-DQuiabXv.js",
     "name": "fighterLines"
   },
-  "_fighterStory-T8x-XogQ.js": {
-    "file": "assets/fighterStory-T8x-XogQ.js",
+  "_fighterStory-ui6srrdo.js": {
+    "file": "assets/fighterStory-ui6srrdo.js",
     "name": "fighterStory",
     "imports": [
       "_Locale-BoqNfY5_.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
       "_dist-CuSK8MRy.js",
       "_registeredFighters-cV5wg83O.js",
-      "_fighterCreator-CRj2x9oa.js",
+      "_fighterCreator-B5d3PY3n.js",
       "_arenaRankings-DuZxNMTx.js",
       "_ArenaBoutLink-CHN2seHZ.js",
       "_city-tournament-azouTl3-.js"
     ]
   },
-  "_fileSave-DQ6E3crU.js": {
-    "file": "assets/fileSave-DQ6E3crU.js",
+  "_fileSave-BQtpeBqR.js": {
+    "file": "assets/fileSave-BQtpeBqR.js",
     "name": "fileSave",
     "imports": [
       "_rolldown-runtime-B0Z9INg1.js",
@@ -327,12 +310,12 @@
       "_registeredFighters-cV5wg83O.js",
       "_VillagePathFacing-DTuOohAt.js",
       "_NativeCityOrthoPack-8IWFh-Yk.js",
-      "_palette-CoCtOR9y.js",
       "_city-tournament-azouTl3-.js",
-      "_NativeCityOttoEncounter-DHxdWWyc.js",
-      "_PauseMenuScene-BudSCuNV.js",
+      "_NativeCityOttoEncounter-DSlpOHKX.js",
+      "_PauseMenuScene-C5HYCe0N.js",
       "_AttackMoves-B-lq5s5T.js",
       "_CityEnvironment-AhQf9g8O.js",
+      "_palette-CoCtOR9y.js",
       "_WebGl2Support-hZXjXmi-.js",
       "_PlayerLook-Bb3gqXoy.js",
       "_NativeCityKtx2Files-B34WNJFX.js"
@@ -364,25 +347,25 @@
       "src/platform/woniSample.ts"
     ]
   },
-  "_infoPage-3AVXp6ft.css": {
-    "file": "assets/infoPage-3AVXp6ft.css",
-    "src": "_infoPage-3AVXp6ft.css"
+  "_infoPage-DDfLwIfF.css": {
+    "file": "assets/infoPage-DDfLwIfF.css",
+    "src": "_infoPage-DDfLwIfF.css"
   },
-  "_infoPage-zy05-0Zj.js": {
-    "file": "assets/infoPage-zy05-0Zj.js",
+  "_infoPage-vq6VoeSF.js": {
+    "file": "assets/infoPage-vq6VoeSF.js",
     "name": "infoPage",
     "imports": [
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_siteChrome-udC2jkEc.js",
+      "_siteChrome-C5-e4drx.js",
       "_siteLinks-Cb1kHGko.js"
     ],
     "css": [
-      "assets/infoPage-3AVXp6ft.css"
+      "assets/infoPage-DDfLwIfF.css"
     ]
   },
-  "_league-DFfqQdmM.css": {
-    "file": "assets/league-DFfqQdmM.css",
-    "src": "_league-DFfqQdmM.css"
+  "_league-BqkgClzO.css": {
+    "file": "assets/league-BqkgClzO.css",
+    "src": "_league-BqkgClzO.css"
   },
   "_leagueContent-CAVtHixG.js": {
     "file": "assets/leagueContent-CAVtHixG.js",
@@ -403,23 +386,23 @@
       "_preload-helper-Czpn1I53.js"
     ],
     "dynamicImports": [
-      "../../../Users/turbo08/crashbang-heroes/kaito_web/node_modules/@supabase/supabase-js/dist/index.mjs"
+      "node_modules/@supabase/supabase-js/dist/index.mjs"
     ]
   },
   "_palette-CoCtOR9y.js": {
     "file": "assets/palette-CoCtOR9y.js",
     "name": "palette"
   },
-  "_portraitLock-DYcks80K.js": {
-    "file": "assets/portraitLock-DYcks80K.js",
+  "_portraitLock-CWuP8ucL.css": {
+    "file": "assets/portraitLock-CWuP8ucL.css",
+    "src": "_portraitLock-CWuP8ucL.css"
+  },
+  "_portraitLock-D87EknFu.js": {
+    "file": "assets/portraitLock-D87EknFu.js",
     "name": "portraitLock",
     "css": [
-      "assets/portraitLock-wH03GdfC.css"
+      "assets/portraitLock-CWuP8ucL.css"
     ]
-  },
-  "_portraitLock-wH03GdfC.css": {
-    "file": "assets/portraitLock-wH03GdfC.css",
-    "src": "_portraitLock-wH03GdfC.css"
   },
   "_preload-helper-Czpn1I53.js": {
     "file": "assets/preload-helper-Czpn1I53.js",
@@ -444,21 +427,210 @@
     "file": "assets/rolldown-runtime-B0Z9INg1.js",
     "name": "rolldown-runtime"
   },
-  "_siteChrome-0JukJQ6r.css": {
-    "file": "assets/siteChrome-0JukJQ6r.css",
-    "src": "_siteChrome-0JukJQ6r.css"
+  "_siteBase-Q85EwuBo.css": {
+    "file": "assets/siteBase-Q85EwuBo.css",
+    "src": "_siteBase-Q85EwuBo.css"
   },
-  "_siteChrome-udC2jkEc.js": {
-    "file": "assets/siteChrome-udC2jkEc.js",
+  "_siteChrome-B2CWFBx3.css": {
+    "file": "assets/siteChrome-B2CWFBx3.css",
+    "src": "_siteChrome-B2CWFBx3.css"
+  },
+  "_siteChrome-C5-e4drx.js": {
+    "file": "assets/siteChrome-C5-e4drx.js",
     "name": "siteChrome",
     "imports": [
-      "_accountControl-CiCTQRBQ.js",
+      "_accountControl-Ds71Fs4Q.js",
       "_oddboutSession-BLfvyrde.js",
-      "_portraitLock-DYcks80K.js",
+      "_portraitLock-D87EknFu.js",
       "_OddboutCommunity-yZWAEfH9.js"
     ],
     "css": [
-      "assets/siteChrome-0JukJQ6r.css"
+      "assets/siteChrome-B2CWFBx3.css",
+      "assets/siteBase-Q85EwuBo.css"
+    ],
+    "assets": [
+      "assets/Pretendard-Regular.subset.0-CLvkdWSe.woff2",
+      "assets/Pretendard-Regular.subset.1-BVqFoDjZ.woff2",
+      "assets/Pretendard-Regular.subset.2-yvaFdlZs.woff2",
+      "assets/Pretendard-Regular.subset.3-C9Tpixhb.woff2",
+      "assets/Pretendard-Regular.subset.4-BGFtMC3e.woff2",
+      "assets/Pretendard-Regular.subset.5-sliuPxIf.woff2",
+      "assets/Pretendard-Regular.subset.6-B5k_yUqt.woff2",
+      "assets/Pretendard-Regular.subset.7-DJUXMmnx.woff2",
+      "assets/Pretendard-Regular.subset.8-z1Wdyr3p.woff2",
+      "assets/Pretendard-Regular.subset.9-BlBUToJX.woff2",
+      "assets/Pretendard-Regular.subset.10-DTdwOQTA.woff2",
+      "assets/Pretendard-Regular.subset.11-DRkSlUm5.woff2",
+      "assets/Pretendard-Regular.subset.12-DFwM-W5f.woff2",
+      "assets/Pretendard-Regular.subset.13-D7_zCHDo.woff2",
+      "assets/Pretendard-Regular.subset.14-Bi8lmHnI.woff2",
+      "assets/Pretendard-Regular.subset.15-Hz9ATDJF.woff2",
+      "assets/Pretendard-Regular.subset.16-4qMG15x6.woff2",
+      "assets/Pretendard-Regular.subset.17-aLuDQMIi.woff2",
+      "assets/Pretendard-Regular.subset.18-DkYexm46.woff2",
+      "assets/Pretendard-Regular.subset.19-BF2Ja_M4.woff2",
+      "assets/Pretendard-Regular.subset.20-r5wxigYa.woff2",
+      "assets/Pretendard-Regular.subset.21-CN37rNdB.woff2",
+      "assets/Pretendard-Regular.subset.22-BIGh3MMA.woff2",
+      "assets/Pretendard-Regular.subset.23-DVqgWK0D.woff2",
+      "assets/Pretendard-Regular.subset.24-BFe-65yo.woff2",
+      "assets/Pretendard-Regular.subset.25-CkC0V2mk.woff2",
+      "assets/Pretendard-Regular.subset.26-CL_MrIn_.woff2",
+      "assets/Pretendard-Regular.subset.27-aleAX6Fv.woff2",
+      "assets/Pretendard-Regular.subset.28-w6RZIgAk.woff2",
+      "assets/Pretendard-Regular.subset.29-CXZoc9IN.woff2",
+      "assets/Pretendard-Regular.subset.30-BtoiFKRD.woff2",
+      "assets/Pretendard-Regular.subset.31-DbT4MEcl.woff2",
+      "assets/Pretendard-Regular.subset.32-DaI-s2Ht.woff2",
+      "assets/Pretendard-Regular.subset.33-C7C47Gl2.woff2",
+      "assets/Pretendard-Regular.subset.34-Drlq_G2G.woff2",
+      "assets/Pretendard-Regular.subset.35-PTe3TrP-.woff2",
+      "assets/Pretendard-Regular.subset.36-CI8Zmn3G.woff2",
+      "assets/Pretendard-Regular.subset.37-CUdPrEM2.woff2",
+      "assets/Pretendard-Regular.subset.38-DgckgUVf.woff2",
+      "assets/Pretendard-Regular.subset.39-dHwaNReA.woff2",
+      "assets/Pretendard-Regular.subset.40-__xIh32o.woff2",
+      "assets/Pretendard-Regular.subset.41-BnlHKs0e.woff2",
+      "assets/Pretendard-Regular.subset.42-Di0yTY5K.woff2",
+      "assets/Pretendard-Regular.subset.43-Jmy9lB6-.woff2",
+      "assets/Pretendard-Regular.subset.44-bCt39uYF.woff2",
+      "assets/Pretendard-Regular.subset.45-CpKCLeqj.woff2",
+      "assets/Pretendard-Regular.subset.46-Bp6gHNld.woff2",
+      "assets/Pretendard-Regular.subset.47-D-TQ2Dpe.woff2",
+      "assets/Pretendard-Regular.subset.48-CpUOPkpc.woff2",
+      "assets/Pretendard-Regular.subset.49-BFCe55dU.woff2",
+      "assets/Pretendard-Regular.subset.50-C0hS-48T.woff2",
+      "assets/Pretendard-Regular.subset.51-BM7aEno_.woff2",
+      "assets/Pretendard-Regular.subset.52-aQbNhxVW.woff2",
+      "assets/Pretendard-Regular.subset.53-CVyVV76U.woff2",
+      "assets/Pretendard-Regular.subset.54-CCaqh-Wb.woff2",
+      "assets/Pretendard-Regular.subset.55-D5HzRiiA.woff2",
+      "assets/Pretendard-Regular.subset.56-DQsKG79T.woff2",
+      "assets/Pretendard-Regular.subset.57-BHBjSRoS.woff2",
+      "assets/Pretendard-Regular.subset.58-BbKZplzG.woff2",
+      "assets/Pretendard-Regular.subset.59-BGn-xlCG.woff2",
+      "assets/Pretendard-Regular.subset.60-Bpn-X_60.woff2",
+      "assets/Pretendard-Regular.subset.61-DcY-UrqT.woff2",
+      "assets/Pretendard-Regular.subset.62-_K7zckZd.woff2",
+      "assets/Pretendard-Regular.subset.63-rllBUvx6.woff2",
+      "assets/Pretendard-Regular.subset.65-C11QvOfb.woff2",
+      "assets/Pretendard-Regular.subset.66-B6NcoCe7.woff2",
+      "assets/Pretendard-Regular.subset.67-Bpoh0lqZ.woff2",
+      "assets/Pretendard-Regular.subset.68-DlrU_wR_.woff2",
+      "assets/Pretendard-Regular.subset.69-YRxp0yrA.woff2",
+      "assets/Pretendard-Regular.subset.70-BomXJ8qi.woff2",
+      "assets/Pretendard-Regular.subset.71-65EIJBcG.woff2",
+      "assets/Pretendard-Regular.subset.72-BnY9n_Mj.woff2",
+      "assets/Pretendard-Regular.subset.73-O1E98iPB.woff2",
+      "assets/Pretendard-Regular.subset.74-CfbLEg7p.woff2",
+      "assets/Pretendard-Regular.subset.75-DzppOeWu.woff2",
+      "assets/Pretendard-Regular.subset.76-BUcgmqWO.woff2",
+      "assets/Pretendard-Regular.subset.77-C29jvt9x.woff2",
+      "assets/Pretendard-Regular.subset.78-Di1fo1-6.woff2",
+      "assets/Pretendard-Regular.subset.79-BXs_nTf_.woff2",
+      "assets/Pretendard-Regular.subset.80-B7hI_OTv.woff2",
+      "assets/Pretendard-Regular.subset.81-DPIdfzrH.woff2",
+      "assets/Pretendard-Regular.subset.82-C6Ij-OqK.woff2",
+      "assets/Pretendard-Regular.subset.83-B8ZdeZ2v.woff2",
+      "assets/Pretendard-Regular.subset.84-BirVK4H9.woff2",
+      "assets/Pretendard-Regular.subset.85-BAlM43J5.woff2",
+      "assets/Pretendard-Regular.subset.86-Zzc7ua_r.woff2",
+      "assets/Pretendard-Regular.subset.87-BjkG61uS.woff2",
+      "assets/Pretendard-Regular.subset.88-hrrXTjG5.woff2",
+      "assets/Pretendard-Regular.subset.89-elZC0DyK.woff2",
+      "assets/Pretendard-Regular.subset.90-CZ2yVr7J.woff2",
+      "assets/Pretendard-Regular.subset.91-DLuMSciM.woff2",
+      "assets/Pretendard-Bold.subset.0-DI-271U-.woff2",
+      "assets/Pretendard-Bold.subset.1-BRRWT-kM.woff2",
+      "assets/Pretendard-Bold.subset.2-Cexlqa70.woff2",
+      "assets/Pretendard-Bold.subset.3-Bl4i3r69.woff2",
+      "assets/Pretendard-Bold.subset.4-CXbiqweC.woff2",
+      "assets/Pretendard-Bold.subset.5-cDjVQeMI.woff2",
+      "assets/Pretendard-Bold.subset.6-BBBoNzaG.woff2",
+      "assets/Pretendard-Bold.subset.7-BSH3zjpr.woff2",
+      "assets/Pretendard-Bold.subset.8-CM_bVb9x.woff2",
+      "assets/Pretendard-Bold.subset.9-DN6f6aal.woff2",
+      "assets/Pretendard-Bold.subset.10-D5Ckv9YG.woff2",
+      "assets/Pretendard-Bold.subset.11-B1gRnSkd.woff2",
+      "assets/Pretendard-Bold.subset.12-j5ORzkeN.woff2",
+      "assets/Pretendard-Bold.subset.13-BOZItqG1.woff2",
+      "assets/Pretendard-Bold.subset.14-BNOTgc54.woff2",
+      "assets/Pretendard-Bold.subset.15-BeBSvWhq.woff2",
+      "assets/Pretendard-Bold.subset.16-1JP8UDJ7.woff2",
+      "assets/Pretendard-Bold.subset.17--zbCw3JP.woff2",
+      "assets/Pretendard-Bold.subset.18-BecALZMd.woff2",
+      "assets/Pretendard-Bold.subset.19-BZgCsGxG.woff2",
+      "assets/Pretendard-Bold.subset.20-P5oUxd0b.woff2",
+      "assets/Pretendard-Bold.subset.21-DCVme34P.woff2",
+      "assets/Pretendard-Bold.subset.22-IiR6S7ux.woff2",
+      "assets/Pretendard-Bold.subset.23-Bcuc9a8h.woff2",
+      "assets/Pretendard-Bold.subset.24-ChIspFtL.woff2",
+      "assets/Pretendard-Bold.subset.25-DT_eoyeX.woff2",
+      "assets/Pretendard-Bold.subset.26-CzOPEzNj.woff2",
+      "assets/Pretendard-Bold.subset.27-BCf8Y9rv.woff2",
+      "assets/Pretendard-Bold.subset.28-Dn9OZ7gK.woff2",
+      "assets/Pretendard-Bold.subset.29-C4bqRlR7.woff2",
+      "assets/Pretendard-Bold.subset.30-CEnytXAA.woff2",
+      "assets/Pretendard-Bold.subset.31-DSVHfO6M.woff2",
+      "assets/Pretendard-Bold.subset.32-CLq2SG_t.woff2",
+      "assets/Pretendard-Bold.subset.33-DVPq2PiX.woff2",
+      "assets/Pretendard-Bold.subset.34-C6AkQEW0.woff2",
+      "assets/Pretendard-Bold.subset.35-C4gJs43Y.woff2",
+      "assets/Pretendard-Bold.subset.36-BSTGVA8y.woff2",
+      "assets/Pretendard-Bold.subset.37-OpRtuglW.woff2",
+      "assets/Pretendard-Bold.subset.38-BSUZ0IED.woff2",
+      "assets/Pretendard-Bold.subset.39-CQILwqQt.woff2",
+      "assets/Pretendard-Bold.subset.40-CBj8JkiM.woff2",
+      "assets/Pretendard-Bold.subset.41-BkTvIRy0.woff2",
+      "assets/Pretendard-Bold.subset.42-Dxm--e8L.woff2",
+      "assets/Pretendard-Bold.subset.43-Bjth_ZHy.woff2",
+      "assets/Pretendard-Bold.subset.44-DrsfnaJG.woff2",
+      "assets/Pretendard-Bold.subset.45-3-E2CdQ5.woff2",
+      "assets/Pretendard-Bold.subset.46-CJDtHZku.woff2",
+      "assets/Pretendard-Bold.subset.47-DeuWUwZQ.woff2",
+      "assets/Pretendard-Bold.subset.48-kR8-bTj0.woff2",
+      "assets/Pretendard-Bold.subset.49-C-7uFl8R.woff2",
+      "assets/Pretendard-Bold.subset.50-CpbxBIRd.woff2",
+      "assets/Pretendard-Bold.subset.51-BzcAI4CC.woff2",
+      "assets/Pretendard-Bold.subset.52-DaVYTDiD.woff2",
+      "assets/Pretendard-Bold.subset.53-BfgVf2yk.woff2",
+      "assets/Pretendard-Bold.subset.54-CEnq6z3q.woff2",
+      "assets/Pretendard-Bold.subset.55-EqHF8uPM.woff2",
+      "assets/Pretendard-Bold.subset.56-D8xS_ZI5.woff2",
+      "assets/Pretendard-Bold.subset.57-D8xVm1sC.woff2",
+      "assets/Pretendard-Bold.subset.58-CNODPb29.woff2",
+      "assets/Pretendard-Bold.subset.59-Z68Ef1z2.woff2",
+      "assets/Pretendard-Bold.subset.60-BDtxBEUP.woff2",
+      "assets/Pretendard-Bold.subset.61-DTxpMu7s.woff2",
+      "assets/Pretendard-Bold.subset.62-Ew7L0dVK.woff2",
+      "assets/Pretendard-Bold.subset.63-Bu7qzEhQ.woff2",
+      "assets/Pretendard-Bold.subset.65-DewFSsH0.woff2",
+      "assets/Pretendard-Bold.subset.66-B4gpWdwU.woff2",
+      "assets/Pretendard-Bold.subset.67-Bo69LmZD.woff2",
+      "assets/Pretendard-Bold.subset.68-nVlfo4fD.woff2",
+      "assets/Pretendard-Bold.subset.69-uxq-xN90.woff2",
+      "assets/Pretendard-Bold.subset.70-B7Xjj8RR.woff2",
+      "assets/Pretendard-Bold.subset.71-udLph1Ne.woff2",
+      "assets/Pretendard-Bold.subset.72-CXAceLhm.woff2",
+      "assets/Pretendard-Bold.subset.73-CPSKLqdJ.woff2",
+      "assets/Pretendard-Bold.subset.74-DxY1_Zil.woff2",
+      "assets/Pretendard-Bold.subset.75-4JZdAVXy.woff2",
+      "assets/Pretendard-Bold.subset.76-aC77MvdV.woff2",
+      "assets/Pretendard-Bold.subset.77-BLftLGQA.woff2",
+      "assets/Pretendard-Bold.subset.78-COoje3nY.woff2",
+      "assets/Pretendard-Bold.subset.79-CwZ1xSqL.woff2",
+      "assets/Pretendard-Bold.subset.80-cJaFb9DW.woff2",
+      "assets/Pretendard-Bold.subset.81-D4G_6Jbq.woff2",
+      "assets/Pretendard-Bold.subset.82-CqQrq6lK.woff2",
+      "assets/Pretendard-Bold.subset.83-IQeHPxJV.woff2",
+      "assets/Pretendard-Bold.subset.84-D2t15K4I.woff2",
+      "assets/Pretendard-Bold.subset.85-Bk0HsLXN.woff2",
+      "assets/Pretendard-Bold.subset.86-Duq28nuO.woff2",
+      "assets/Pretendard-Bold.subset.87-DDIdDlrD.woff2",
+      "assets/Pretendard-Bold.subset.88-CwgMjdeO.woff2",
+      "assets/Pretendard-Bold.subset.89-BeAG6Wn1.woff2",
+      "assets/Pretendard-Bold.subset.90-aWD9PU43.woff2",
+      "assets/Pretendard-Bold.subset.91-DoowpukH.woff2"
     ]
   },
   "_siteLinks-Cb1kHGko.js": {
@@ -469,38 +641,223 @@
     "file": "assets/storageKeys-Lf7lfo-I.js",
     "name": "storageKeys"
   },
-  "_style-B4TUFPZx.css": {
-    "file": "assets/style-B4TUFPZx.css",
-    "src": "_style-B4TUFPZx.css"
+  "_style-BlYBj6Lk.css": {
+    "file": "assets/style-BlYBj6Lk.css",
+    "src": "_style-BlYBj6Lk.css"
   },
   "_three.core-Dt6LFlTl.js": {
     "file": "assets/three.core-Dt6LFlTl.js",
     "name": "three.core"
   },
   "about.html": {
-    "file": "assets/about-WEyGvAis.js",
+    "file": "assets/about-sFkW7K8H.js",
     "name": "about",
     "src": "about.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-CiCTQRBQ.js",
-      "_infoPage-zy05-0Zj.js"
+      "_accountControl-Ds71Fs4Q.js",
+      "_infoPage-vq6VoeSF.js"
     ]
   },
   "admin.html": {
-    "file": "assets/admin-h4zp9TQC.js",
+    "file": "assets/admin-Bna6aM2k.js",
     "name": "admin",
     "src": "admin.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-CiCTQRBQ.js",
+      "_accountControl-Ds71Fs4Q.js",
       "_oddboutSession-BLfvyrde.js",
-      "_fighterCreator-CRj2x9oa.js",
+      "_fighterCreator-B5d3PY3n.js",
       "_palette-CoCtOR9y.js"
     ],
     "css": [
       "assets/admin-BwnEhG1v.css",
-      "assets/style-B4TUFPZx.css"
+      "assets/siteBase-Q85EwuBo.css",
+      "assets/style-BlYBj6Lk.css"
+    ],
+    "assets": [
+      "assets/Pretendard-Regular.subset.0-CLvkdWSe.woff2",
+      "assets/Pretendard-Regular.subset.1-BVqFoDjZ.woff2",
+      "assets/Pretendard-Regular.subset.2-yvaFdlZs.woff2",
+      "assets/Pretendard-Regular.subset.3-C9Tpixhb.woff2",
+      "assets/Pretendard-Regular.subset.4-BGFtMC3e.woff2",
+      "assets/Pretendard-Regular.subset.5-sliuPxIf.woff2",
+      "assets/Pretendard-Regular.subset.6-B5k_yUqt.woff2",
+      "assets/Pretendard-Regular.subset.7-DJUXMmnx.woff2",
+      "assets/Pretendard-Regular.subset.8-z1Wdyr3p.woff2",
+      "assets/Pretendard-Regular.subset.9-BlBUToJX.woff2",
+      "assets/Pretendard-Regular.subset.10-DTdwOQTA.woff2",
+      "assets/Pretendard-Regular.subset.11-DRkSlUm5.woff2",
+      "assets/Pretendard-Regular.subset.12-DFwM-W5f.woff2",
+      "assets/Pretendard-Regular.subset.13-D7_zCHDo.woff2",
+      "assets/Pretendard-Regular.subset.14-Bi8lmHnI.woff2",
+      "assets/Pretendard-Regular.subset.15-Hz9ATDJF.woff2",
+      "assets/Pretendard-Regular.subset.16-4qMG15x6.woff2",
+      "assets/Pretendard-Regular.subset.17-aLuDQMIi.woff2",
+      "assets/Pretendard-Regular.subset.18-DkYexm46.woff2",
+      "assets/Pretendard-Regular.subset.19-BF2Ja_M4.woff2",
+      "assets/Pretendard-Regular.subset.20-r5wxigYa.woff2",
+      "assets/Pretendard-Regular.subset.21-CN37rNdB.woff2",
+      "assets/Pretendard-Regular.subset.22-BIGh3MMA.woff2",
+      "assets/Pretendard-Regular.subset.23-DVqgWK0D.woff2",
+      "assets/Pretendard-Regular.subset.24-BFe-65yo.woff2",
+      "assets/Pretendard-Regular.subset.25-CkC0V2mk.woff2",
+      "assets/Pretendard-Regular.subset.26-CL_MrIn_.woff2",
+      "assets/Pretendard-Regular.subset.27-aleAX6Fv.woff2",
+      "assets/Pretendard-Regular.subset.28-w6RZIgAk.woff2",
+      "assets/Pretendard-Regular.subset.29-CXZoc9IN.woff2",
+      "assets/Pretendard-Regular.subset.30-BtoiFKRD.woff2",
+      "assets/Pretendard-Regular.subset.31-DbT4MEcl.woff2",
+      "assets/Pretendard-Regular.subset.32-DaI-s2Ht.woff2",
+      "assets/Pretendard-Regular.subset.33-C7C47Gl2.woff2",
+      "assets/Pretendard-Regular.subset.34-Drlq_G2G.woff2",
+      "assets/Pretendard-Regular.subset.35-PTe3TrP-.woff2",
+      "assets/Pretendard-Regular.subset.36-CI8Zmn3G.woff2",
+      "assets/Pretendard-Regular.subset.37-CUdPrEM2.woff2",
+      "assets/Pretendard-Regular.subset.38-DgckgUVf.woff2",
+      "assets/Pretendard-Regular.subset.39-dHwaNReA.woff2",
+      "assets/Pretendard-Regular.subset.40-__xIh32o.woff2",
+      "assets/Pretendard-Regular.subset.41-BnlHKs0e.woff2",
+      "assets/Pretendard-Regular.subset.42-Di0yTY5K.woff2",
+      "assets/Pretendard-Regular.subset.43-Jmy9lB6-.woff2",
+      "assets/Pretendard-Regular.subset.44-bCt39uYF.woff2",
+      "assets/Pretendard-Regular.subset.45-CpKCLeqj.woff2",
+      "assets/Pretendard-Regular.subset.46-Bp6gHNld.woff2",
+      "assets/Pretendard-Regular.subset.47-D-TQ2Dpe.woff2",
+      "assets/Pretendard-Regular.subset.48-CpUOPkpc.woff2",
+      "assets/Pretendard-Regular.subset.49-BFCe55dU.woff2",
+      "assets/Pretendard-Regular.subset.50-C0hS-48T.woff2",
+      "assets/Pretendard-Regular.subset.51-BM7aEno_.woff2",
+      "assets/Pretendard-Regular.subset.52-aQbNhxVW.woff2",
+      "assets/Pretendard-Regular.subset.53-CVyVV76U.woff2",
+      "assets/Pretendard-Regular.subset.54-CCaqh-Wb.woff2",
+      "assets/Pretendard-Regular.subset.55-D5HzRiiA.woff2",
+      "assets/Pretendard-Regular.subset.56-DQsKG79T.woff2",
+      "assets/Pretendard-Regular.subset.57-BHBjSRoS.woff2",
+      "assets/Pretendard-Regular.subset.58-BbKZplzG.woff2",
+      "assets/Pretendard-Regular.subset.59-BGn-xlCG.woff2",
+      "assets/Pretendard-Regular.subset.60-Bpn-X_60.woff2",
+      "assets/Pretendard-Regular.subset.61-DcY-UrqT.woff2",
+      "assets/Pretendard-Regular.subset.62-_K7zckZd.woff2",
+      "assets/Pretendard-Regular.subset.63-rllBUvx6.woff2",
+      "assets/Pretendard-Regular.subset.65-C11QvOfb.woff2",
+      "assets/Pretendard-Regular.subset.66-B6NcoCe7.woff2",
+      "assets/Pretendard-Regular.subset.67-Bpoh0lqZ.woff2",
+      "assets/Pretendard-Regular.subset.68-DlrU_wR_.woff2",
+      "assets/Pretendard-Regular.subset.69-YRxp0yrA.woff2",
+      "assets/Pretendard-Regular.subset.70-BomXJ8qi.woff2",
+      "assets/Pretendard-Regular.subset.71-65EIJBcG.woff2",
+      "assets/Pretendard-Regular.subset.72-BnY9n_Mj.woff2",
+      "assets/Pretendard-Regular.subset.73-O1E98iPB.woff2",
+      "assets/Pretendard-Regular.subset.74-CfbLEg7p.woff2",
+      "assets/Pretendard-Regular.subset.75-DzppOeWu.woff2",
+      "assets/Pretendard-Regular.subset.76-BUcgmqWO.woff2",
+      "assets/Pretendard-Regular.subset.77-C29jvt9x.woff2",
+      "assets/Pretendard-Regular.subset.78-Di1fo1-6.woff2",
+      "assets/Pretendard-Regular.subset.79-BXs_nTf_.woff2",
+      "assets/Pretendard-Regular.subset.80-B7hI_OTv.woff2",
+      "assets/Pretendard-Regular.subset.81-DPIdfzrH.woff2",
+      "assets/Pretendard-Regular.subset.82-C6Ij-OqK.woff2",
+      "assets/Pretendard-Regular.subset.83-B8ZdeZ2v.woff2",
+      "assets/Pretendard-Regular.subset.84-BirVK4H9.woff2",
+      "assets/Pretendard-Regular.subset.85-BAlM43J5.woff2",
+      "assets/Pretendard-Regular.subset.86-Zzc7ua_r.woff2",
+      "assets/Pretendard-Regular.subset.87-BjkG61uS.woff2",
+      "assets/Pretendard-Regular.subset.88-hrrXTjG5.woff2",
+      "assets/Pretendard-Regular.subset.89-elZC0DyK.woff2",
+      "assets/Pretendard-Regular.subset.90-CZ2yVr7J.woff2",
+      "assets/Pretendard-Regular.subset.91-DLuMSciM.woff2",
+      "assets/Pretendard-Bold.subset.0-DI-271U-.woff2",
+      "assets/Pretendard-Bold.subset.1-BRRWT-kM.woff2",
+      "assets/Pretendard-Bold.subset.2-Cexlqa70.woff2",
+      "assets/Pretendard-Bold.subset.3-Bl4i3r69.woff2",
+      "assets/Pretendard-Bold.subset.4-CXbiqweC.woff2",
+      "assets/Pretendard-Bold.subset.5-cDjVQeMI.woff2",
+      "assets/Pretendard-Bold.subset.6-BBBoNzaG.woff2",
+      "assets/Pretendard-Bold.subset.7-BSH3zjpr.woff2",
+      "assets/Pretendard-Bold.subset.8-CM_bVb9x.woff2",
+      "assets/Pretendard-Bold.subset.9-DN6f6aal.woff2",
+      "assets/Pretendard-Bold.subset.10-D5Ckv9YG.woff2",
+      "assets/Pretendard-Bold.subset.11-B1gRnSkd.woff2",
+      "assets/Pretendard-Bold.subset.12-j5ORzkeN.woff2",
+      "assets/Pretendard-Bold.subset.13-BOZItqG1.woff2",
+      "assets/Pretendard-Bold.subset.14-BNOTgc54.woff2",
+      "assets/Pretendard-Bold.subset.15-BeBSvWhq.woff2",
+      "assets/Pretendard-Bold.subset.16-1JP8UDJ7.woff2",
+      "assets/Pretendard-Bold.subset.17--zbCw3JP.woff2",
+      "assets/Pretendard-Bold.subset.18-BecALZMd.woff2",
+      "assets/Pretendard-Bold.subset.19-BZgCsGxG.woff2",
+      "assets/Pretendard-Bold.subset.20-P5oUxd0b.woff2",
+      "assets/Pretendard-Bold.subset.21-DCVme34P.woff2",
+      "assets/Pretendard-Bold.subset.22-IiR6S7ux.woff2",
+      "assets/Pretendard-Bold.subset.23-Bcuc9a8h.woff2",
+      "assets/Pretendard-Bold.subset.24-ChIspFtL.woff2",
+      "assets/Pretendard-Bold.subset.25-DT_eoyeX.woff2",
+      "assets/Pretendard-Bold.subset.26-CzOPEzNj.woff2",
+      "assets/Pretendard-Bold.subset.27-BCf8Y9rv.woff2",
+      "assets/Pretendard-Bold.subset.28-Dn9OZ7gK.woff2",
+      "assets/Pretendard-Bold.subset.29-C4bqRlR7.woff2",
+      "assets/Pretendard-Bold.subset.30-CEnytXAA.woff2",
+      "assets/Pretendard-Bold.subset.31-DSVHfO6M.woff2",
+      "assets/Pretendard-Bold.subset.32-CLq2SG_t.woff2",
+      "assets/Pretendard-Bold.subset.33-DVPq2PiX.woff2",
+      "assets/Pretendard-Bold.subset.34-C6AkQEW0.woff2",
+      "assets/Pretendard-Bold.subset.35-C4gJs43Y.woff2",
+      "assets/Pretendard-Bold.subset.36-BSTGVA8y.woff2",
+      "assets/Pretendard-Bold.subset.37-OpRtuglW.woff2",
+      "assets/Pretendard-Bold.subset.38-BSUZ0IED.woff2",
+      "assets/Pretendard-Bold.subset.39-CQILwqQt.woff2",
+      "assets/Pretendard-Bold.subset.40-CBj8JkiM.woff2",
+      "assets/Pretendard-Bold.subset.41-BkTvIRy0.woff2",
+      "assets/Pretendard-Bold.subset.42-Dxm--e8L.woff2",
+      "assets/Pretendard-Bold.subset.43-Bjth_ZHy.woff2",
+      "assets/Pretendard-Bold.subset.44-DrsfnaJG.woff2",
+      "assets/Pretendard-Bold.subset.45-3-E2CdQ5.woff2",
+      "assets/Pretendard-Bold.subset.46-CJDtHZku.woff2",
+      "assets/Pretendard-Bold.subset.47-DeuWUwZQ.woff2",
+      "assets/Pretendard-Bold.subset.48-kR8-bTj0.woff2",
+      "assets/Pretendard-Bold.subset.49-C-7uFl8R.woff2",
+      "assets/Pretendard-Bold.subset.50-CpbxBIRd.woff2",
+      "assets/Pretendard-Bold.subset.51-BzcAI4CC.woff2",
+      "assets/Pretendard-Bold.subset.52-DaVYTDiD.woff2",
+      "assets/Pretendard-Bold.subset.53-BfgVf2yk.woff2",
+      "assets/Pretendard-Bold.subset.54-CEnq6z3q.woff2",
+      "assets/Pretendard-Bold.subset.55-EqHF8uPM.woff2",
+      "assets/Pretendard-Bold.subset.56-D8xS_ZI5.woff2",
+      "assets/Pretendard-Bold.subset.57-D8xVm1sC.woff2",
+      "assets/Pretendard-Bold.subset.58-CNODPb29.woff2",
+      "assets/Pretendard-Bold.subset.59-Z68Ef1z2.woff2",
+      "assets/Pretendard-Bold.subset.60-BDtxBEUP.woff2",
+      "assets/Pretendard-Bold.subset.61-DTxpMu7s.woff2",
+      "assets/Pretendard-Bold.subset.62-Ew7L0dVK.woff2",
+      "assets/Pretendard-Bold.subset.63-Bu7qzEhQ.woff2",
+      "assets/Pretendard-Bold.subset.65-DewFSsH0.woff2",
+      "assets/Pretendard-Bold.subset.66-B4gpWdwU.woff2",
+      "assets/Pretendard-Bold.subset.67-Bo69LmZD.woff2",
+      "assets/Pretendard-Bold.subset.68-nVlfo4fD.woff2",
+      "assets/Pretendard-Bold.subset.69-uxq-xN90.woff2",
+      "assets/Pretendard-Bold.subset.70-B7Xjj8RR.woff2",
+      "assets/Pretendard-Bold.subset.71-udLph1Ne.woff2",
+      "assets/Pretendard-Bold.subset.72-CXAceLhm.woff2",
+      "assets/Pretendard-Bold.subset.73-CPSKLqdJ.woff2",
+      "assets/Pretendard-Bold.subset.74-DxY1_Zil.woff2",
+      "assets/Pretendard-Bold.subset.75-4JZdAVXy.woff2",
+      "assets/Pretendard-Bold.subset.76-aC77MvdV.woff2",
+      "assets/Pretendard-Bold.subset.77-BLftLGQA.woff2",
+      "assets/Pretendard-Bold.subset.78-COoje3nY.woff2",
+      "assets/Pretendard-Bold.subset.79-CwZ1xSqL.woff2",
+      "assets/Pretendard-Bold.subset.80-cJaFb9DW.woff2",
+      "assets/Pretendard-Bold.subset.81-D4G_6Jbq.woff2",
+      "assets/Pretendard-Bold.subset.82-CqQrq6lK.woff2",
+      "assets/Pretendard-Bold.subset.83-IQeHPxJV.woff2",
+      "assets/Pretendard-Bold.subset.84-D2t15K4I.woff2",
+      "assets/Pretendard-Bold.subset.85-Bk0HsLXN.woff2",
+      "assets/Pretendard-Bold.subset.86-Duq28nuO.woff2",
+      "assets/Pretendard-Bold.subset.87-DDIdDlrD.woff2",
+      "assets/Pretendard-Bold.subset.88-CwgMjdeO.woff2",
+      "assets/Pretendard-Bold.subset.89-BeAG6Wn1.woff2",
+      "assets/Pretendard-Bold.subset.90-aWD9PU43.woff2",
+      "assets/Pretendard-Bold.subset.91-DoowpukH.woff2"
     ]
   },
   "assets/coop-campaign/animations/female-lupin-actions-v3-20261014.webp": {
@@ -512,106 +869,105 @@
     "src": "assets/coop-campaign/animations/handsome-actions-v2-20261014.webp"
   },
   "creator.html": {
-    "file": "assets/creator-doMBeR7H.js",
+    "file": "assets/creator-Dudphf2d.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-CiCTQRBQ.js",
+      "_accountControl-Ds71Fs4Q.js",
       "_fighterLines-DQuiabXv.js",
       "_Locale-BoqNfY5_.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_fighterStory-T8x-XogQ.js",
+      "_fighterStory-ui6srrdo.js",
       "_storageKeys-Lf7lfo-I.js",
       "_preload-helper-Czpn1I53.js",
       "_oddboutSession-BLfvyrde.js",
       "_registeredFighters-cV5wg83O.js",
-      "_fighterCreator-CRj2x9oa.js",
-      "_communityRoster-Bh9nuYLP.js",
-      "_siteChrome-udC2jkEc.js",
+      "_fighterCreator-B5d3PY3n.js",
+      "_communityRoster-DBAImfb2.js",
+      "_siteChrome-C5-e4drx.js",
       "_OddboutCommunity-yZWAEfH9.js",
       "_siteLinks-Cb1kHGko.js",
       "_arena-concept-runtime-BHN1CmLz.js",
       "_fighterFace-CR4nbOBD.js",
       "_NativeCityOrthoPack-8IWFh-Yk.js",
       "_rankedDuels-DOPkUcRo.js",
-      "_arenaRankings-DuZxNMTx.js",
-      "_palette-CoCtOR9y.js"
+      "_arenaRankings-DuZxNMTx.js"
     ],
     "dynamicImports": [
       "src/creator/leagueContent.ts"
     ],
     "css": [
-      "assets/creator-jk1djs6n.css",
-      "assets/style-B4TUFPZx.css"
+      "assets/creator-BYyk2nRg.css",
+      "assets/style-BlYBj6Lk.css"
     ]
   },
   "credits.html": {
-    "file": "assets/credits-X1lyPbiU.js",
+    "file": "assets/credits-BOC3zFef.js",
     "name": "credits",
     "src": "credits.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-CiCTQRBQ.js",
+      "_accountControl-Ds71Fs4Q.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_siteChrome-udC2jkEc.js",
+      "_siteChrome-C5-e4drx.js",
       "_leagueContent-CAVtHixG.js"
     ],
     "css": [
-      "assets/credits-D3j8SwRf.css"
+      "assets/credits-B9uvnNj1.css"
     ]
   },
   "docs.html": {
-    "file": "assets/docs-TQcIOzLm.js",
+    "file": "assets/docs-CyZYhOhw.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-CiCTQRBQ.js",
-      "_infoPage-zy05-0Zj.js"
+      "_accountControl-Ds71Fs4Q.js",
+      "_infoPage-vq6VoeSF.js"
     ]
   },
   "fighter.html": {
-    "file": "assets/fighter-BQQBwupy.js",
+    "file": "assets/fighter-DzGLHYrg.js",
     "name": "fighter",
     "src": "fighter.html",
     "isEntry": true,
     "imports": [
       "_rolldown-runtime-B0Z9INg1.js",
-      "_accountControl-CiCTQRBQ.js",
+      "_accountControl-Ds71Fs4Q.js",
       "_storageKeys-Lf7lfo-I.js",
       "_oddboutSession-BLfvyrde.js",
       "_registeredFighters-cV5wg83O.js",
-      "_portraitLock-DYcks80K.js",
+      "_portraitLock-D87EknFu.js",
       "_rankedDuels-DOPkUcRo.js",
       "_arenaRankings-DuZxNMTx.js",
-      "_palette-CoCtOR9y.js",
       "_city-tournament-azouTl3-.js",
-      "_NativeCityOttoEncounter-DHxdWWyc.js",
-      "_PauseMenuScene-BudSCuNV.js",
-      "_ArenaGoldDropView-BwZnE6FB.js",
+      "_NativeCityOttoEncounter-DSlpOHKX.js",
+      "_PauseMenuScene-C5HYCe0N.js",
+      "_ArenaGoldDropView-sRGcUnjQ.js",
+      "_palette-CoCtOR9y.js",
       "_leagueContent-CAVtHixG.js",
-      "_TournamentBracketScene-OlFSkA_y.js"
+      "_TournamentBracketScene-CAbjwB50.js"
     ],
     "css": [
-      "assets/fighter-BLfO205R.css"
+      "assets/fighter-1IPMv0AM.css"
     ]
   },
   "fighters.html": {
-    "file": "assets/fighters-B_lQPdA-.js",
+    "file": "assets/fighters-BJ1vTAXh.js",
     "name": "fighters",
     "src": "fighters.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-CiCTQRBQ.js",
+      "_accountControl-Ds71Fs4Q.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_fighterStory-T8x-XogQ.js",
+      "_fighterStory-ui6srrdo.js",
       "_dist-CuSK8MRy.js",
       "_storageKeys-Lf7lfo-I.js",
       "_registeredFighters-cV5wg83O.js",
-      "_fighterCreator-CRj2x9oa.js",
-      "_communityRoster-Bh9nuYLP.js",
-      "_siteChrome-udC2jkEc.js",
+      "_fighterCreator-B5d3PY3n.js",
+      "_communityRoster-DBAImfb2.js",
+      "_siteChrome-C5-e4drx.js",
       "_siteLinks-Cb1kHGko.js",
       "_arenaRankings-DuZxNMTx.js",
       "_ArenaBoutLink-CHN2seHZ.js",
@@ -619,39 +975,56 @@
       "_leagueContent-CAVtHixG.js"
     ],
     "css": [
-      "assets/fighters-BtNI4KP5.css",
-      "assets/league-DFfqQdmM.css"
+      "assets/fighters-CGQ_Cwm0.css",
+      "assets/league-BqkgClzO.css"
     ]
   },
   "league.html": {
-    "file": "assets/league-CcBjIcd4.js",
+    "file": "assets/league-Dko0uUIH.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-CiCTQRBQ.js",
+      "_accountControl-Ds71Fs4Q.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_siteChrome-udC2jkEc.js",
+      "_siteChrome-C5-e4drx.js",
       "_OddboutCommunity-yZWAEfH9.js",
       "_siteLinks-Cb1kHGko.js",
       "_fighterFace-CR4nbOBD.js",
       "_leagueContent-CAVtHixG.js"
     ],
     "css": [
-      "assets/league-DFfqQdmM.css"
+      "assets/league-BqkgClzO.css"
     ]
   },
+  "node_modules/@supabase/supabase-js/dist/index.mjs": {
+    "file": "assets/dist-BziIhgZ3.js",
+    "name": "dist",
+    "src": "node_modules/@supabase/supabase-js/dist/index.mjs",
+    "isDynamicEntry": true,
+    "imports": [
+      "_dist-CuSK8MRy.js"
+    ]
+  },
+  "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js": {
+    "file": "assets/basis_transcoder-o4Hde_L7.js",
+    "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.js"
+  },
+  "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm": {
+    "file": "assets/basis_transcoder-VXdx5NbI.wasm",
+    "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
+  },
   "privacy.html": {
-    "file": "assets/privacy-DrYIvcmi.js",
+    "file": "assets/privacy-DDzs_vqb.js",
     "name": "privacy",
     "src": "privacy.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-CiCTQRBQ.js",
-      "_siteChrome-udC2jkEc.js"
+      "_accountControl-Ds71Fs4Q.js",
+      "_siteChrome-C5-e4drx.js"
     ],
     "css": [
-      "assets/privacy-CqLiglDx.css"
+      "assets/privacy-_4x5eeMt.css"
     ]
   },
   "src/assets/native-city-ahn-side-runtime.json": {
@@ -818,6 +1191,734 @@
     "file": "assets/g-logo-CpxN0HWb.png",
     "src": "src/creator/assets/google/g-logo.png"
   },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.0.woff2": {
+    "file": "assets/Pretendard-Bold.subset.0-DI-271U-.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.0.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.1.woff2": {
+    "file": "assets/Pretendard-Bold.subset.1-BRRWT-kM.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.1.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.10.woff2": {
+    "file": "assets/Pretendard-Bold.subset.10-D5Ckv9YG.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.10.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.11.woff2": {
+    "file": "assets/Pretendard-Bold.subset.11-B1gRnSkd.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.11.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.12.woff2": {
+    "file": "assets/Pretendard-Bold.subset.12-j5ORzkeN.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.12.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.13.woff2": {
+    "file": "assets/Pretendard-Bold.subset.13-BOZItqG1.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.13.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.14.woff2": {
+    "file": "assets/Pretendard-Bold.subset.14-BNOTgc54.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.14.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.15.woff2": {
+    "file": "assets/Pretendard-Bold.subset.15-BeBSvWhq.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.15.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.16.woff2": {
+    "file": "assets/Pretendard-Bold.subset.16-1JP8UDJ7.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.16.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.17.woff2": {
+    "file": "assets/Pretendard-Bold.subset.17--zbCw3JP.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.17.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.18.woff2": {
+    "file": "assets/Pretendard-Bold.subset.18-BecALZMd.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.18.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.19.woff2": {
+    "file": "assets/Pretendard-Bold.subset.19-BZgCsGxG.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.19.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.2.woff2": {
+    "file": "assets/Pretendard-Bold.subset.2-Cexlqa70.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.2.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.20.woff2": {
+    "file": "assets/Pretendard-Bold.subset.20-P5oUxd0b.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.20.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.21.woff2": {
+    "file": "assets/Pretendard-Bold.subset.21-DCVme34P.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.21.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.22.woff2": {
+    "file": "assets/Pretendard-Bold.subset.22-IiR6S7ux.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.22.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.23.woff2": {
+    "file": "assets/Pretendard-Bold.subset.23-Bcuc9a8h.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.23.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.24.woff2": {
+    "file": "assets/Pretendard-Bold.subset.24-ChIspFtL.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.24.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.25.woff2": {
+    "file": "assets/Pretendard-Bold.subset.25-DT_eoyeX.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.25.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.26.woff2": {
+    "file": "assets/Pretendard-Bold.subset.26-CzOPEzNj.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.26.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.27.woff2": {
+    "file": "assets/Pretendard-Bold.subset.27-BCf8Y9rv.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.27.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.28.woff2": {
+    "file": "assets/Pretendard-Bold.subset.28-Dn9OZ7gK.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.28.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.29.woff2": {
+    "file": "assets/Pretendard-Bold.subset.29-C4bqRlR7.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.29.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.3.woff2": {
+    "file": "assets/Pretendard-Bold.subset.3-Bl4i3r69.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.3.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.30.woff2": {
+    "file": "assets/Pretendard-Bold.subset.30-CEnytXAA.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.30.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.31.woff2": {
+    "file": "assets/Pretendard-Bold.subset.31-DSVHfO6M.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.31.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.32.woff2": {
+    "file": "assets/Pretendard-Bold.subset.32-CLq2SG_t.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.32.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.33.woff2": {
+    "file": "assets/Pretendard-Bold.subset.33-DVPq2PiX.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.33.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.34.woff2": {
+    "file": "assets/Pretendard-Bold.subset.34-C6AkQEW0.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.34.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.35.woff2": {
+    "file": "assets/Pretendard-Bold.subset.35-C4gJs43Y.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.35.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.36.woff2": {
+    "file": "assets/Pretendard-Bold.subset.36-BSTGVA8y.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.36.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.37.woff2": {
+    "file": "assets/Pretendard-Bold.subset.37-OpRtuglW.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.37.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.38.woff2": {
+    "file": "assets/Pretendard-Bold.subset.38-BSUZ0IED.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.38.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.39.woff2": {
+    "file": "assets/Pretendard-Bold.subset.39-CQILwqQt.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.39.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.4.woff2": {
+    "file": "assets/Pretendard-Bold.subset.4-CXbiqweC.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.4.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.40.woff2": {
+    "file": "assets/Pretendard-Bold.subset.40-CBj8JkiM.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.40.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.41.woff2": {
+    "file": "assets/Pretendard-Bold.subset.41-BkTvIRy0.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.41.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.42.woff2": {
+    "file": "assets/Pretendard-Bold.subset.42-Dxm--e8L.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.42.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.43.woff2": {
+    "file": "assets/Pretendard-Bold.subset.43-Bjth_ZHy.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.43.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.44.woff2": {
+    "file": "assets/Pretendard-Bold.subset.44-DrsfnaJG.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.44.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.45.woff2": {
+    "file": "assets/Pretendard-Bold.subset.45-3-E2CdQ5.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.45.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.46.woff2": {
+    "file": "assets/Pretendard-Bold.subset.46-CJDtHZku.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.46.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.47.woff2": {
+    "file": "assets/Pretendard-Bold.subset.47-DeuWUwZQ.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.47.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.48.woff2": {
+    "file": "assets/Pretendard-Bold.subset.48-kR8-bTj0.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.48.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.49.woff2": {
+    "file": "assets/Pretendard-Bold.subset.49-C-7uFl8R.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.49.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.5.woff2": {
+    "file": "assets/Pretendard-Bold.subset.5-cDjVQeMI.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.5.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.50.woff2": {
+    "file": "assets/Pretendard-Bold.subset.50-CpbxBIRd.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.50.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.51.woff2": {
+    "file": "assets/Pretendard-Bold.subset.51-BzcAI4CC.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.51.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.52.woff2": {
+    "file": "assets/Pretendard-Bold.subset.52-DaVYTDiD.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.52.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.53.woff2": {
+    "file": "assets/Pretendard-Bold.subset.53-BfgVf2yk.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.53.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.54.woff2": {
+    "file": "assets/Pretendard-Bold.subset.54-CEnq6z3q.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.54.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.55.woff2": {
+    "file": "assets/Pretendard-Bold.subset.55-EqHF8uPM.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.55.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.56.woff2": {
+    "file": "assets/Pretendard-Bold.subset.56-D8xS_ZI5.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.56.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.57.woff2": {
+    "file": "assets/Pretendard-Bold.subset.57-D8xVm1sC.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.57.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.58.woff2": {
+    "file": "assets/Pretendard-Bold.subset.58-CNODPb29.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.58.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.59.woff2": {
+    "file": "assets/Pretendard-Bold.subset.59-Z68Ef1z2.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.59.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.6.woff2": {
+    "file": "assets/Pretendard-Bold.subset.6-BBBoNzaG.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.6.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.60.woff2": {
+    "file": "assets/Pretendard-Bold.subset.60-BDtxBEUP.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.60.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.61.woff2": {
+    "file": "assets/Pretendard-Bold.subset.61-DTxpMu7s.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.61.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.62.woff2": {
+    "file": "assets/Pretendard-Bold.subset.62-Ew7L0dVK.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.62.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.63.woff2": {
+    "file": "assets/Pretendard-Bold.subset.63-Bu7qzEhQ.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.63.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.65.woff2": {
+    "file": "assets/Pretendard-Bold.subset.65-DewFSsH0.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.65.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.66.woff2": {
+    "file": "assets/Pretendard-Bold.subset.66-B4gpWdwU.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.66.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.67.woff2": {
+    "file": "assets/Pretendard-Bold.subset.67-Bo69LmZD.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.67.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.68.woff2": {
+    "file": "assets/Pretendard-Bold.subset.68-nVlfo4fD.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.68.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.69.woff2": {
+    "file": "assets/Pretendard-Bold.subset.69-uxq-xN90.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.69.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.7.woff2": {
+    "file": "assets/Pretendard-Bold.subset.7-BSH3zjpr.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.7.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.70.woff2": {
+    "file": "assets/Pretendard-Bold.subset.70-B7Xjj8RR.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.70.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.71.woff2": {
+    "file": "assets/Pretendard-Bold.subset.71-udLph1Ne.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.71.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.72.woff2": {
+    "file": "assets/Pretendard-Bold.subset.72-CXAceLhm.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.72.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.73.woff2": {
+    "file": "assets/Pretendard-Bold.subset.73-CPSKLqdJ.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.73.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.74.woff2": {
+    "file": "assets/Pretendard-Bold.subset.74-DxY1_Zil.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.74.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.75.woff2": {
+    "file": "assets/Pretendard-Bold.subset.75-4JZdAVXy.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.75.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.76.woff2": {
+    "file": "assets/Pretendard-Bold.subset.76-aC77MvdV.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.76.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.77.woff2": {
+    "file": "assets/Pretendard-Bold.subset.77-BLftLGQA.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.77.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.78.woff2": {
+    "file": "assets/Pretendard-Bold.subset.78-COoje3nY.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.78.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.79.woff2": {
+    "file": "assets/Pretendard-Bold.subset.79-CwZ1xSqL.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.79.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.8.woff2": {
+    "file": "assets/Pretendard-Bold.subset.8-CM_bVb9x.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.8.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.80.woff2": {
+    "file": "assets/Pretendard-Bold.subset.80-cJaFb9DW.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.80.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.81.woff2": {
+    "file": "assets/Pretendard-Bold.subset.81-D4G_6Jbq.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.81.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.82.woff2": {
+    "file": "assets/Pretendard-Bold.subset.82-CqQrq6lK.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.82.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.83.woff2": {
+    "file": "assets/Pretendard-Bold.subset.83-IQeHPxJV.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.83.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.84.woff2": {
+    "file": "assets/Pretendard-Bold.subset.84-D2t15K4I.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.84.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.85.woff2": {
+    "file": "assets/Pretendard-Bold.subset.85-Bk0HsLXN.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.85.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.86.woff2": {
+    "file": "assets/Pretendard-Bold.subset.86-Duq28nuO.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.86.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.87.woff2": {
+    "file": "assets/Pretendard-Bold.subset.87-DDIdDlrD.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.87.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.88.woff2": {
+    "file": "assets/Pretendard-Bold.subset.88-CwgMjdeO.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.88.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.89.woff2": {
+    "file": "assets/Pretendard-Bold.subset.89-BeAG6Wn1.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.89.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.9.woff2": {
+    "file": "assets/Pretendard-Bold.subset.9-DN6f6aal.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.9.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.90.woff2": {
+    "file": "assets/Pretendard-Bold.subset.90-aWD9PU43.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.90.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Bold.subset.91.woff2": {
+    "file": "assets/Pretendard-Bold.subset.91-DoowpukH.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Bold.subset.91.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.0.woff2": {
+    "file": "assets/Pretendard-Regular.subset.0-CLvkdWSe.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.0.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.1.woff2": {
+    "file": "assets/Pretendard-Regular.subset.1-BVqFoDjZ.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.1.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.10.woff2": {
+    "file": "assets/Pretendard-Regular.subset.10-DTdwOQTA.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.10.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.11.woff2": {
+    "file": "assets/Pretendard-Regular.subset.11-DRkSlUm5.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.11.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.12.woff2": {
+    "file": "assets/Pretendard-Regular.subset.12-DFwM-W5f.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.12.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.13.woff2": {
+    "file": "assets/Pretendard-Regular.subset.13-D7_zCHDo.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.13.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.14.woff2": {
+    "file": "assets/Pretendard-Regular.subset.14-Bi8lmHnI.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.14.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.15.woff2": {
+    "file": "assets/Pretendard-Regular.subset.15-Hz9ATDJF.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.15.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.16.woff2": {
+    "file": "assets/Pretendard-Regular.subset.16-4qMG15x6.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.16.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.17.woff2": {
+    "file": "assets/Pretendard-Regular.subset.17-aLuDQMIi.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.17.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.18.woff2": {
+    "file": "assets/Pretendard-Regular.subset.18-DkYexm46.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.18.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.19.woff2": {
+    "file": "assets/Pretendard-Regular.subset.19-BF2Ja_M4.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.19.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.2.woff2": {
+    "file": "assets/Pretendard-Regular.subset.2-yvaFdlZs.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.2.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.20.woff2": {
+    "file": "assets/Pretendard-Regular.subset.20-r5wxigYa.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.20.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.21.woff2": {
+    "file": "assets/Pretendard-Regular.subset.21-CN37rNdB.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.21.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.22.woff2": {
+    "file": "assets/Pretendard-Regular.subset.22-BIGh3MMA.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.22.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.23.woff2": {
+    "file": "assets/Pretendard-Regular.subset.23-DVqgWK0D.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.23.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.24.woff2": {
+    "file": "assets/Pretendard-Regular.subset.24-BFe-65yo.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.24.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.25.woff2": {
+    "file": "assets/Pretendard-Regular.subset.25-CkC0V2mk.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.25.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.26.woff2": {
+    "file": "assets/Pretendard-Regular.subset.26-CL_MrIn_.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.26.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.27.woff2": {
+    "file": "assets/Pretendard-Regular.subset.27-aleAX6Fv.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.27.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.28.woff2": {
+    "file": "assets/Pretendard-Regular.subset.28-w6RZIgAk.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.28.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.29.woff2": {
+    "file": "assets/Pretendard-Regular.subset.29-CXZoc9IN.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.29.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.3.woff2": {
+    "file": "assets/Pretendard-Regular.subset.3-C9Tpixhb.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.3.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.30.woff2": {
+    "file": "assets/Pretendard-Regular.subset.30-BtoiFKRD.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.30.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.31.woff2": {
+    "file": "assets/Pretendard-Regular.subset.31-DbT4MEcl.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.31.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.32.woff2": {
+    "file": "assets/Pretendard-Regular.subset.32-DaI-s2Ht.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.32.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.33.woff2": {
+    "file": "assets/Pretendard-Regular.subset.33-C7C47Gl2.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.33.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.34.woff2": {
+    "file": "assets/Pretendard-Regular.subset.34-Drlq_G2G.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.34.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.35.woff2": {
+    "file": "assets/Pretendard-Regular.subset.35-PTe3TrP-.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.35.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.36.woff2": {
+    "file": "assets/Pretendard-Regular.subset.36-CI8Zmn3G.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.36.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.37.woff2": {
+    "file": "assets/Pretendard-Regular.subset.37-CUdPrEM2.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.37.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.38.woff2": {
+    "file": "assets/Pretendard-Regular.subset.38-DgckgUVf.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.38.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.39.woff2": {
+    "file": "assets/Pretendard-Regular.subset.39-dHwaNReA.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.39.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.4.woff2": {
+    "file": "assets/Pretendard-Regular.subset.4-BGFtMC3e.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.4.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.40.woff2": {
+    "file": "assets/Pretendard-Regular.subset.40-__xIh32o.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.40.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.41.woff2": {
+    "file": "assets/Pretendard-Regular.subset.41-BnlHKs0e.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.41.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.42.woff2": {
+    "file": "assets/Pretendard-Regular.subset.42-Di0yTY5K.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.42.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.43.woff2": {
+    "file": "assets/Pretendard-Regular.subset.43-Jmy9lB6-.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.43.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.44.woff2": {
+    "file": "assets/Pretendard-Regular.subset.44-bCt39uYF.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.44.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.45.woff2": {
+    "file": "assets/Pretendard-Regular.subset.45-CpKCLeqj.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.45.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.46.woff2": {
+    "file": "assets/Pretendard-Regular.subset.46-Bp6gHNld.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.46.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.47.woff2": {
+    "file": "assets/Pretendard-Regular.subset.47-D-TQ2Dpe.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.47.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.48.woff2": {
+    "file": "assets/Pretendard-Regular.subset.48-CpUOPkpc.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.48.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.49.woff2": {
+    "file": "assets/Pretendard-Regular.subset.49-BFCe55dU.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.49.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.5.woff2": {
+    "file": "assets/Pretendard-Regular.subset.5-sliuPxIf.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.5.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.50.woff2": {
+    "file": "assets/Pretendard-Regular.subset.50-C0hS-48T.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.50.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.51.woff2": {
+    "file": "assets/Pretendard-Regular.subset.51-BM7aEno_.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.51.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.52.woff2": {
+    "file": "assets/Pretendard-Regular.subset.52-aQbNhxVW.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.52.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.53.woff2": {
+    "file": "assets/Pretendard-Regular.subset.53-CVyVV76U.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.53.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.54.woff2": {
+    "file": "assets/Pretendard-Regular.subset.54-CCaqh-Wb.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.54.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.55.woff2": {
+    "file": "assets/Pretendard-Regular.subset.55-D5HzRiiA.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.55.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.56.woff2": {
+    "file": "assets/Pretendard-Regular.subset.56-DQsKG79T.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.56.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.57.woff2": {
+    "file": "assets/Pretendard-Regular.subset.57-BHBjSRoS.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.57.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.58.woff2": {
+    "file": "assets/Pretendard-Regular.subset.58-BbKZplzG.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.58.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.59.woff2": {
+    "file": "assets/Pretendard-Regular.subset.59-BGn-xlCG.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.59.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.6.woff2": {
+    "file": "assets/Pretendard-Regular.subset.6-B5k_yUqt.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.6.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.60.woff2": {
+    "file": "assets/Pretendard-Regular.subset.60-Bpn-X_60.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.60.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.61.woff2": {
+    "file": "assets/Pretendard-Regular.subset.61-DcY-UrqT.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.61.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.62.woff2": {
+    "file": "assets/Pretendard-Regular.subset.62-_K7zckZd.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.62.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.63.woff2": {
+    "file": "assets/Pretendard-Regular.subset.63-rllBUvx6.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.63.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.65.woff2": {
+    "file": "assets/Pretendard-Regular.subset.65-C11QvOfb.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.65.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.66.woff2": {
+    "file": "assets/Pretendard-Regular.subset.66-B6NcoCe7.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.66.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.67.woff2": {
+    "file": "assets/Pretendard-Regular.subset.67-Bpoh0lqZ.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.67.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.68.woff2": {
+    "file": "assets/Pretendard-Regular.subset.68-DlrU_wR_.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.68.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.69.woff2": {
+    "file": "assets/Pretendard-Regular.subset.69-YRxp0yrA.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.69.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.7.woff2": {
+    "file": "assets/Pretendard-Regular.subset.7-DJUXMmnx.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.7.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.70.woff2": {
+    "file": "assets/Pretendard-Regular.subset.70-BomXJ8qi.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.70.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.71.woff2": {
+    "file": "assets/Pretendard-Regular.subset.71-65EIJBcG.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.71.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.72.woff2": {
+    "file": "assets/Pretendard-Regular.subset.72-BnY9n_Mj.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.72.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.73.woff2": {
+    "file": "assets/Pretendard-Regular.subset.73-O1E98iPB.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.73.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.74.woff2": {
+    "file": "assets/Pretendard-Regular.subset.74-CfbLEg7p.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.74.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.75.woff2": {
+    "file": "assets/Pretendard-Regular.subset.75-DzppOeWu.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.75.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.76.woff2": {
+    "file": "assets/Pretendard-Regular.subset.76-BUcgmqWO.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.76.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.77.woff2": {
+    "file": "assets/Pretendard-Regular.subset.77-C29jvt9x.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.77.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.78.woff2": {
+    "file": "assets/Pretendard-Regular.subset.78-Di1fo1-6.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.78.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.79.woff2": {
+    "file": "assets/Pretendard-Regular.subset.79-BXs_nTf_.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.79.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.8.woff2": {
+    "file": "assets/Pretendard-Regular.subset.8-z1Wdyr3p.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.8.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.80.woff2": {
+    "file": "assets/Pretendard-Regular.subset.80-B7hI_OTv.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.80.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.81.woff2": {
+    "file": "assets/Pretendard-Regular.subset.81-DPIdfzrH.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.81.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.82.woff2": {
+    "file": "assets/Pretendard-Regular.subset.82-C6Ij-OqK.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.82.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.83.woff2": {
+    "file": "assets/Pretendard-Regular.subset.83-B8ZdeZ2v.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.83.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.84.woff2": {
+    "file": "assets/Pretendard-Regular.subset.84-BirVK4H9.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.84.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.85.woff2": {
+    "file": "assets/Pretendard-Regular.subset.85-BAlM43J5.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.85.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.86.woff2": {
+    "file": "assets/Pretendard-Regular.subset.86-Zzc7ua_r.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.86.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.87.woff2": {
+    "file": "assets/Pretendard-Regular.subset.87-BjkG61uS.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.87.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.88.woff2": {
+    "file": "assets/Pretendard-Regular.subset.88-hrrXTjG5.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.88.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.89.woff2": {
+    "file": "assets/Pretendard-Regular.subset.89-elZC0DyK.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.89.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.9.woff2": {
+    "file": "assets/Pretendard-Regular.subset.9-BlBUToJX.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.9.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.90.woff2": {
+    "file": "assets/Pretendard-Regular.subset.90-CZ2yVr7J.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.90.woff2"
+  },
+  "src/creator/assets/pretendard/Pretendard-Regular.subset.91.woff2": {
+    "file": "assets/Pretendard-Regular.subset.91-DLuMSciM.woff2",
+    "src": "src/creator/assets/pretendard/Pretendard-Regular.subset.91.woff2"
+  },
   "src/creator/leagueContent.ts": {
     "file": "assets/leagueContent-JtDMTHvr.js",
     "name": "leagueContent",
@@ -838,7 +1939,7 @@
     ]
   },
   "src/render/scenes/arena/ArenaModule.ts": {
-    "file": "assets/ArenaModule-Bhl2smQf.js",
+    "file": "assets/ArenaModule-Cvnsg5Oo.js",
     "name": "ArenaModule",
     "src": "src/render/scenes/arena/ArenaModule.ts",
     "isDynamicEntry": true,
@@ -851,17 +1952,17 @@
       "_NativeCityOrthoPack-8IWFh-Yk.js",
       "_rankedDuels-DOPkUcRo.js",
       "_arenaRankings-DuZxNMTx.js",
-      "_palette-CoCtOR9y.js",
       "_ArenaBoutLink-CHN2seHZ.js",
       "_city-tournament-azouTl3-.js",
-      "_NativeCityOttoEncounter-DHxdWWyc.js",
-      "_PauseMenuScene-BudSCuNV.js",
-      "_ArenaGoldDropView-BwZnE6FB.js",
-      "_fileSave-DQ6E3crU.js"
+      "_NativeCityOttoEncounter-DSlpOHKX.js",
+      "_PauseMenuScene-C5HYCe0N.js",
+      "_ArenaGoldDropView-sRGcUnjQ.js",
+      "_palette-CoCtOR9y.js",
+      "_fileSave-BQtpeBqR.js"
     ]
   },
   "src/render/scenes/village/NativeCityModule.ts": {
-    "file": "assets/NativeCityModule-ByU1i0qb.js",
+    "file": "assets/NativeCityModule-DseG23fT.js",
     "name": "NativeCityModule",
     "src": "src/render/scenes/village/NativeCityModule.ts",
     "isDynamicEntry": true,
@@ -872,17 +1973,17 @@
       "_storageKeys-Lf7lfo-I.js",
       "_preload-helper-Czpn1I53.js",
       "_NativeCityOrthoPack-8IWFh-Yk.js",
-      "_palette-CoCtOR9y.js",
       "_city-tournament-azouTl3-.js",
-      "_NativeCityOttoEncounter-DHxdWWyc.js",
-      "_PauseMenuScene-BudSCuNV.js",
+      "_NativeCityOttoEncounter-DSlpOHKX.js",
+      "_PauseMenuScene-C5HYCe0N.js",
       "_AttackMoves-B-lq5s5T.js",
-      "_fileSave-DQ6E3crU.js",
+      "_palette-CoCtOR9y.js",
+      "_fileSave-BQtpeBqR.js",
       "_WebGl2Support-hZXjXmi-.js",
-      "_TournamentBracketScene-OlFSkA_y.js",
+      "_TournamentBracketScene-CAbjwB50.js",
       "_PlayerLook-Bb3gqXoy.js",
       "_NativeCityTreeShadow-BmTBhg-P.js",
-      "_NativeCityFloorDecal-CLXmUPnr.js"
+      "_NativeCityFloorDecal-CJ9eiVbO.js"
     ],
     "dynamicImports": [
       "src/assets/native-city-otto-side-runtime.json",
@@ -893,27 +1994,27 @@
     ]
   },
   "src/render/view/NativeCityCardView.ts": {
-    "file": "assets/NativeCityCardView-Drd9awUw.js",
+    "file": "assets/NativeCityCardView-CTUWE9CU.js",
     "name": "NativeCityCardView",
     "src": "src/render/view/NativeCityCardView.ts",
     "isDynamicEntry": true,
     "imports": [
       "_rolldown-runtime-B0Z9INg1.js",
-      "_palette-CoCtOR9y.js",
-      "_NativeCityOttoEncounter-DHxdWWyc.js",
+      "_NativeCityOttoEncounter-DSlpOHKX.js",
       "_CityEnvironment-AhQf9g8O.js",
+      "_palette-CoCtOR9y.js",
       "_NativeCityKtx2Files-B34WNJFX.js",
       "_NativeCityTreeShadow-BmTBhg-P.js",
-      "_NativeCityFloorDecal-CLXmUPnr.js",
+      "_NativeCityFloorDecal-CJ9eiVbO.js",
       "_native-city-art-finish-BZDHQ1na.js",
-      "_NativeCityBuildingGrade-CjHp4-jS.js",
+      "_NativeCityBuildingGrade-DSC2-S_a.js",
       "_three.core-Dt6LFlTl.js",
       "_NativeCityShopLightmap-Dq9ySLfR.js",
       "_NativeCityWallRelief-DgaUovU8.js",
       "_NativeCityCompressedTexture-CjxL7kCm.js",
       "_NativeCityPaintedFacePlan-Bd27WAXL.js",
       "_NativeCityStreetFinishView-Bevxc9lf.js",
-      "_NativeCityTownKitView-CbE_HjBw.js"
+      "_NativeCityTownKitView-CkGJfNQk.js"
     ]
   },
   "src/render/view/NativeCityCompressedTexture.ts": {
@@ -944,31 +2045,31 @@
     ]
   },
   "src/render/view/NativeCityTownKitView.ts": {
-    "file": "assets/NativeCityTownKitView-D01IPLSU.js",
+    "file": "assets/NativeCityTownKitView-CLnpS-Mz.js",
     "name": "NativeCityTownKitView",
     "src": "src/render/view/NativeCityTownKitView.ts",
     "isDynamicEntry": true,
     "imports": [
-      "_NativeCityTownKitView-CbE_HjBw.js"
+      "_NativeCityTownKitView-CkGJfNQk.js"
     ]
   },
   "world.html": {
-    "file": "assets/world-Cgng_qDJ.js",
+    "file": "assets/world-Bd8z65SD.js",
     "name": "world",
     "src": "world.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-CiCTQRBQ.js",
-      "_fighterStory-T8x-XogQ.js",
+      "_accountControl-Ds71Fs4Q.js",
+      "_fighterStory-ui6srrdo.js",
       "_storageKeys-Lf7lfo-I.js",
       "_oddboutSession-BLfvyrde.js",
       "_registeredFighters-cV5wg83O.js",
-      "_fighterCreator-CRj2x9oa.js",
-      "_siteChrome-udC2jkEc.js",
+      "_fighterCreator-B5d3PY3n.js",
+      "_siteChrome-C5-e4drx.js",
       "_arenaRankings-DuZxNMTx.js"
     ],
     "css": [
-      "assets/world-CwgB2GVf.css"
+      "assets/world-D6tUMwvm.css"
     ]
   }
 }

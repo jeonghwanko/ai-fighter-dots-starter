@@ -37,28 +37,29 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
         setTimeout(() => document.documentElement.classList.remove("translating"), 3000);
       }
     } catch {}
-  </script>
-  <script type="module" crossorigin src="/assets/league-CcBjIcd4.js"></script>
+  </script>
+  <script type="module" crossorigin src="/assets/league-Dko0uUIH.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/storageKeys-Lf7lfo-I.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
   <link rel="modulepreload" crossorigin href="/assets/oddboutSession-BLfvyrde.js">
-  <link rel="modulepreload" crossorigin href="/assets/accountControl-CiCTQRBQ.js">
+  <link rel="modulepreload" crossorigin href="/assets/accountControl-Ds71Fs4Q.js">
   <link rel="modulepreload" crossorigin href="/assets/fighterCreatorLocale-Bh29uOe8.js">
-  <link rel="modulepreload" crossorigin href="/assets/portraitLock-DYcks80K.js">
+  <link rel="modulepreload" crossorigin href="/assets/portraitLock-D87EknFu.js">
   <link rel="modulepreload" crossorigin href="/assets/OddboutCommunity-yZWAEfH9.js">
-  <link rel="modulepreload" crossorigin href="/assets/siteChrome-udC2jkEc.js">
+  <link rel="modulepreload" crossorigin href="/assets/siteChrome-C5-e4drx.js">
   <link rel="modulepreload" crossorigin href="/assets/siteLinks-Cb1kHGko.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-concept-runtime-BHN1CmLz.js">
   <link rel="modulepreload" crossorigin href="/assets/fighterFace-CR4nbOBD.js">
   <link rel="modulepreload" crossorigin href="/assets/leagueContent-CAVtHixG.js">
-  <link rel="stylesheet" crossorigin href="/assets/accountControl-CM8krToR.css">
-  <link rel="stylesheet" crossorigin href="/assets/portraitLock-wH03GdfC.css">
-  <link rel="stylesheet" crossorigin href="/assets/siteChrome-0JukJQ6r.css">
-  <link rel="stylesheet" crossorigin href="/assets/league-DFfqQdmM.css">
+  <link rel="stylesheet" crossorigin href="/assets/accountControl-VJz_K6KY.css">
+  <link rel="stylesheet" crossorigin href="/assets/portraitLock-CWuP8ucL.css">
+  <link rel="stylesheet" crossorigin href="/assets/siteChrome-B2CWFBx3.css">
+  <link rel="stylesheet" crossorigin href="/assets/siteBase-Q85EwuBo.css">
+  <link rel="stylesheet" crossorigin href="/assets/league-BqkgClzO.css">
 </head>
 <body>
   <a class="skip" href="#main"><span data-copy="skip">본문으로 건너뛰기</span></a>
-  <header class="club-header" data-club-header><a class="club-brand" href="./?lang=en" aria-label="ODDBOUT home"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a><nav class="club-nav" aria-label="Main navigation"><a href="./fighters.html?lang=en">Fighters</a><a href="./creator.html?lang=en#view=rankings">Rank</a><a href="./docs.html?lang=en">Docs</a><a class="club-create" href="./creator.html?lang=en">Create your fighter</a></nav><div class="club-languages" aria-label="Language"><a href="?lang=ko" lang="ko">한국어</a><a href="?lang=en" lang="en">EN</a></div></header>
+  <header class="club-header" data-club-header><a class="club-brand" href="./" aria-label="ODDBOUT home"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a></header>
   <main id="main">
     <section class="hero" aria-labelledby="hero-title">
       <div class="hero-top">
@@ -85,7 +86,8 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
     <section class="featured-section wrap" id="featured" aria-labelledby="featured-title">
       <div class="section-head"><h2 id="featured-title"><span data-copy="fightersTitle">선수들</span></h2><p id="featured-intro"><span data-copy="facesIntro">프로필을 열어 응원할 선수를 고르세요.</span></p></div>
       <ol class="featured-bouts" id="featured-bouts" hidden></ol>
-      <ul class="face-row" id="face-row"></ul>
+      <!-- One empty slot per house fighter (test/league-featured-bouts.test.ts): league.ts fills the row without moving what follows. -->
+      <ul class="face-row" id="face-row"><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li><li class="face-slot" aria-hidden="true"><span class="face"></span><span class="face-name"></span></li></ul>
       <div class="featured-more"><a id="featured-all" class="featured-link" href="./fighters.html?lang=ko" data-destination="fighters.html"><span>선수 23명 모두 보기</span><span aria-hidden="true">→</span></a><a id="featured-youtube" class="featured-link" href="https://www.youtube.com/@oddbout/" target="_blank" rel="noopener noreferrer"><span data-copy="featuredYoutube">유튜브에서 더 보기</span><span aria-hidden="true">↗</span></a></div>
     </section>
     <section class="cup-section wrap" id="cup" aria-labelledby="cup-title">
@@ -113,5 +115,5 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
       </div>
     </section>
   </main>
-  <footer class="club-footer" data-club-footer><a class="club-brand" href="./?lang=en"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a><p>Your fighter. Your fight.</p><nav aria-label="Footer"><a href="./about.html?lang=en">About</a><a href="./docs.html?lang=en">Docs</a><a href="mailto:turbo08@gmail.com">Contact</a><a href="./privacy.html?lang=en">Privacy</a><a href="./credits.html?lang=en">Credits</a></nav></footer>
+  <footer class="club-footer" data-club-footer><a class="club-brand" href="./?lang=en"><img src="/art/ui/oddbout-logo.webp" alt="ODDBOUT Fight Club" width="376" height="76"></a><p>Your fighter. Your fight.</p><nav aria-label="Footer"><a href="./about.html?lang=en">About</a><a href="./docs.html?lang=en">Docs</a><a href="mailto:turbo08@gmail.com">Contact</a><a href="./privacy.html?lang=en">Privacy</a><a href="./credits.html?lang=en">Credits</a></nav></footer>
 </body></html>

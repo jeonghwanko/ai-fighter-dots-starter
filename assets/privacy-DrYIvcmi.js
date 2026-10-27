@@ -1,1 +1,0 @@
-import"./accountControl-CiCTQRBQ.js";import{r as e}from"./siteChrome-udC2jkEc.js";e(`en`,`privacy`);
