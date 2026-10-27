@@ -41,6 +41,15 @@ the exact configured storage origin, downloads without redirects, verifies bytes
 the PNG before atomically admitting it to the workspace. Expiry renews a grant for the same source.
 This route is for authorized file transport, not an alternate network-policy bypass.
 
+## Private preview persistence
+
+A supported Pages host file input can persist VM previews in an owner-only personal review Page.
+The agent verifies upload size/hash and file_access_confirmed, inserts the returned native reference,
+and inspects the rendered Page. The target conversation can read that same reference through its
+supported Page-file tool. This preserves originals across chats without public URLs or credentials.
+A Page render is not automatically a current-conversation render; record both observations and verify
+animation playback separately. See DOTS-PRIVATE-SOURCES.md for the exact host-tool workflow.
+
 ## Creation and resume
 
 Persist the brief, Grok route, selected versions, original pixels, request IDs, outcomes, reviews and
