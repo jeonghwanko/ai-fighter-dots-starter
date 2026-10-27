@@ -5,14 +5,19 @@
 import { validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { applyFighterEdit } from './fighter-profile.mjs';
 import { Problem, UUID, jsonResponse, readBody } from './http.mjs';
-import { WORLD_COVERS, canonSheet, factionId, factions, mergeCanon, nickname, note, text, worldCover, worldId, worldText, WORLD_LIMITS,
+import { WORLD_COVERS, canonSheet, factionId, factions, nickname, note, text, worldCover, worldId, worldText, WORLD_LIMITS,
   RELATION_KINDS } from './canon.mjs';
 
 const CORS = { methods: 'GET, POST, PUT, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type' };
 const STATUS = { 'nickname-required': 409, 'nickname-taken': 409, 'canon-changed': 409, 'fighter-not-found': 404, 'not-found': 404,
   'rate-limit': 429, 'world-rate-limit': 429, 'not-a-proposal': 409, 'note-closed': 409, 'relation-exists': 409, 'relation-quota': 409,
   'world-quota': 409, 'world-not-found': 404, 'faction-not-found': 422, 'world-locked': 409, 'not-world-owner': 403,
-  'world-membership-required': 409, 'world-author-mismatch': 403, 'account-disabled': 403, 'invite-required': 403 };
+  'world-membership-required': 409, 'world-author-mismatch': 403, 'account-disabled': 403, 'invite-required': 403, 'canon-empty': 422,
+  'invalid-canon': 422, 'post-exists': 409, 'world-full': 409 };
+// A unique key two writers raced for, by its name (any other is a plain conflict).
+const UNIQUE = [[/af_creator_names_nickname/, 'nickname-taken'], [/af_fighter_relations_pair/, 'relation-exists'], [/af_world_posts_pkey|af_world_posts_world_id_id_key/, 'post-exists']];
+// A story's cursor: the time a page's last note was written, as the story gave it.
+const CURSOR = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
 /** Is this path the workshop's? */
 export function workshopRoute(parts) {
@@ -29,7 +34,9 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
     // The longest code a message names (`faction-not-found` before `not-found`).
     const known = Object.keys(STATUS).sort((x, y) => y.length - x.length).find(code => error.message?.includes(code));
     if (known) throw new Problem(STATUS[known], known);
-    if (error.code === '23505' || /af_creator_names_nickname/.test(error.message ?? '')) throw new Problem(409, 'nickname-taken');
+    const unique = UNIQUE.find(([name]) => name.test(error.message ?? ''));
+    if (unique) throw new Problem(409, unique[1]);
+    if (error.code === '23505') throw new Problem(409, 'conflict');
     if (error.code === '23514' || /violates check constraint/.test(error.message ?? '')) throw new Problem(422, 'invalid-text');
     throw new Problem(503, 'database-unavailable');
   }
@@ -58,9 +65,18 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
     const result = validateFighter({ ...manifest, combat });
     if (!result.ok) throw new Problem(422, 'invalid-proposal', result.errors?.slice(0, 20));
   }
+  // A proposal's style, applied once: the note's id keys the edit, so a retry finds it made and does not make it twice.
+  async function applyStyle(noteId, fighter, style, owner, pack) {
+    const { data: made, error } = await db.from('af_submissions').select('id').eq('owner_id', owner).eq('idempotency_key', noteId).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    if (made) return false;
+    try { await applyFighterEdit({ body: { style, expectedManifestSha256: pack.sha }, owner, id: fighter, key: noteId, db, rpc: profileRpc }); }
+    catch (problem) { if (!(problem instanceof Problem && problem.message === 'fighter-unchanged')) throw problem; }
+    return true;
+  }
   async function story(fighter, url) {
     const before = url.searchParams.get('before'), version = url.searchParams.get('version');
-    if (before !== null && !Number.isFinite(Date.parse(before))) throw new Problem(422, 'invalid-cursor');
+    if (before !== null && (!CURSOR.test(before) || !Number.isFinite(Date.parse(before)))) throw new Problem(422, 'invalid-cursor');
     if (version !== null && !/^[1-9]\d{0,3}$/.test(version)) throw new Problem(422, 'invalid-version');
     const data = await call('af_fighter_story', { p_fighter: fighter, p_before: before, p_version: version === null ? null : Number(version) });
     if (!data) throw new Problem(404, 'fighter-not-found');
@@ -111,32 +127,25 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
       if (method === 'POST' && parts[0] === 'notes' && parts[2] === 'resolve' && parts.length === 3) {
         const noteId = id(parts[1]), body = fields(await readJson(request), ['decision']);
         if (!['accept', 'decline'].includes(body.decision)) throw new Problem(422, 'invalid-decision');
-        const { data: n, error } = await db.from('af_fighter_notes').select('fighter_id,kind,state,proposal,hidden').eq('id', noteId).maybeSingle();
+        const { data: n, error } = await db.from('af_fighter_notes').select('fighter_id,kind,state,proposal,hidden,resolved_version').eq('id', noteId).maybeSingle();
         if (error) throw new Problem(503, 'database-unavailable');
         if (!n || n.hidden) throw new Problem(404, 'not-found');
-        let sheet = null;
-        if (body.decision === 'accept' && n.kind === 'proposal' && n.state === 'open') {
-          const pack = await currentPackage(n.fighter_id);
+        // The answer first, under the note's lock (the database merges a proposal's canon fields over the sheet as it is then); a proposal's
+        // style after it. A style his package cannot take refuses the accept before anything is written; an accepted proposal whose style
+        // edit failed after the answer is finished by accepting it again.
+        const style = body.decision === 'accept' && n.kind === 'proposal' && n.proposal?.style !== undefined;
+        let pack = null;
+        if (style && ['open', 'accepted'].includes(n.state)) {
+          pack = await currentPackage(n.fighter_id);
           if (pack.owner !== owner) throw new Problem(404, 'not-found');
-          if (n.proposal.style !== undefined) {
-            // The note's id keys the edit: a retry after a failure below finds the edit made and does not make it twice.
-            const { data: made, error: madeError } = await db.from('af_submissions').select('id').eq('owner_id', owner).eq('idempotency_key', noteId).maybeSingle();
-            if (madeError) throw new Problem(503, 'database-unavailable');
-            if (!made) {
-              checkStyle(pack.manifest, n.proposal.style);
-              try { await applyFighterEdit({ body: { style: n.proposal.style, expectedManifestSha256: pack.sha }, owner, id: n.fighter_id, key: noteId, db, rpc: profileRpc }); }
-              catch (problem) { if (!(problem instanceof Problem && problem.message === 'fighter-unchanged')) throw problem; }
-            }
+          if (n.state === 'accepted') {
+            if (!await applyStyle(noteId, n.fighter_id, n.proposal.style, owner, pack)) throw new Problem(409, 'note-closed');
+            return json({ ok: true, note: { id: noteId, state: 'accepted', resolvedVersion: n.resolved_version } });
           }
-          if (n.proposal.canon) {
-            const { data: current, error: canonError } = await db.from('af_fighter_canon').select('sheet').eq('fighter_id', n.fighter_id)
-              .order('version', { ascending: false }).limit(1).maybeSingle();
-            if (canonError) throw new Problem(503, 'database-unavailable');
-            sheet = mergeCanon(current?.sheet, n.proposal.canon);
-            if (sheet) sheet = canonSheet(sheet);
-          }
+          checkStyle(pack.manifest, n.proposal.style);
         }
-        const row = await call('af_note_resolve', { p_owner: owner, p_note: noteId, p_accept: body.decision === 'accept', p_sheet: sheet, p_client: client });
+        const row = await call('af_note_resolve', { p_owner: owner, p_note: noteId, p_accept: body.decision === 'accept', p_sheet: null, p_client: client });
+        if (style) await applyStyle(noteId, n.fighter_id, n.proposal.style, owner, pack);
         return json({ ok: true, note: { id: row.id, state: row.state, resolvedVersion: row.resolved_version } });
       }
       if (method === 'DELETE' && parts[0] === 'notes' && parts.length === 2) {
