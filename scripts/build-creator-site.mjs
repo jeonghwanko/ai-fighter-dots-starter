@@ -99,9 +99,16 @@ for (const value of [config.apiBase, config.publishableKey, config.gameUrl]) {
   if (!js.includes(value)) throw new Error('Public configuration missing from build');
 }
 if (js.includes('rupin.pryzm.gg') || js.includes('findthem')) throw new Error('Old host dependency found in build');
-for (const font of ['Pretendard-Regular.woff2', 'Pretendard-Bold.woff2']) {
-  if (!css.includes(`${config.base}fonts/${font}`)) throw new Error(`Incorrect deployed font URL: ${font}`);
+// Every font a stylesheet loads must be in the output at the address it gives: the site's Pretendard slices are bundled (assets/), the
+// game page's whole fonts stay under fonts/. A font inlined as a data URI has no file to check.
+const fontUrls = [...css.matchAll(/url\(\s*['"]?([^'")]+\.woff2?)(?:[?#][^'")]*)?['"]?\s*\)/g)].map(match => match[1]);
+if (!fontUrls.some(url => /Pretendard-Regular/.test(url)) || !fontUrls.some(url => /Pretendard-Bold/.test(url))) throw new Error('Site stylesheet does not load Pretendard');
+for (const url of new Set(fontUrls)) {
+  if (/^[a-z]+:/i.test(url)) throw new Error(`Font loaded from another origin: ${url}`);
+  const path = url.startsWith(config.base) ? url.slice(config.base.length) : join('assets', url);
+  await readFile(join(output, path)).catch(() => { throw new Error(`Incorrect deployed font URL: ${url}`); });
 }
+for (const font of ['Pretendard-Regular.woff2', 'Pretendard-Bold.woff2']) await readFile(join(output, 'fonts', font));
 assertSameRevision(revision, buildRevision(source, hostingRoot));
 const release = {
   buildId: randomUUID(), siteUrl: config.siteUrl, builtAt,
