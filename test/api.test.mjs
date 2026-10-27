@@ -116,3 +116,17 @@ test('the creator page may call every submission route from a browser, including
   assert.equal(refused.status, 401); assert.equal(refused.headers.get('access-control-allow-origin'), '*');
   assert.equal((await handle(new Request('https://test/ai-fighter/worker/claim', { method: 'OPTIONS' }))).headers.get('access-control-allow-origin'), null);
 });
+test('a worker hands back an infrastructure failure under its lease; the code is validated first', async () => {
+  const calls = [];
+  const workers = { select: () => workers, eq: () => workers, gt: () => workers, maybeSingle: async () => ({ data: { token_hash: 'h' } }) };
+  const handle = createHandler({ db: { from: () => workers,
+    rpc: async (name, args) => { calls.push([name, args]); return { data: { id: args.p_id, status: 'queued' } }; } } });
+  const release = body => handle(new Request('https://test/ai-fighter/worker/release', { method: 'POST',
+    headers: { authorization: `Bearer afw_${'a'.repeat(64)}` }, body: JSON.stringify(body) }));
+  const ids = { submissionId: crypto.randomUUID(), leaseToken: crypto.randomUUID() };
+  assert.equal((await release({ ...ids, code: 'Not A Code' })).status, 400);
+  assert.equal(calls.length, 0);
+  const response = await release({ ...ids, code: 'download-failed' });
+  assert.deepEqual([response.status, (await response.json()).stage], [200, 'requeued']);
+  assert.deepEqual(calls, [['af_release', { p_id: ids.submissionId, p_lease: ids.leaseToken, p_code: 'download-failed' }]]);
+});

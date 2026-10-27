@@ -240,6 +240,13 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
           try { await analytics?.registered(completed); } catch { /* Analytics must never break registration. */ }
           return json(await present(completed));
         }
+        // An infrastructure failure under the caller's own lease: requeue without spending one of the package's attempts.
+        if (parts.join('/') === 'worker/release') {
+          requireId(body.submissionId); requireId(body.leaseToken);
+          if (!/^[a-z0-9-]{1,64}$/.test(body.code ?? '')) throw new Problem(400, 'invalid-release-code');
+          const released = await rpc('af_release', { p_id: body.submissionId, p_lease: body.leaseToken, p_code: body.code });
+          return json({ ok: true, stage: released.status === 'queued' ? 'requeued' : 'rejected' });
+        }
       }
       throw new Problem(404, 'route-not-found');
     } catch (error) {

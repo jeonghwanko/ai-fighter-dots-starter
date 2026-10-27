@@ -60,6 +60,9 @@ The worker key can claim validation jobs and finish leased jobs; it is not a
 Supabase service-role key. Its hash is registered as `render-free validator`.
 The current key expires **2027-01-18 UTC**. Rotate it in `af_workers` and Render's
 environment before expiry. Keep values out of source, logs and website files.
+A rejected key shows as `queue.status: "credential-rejected"` in `/health` and as a
+`worker-credential-rejected` log line. `/health` itself stays 200 because this instance
+also serves the MCP gateway; watch the `queue` field, not the HTTP status.
 
 Startup runs the real child-process WebP validator against the existing
 geometric test fixture. Health is available only after it passes. No fighter
