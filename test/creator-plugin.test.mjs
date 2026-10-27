@@ -68,6 +68,46 @@ test('Dots output contract blocks an existing prepared job before workflow or ge
   assert.equal(recovered.status, 'unknown'); assert.equal(dispatches, 0);
 });
 
+test('Dots managed Grok image, batch and video recovery reach the original engine with unchanged arguments', async t => {
+  const routes = [
+    ['gen', '--provider', 'grok'], ['gen', '--provider=grok'], ['gen-set', '--provider=grok'],
+    ['video', '--image', 'input.png'], ['video-set', '--base=side=input.png'],
+    ['video-set', '--base=front=input.png', '--states=walk', '--still-provider=grok'],
+    ['video-resume', '--request-id', 'existing-request'],
+  ];
+  for (const args of routes) {
+    const f = await fixture(t), key = randomUUID();
+    await f.put('output/creation-environment/environment.json', JSON.stringify({ host: 'dots' }));
+    const video = args[0].startsWith('video');
+    const p = plan({ args, workflowArgs: ['workflow', '--kind', video ? 'sprite' : 'image', '--image-provider', 'grok',
+      ...(video ? ['--motion-method', 'grok-video'] : []), '--confirmed-access', 'grok'] });
+    await f.jobs.prepare(sessionId, 1, key, p);
+    const calls = [];
+    const execute = async (root, engine, actual) => {
+      calls.push([...actual]); assert.equal(root, f.root); assert.equal(engine, 'sprite');
+      if (actual[0] !== 'workflow') await f.put(p.outputs[0], 'mock output, no generation');
+      return { code: 0 };
+    };
+    const result = await runCreationJob(f.store, sessionId, key, { execute });
+    assert.equal(result.status, 'succeeded'); assert.deepEqual(calls, [p.workflowArgs, args]);
+    const job = await f.jobs.read(sessionId, key); job.status = 'unknown'; await f.jobs.write(sessionId, job);
+    assert.equal((await runCreationJob(f.store, sessionId, key, { execute })).status, 'unknown');
+    assert.equal(calls.length, 2, 'unknown jobs must not dispatch workflow, generation or recovery again');
+  }
+});
+
+test('Dots managed jobs reject ambiguous or mismatched providers without weakening the Codex row contract', async t => {
+  const f = await fixture(t);
+  await f.put('output/creation-environment/environment.json', JSON.stringify({ host: 'dots' }));
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan({ args: ['gen'] })), /explicit-provider-required/);
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan({ args: ['gen-set', '--provider=grok'] })), /provider-preflight-mismatch/);
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan({ args: ['gen-set', '--provider=codex'] })), /provider-preflight-mismatch/);
+  const workflowArgs = ['workflow', '--kind', 'sprite', '--image-provider', 'grok', '--motion-method', 'grok-video', '--confirmed-access', 'grok'];
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan({ args: ['video-set', '--base=front=a'], workflowArgs })),
+    /dots-video-set-still-provider-required/);
+  assert.deepEqual(await f.jobs.list(sessionId), []);
+});
+
 test('versions survive source overwrites; revised motions preserve other choices and old files', async t => {
   const f = await fixture(t);
   await f.record('idle'); await f.review('idle'); await f.select('idle'); await f.change({ type: 'advance' });

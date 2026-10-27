@@ -206,14 +206,19 @@ test('protected paths, traversal and artifact symlinks are rejected; normal exec
   assert.equal(await findBinary('python3', { PATH: path.join(f.runtime, 'bin') }), path.join(f.runtime, 'bin/python3'));
 });
 
-test('Dots blocks direct and indirect generation before provider dispatch; source names never establish support', async t => {
+test('Dots blocks Codex image paths without making Grok depend on Codex source', async t => {
   const f = await fixture(t), env = { AI_FIGHTER_EXECUTION_HOST: 'dots' };
-  for (const command of ['gen', 'gen-set', 'gen-motion', 'video-set', 'video-resume'])
-    await assert.rejects(guardDotsExecution(f.runtime, f.workspace, [command], env), /dots-protected-session-provider-blocked/);
+  for (const args of [['gen', '--provider', 'codex'], ['gen-set', '--provider=codex'], ['gen-motion'],
+    ['video-set', '--base', 'front=still.png', '--states', 'walk', '--still-provider', 'codex']])
+    await assert.rejects(guardDotsExecution(f.runtime, f.workspace, args, env), /dots-protected-session-provider-blocked/);
   await guardDotsExecution(f.runtime, f.workspace, ['game-pack'], env);
   await f.put('vendor/sprite-gen/sprite_gen/gen/codex_provider.py', '# official stdout adapter placeholder\n');
   assert.equal((await inspectProvider(f.runtime)).status, 'unknown');
-  await assert.rejects(guardDotsExecution(f.runtime, f.workspace, ['gen'], env), /dots-generation-output-contract-unverified/);
+  await assert.rejects(guardDotsExecution(f.runtime, f.workspace, ['gen', '--provider', 'codex'], env), /dots-generation-output-contract-unverified/);
+  const grok = await doctor({ ...f.options, provider: 'grok' }, f.deps);
+  assert.equal(grok.provider.provider, 'grok'); assert.equal(grok.provider.executionPolicy, 'existing-provider-checks');
+  assert.equal(grok.provider.reason, 'grok-generation-and-delivery-unverified');
+  assert.equal(grok.readyForGeneration, false); assert.equal(grok.auth.status, 'unknown');
 });
 
 test('bundle status is read-only; explicit install binds a reviewed hash and doctor rejects forged or corrupted provenance', async t => {
