@@ -34,7 +34,7 @@ export function registerCreatorTools(server, { root, contextRequest, respond, ou
     { ...session, jobId: z.string().uuid().optional() }, read,
     async ({ sessionId, jobId }) => jobId ? jobs.inspect(sessionId, jobId)
       : Promise.all((await jobs.list(sessionId)).map(job => jobs.inspect(sessionId, job.jobId))));
-  register('cancel_creation_job', 'Cancel an unstarted reservation, for example after changing its inputs. Does not stop a running provider request or erase its evidence.',
+  register('cancel_creation_job', 'Cancel an unstarted reservation, for example after changing its inputs. For a running job, ask its runner to stop the engine (within seconds); the job then ends unknown for generation, since a provider request may already be billed, or failed for packing. Never erases evidence or reruns.',
     job, { ...write, idempotentHint: true }, ({ sessionId, jobId }) => jobs.cancel(sessionId, jobId));
   // Readiness reads the same records to tell whether a character is already in progress.
   const stores = { store, jobs };
