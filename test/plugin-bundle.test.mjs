@@ -10,6 +10,7 @@ import { assertCommitted, checkRuntimeImports, runtimeFileList } from '../script
 const repository = fileURLToPath(new URL('../', import.meta.url));
 // Side-effect-free entry modules (CLI mains are guarded); importing them evaluates the whole shipped graph.
 const entries = ['scripts/pack-fighter.mjs', 'scripts/gait.mjs', 'scripts/sprite-gen.mjs', 'scripts/run-creation-job.mjs',
+  'scripts/dots-workspace.mjs',
   'scripts/creation-tool.mjs', 'scripts/check-connection.mjs', 'scripts/check-creation-delivery.mjs', 'scripts/connect-generation.mjs',
   'tools/ai-fighter/gait.mjs', 'server/ai-fighter-package.mjs', 'mcp/server.mjs'];
 let temporary;

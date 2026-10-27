@@ -15,10 +15,17 @@ An older kit without `scripts/creation-tool.mjs` can continue with its existing 
 it mid-character. Use connected ODDBOUT for registration and keep workspace login advice separate.
 
 For a fresh bundled installation, resolve this skill's plugin root and run `node <plugin-root>/launcher.mjs --status`.
-It reports `runtime` and `root` (workspace), verifies and copies source bytes to a writable user directory.
-It does not install dependencies, log in, generate or register. Never install dependencies or a venv in
+It verifies source and any installed runtime, reports `runtime` and `root` (workspace), and writes nothing.
+Installation is explicit: `node <plugin-root>/launcher.mjs --install --manifest-sha256 <reviewed-runtime-manifest-sha256>`.
+Obtain that hash from the independently reviewed build/release, not a caller's readiness claim. Only this
+command copies source to a writable user directory; it does not install dependencies, log in or generate.
+Read `docs/DOTS-QUICKSTART.md` and use the returned runtime's offline doctor and resume inventory before
+`bootstrap --install`. Bundle doctor/bootstrap also require that manifest hash. Never install dependencies or a venv in
 the plugin cache. A local developer build reports the existing checkout/workspace instead of copying it.
 The source bundle is portable source, not a promise that every host has been tested.
+An older bundle has its own launcher contract; never update an active project just to obtain these commands.
+Dots generation requiring protected session output is blocked before dispatch. No version string or login
+proves an official image bridge; use an actually supported host route or report the blocker.
 
 In the returned runtime, use Node 22.12+ and run `npm ci --ignore-scripts` if dependencies are missing;
 read `AGENTS.md`, `docs/DOT-CREATION.md`, `docs/AUTHORING.md`, `docs/EXECUTION-HOST.md`,

@@ -69,6 +69,14 @@ See the [full creation workflow](docs/DOT-CREATION.md) for generation, revision,
 
 ## Set up the kit yourself
 
+For a Dots VM, start with [Dots bootstrap, doctor and resume](docs/DOTS-QUICKSTART.md) and the
+[saved-environment Start instructions](docs/DOTS-START.md). The offline entry point is
+`node scripts/dots-workspace.mjs doctor --workspace <absolute-workspace>`; installation is explicit
+with `bootstrap --install`. A Git URL alone does not authorize generation. Use the service branch below,
+record its actual commit, and do not mistake an older main checkout for the current creator kit.
+The Dots workflow reports unsupported image-output contracts as blocked; it does not read protected
+Codex sessions or claim that login/installation proves image generation or parent delivery.
+
 Use the **codex/creator-hosting** branch, which contains the public service configuration. For a new installation:
 
 ```sh
