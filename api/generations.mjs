@@ -4,6 +4,7 @@
 // only as signed URLs of ten minutes. The package the worker makes goes through the same submission checks as any other
 // (`submissions.mjs`) under the creator's account — the job row names the owner, never the worker.
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 import { text } from './canon.mjs';
 import { probeImage } from './image-probe.mjs';
 import { Problem, UUID, jsonResponse, readBody } from './http.mjs';
@@ -45,13 +46,13 @@ export const artifactPath = (job, name) => `jobs/${job}/${name}.webp`;
  */
 export function confirmedProfile(value) {
   const body = fields(value, ['name', 'description', 'names', 'lines', 'stats']);
-  const out = { name: text(body.name, 40, '/profile/name', { code: 'invalid-profile' }),
-    description: text(body.description, 600, '/profile/description', { lines: true, code: 'invalid-profile' }) };
-  for (const [key, allowed] of [['names', ['ko', 'en']], ['lines', ['challenge', 'win', 'lose']]]) {
+  const out = { name: text(body.name, profileLimits.name, '/profile/name', { code: 'invalid-profile' }),
+    description: text(body.description, profileLimits.description, '/profile/description', { lines: true, code: 'invalid-profile' }) };
+  for (const [key, allowed, max] of [['names', profileLimits.languages, profileLimits.displayName], ['lines', profileLimits.lineKeys, profileLimits.line]]) {
     if (body[key] === undefined || body[key] === null) continue;
     const part = fields(body[key], allowed), kept = {};
     for (const name of allowed) if (part[name] !== undefined && part[name] !== null && part[name] !== '')
-      kept[name] = text(part[name], 40, `/profile/${key}/${name}`, { code: 'invalid-profile' });
+      kept[name] = text(part[name], max, `/profile/${key}/${name}`, { code: 'invalid-profile' });
     if (Object.keys(kept).length) out[key] = kept;
   }
   if (body.stats !== undefined && body.stats !== null) {
