@@ -103,3 +103,25 @@ test('failed review still creates a self-contained preview and escapes annotatio
   assert.ok(html.includes('\\u003c/script>'));
   assert.ok((await readFile(path.join(dir, 'contact-sheet.png'))).length > 100);
 }));
+
+test('a game-pack sequence decodes each sheet once and keeps the exact per-cell pixels', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gait-decode-'));
+  try {
+    // RGB (alpha added by ensureAlpha) and RGBA pages, cells in a 3x2 grid, one cell reused across both animations.
+    const pixels = (w, h, channels, seed) => Buffer.from(Array.from({ length: w * h * channels }, (_, i) => (i * 37 + seed * 11) % 251));
+    await sharp(pixels(96, 64, 3, 1), { raw: { width: 96, height: 64, channels: 3 } }).png().toFile(path.join(dir, 'rgb.png'));
+    await sharp(pixels(96, 64, 4, 2), { raw: { width: 96, height: 64, channels: 4 } }).png().toFile(path.join(dir, 'rgba.png'));
+    const frames = (prefix, image) => Object.fromEntries(Array.from({ length: 6 }, (_, i) => [`${prefix}/${i}`, { frame: { x: i % 3 * 32, y: Math.floor(i / 3) * 32, w: 32, h: 32 },
+      rotated: false, trimmed: false }]));
+    const pack = { kind: 'sprite-gen-game-pack', version: 1, textures: [{ image: 'rgb.png', frames: frames('a', 'rgb.png') }, { image: 'rgba.png', frames: frames('b', 'rgba.png') }],
+      animations: { mix: { frames: ['a/0', 'b/1', 'a/5', 'b/4', 'a/0'], durations_ms: [90, 90, 90, 90, 90] } } };
+    await writeFile(path.join(dir, 'game-pack.json'), JSON.stringify(pack));
+    const sequence = await loadSequence({ file: 'game-pack.json', animation: 'mix' }, dir);
+    for (const [index, key] of pack.animations.mix.frames.entries()) {
+      const texture = pack.textures.find(t => t.frames[key]), cell = texture.frames[key].frame;
+      const expected = await sharp(path.join(dir, texture.image)).extract({ left: cell.x, top: cell.y, width: cell.w, height: cell.h }).ensureAlpha().raw().toBuffer();
+      assert.ok(sequence.frames[index].data.equals(expected), `frame ${index} (${key})`);
+      assert.deepEqual([sequence.frames[index].width, sequence.frames[index].height], [32, 32]);
+    }
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
