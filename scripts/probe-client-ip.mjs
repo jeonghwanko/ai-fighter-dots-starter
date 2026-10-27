@@ -9,11 +9,16 @@ const SPOOF = { xff: '192.0.2.66', cf: '192.0.2.77' }; // TEST-NET-1: never a re
 const CASES = { plain: {}, forwarded: { 'x-forwarded-for': SPOOF.xff }, cloudflare: { 'cf-connecting-ip': SPOOF.cf },
   both: { 'x-forwarded-for': SPOOF.xff, 'cf-connecting-ip': SPOOF.cf } };
 
-/** `echoes`: case name → the probe's JSON. Returns a verdict per source. Pure, so it is tested without a network. */
+/**
+ * `echoes`: case name → the probe's JSON, or `{ rejectedByEdge: true }` when the edge refused that spoofed request
+ * (Cloudflare answers a client-sent CF-Connecting-IP with 403 `error code: 1000`, seen 2026-10-27). A refused spoof
+ * never reaches the function, so it is evidence the client cannot set that header. Pure, so it is tested without a network.
+ */
 export function judge(echoes) {
   const verdicts = {};
+  const reached = Object.fromEntries(Object.entries(echoes).filter(([, echo]) => !echo.rejectedByEdge));
   for (const source of ['cf-connecting-ip', 'forwarded-last']) {
-    const seen = Object.fromEntries(Object.entries(echoes).map(([name, echo]) => [name, clientAddress(new Request('https://probe', {
+    const seen = Object.fromEntries(Object.entries(reached).map(([name, echo]) => [name, clientAddress(new Request('https://probe', {
       headers: Object.fromEntries([['cf-connecting-ip', echo.cfConnectingIp], ['x-forwarded-for', echo.forwardedFor]].filter(([, v]) => v)) }), source)]));
     const values = Object.values(seen);
     const reason = values.some(v => v === null) ? 'missing-or-not-an-address'
@@ -33,8 +38,10 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const echoes = {};
   for (const [name, headers] of Object.entries(CASES)) {
     const response = await fetch(url, { headers, redirect: 'error', signal: AbortSignal.timeout(15_000) });
+    const text = await response.text();
+    if (response.status === 403 && /error code: 1000/.test(text) && 'cf-connecting-ip' in headers) { echoes[name] = { rejectedByEdge: true }; continue; }
     if (!response.ok) throw new Error(`probe-http-${response.status}`);
-    echoes[name] = await response.json();
+    echoes[name] = JSON.parse(text);
   }
   const verdicts = judge(echoes);
   // The raw echoes contain the operator's own address; print them only to this terminal, never to a file or log.

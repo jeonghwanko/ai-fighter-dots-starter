@@ -87,6 +87,11 @@ test('the probe trusts only a source the spoofed requests could not change', asy
   const verdicts = judge(appended);
   assert.deepEqual([verdicts['forwarded-last'].trusted, verdicts['cf-connecting-ip'].trusted, verdicts['cf-connecting-ip'].reason],
     [true, false, 'missing-or-not-an-address']);
+  // Observed on Supabase Edge (2026-10-27): a spoofed CF-Connecting-IP is refused at the edge; X-Forwarded-For carries the
+  // client twice and then an internal proxy, and a client-sent value is dropped.
+  const observed = { plain: { cfConnectingIp: real, forwardedFor: `${real},${real}, 10.1.2.3` }, forwarded: { cfConnectingIp: real, forwardedFor: `${real},${real}, 10.4.5.6` },
+    cloudflare: { rejectedByEdge: true }, both: { rejectedByEdge: true } };
+  assert.deepEqual([judge(observed)['cf-connecting-ip'].trusted, judge(observed)['forwarded-last'].trusted], [true, false]);
   const overwritten = Object.fromEntries(Object.keys(appended).map(name => [name, { cfConnectingIp: real, forwardedFor: `${real}, 10.0.0.${name.length}` }]));
   assert.deepEqual([judge(overwritten)['cf-connecting-ip'].trusted, judge(overwritten)['forwarded-last'].reason], [true, 'unstable']);
 });
