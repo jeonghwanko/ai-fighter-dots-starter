@@ -294,3 +294,22 @@ walk의 보폭은 이 근거에서 받아오므로 `stridePixels`를 수기로 �
 
 수정 시 관련 테스트는 `node --test test/gpt-motion.test.mjs test/gait.test.mjs test/gait-engine.test.mjs test/pack.test.mjs`로 실행한다.
 기존 실패 시퀀스의 지면 오차, 양발 근거 누락, 보폭 단위, 검수 해시 만료, 자세별 과대 확대와 미리보기 생성이 회귀 검사 대상이다.
+
+## 호스팅 생성의 고리 검수 (`engine-loop`)
+
+ODDBOUT 호스팅 생성(서버가 신청을 받아 생성하는 경로)은 걷기·달리기를 Grok 영상 고리로 만든다. 영상 속 발은 구르며 바닥에 닿고,
+발가락이 굴곡으로 그려져 있어서 3절의 같은 발 측정이 한 발을 따로 떼어 내지 못하는 일이 잦다. 그래서 이 경로만 패키지 계획에
+`"reviewPolicy": "engine-loop"`를 쓰고, 걷기·달리기에 `gaitReview` 대신 `loopReview`를 둔다.
+
+```sh
+npm run fighter:gait -- loop-review <config.json> <loop-review.json>
+```
+
+- config: `motion`(walk·run), `source`(최종 game-pack 애니메이션), `strip`(그 고리를 자른 `video-loop`·`video-cycle-align`의 strip.json),
+  `verdict`(시각 판정 JSON: identity·anatomy·loop가 pass/fail, notes), `judge`(판정한 쪽), `stridePixels`(걷기만, 생성기가 발에서 잰 값).
+- 발 교대는 판정이 아니라 엔진 기록이다. `video-cycle-align`이 두 착지에 서로 다른 발 이름(`cycle_align.foot.feet`)을 붙여야 한다.
+  같은 색 다리를 옆에서 본 고리는 시각 판정 모델이 교대를 가리지 못했다(엔진이 교대로 읽은 걷기를 같은 다리로 판정).
+- 기록은 최종 프레임과 시간에 묶인다(`sequenceSha256`). 엔진이 남긴 다시 찍기 사유가 하나라도 있거나, 발 이름이 없거나 같거나,
+  판정 하나라도 fail이거나, 걷기 보폭이 없으면 `status: fail`이고 `fighter:pack`이 받지 않는다.
+- 같은 발 측정을 했다고 주장하지 않는다. `pack-report.json`의 `review`와 `motions.walk.stride.source`(`loop-review`)가 그 사실을 남긴다.
+- Dot 제작 경로는 그대로 `required`다(`creation:run`의 패키지 작업은 `required`가 아닌 정책을 거절한다).
