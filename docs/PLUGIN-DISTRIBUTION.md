@@ -1,6 +1,6 @@
 # ODDBOUT distribution
 
-**Current release: 0.5.3** (faster packing and gait checks, resumable device sign-in, recoverable version copies; 0.5.2 added lock recovery, recorded jobs and contract-derived profile limits; 0.5.1 restored the projected-ground module missing from 0.5.0; sprite-gen-agent engine; 0.4.0 was the last with the hash-bound patch). Use [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md). `plugin:bundle` now produces a
+**Current release: 0.5.4** (stoppable, time-limited generation jobs, faster readiness and file checks; 0.5.3 added faster packing and gait checks, resumable device sign-in, recoverable version copies; 0.5.2 added lock recovery, recorded jobs and contract-derived profile limits; 0.5.1 restored the projected-ground module missing from 0.5.0; sprite-gen-agent engine; 0.4.0 was the last with the hash-bound patch). Use [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md). `plugin:bundle` now produces a
 source-only ODDBOUT ZIP with the creation skill and existing cloud account mapping; it no longer embeds
 Windows node_modules or starts a local MCP. Install locked dependencies in the extracted writable runtime.
 The 0.2.x Windows bundle details below are historical and do not describe the current bundle or install ID.
