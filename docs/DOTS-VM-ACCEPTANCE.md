@@ -56,29 +56,59 @@ The old VM catalog remains stale; after the official app refresh, a newly create
 three with their input schemas. Native file ingress remains unverified.
 Local tests use migrated PostgreSQL (PGlite) and simulated Storage, not an actual user upload.
 
-## Published environment and remaining host-selection blocker
+## Published settings and actual VM installation
 
 With the user's explicit approval, the saved ai-fighter-dots-starter environment was published on
-2026-10-28 KST. Its install script pins front door 1f110b3e37c4cfbc965014960e937d646c57b630,
-which pins runtime 97890ddf399cbbaae9351ee6d11ac0776714d7b0. Its Start instructions use the
-/workspace tools/runtime/user-workspace paths and the full Grok creation/recovery flow.
-The exact three hosts nodejs.org, storage.googleapis.com and ztfxxhtmtrvxvuxlqmgz.supabase.co
-were added (8 -> 11 custom hosts). Unrestricted Internet remains off; no proxy secrets or environment
-credentials were added. The UI confirmed publication and loaded a new draft from that published version.
+2026-10-28 KST. Its initial install script pinned front door 1f110b3e37c4cfbc965014960e937d646c57b630,
+which pins runtime 97890ddf399cbbaae9351ee6d11ac0776714d7b0. Start instructions cover the complete
+Grok creation/recovery flow. The exact three hosts nodejs.org, storage.googleapis.com and
+ztfxxhtmtrvxvuxlqmgz.supabase.co were added (8 -> 11 custom hosts). Unrestricted Internet remains off;
+no proxy secrets or environment credentials were added.
 
-The authorized new Work verification task (6ae0cf8e-5e78-83ec-88e7-116b2ed2066e) instead started
-a default Work host, not the selected saved Codex environment. Observed host e359ea652db4 had cwd
-/workspace/scratch/feab6b495011, Node 24.22.1, no target checkout or prepared env.sh, and no Grok/WebP
-on PATH. The task-creation tool provides no saved-environment selector. It correctly stopped before
-installation and did not label this host as the published image.
+The task-creation tool's default Work task (6ae0cf8e-5e78-83ec-88e7-116b2ed2066e) did not select this
+saved environment. Its host e359ea652db4 correctly stopped before installation. The browser's Codex
+Cloud environment selector resolved that routing issue: task **ODDBOUT 0.5.5 게시 환경 실증**
+(01a17e32-c032-77ac-887c-7913888b50ac), host fffae06c15fb, started in /workspace with all three added
+hosts allowed. All three private-source MCP tools are visible there.
 
-Next host action: start a new cloud task explicitly attached to the published ai-fighter-dots-starter
-saved environment, then verify its actual install log, pinned tools, network and unchanged resume binding.
-Publishing settings alone is not a successful fresh-image install, restart or creation test.
+This correctly selected VM still had old main b1e1966 and no prepared env.sh/Grok/WebP. Publication had
+applied settings but did not demonstrate execution of the saved installer or capture of prepared tools.
+A separate direct installation trial preserved that original checkout and all previous attempt logs:
+
+| Front door | Actual result | Follow-up |
+| --- | --- | --- |
+| 1f110b3 | exit 127, sudo absent before installation | Check/reuse usable base tools; apt only for missing tools with supported privilege |
+| fdae405 | Node 22.22.2 SHA-256 and execution pass; exit 254 at npm home cache | Keep npm/pip download caches in the workspace; retain official authentication locations |
+| 6b7b8bfaf6728dff8f75b8f155c356616ee0f592 | installer exit 0 | Actual installation and ordinary resume both exit 0 |
+
+The final script ran once. Actual kit 0.5.5, Node 22.22.2, Python 3.12.14, Grok 1.0.70,
+engine 0dc264ba257c0d417f86ef797bc503f933e1e142 and img2webp -exact were checked. The separate
+/workspace/oddbout-v055-acceptance --install returned installation: reused with no installation steps;
+ordinary resume retained the identical binding. Both Git traces had no pull/fetch/clone. Installation
+receipt, dependency files and FETCH_HEAD hashes were unchanged. The resulting single next action was
+connect-grok-subscription / sign-in-required; these checks did not log in or generate.
+Evidence: /workspace/work/oddbout-v055-evidence/direct-install-6b7b8bf/verification.json and adjacent
+stdout/stderr, exit-code, file-hash and Git-trace records in that VM.
+
+The saved environment draft now names this tested front door. Preparing its reusable filesystem and
+republishing still require the environment preparer, followed by a new-task and real-restart check.
+Direct installation in a running user's VM does not update the reusable saved image.
+
+## Related animation change
+
+[PR #38](https://github.com/jeonghwanko/ai-fighter-dots-starter/pull/38) is in this creator-kit repository,
+not crashbang-heroes. It merged into codex/creator-hosting as 43c63da3a1362aa113763a8f1f2802c639705a02.
+It adds a hosted-only engine-loop packing policy: engine loop/foot-name records and visual verdicts are
+bound to final frame pixels/durations, with missing/stale/failing reviews rejected. It helps Grok video
+walk/run packaging but changes none of VM installation, login or private-file delivery.
+Its own documentation keeps Dot creation on reviewPolicy: required. That policy is retained here;
+engine-loop is not silently substituted for same-foot stance evidence. The current pinned runtime
+97890dd predates PR #38. Any later runtime integration needs its pack/gait and creation-policy checks
+before a new immutable pin, without upgrading a character already in progress.
 
 ## Open acceptance gates
 
-The reviewed release remains a candidate. Still required: fresh saved-image install and restart;
+The reviewed release remains a candidate. Still required: prepared saved-image publication, new-task verification and restart;
 official Grok login plus actual image/video entitlement; native original ingress and sealed VM transfer;
 visible delivery to the current conversation; requested character creation, group review and final package.
 No successful actual generation, displayed VM output or complete fighter is claimed.
@@ -102,5 +132,5 @@ The old task title is not a version source: record actual kit manifest/version, 
 8. Continue authorized groups to eleven motions, actual gait review and validated packaging; registration
    requires the user's final registration request. Do not call an example fixture a generated fighter.
 
-The existing VM has run the initial candidate as recorded above; the revised saved image and complete
-creation path remain unverified. Main must not advertise this candidate as verified until that evidence exists. Publishing/Republishing the saved environment is a host operation outside the kit.
+The existing VM passed the related tests and the new selected VM passed direct installation/resume.
+The prepared saved image and complete creation path remain unverified. Main must not advertise this candidate as verified until that evidence exists. Publishing/Republishing the saved environment is a host operation outside the kit.
