@@ -7,6 +7,7 @@ import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/valid
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { resolveManifest } from './package-access.mjs';
 import { creatorLink } from './creator-handoff.mjs';
+import { errorCode } from './error-code.mjs';
 
 const CHANGED = 'package-changed-after-validation';
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -43,7 +44,7 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
     validation: z.unknown().optional(), code: z.string().optional(), fighter: z.unknown().optional(),
     errors: z.array(z.unknown()).optional(), errorCount: z.number().optional(), loginUrl: z.string().optional(), expiresAt: z.string().optional() };
   const read = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
-  const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: /^[a-z0-9-]+$/.test(error.message) ? error.message : 'remote-operation-failed' }); } };
+  const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: errorCode(error, 'remote-operation-failed') }); } };
   if (validatePackage) {
     server.registerTool('submit_fighter_package', {
       description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically. For text-only edits use update_fighter_profile without uploading assets. Each account may register up to three fighters: to update an existing fighter (concept, move names, bout lines, stats, fighting style or art), pass its fighterId — the package is replaced in place and the fighter keeps its ID and duel record. Omit fighterId to register a new fighter while the account has fewer than three.',

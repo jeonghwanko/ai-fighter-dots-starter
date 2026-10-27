@@ -7,6 +7,7 @@ import { readProject } from './connection-readiness.mjs';
 import { connectionAction } from '../api/connection-errors.mjs';
 import { defaultSessionPath, pendingDeviceLoginPath, startDeviceLogin, waitDeviceLogin } from '../scripts/login.mjs';
 import { creatorPage, PUBLIC_CREATOR_PAGE } from './creator-handoff.mjs';
+import { errorCode } from './error-code.mjs';
 
 const kitRoot = fileURLToPath(new URL('../', import.meta.url));
 const instruction = '링크를 열어 본인 Google 계정으로 로그인하고, 본인이 시작한 요청의 코드와 화면의 코드가 같은지 확인해 승인하세요. 콜백 주소나 토큰을 대화로 보내지 마세요.';
@@ -55,7 +56,7 @@ export function connectionHandler({ remote, root = kitRoot, sessionPath = defaul
       // File existence is not account verification. Check the authenticated API after redemption.
       return { ok: true, stage: 'oddbout-connection', data: await status() };
     } catch (error) {
-      const code = /^[a-z][a-z0-9-]{0,80}$/.test(error.message) ? error.message : 'connection-failed';
+      const code = errorCode(error, 'connection-failed');
       return { ok: false, stage: 'oddbout-connection', code, data: { nextAction: connectionAction(code) } };
     } finally { busy = false; }
   };

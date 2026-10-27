@@ -8,6 +8,7 @@ import { fetchCreationContext, itemBlockers, reviewCreationProgress } from './cr
 import { makePackageValidator } from './package-access.mjs';
 import { withFileLock } from './file-lock.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+import { errorCode } from './error-code.mjs';
 
 export const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
 const style = spec.combatStyle, range = ({ min, max }) => z.number().int().min(min).max(max);
@@ -178,7 +179,7 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
     const state = await read(id), { view, problems } = await effective(state);
     let decision, contextError;
     try { decision = reviewCreationProgress(await latestContext(), view); }
-    catch { contextError = 'creation-context-unavailable'; }
+    catch (error) { contextError = errorCode(error, 'creation-context-unavailable', { prefix: 'creation-context-' }); }
     return { state, effectiveItems: Object.fromEntries(Object.entries(view.items).map(([k, v]) => [k,
       { version: v.version, selectedVersion: v.selectedVersion, review: v.review }])), problems,
       decision: decision ?? { canAdvance: false, blockers: [contextError], nextGroup: null, registrationAuthorized: false } };
