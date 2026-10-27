@@ -110,6 +110,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         let query = db.from('af_fighters').select('id,created_at,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha')
           .eq('runtime_approved', true).eq('runtime_scope', 'arena-player-v1').eq('review_state', 'approved');
         if (parts.length === 1) {
+          // An unlisted fighter (`listed`, 2026-10-27) is left out of the list only: his own address below still serves him.
+          query = query.eq('listed', true);
           const cursor = new URL(request.url).searchParams.get('after');
           if (cursor !== null) {
             // Strictly validate both parts before placing them in PostgREST filter syntax.

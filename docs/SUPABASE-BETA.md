@@ -269,8 +269,8 @@ Dot에서 첫 실제 등록:
 | 메서드·경로 | 인증 | 역할 |
 | --- | --- | --- |
 | GET /spec | 없음 | 서버 규격·베타 등록 가능 여부 |
-| GET /roster | 없음 | 출전 승인된 선수의 ID·이름·해시·범위. 최대 20명 |
-| GET /roster/:id | 없음 | 승인된 JSON 원문과 10분 만료 다운로드 URL |
+| GET /roster | 없음 | 출전 승인된 선수의 ID·이름·해시·범위. 최대 20명. 운영자가 목록에서 뺀 선수(`af_fighters.listed = false`)는 빠진다 |
+| GET /roster/:id | 없음 | 승인된 JSON 원문과 10분 만료 다운로드 URL. 목록에서 뺀 선수도 준다 |
 | POST /duels | 공개 게스트 요청 | 승인된 두 선수의 서버 계산·저장. a, b, idempotencyKey만 허용 |
 | GET /duels/:id | 없음 | 확정된 경기의 ID·시드·해시·엔진 버전·결과 |
 | GET /rankings | 없음 | 승인 선수별 승패·점수·공동 순위. 최대 20명 |
