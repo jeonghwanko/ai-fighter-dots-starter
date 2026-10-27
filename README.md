@@ -118,4 +118,4 @@ The sparring-bot example is a geometric test fixture. These checks do not genera
 
 ## License
 
-The creator kit is [MIT-licensed](LICENSE). The bundled [sprite-gen](vendor/sprite-gen) submodule has its own Apache-2.0 LICENSE and NOTICE. Generation providers have their own account and usage terms.
+The creator kit is [MIT-licensed](LICENSE). The bundled [sprite-gen](vendor/sprite-gen) submodule is [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent), our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen), with its own Apache-2.0 LICENSE and NOTICE. Generation providers have their own account and usage terms.

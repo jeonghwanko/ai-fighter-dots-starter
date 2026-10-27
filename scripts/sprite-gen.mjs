@@ -2,7 +2,6 @@ import { access, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ensureSpritePatch, inspectSpritePatch } from './sprite-patch.mjs';
 import { inspectTools, inspectRife, installImg2webp, toolEnv, toolsItem } from './sprite-tools.mjs';
 
 export const kitRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -10,12 +9,19 @@ export const spriteRoot = path.join(kitRoot, 'vendor', 'sprite-gen');
 export const spritePython = path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
 const exists = async file => { try { await access(file); return true; } catch { return false; } };
 
+// The motion engine ships in sprite-gen-agent's own history; a checkout of an older upstream pin lacks it.
+export async function inspectSpriteEngine(root = spriteRoot) {
+  const metadata = await readFile(path.join(root, 'pyproject.toml'), 'utf8').catch(() => null);
+  if (metadata === null) return { version: null, motion: false, error: 'sprite-gen-not-installed' };
+  return { version: metadata.match(/^version = "([^"]+)"/m)?.[1] ?? null,
+    motion: await exists(path.join(root, 'sprite_gen', 'gen', 'gen_motion.py')) };
+}
+
 export async function spriteStatus({ tools = true } = {}) {
   const sourcePresent = await exists(path.join(spriteRoot, 'SKILL.md'));
-  const metadata = sourcePresent ? await readFile(path.join(spriteRoot, 'pyproject.toml'), 'utf8').catch(() => '') : '';
-  const motionPatch = sourcePresent ? await inspectSpritePatch(spriteRoot).then(state => ({ id: state.manifest.id, applied: state.applied }), error => ({ applied: false, error: error.message })) : { applied: false };
+  const engine = await inspectSpriteEngine();
   return {
-    sourcePresent, version: metadata.match(/^version = "([^"]+)"/m)?.[1] ?? null, motionPatch,
+    sourcePresent, version: engine.version, motionEngine: engine.motion,
     environmentPresent: await exists(spritePython), repositoryRoot: kitRoot, sourceRoot: spriteRoot,
     skillPath: path.join(spriteRoot, 'SKILL.md'), pythonPath: spritePython,
     setupCommand: 'npm run sprite:setup', runCommand: 'npm run sprite --', packCommand: 'npm run fighter:pack -- <plan.json>',
@@ -42,14 +48,15 @@ export async function main(args) {
   if (args[0] === 'status') { console.log(JSON.stringify(await spriteStatus(), null, 2)); return 0; }
   if (args[0] === 'setup') {
     if (args.length !== 1) throw new Error('Usage: npm run sprite:setup');
-    if (!(await exists(path.join(spriteRoot, 'SKILL.md')))) {
-      // History is not needed to run the pinned commit; depth 1 skips the upstream history download.
-      if (!(await exists(path.join(kitRoot, '.git')))) throw new Error('sprite-gen source missing and this folder is not a Git checkout. Clone AI Fighter with git; GitHub ZIP archives do not include submodules.');
+    if (await exists(path.join(kitRoot, '.git'))) {
+      // Follow a moved pin or URL. History is not needed to run the pinned commit; depth 1 skips the download.
+      // Git refuses, and setup stops, when the checkout has local edits the pinned commit would overwrite.
+      const synced = await run('git', ['submodule', 'sync', '--', 'vendor/sprite-gen']);
+      if (synced) return synced;
       const result = await run('git', ['submodule', 'update', '--init', '--depth', '1', '--', 'vendor/sprite-gen']);
       if (result) return result;
-    }
+    } else if (!(await exists(path.join(spriteRoot, 'SKILL.md')))) throw new Error('sprite-gen source missing and this folder is not a Git checkout. Clone AI Fighter with git; GitHub ZIP archives do not include submodules.');
     if (!(await exists(path.join(spriteRoot, 'SKILL.md')))) throw new Error('sprite-gen source missing. Clone AI Fighter with --recurse-submodules. GitHub ZIP archives do not include submodules.');
-    await ensureSpritePatch(spriteRoot);
     if (!(await exists(spritePython))) {
       // A global Python is used only to create this repository's isolated environment.
       const candidates = process.env.AI_FIGHTER_BOOTSTRAP_PYTHON ? [[process.env.AI_FIGHTER_BOOTSTRAP_PYTHON, []]]
@@ -74,7 +81,7 @@ export async function main(args) {
   }
   if (!args.length) throw new Error('Pass a sprite-gen command, for example: npm run sprite -- workflow --kind sprite');
   if (!(await exists(spritePython))) throw new Error('Run npm run sprite:setup first. No fallback to a global sprite-gen installation.');
-  await ensureSpritePatch(spriteRoot);
+  if (!(await inspectSpriteEngine()).motion) throw new Error('vendor/sprite-gen predates sprite-gen-agent (no motion engine). Run npm run sprite:setup.');
   await requireMotionContract(args, process.env.INIT_CWD || process.cwd());
   // Use only the bundled source and its venv. Preserve upstream arguments and exit codes (2: questions, 75: choice needed).
   // Relative paths resolve from where the user ran npm, not from inside the submodule.
