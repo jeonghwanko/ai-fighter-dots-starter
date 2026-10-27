@@ -169,3 +169,78 @@ test('open worlds: two per account, factions, placing fighters, the owner\'s can
     await f.sql.exec('reset role');
   } finally { await f.sql.close(); }
 });
+
+test('보강: accepts merge over the sheet as it is; a style follows the answer; any open note can be dismissed; the owner reads his own canon', async () => {
+  const { f, call, mine, them } = await workshop();
+  try {
+    await call('PUT', 'me/name', { nickname: '손님' }, them);
+    await call('PUT', `fighters/${mine}/canon`, { base: 0, sheet: { personality: '조용하다\n그러나 끈질기다' } });
+    const propose = canon => call('POST', 'notes', { fighter: mine, kind: 'proposal', body: '이렇게 바꿔 보자.', proposal: { canon } }, them);
+    const voice = (await propose({ voice: '반말' })).body.note.id, motive = (await propose({ motive: '잃어버린 검' })).body.note.id;
+    // Two accepts at once: each merges over the other's version, neither is lost.
+    const both = await Promise.all([voice, motive].map(note => call('POST', `notes/${note}/resolve`, { decision: 'accept' })));
+    assert.deepEqual(both.map(r => r.status), [200, 200]);
+    assert.deepEqual((await call('GET', `story/${mine}`, undefined, null)).body.canon.sheet,
+      { personality: '조용하다\n그러나 끈질기다', voice: '반말', motive: '잃어버린 검' });
+    // A proposal that would leave no field is refused.
+    await call('PUT', `fighters/${mine}/canon`, { base: 3, sheet: { voice: '반말' } });
+    const empty = (await propose({ voice: null })).body.note.id;
+    assert.equal((await call('POST', `notes/${empty}/resolve`, { decision: 'accept' })).body.code, 'canon-empty');
+    // A note withdrawn while the owner accepts: the style is applied only after the answer, so a closed note leaves the fighter as he was.
+    const style = { mix: { slam: 2, combo: 1, fast: 0 }, distance: 2 };
+    const styled = (await call('POST', 'notes', { fighter: mine, kind: 'proposal', body: '붙어서 싸워라.', proposal: { style } }, them)).body.note.id;
+    const [answer] = await Promise.all([call('POST', `notes/${styled}/resolve`, { decision: 'accept' }), call('DELETE', `notes/${styled}`, undefined, them)]);
+    const combat = async () => (await f.sql.query('select s.manifest->\'combat\' as c from af_fighters f join af_submissions s on s.id=f.submission_id where f.id=$1', [mine])).rows[0].c;
+    if (answer.status !== 200) { assert.equal(answer.body.code, 'note-closed'); assert.equal((await combat()).style, undefined); }
+    else assert.deepEqual((await combat()).style, style);
+    // A critique is dismissed by declining it; the inbox carries the owner's canon and each relation's other side.
+    const critique = (await call('POST', 'notes', { fighter: mine, kind: 'critique', body: '늘 같은 거리.' }, them)).body.note.id;
+    assert.equal((await call('POST', `notes/${critique}/resolve`, { decision: 'accept' })).body.code, 'not-a-proposal');
+    assert.equal((await call('POST', `notes/${critique}/resolve`, { decision: 'decline' })).body.note.state, 'declined');
+    const inbox = (await call('GET', 'me/workshop')).body;
+    assert.ok(!inbox.notes.some(n => n.id === critique)); assert.equal(inbox.canon[mine].version, 4);
+    // The owner reads his canon while his fighter is off the public stage; the public does not.
+    await f.sql.query("update af_fighters set review_state='rejected', runtime_approved=false, runtime_scope=null, runtime_manifest_sha=null, duel_approved=false, duel_manifest_sha=null where id=$1", [mine]);
+    assert.equal((await call('GET', 'me/workshop')).body.canon[mine].sheet.voice, '반말');
+    assert.equal((await call('GET', `story/${mine}`, undefined, null)).status, 404);
+  } finally { await f.sql.close(); }
+});
+
+test('보강: relations and worlds take only fighters on the public stage; the cast shows current names; a post id sent again is the same post', async () => {
+  const { f, call, mine, theirs, them } = await workshop();
+  try {
+    await call('PUT', 'me/name', { nickname: '사부' }); await call('PUT', 'me/name', { nickname: '제자' }, them);
+    const mentor = await call('POST', 'relations', { fighter: mine, other: theirs, kind: 'mentor' });
+    const waiting = (await call('GET', 'me/workshop', undefined, them)).body.relations[0];
+    assert.equal(waiting.kind, 'mentor'); assert.equal(waiting.otherKind, 'student');
+    await call('DELETE', `relations/${mentor.body.relation.id}`);
+    const world = (await call('POST', 'worlds', { name: '항구', nickname: '항구지기' })).body.world.id;
+    assert.equal((await call('PUT', `fighters/${mine}/world`, { world })).status, 200);
+    assert.equal((await call('PUT', `fighters/${theirs}/world`, { world }, them)).status, 200);
+    await f.sql.query("update af_fighters set profile = jsonb_set(profile, '{name}', '\"새 이름\"') where id=$1", [theirs]);
+    // Removed by moderation: out of the cast the public sees, and neither placed nor related again.
+    await f.sql.query("update af_fighters set review_state='rejected', runtime_approved=false, runtime_scope=null, runtime_manifest_sha=null, duel_approved=false, duel_manifest_sha=null where id=$1", [mine]);
+    const read = (await call('GET', `worlds/${world}`, undefined, null)).body;
+    assert.deepEqual(read.fighters.map(c => [c.id, c.name]), [[theirs, '새 이름']]);
+    assert.equal((await call('GET', 'worlds', undefined, null)).body.worlds.find(w => w.id === world).fighters, 1);
+    assert.equal((await call('PUT', `fighters/${mine}/world`, { world })).body.code, 'fighter-not-found');
+    assert.equal((await call('POST', 'relations', { fighter: mine, other: theirs, kind: 'rival' })).body.code, 'fighter-not-found');
+    // Who placed a fighter is not a column the public reads.
+    await f.sql.exec('set role authenticated');
+    await assert.rejects(f.sql.query('select placed_by from af_world_fighters'));
+    assert.ok((await f.sql.query('select fighter_id, name, faction from af_world_fighters')).rows.length >= 1);
+    await f.sql.exec('reset role');
+    // A post sent again with its id comes back as it is; another author's id is refused.
+    const post = { id: crypto.randomUUID(), title: '첫 밤', body: '등대가 꺼졌다.' };
+    const first = await call('POST', `worlds/${world}/posts`, post);
+    assert.deepEqual((await call('POST', `worlds/${world}/posts`, post)).body.post, first.body.post);
+    assert.equal((await call('POST', `worlds/${world}/posts`, { ...post, nickname: '구경꾼' }, them)).body.code, 'post-exists');
+    // The operator's worlds lead the list; a cursor is a time as the story gives it; evidence ids are kept lower case.
+    assert.equal((await call('GET', 'worlds', undefined, null)).body.worlds[0].operator, true);
+    assert.equal((await call('GET', `story/${theirs}?before=1`, undefined, null)).body.code, 'invalid-cursor');
+    const upper = theirs.toUpperCase();
+    const noted = await call('POST', 'notes', { fighter: theirs, kind: 'review', body: '좋은 경기.', evidence: [{ a: 'kuma', b: upper, seed: 3 }] });
+    assert.equal(noted.status, 200);
+    assert.equal((await call('GET', `story/${theirs}`, undefined, null)).body.notes[0].evidence[0].b, theirs);
+  } finally { await f.sql.close(); }
+});

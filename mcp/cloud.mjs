@@ -382,9 +382,9 @@ function registerWorkshopTools({ register, arena, invoke }) {
       const bouts = (evidence ?? []).map(({ cupId, round, slot, a, b, seed }) => cupId !== undefined ? { cup: cupId, round, slot } : { a, b, seed });
       return send('notes', 'POST', { fighter: fighterId, kind, body, ...(bouts.length ? { evidence: bouts } : {}), ...(proposal ? { proposal } : {}) });
     }, { write: true, publish: true, openWorld: true });
-  register('get_workshop_inbox', '내 공방 받은 글', `The connected user's workshop inbox: open notes about his fighters (proposals to answer), relations waiting for him or proposed by him, and his public name. ${DATA_NOTE}`,
+  register('get_workshop_inbox', '내 공방 받은 글', `The connected user's workshop inbox: open notes about his fighters (the newest 100), relations waiting for him or proposed by him (otherKind: the kind as the other fighter sees it), his fighters' current canon (version: the baseVersion to write over) and his public name. ${DATA_NOTE}`,
     {}, () => invoke('me/workshop'));
-  register('resolve_workshop_note', '제안 받기·거절', 'Accept or decline an open proposal about the connected user\'s fighter. Accepting writes its canon fields as a new canon version and applies its fighting style; a remake request is only marked accepted. Requires the user\'s decision.',
+  register('resolve_workshop_note', '제안 받기·거절', 'Accept or decline an open proposal about the connected user\'s fighter; decline also dismisses a critique or review. Accepting writes its canon fields over the current canon as a new version and applies its fighting style (accepting again finishes a style that failed); a remake request is only marked accepted. Requires the user\'s decision.',
     { noteId: UUID_ARG(), decision: z.enum(['accept', 'decline']) }, ({ noteId, decision }) => send(`notes/${noteId}/resolve`, 'POST', { decision }),
     { write: true, publish: true, openWorld: true });
   register('set_fighter_relation', '관계 맺기', 'Declare a relation between the connected user\'s fighter and another registered fighter: rival, comrade, mentor (his fighter teaches) or student. Another owner\'s fighter waits for that owner to accept; one relation per pair. accept/decline answer one waiting for him; remove ends one. Results-made rivalries need nothing. Requires the user\'s request.',

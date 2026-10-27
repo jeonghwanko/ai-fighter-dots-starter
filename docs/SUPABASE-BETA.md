@@ -285,9 +285,9 @@ Dot에서 첫 실제 등록:
 | GET /story/:id | 없음 | 공방과 연대기(4단계): 공개 선수의 정본(지금 판, `?version=`), 판 목록, 공방 글 20개(`?before=`로 앞), 맺은 관계 |
 | PUT /fighters/:id/canon | 소유자 | 정본 다음 판 `{ base, sheet }`. 읽은 판이 아니면 409 `canon-changed` |
 | POST /notes · DELETE /notes/:id | 사용자 JWT | 공방 글 쓰기(공개 이름 필요)·거두기(글쓴이) |
-| POST /notes/:id/resolve | 소유자 | 제안 받기·거절 `{ decision }` |
+| POST /notes/:id/resolve | 소유자 | 제안 받기·거절 `{ decision }`(거절은 비평·경기평도 치운다). 정본 칸은 데이터베이스가 그때의 정본 위에 합친다 |
 | POST /relations · POST /relations/:id/answer · DELETE /relations/:id | 사용자 JWT | 관계 맺기·받기·끊기 |
-| GET /me/workshop · PUT /me/name | 사용자 JWT | 받은 공방 글·관계와 공개 이름 |
+| GET /me/workshop · PUT /me/name | 사용자 JWT | 받은 공방 글(최근 100개)·관계(`otherKind`)·내 선수의 지금 정본(`canon`)과 공개 이름 |
 | GET /worlds · GET /worlds/:id | 없음 | 공개 세계 목록·표지, 세계 하나(진영·소속 선수·정사) |
 | POST /worlds · PATCH /worlds/:id · POST /worlds/:id/posts | 사용자 JWT | 세계 열기(계정당 둘)·고치기(진영·정사·선수 빼기)·라운지 글(그 사람으로) |
 | PUT /fighters/:id/world | 소유자 | 선수를 남이 연 세계·진영에 두기, `world: null`이면 빼기 |

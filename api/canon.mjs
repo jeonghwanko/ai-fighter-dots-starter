@@ -8,11 +8,11 @@ import { Problem, UUID } from './http.mjs';
  * Relations are not here: the relation graph holds them (declared ones and those his bouts made).
  */
 export const CANON_FIELDS = Object.freeze({
-  personality: Object.freeze({ max: 300 }),
+  personality: Object.freeze({ max: 300, lines: true }),
   voice: Object.freeze({ max: 200 }),
-  motive: Object.freeze({ max: 300 }),
+  motive: Object.freeze({ max: 300, lines: true }),
   taboos: Object.freeze({ max: 80, items: 5 }),
-  scenes: Object.freeze({ max: 200, items: 3 }),
+  scenes: Object.freeze({ max: 200, items: 3, lines: true }),
 });
 export const NOTE_KINDS = Object.freeze(['critique', 'proposal', 'review']);
 export const RELATION_KINDS = Object.freeze(['rival', 'comrade', 'mentor', 'student']);
@@ -38,9 +38,10 @@ export function text(value, max, path, { min = 1, lines = false, code = 'invalid
 
 function field(name, value, path) {
   const rule = CANON_FIELDS[name];
-  if (!rule.items) return text(value, rule.max, path, { code: 'invalid-canon' });
+  const lines = rule.lines === true;
+  if (!rule.items) return text(value, rule.max, path, { lines, code: 'invalid-canon' });
   if (!Array.isArray(value) || value.length < 1 || value.length > rule.items) throw invalid('invalid-canon', path);
-  return value.map((item, i) => text(item, rule.max, `${path}/${i}`, { code: 'invalid-canon' }));
+  return value.map((item, i) => text(item, rule.max, `${path}/${i}`, { lines, code: 'invalid-canon' }));
 }
 
 /** A whole sheet: known fields only, at least one. */
@@ -59,13 +60,6 @@ export function canonPatch(value, path = '/proposal/canon') {
     .map(key => [key, value[key] === null ? null : field(key, value[key], `${path}/${key}`)]));
 }
 
-/** The sheet after a patch; null when nothing is left. */
-export function mergeCanon(sheet, patch) {
-  const merged = { ...(sheet ?? {}) };
-  for (const [key, value] of Object.entries(patch)) { if (value === null) delete merged[key]; else merged[key] = value; }
-  return Object.keys(merged).length ? Object.fromEntries(Object.keys(CANON_FIELDS).filter(key => key in merged).map(key => [key, merged[key]])) : null;
-}
-
 const fighterId = value => typeof value === 'string' && (UUID.test(value) || BUILTIN.test(value));
 
 /** Bouts a note points at: a cup bout (`cup`, `round` 0-3, `slot` within the round) or a pairing and seed (a spar or a replay link). */
@@ -82,9 +76,11 @@ export function evidence(value, path = '/evidence') {
       return { cup: item.cup.toLowerCase(), round: item.round, slot: item.slot };
     }
     if (keys === 'a,b,seed') {
-      if (!fighterId(item.a) || !fighterId(item.b) || item.a === item.b || !Number.isInteger(item.seed) || item.seed < 0 || item.seed > 0xffffffff)
+      // A registered fighter's id is stored as the site reads ids: lower case.
+      const a = UUID.test(item.a ?? '') ? item.a.toLowerCase() : item.a, b = UUID.test(item.b ?? '') ? item.b.toLowerCase() : item.b;
+      if (!fighterId(a) || !fighterId(b) || a === b || !Number.isInteger(item.seed) || item.seed < 0 || item.seed > 0xffffffff)
         throw invalid('invalid-evidence', at);
-      return { a: item.a, b: item.b, seed: item.seed };
+      return { a, b, seed: item.seed };
     }
     throw invalid('invalid-evidence', at);
   });
