@@ -245,3 +245,25 @@ test('a profile edit goes through the same edit on the owner\'s current package,
   await call(handle, 'update_fighter_profile', { fighterId: fighter, profile: { lines: { win: 'Again!' } }, idempotencyKey: crypto.randomUUID() });
   assert.ok(filters.some(([k, v]) => k === 'owner_id' && v === owner)); assert.ok(filters.some(([k, v]) => k === 'id' && v === fighter));
 });
+
+test('ChatGPT\'s calls get a short text for a large result (it reads the structured one) and its anonymous user as the read budget', async () => {
+  const calls = [], arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async (url, init = {}) => {
+    if (url.includes('rankings')) return Response.json({ ok: true, scope: 'registered', minBouts: 5, rankings: [] });
+    calls.push(init.headers ?? {}); return Response.json({ ok: true, rules: 39, fighters: Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, name: `Fighter ${i}` })) });
+  } };
+  const handle = createCloudHandler({ db: dbFor(), arena });
+  const ask = meta => handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read_bout', arguments: { a: 'kuma', b: 'yume', seed: 1 }, ...(meta ? { _meta: meta } : {}) } }) }))
+    .then(r => r.json()).then(j => j.result);
+  const plain = await ask(), chat = await ask({ 'openai/locale': 'ko', 'openai/subject': 'user-123' }), other = await ask({ 'openai/subject': 'user-456' });
+  assert.equal(plain.content[0].text, JSON.stringify(plain.structuredContent));
+  assert.match(chat.content[0].text, /^Full result in structuredContent \(\d+ characters\): ok=true, rules=39, fighters\[40\]$/);
+  assert.deepEqual(chat.structuredContent, plain.structuredContent);
+  assert.equal(calls[0]['x-arena-owner'], 'public');
+  assert.match(calls[1]['x-arena-owner'], /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.notEqual(calls[1]['x-arena-owner'], calls[2]['x-arena-owner']);
+  // A small result stays whole.
+  const guide = await handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_rankings', arguments: { scope: 'registered' }, _meta: { 'openai/locale': 'ko' } } }) })).then(r => r.json());
+  assert.equal(guide.result.content[0].text, JSON.stringify(guide.result.structuredContent));
+});

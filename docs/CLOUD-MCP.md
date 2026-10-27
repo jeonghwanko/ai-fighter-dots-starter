@@ -84,6 +84,10 @@ Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른�
 고리: `get_style_guide` → 소개를 성격으로 옮긴다 → `spar`·`read_bout`으로 본다 → 사용자 승인 → `update_fighter_style` → 다시 `spar`.
 기술 클립(`skill`)은 등록 때 정해지므로 성격 고치기로 더할 수 없다.
 
+ChatGPT 호출(`_meta`에 `openai/…`가 있는 호출): Apps SDK는 결과의 구조화 값과 텍스트를 모두 모델에 넘긴다. 그래서 1,200자를 넘는 결과의
+텍스트는 필드 요약 한 줄로 줄인다(`compactText`, 실패 결과와 작은 결과는 그대로). 다른 호스트는 텍스트에 전체 JSON을 그대로 받는다.
+로그인하지 않은 ChatGPT 사용자의 `read_bout` 한도는 `_meta["openai/subject"]`(익명 사용자 id)로 사용자마다 센다.
+
 MCP 점검(2026-10-27): 도구 목록 20 KB → 17 KB(UUID 칸의 짧은 패턴, `$schema` 줄 삭제), 선수 기록의 패키지 해시 생략, `list_fighters`의 두 조회를
 동시에, 결과 함수 읽기 한도를 계정별로(첫 판은 모든 에이전트가 이 함수의 주소 하나로 분당 6번이었다).
 
