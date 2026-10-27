@@ -10,6 +10,8 @@ import { defaultSessionPath } from '../scripts/login.mjs';
 import { connectionAction } from '../api/connection-errors.mjs';
 import { readProject, probeConnections, checkAccount, pendingConnection, infrastructureItem, unverifiedCreation } from './connection-readiness.mjs';
 import { createEnvironmentStore } from './creation-environment.mjs';
+import { doctor as inspectDotsRuntime } from '../scripts/dots-workspace.mjs';
+import { readRecord, safePath } from '../scripts/dots-safety.mjs';
 
 export const KIT_BRANCH = 'codex/creator-hosting';
 const kitRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -50,6 +52,8 @@ export async function creationProgress({ store, jobs, sessionId } = {}) {
  */
 export async function checkKit({ installed, ...options } = {}) {
   const spriteRoot = options.spriteRoot ?? path.join(options.root ?? kitRoot, 'vendor', 'sprite-gen');
+  const pinned = await checkPinnedDotsKit({ ...options, spriteRoot });
+  if (pinned) return pinned;
   const present = installed ?? await installedSpriteGen(spriteRoot);
   const result = await checkKitCore({ ...options, spriteRoot, present });
   if (present.source && present.environment) return result;
@@ -57,6 +61,40 @@ export async function checkKit({ installed, ...options } = {}) {
   for (const command of ['npm ci --ignore-scripts', 'npm run sprite:setup', 'npm run sprite:status'])
     if (!result.nextCommands.includes(command)) result.nextCommands.push(command);
   return { ...result, status: result.status === 'blocked' ? 'blocked' : 'action-required', reason: result.reason ?? 'sprite-gen-not-installed' };
+}
+
+/** A Dots install keeps its workspace's immutable release; readiness must never fetch a moving branch. */
+async function checkPinnedDotsKit({ root = kitRoot, workspaceRoot, spriteRoot,
+  inspectPinnedRuntime = inspectDotsRuntime, inspectEngine = inspectSpriteEngine }) {
+  const result = { status: 'blocked', branch: null, behind: null, ahead: null, remoteChecked: false,
+    engine: null, changedFiles: [], nextCommands: [], restartRequired: false, versionPolicy: 'retain-workspace-pin' };
+  let marker;
+  try { marker = await readRecord(await safePath('.dots-runtime.json', { root })); }
+  catch (error) { return error.code === 'ENOENT' ? null : { ...result, reason: 'dots-runtime-marker-invalid' }; }
+  if (marker?.schemaVersion !== 1 || marker.host !== 'dots') return { ...result, reason: 'dots-runtime-marker-invalid' };
+  if (!workspaceRoot) return { ...result, reason: 'dots-workspace-binding-required' };
+  let binding;
+  try { binding = await readRecord(await safePath('output/dots-workspace.json', { root: workspaceRoot })); }
+  catch { return { ...result, reason: 'dots-workspace-binding-required' }; }
+  const sourcePin = /^[a-f0-9]{40}$/.test(binding?.commit ?? '');
+  const bundlePin = !binding?.commit && /^[a-f0-9]{64}$/.test(binding?.manifestSha256 ?? '');
+  if (binding?.schemaVersion !== 1 || binding.provider !== 'grok' || typeof binding.runtime !== 'string' || !path.isAbsolute(binding.runtime) ||
+      path.resolve(binding.runtime) !== path.resolve(root) || (!sourcePin && !bundlePin))
+    return { ...result, reason: 'dots-workspace-binding-invalid' };
+  let report;
+  try {
+    report = await inspectPinnedRuntime({ runtime: root, workspace: workspaceRoot, provider: 'none',
+      ...(bundlePin ? { manifestSha256: binding.manifestSha256 } : {}) });
+  } catch { return { ...result, reason: 'dots-runtime-inspection-failed' }; }
+  if (report.blockers?.length) return { ...result, reason: report.blockers[0] };
+  if (!Array.isArray(report.blockers) || !report.kit || report.kit.version !== binding.version ||
+      (sourcePin ? report.kit.distribution !== 'source' || report.kit.commit !== binding.commit
+        : report.kit.distribution !== 'bundle' || report.kit.manifestSha256 !== binding.manifestSha256))
+    return { ...result, reason: 'dots-runtime-binding-mismatch' };
+  result.engine = await inspectEngine(spriteRoot);
+  return { ...result, status: result.engine.motion ? 'ready' : 'action-required',
+    reason: result.engine.motion ? null : 'motion-engine-missing', commit: report.kit.commit ?? null,
+    manifestSha256: report.kit.manifestSha256 ?? null };
 }
 
 async function installedSpriteGen(spriteRoot) {
@@ -224,7 +262,7 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   const spriteRoot = kit.spriteRoot ?? path.join(kit.root ?? kitRoot, 'vendor', 'sprite-gen');
   // The kit, its tools, the login and the workspace record are independent checks: run them together.
   const [{ infrastructure, ...connection }, kitItem, toolsItem, environmentItem] = await Promise.all([loginItem,
-    needsGeneration ? checkKit({ progress, ...kit }) : notRequired,
+    needsGeneration ? checkKit({ progress, workspaceRoot: store?.root, ...kit }) : notRequired,
     // ffmpeg, ffprobe and img2webp -exact are required; RIFE only warns (loops cut as filmed).
     needsGeneration ? checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools }) : notRequired,
     // Recorded environment preconditions are reported for the agent to resolve; they do not make generation ready here.
