@@ -17,6 +17,8 @@ Grok's npm lifecycle scripts are disabled: its official launcher supports in-pac
 when the home directory is unwritable. Do not change HOME/GROK_HOME to route around authentication or
 host restrictions. Confirm the actual launched CLI version; no login or agent prompt is used by installation.
 The script never logs in or generates. Do not run it over a user's active environment.
+Only npm/pip download caches move to the workspace tools folder; env.sh retains those paths for later
+kit installation. HOME and all authentication locations remain the official defaults.
 
 Publishing captures prepared files. Saving an Install script does not prove it ran: execute the recipe in
 the environment preparer, inspect its exit code and env.sh, then publish that prepared filesystem. Verify

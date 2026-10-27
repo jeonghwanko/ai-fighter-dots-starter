@@ -61,7 +61,9 @@ if [[ ! -x "$node_dir/bin/node" ]]; then
 fi
 export PATH="$node_dir/bin:$tools_dir/grok/node_modules/.bin:$PATH"
 [[ "$(node --version)" == v22.22.2 ]] || { echo 'node-version-mismatch' >&2; exit 1; }
-mkdir -p "$tools_dir/grok"
+export npm_config_cache="$tools_dir/npm-cache"
+export PIP_CACHE_DIR="$tools_dir/pip-cache"
+mkdir -p "$tools_dir/grok" "$npm_config_cache" "$PIP_CACHE_DIR"
 cp "$repo/deploy/dots-environment/package.json" "$repo/deploy/dots-environment/package-lock.json" "$tools_dir/grok/"
 npm ci --prefix "$tools_dir/grok" --ignore-scripts --omit=dev --no-audit --no-fund
 # The unmodified official launcher supports in-package extraction on an unwritable home.
@@ -73,6 +75,7 @@ ffmpeg -version >/dev/null
 ffprobe -version >/dev/null
 printf 'export PATH=%q:$PATH\n' "$node_dir/bin:$tools_dir/grok/node_modules/.bin" > "$tools_dir/env.sh"
 printf 'export ODDBOUT_RUNTIME_HOME=%q\nexport AI_FIGHTER_ROOT=%q\n' "$runtime_home" "$workspace" >> "$tools_dir/env.sh"
+printf 'export npm_config_cache=%q\nexport PIP_CACHE_DIR=%q\n' "$npm_config_cache" "$PIP_CACHE_DIR" >> "$tools_dir/env.sh"
 cd "$repo"
 # Install the immutable release into the saved workspace. The kit installs pinned WebP if the OS copy lacks -exact. No login or generation.
 node dots.mjs --install --runtime-home "$runtime_home" --workspace /workspace/.oddbout-template-workspace
