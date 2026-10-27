@@ -6,14 +6,7 @@ repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
 tools_dir="${ODDBOUT_TOOLS_HOME:-/workspace/.oddbout-tools}"
 runtime_home="${ODDBOUT_RUNTIME_HOME:-/workspace/.oddbout/runtimes}"
 workspace="${AI_FIGHTER_ROOT:-/workspace/oddbout-workspace}"
-for credential_dir in "$HOME/.grok" "$HOME/.oddbout/auth"; do
-  if [[ -e "$credential_dir" ]]; then
-    echo 'snapshot-has-personal-auth: prepare a fresh environment before publishing' >&2; exit 1
-  fi
-done
-if [[ -n "${XAI_API_KEY:-}${OPENAI_API_KEY:-}${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
-  echo 'snapshot-has-service-keys: remove injected secrets before preparing the image' >&2; exit 1
-fi
+bash "$repo/deploy/dots-environment/check-clean-image.sh"
 if [[ "$(uname -s)" != Linux ]]; then echo 'saved-linux-vm-required' >&2; exit 1; fi
 # Managed Dots VMs already provide these tools and may have neither root nor sudo.
 # Reuse the base image when it is usable; Node, Grok and WebP install in workspace-owned folders.
