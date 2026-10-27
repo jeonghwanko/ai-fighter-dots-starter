@@ -1,11 +1,12 @@
 import { createHash, randomUUID } from 'node:crypto';
-import { copyFile, lstat, mkdir, open, readdir, realpath, rename, rm } from 'node:fs/promises';
+import { appendFile, copyFile, lstat, mkdir, open, readdir, realpath, rename, rm } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { setTimeout as delay } from 'node:timers/promises';
 import path from 'node:path';
 import { z } from 'zod';
 import { fetchCreationContext, itemBlockers, reviewCreationProgress } from './creation-context.mjs';
 import { makePackageValidator } from './package-access.mjs';
+import { withFileLock } from './file-lock.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
 export const identifier = z.string().regex(/^[a-z][a-z0-9-]{0,63}$/);
@@ -18,6 +19,7 @@ const styleSchema = z.object({
   temper: z.object(Object.fromEntries(style.temper.map(key => [key, range(style.grade).optional()]))).strict().optional(),
   exchanges: z.object(Object.fromEntries(style.exchanges.keys.map(key => [key, range(style.exchanges).optional()]))).strict().optional(),
 }).strict();
+const HISTORY_KEPT = 100;
 const versionId = z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9._-]{0,63}$/);
 const note = z.string().trim().min(1).max(4000);
 const files = z.array(z.string().min(1).max(512)).min(1).max(64);
@@ -123,15 +125,9 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
   const prefix = id => `output/${checkId(id)}-work`;
   const fileFor = (id, file) => localPath(root, `${prefix(id)}/${file}`);
   const latestContext = () => fetchCreationContext({ request: contextRequest });
-  async function lock(id, action) {
-    const filename = await fileFor(id, 'creation.lock');
-    let handle;
-    try { handle = await open(filename, 'wx', 0o600); }
-    catch (e) { if (e.code === 'EEXIST') fail('session-busy-or-interrupted-lock'); throw e; }
-    try {
-      await handle.writeFile(JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() }));
-      return await action();
-    } finally { await handle.close(); await rm(filename, { force: true }); }
+  // Parallel tool calls on one session queue here; a lock left by a killed process is reclaimed once stale.
+  async function lock(id, action, { waitMs } = {}) {
+    return withFileLock(await fileFor(id, 'creation.lock'), action, { busy: 'session-busy-or-interrupted-lock', waitMs });
   }
   async function read(id) {
     const state = await readJson(await fileFor(id, 'creation-session.json'));
@@ -301,7 +297,10 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
       } else if (event.type === 'refresh-context') {
         state.context = context; state.contextRevision = context.revision;
       }
-      state.history.push({ ...event, at: new Date().toISOString(), revision: ++state.revision });
+      const entry = { ...event, at: new Date().toISOString(), revision: ++state.revision };
+      // The full trail is append-only beside the session; the session keeps recent entries so it stays under the 2 MB read limit.
+      await appendFile(await fileFor(id, 'creation-history.jsonl'), JSON.stringify(entry) + '\n', { mode: 0o600 });
+      state.history = [...state.history, entry].slice(-HISTORY_KEPT);
       await save(id, state); return state;
     });
   }

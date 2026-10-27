@@ -134,6 +134,33 @@ test('job retries are immutable and execute once, also across new store instance
   assert.equal((await f.jobs.inspect(sessionId, jobId)).observedStatus, 'outputs-changed');
 });
 
+test('a finished job is recorded even while another process holds the session lock', async t => {
+  const f = await fixture(t), jobId = randomUUID(), p = plan();
+  await f.jobs.prepare(sessionId, 1, jobId, p);
+  const lockFile = await f.store.fileFor(sessionId, 'creation.lock');
+  const result = await runCreationJob(f.store, sessionId, jobId, { execute: async (_root, _engine, argv) => {
+    if (argv[0] === 'workflow') return { code: 0 };
+    await f.put(p.outputs[0], 'synthetic output');
+    // Another MCP process takes the lock as the run ends and keeps it for a moment.
+    await writeFile(lockFile, JSON.stringify({ pid: 0, token: 'other-process' }));
+    setTimeout(() => rm(lockFile, { force: true }), 400);
+    return { code: 0 };
+  } });
+  assert.equal(result.status, 'succeeded');
+  assert.equal((await f.jobs.inspect(sessionId, jobId)).observedStatus, 'succeeded');
+});
+
+test('session history keeps recent entries; the full trail is append-only beside it', async t => {
+  const f = await fixture(t);
+  for (let n = 0; n < 105; n++) await f.change({ type: 'profile', name: `Name ${n}`, description: 'D', feedback: `Edit ${n}` });
+  const state = await f.store.read(sessionId);
+  assert.equal(state.history.length, 100);
+  assert.equal(state.history.at(-1).revision, state.revision);
+  const trail = (await readFile(await f.store.fileFor(sessionId, 'creation-history.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line));
+  assert.equal(trail.length, 105);
+  assert.deepEqual(trail.slice(-100), state.history);
+});
+
 test('unknown outcome blocks even a new request ID; resolving requires evidence and never reruns', async t => {
   const f = await fixture(t), jobId = randomUUID();
   await f.jobs.prepare(sessionId, 1, jobId, plan());

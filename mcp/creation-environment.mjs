@@ -1,10 +1,11 @@
 import { randomUUID, createHash } from 'node:crypto';
-import { open, rm, realpath, readFile } from 'node:fs/promises';
+import { realpath, readFile } from 'node:fs/promises';
 import { hostname, homedir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { atomicJson, localPath, readJson } from './creation-store.mjs';
+import { withFileLock } from './file-lock.mjs';
 import { bundledProfiles, canonical, profileHash, profileSchema, fetchProfileEnvelope } from './environment-profiles.mjs';
 import { inspectGenerationLogin } from './generation-connection.mjs';
 import { checkCreationDelivery } from '../scripts/check-creation-delivery.mjs';
@@ -68,9 +69,8 @@ export function createEnvironmentStore(root, { loginProbe = inspectGenerationLog
   }
   async function locked(action) {
     await localPath(root, prefix, { createParents: true, directory: true });
-    const lockPath = await localPath(root, `${prefix}/environment.lock`);
-    const lock = await open(lockPath, 'wx', 0o600).catch(error => { if (error.code === 'EEXIST') throw Error('environment-busy'); throw error; });
-    try { return await action(); } finally { await lock.close(); await rm(lockPath); }
+    // A device login holds this for minutes, so other callers get environment-busy after a short wait.
+    return withFileLock(await localPath(root, `${prefix}/environment.lock`), action, { busy: 'environment-busy', waitMs: 2000 });
   }
   async function deliveryStatus(state) {
     if (!state.delivery) return { status: 'unknown', ready: false };
