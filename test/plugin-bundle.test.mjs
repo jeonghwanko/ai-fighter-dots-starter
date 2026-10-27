@@ -5,7 +5,7 @@ import { cp, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/pr
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { checkRuntimeImports, runtimeFileList } from '../scripts/build-plugin-bundle.mjs';
+import { assertCommitted, checkRuntimeImports, runtimeFileList } from '../scripts/build-plugin-bundle.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 // Side-effect-free entry modules (CLI mains are guarded); importing them evaluates the whole shipped graph.
@@ -40,6 +40,21 @@ test('a runtime staged from the file list imports every entry module', { timeout
   await writeFile(smoke, entries.map(file => `await import(${JSON.stringify(pathToFileURL(path.join(runtime, file)).href)});`).join('\n'));
   const result = spawnSync(process.execPath, [smoke], { cwd: runtime, encoding: 'utf8', timeout: 45_000, stdio: ['ignore', 'pipe', 'pipe'] });
   assert.equal(result.status, 0, result.stderr || result.error?.message);
+});
+
+test('a kit is built only from committed files', async () => {
+  const repo = path.join(temporary, 'repo');
+  await mkdir(path.join(repo, 'mcp'), { recursive: true });
+  const git = (...args) => { const r = spawnSync('git', args, { cwd: repo, encoding: 'utf8', timeout: 30_000 }); assert.equal(r.status, 0, r.stderr); };
+  git('init', '-q'); git('config', 'user.email', 'test@example.invalid'); git('config', 'user.name', 'test');
+  await writeFile(path.join(repo, 'mcp', 'a.mjs'), 'export const a = 1;\n');
+  git('add', '.'); git('commit', '-q', '-m', 'fixture');
+  await assertCommitted(['mcp/a.mjs'], { sourceRoot: repo });
+  await writeFile(path.join(repo, 'mcp', 'a.mjs'), 'export const a = 2;\n');
+  await assert.rejects(assertCommitted(['mcp/a.mjs'], { sourceRoot: repo }), /Commit runtime changes before bundling:\n M mcp\/a\.mjs/);
+  git('checkout', '-q', '--', 'mcp/a.mjs');
+  await writeFile(path.join(repo, 'mcp', 'b.mjs'), 'export const b = 1;\n');
+  await assert.rejects(assertCommitted(['mcp/b.mjs'], { sourceRoot: repo }), /\?\? mcp\/b\.mjs/);
 });
 
 test('a built runtime with a missing module or an undeclared package fails before zipping', async () => {
