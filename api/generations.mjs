@@ -1,6 +1,6 @@
 // 호스팅 생성 (2026-10-27): a creator asks our generation worker to make his fighter. The creator's routes (`generations/…`, his own token)
 // and the worker's (`generation-worker/…`, a worker key of scope `generation`). The state machine, quotas and leases are the database's
-// (`supabase/migrations/20261027235000_oddbout_hosted_generation.sql`); pictures stay in the private bucket `af-generation` and reach a reader
+// (`supabase/migrations/20261028100000_oddbout_hosted_generation.sql`); pictures stay in the private bucket `af-generation` and reach a reader
 // only as signed URLs of ten minutes. The package the worker makes goes through the same submission checks as any other
 // (`submissions.mjs`) under the creator's account — the job row names the owner, never the worker.
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
