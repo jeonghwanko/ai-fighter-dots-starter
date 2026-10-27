@@ -97,11 +97,13 @@ test('progress counts recorded versions and non-cancelled jobs only', async () =
 test('the account item offers fixed options, never infers, and does not claim display proof', async () => {
   const open = accountItem(undefined);
   assert.equal(open.status, 'choice-required');
-  assert.deepEqual(open.options.map(o => o.id), ['gpt', 'grok', 'stop']);
+  assert.deepEqual(open.options.map(o => o.id), ['gpt', 'grok', 'both', 'stop']);
   assert.match(open.verification, /creation:delivery는 기록의 누락·모순만 검사하며 표시를 증명하지 않는다/);
   const gpt = accountItem('gpt');
   assert.equal(gpt.status, 'chosen-unverified');
-  assert.match(gpt.nextCommands[0], /--confirmed-access codex$/);
+  assert.match(gpt.nextCommands[0], /--image-provider codex$/);
+  assert.ok(!gpt.nextCommands.join(' ').includes('--confirmed-access'));
+  assert.equal(accountItem('both').motionMethod, 'grok-video');
   assert.equal(accountItem('stop').status, 'stopped');
   assert.deepEqual(await elicitAccount({ getClientCapabilities: () => ({}) }), { method: 'unsupported', choice: null });
   const answering = content => ({ getClientCapabilities: () => ({ elicitation: { form: {} } }), elicitInput: async () => content });
@@ -226,7 +228,7 @@ test('the MCP tool asks the account through a host form when the client supports
   await client.connect(clientSide); t.after(() => client.close());
   const result = (await client.callTool({ name: 'check_creation_readiness', arguments: { checkRemote: false } })).structuredContent;
   assert.equal(result.ok, true);
-  assert.deepEqual(asked.requestedSchema.properties.account.oneOf.map(o => o.const), ['gpt', 'grok', 'stop']);
+  assert.deepEqual(asked.requestedSchema.properties.account.oneOf.map(o => o.const), ['gpt', 'grok', 'both', 'stop']);
   assert.equal(result.data.elicitation, 'elicited');
   assert.equal(result.data.items.account.choice, 'gpt');
   // Without a workspace, progress is unknown: the kit is reported, never changed.
@@ -234,6 +236,39 @@ test('the MCP tool asks the account through a host form when the client supports
   assert.ok(['ready', 'deferred', 'action-required', 'blocked'].includes(result.data.items.kit.status));
   const stated = (await client.callTool({ name: 'check_creation_readiness', arguments: { account: 'stop', checkRemote: false } })).structuredContent;
   assert.deepEqual([stated.data.elicitation, stated.data.items.account.status, stated.data.readyForGeneration], ['not-needed', 'stopped', false]);
+});
+
+test('cloud workspace readiness does not read or suggest a local registration account', async t => {
+  const [serverSide, clientSide] = InMemoryTransport.createLinkedPair();
+  await createServer({ registrationMode: 'cloud' }).connect(serverSide);
+  const client = new Client({ name: 'cloud-readiness-test', version: '1' });
+  await client.connect(clientSide); t.after(() => client.close());
+  const result = (await client.callTool({ name: 'check_creation_readiness', arguments: { account: 'stop', checkRemote: false } })).structuredContent;
+  assert.equal(result.ok, true);
+  assert.equal(result.data.items.login.status, 'connector-verification-required');
+  assert.equal(result.data.items.login.userId, null);
+  assert.equal(result.data.items.login.routes, undefined);
+  assert.equal(result.data.readyForRegistration, false);
+  assert.deepEqual(result.data.items.login.nextTools, ['get_profile', 'check_creation_readiness']);
+  assert.throws(() => createServer({ registrationMode: 'cloud', remote: { request: () => assert.fail('must not use CLI account') } }), /inconsistent-registration-route/);
+});
+
+test('a saved environment keeps the stated provider and reports its preconditions without certifying generation', async () => {
+  const kit = { installed, git: fakeGit({ counts: '0\t0' }).git, inspectEngine: engineState(true) };
+  const base = { account: 'gpt', kit, tools: workingTools, registrationMode: 'cloud' };
+  const noEnvironment = await checkReadiness(base);
+  assert.equal(noEnvironment.readyForGeneration, false);
+  assert.equal(noEnvironment.items.environment.status, 'workspace-required');
+  const environment = { read: async () => ({ account: 'gpt' }), inspect: async () => ({ status: 'preconditions-recorded', account: 'gpt', readyForGeneration: true }) };
+  const saved = await checkReadiness({ ...base, account: undefined, environment,
+    lowLevelServer: { getClientCapabilities: () => { assert.fail('must reuse the stated choice'); } } });
+  assert.equal(saved.elicitation, 'saved-environment');
+  assert.equal(saved.items.account.choice, 'gpt');
+  assert.equal(saved.items.environment.status, 'preconditions-recorded');
+  assert.equal(saved.items.environment.matchesChoice, true);
+  assert.equal(saved.readyForGeneration, false);
+  const other = await checkReadiness({ ...base, account: 'grok', environment });
+  assert.equal(other.items.environment.matchesChoice, false);
 });
 
 test('connection and registration never ask generation questions or touch the engine', async t => {

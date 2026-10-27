@@ -9,6 +9,7 @@ import { checkTools } from '../scripts/sprite-tools.mjs';
 import { defaultSessionPath } from '../scripts/login.mjs';
 import { connectionAction } from '../api/connection-errors.mjs';
 import { readProject, probeConnections, checkAccount, pendingConnection, infrastructureItem, unverifiedCreation } from './connection-readiness.mjs';
+import { createEnvironmentStore } from './creation-environment.mjs';
 
 export const KIT_BRANCH = 'codex/creator-hosting';
 const kitRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -16,6 +17,7 @@ const kitRoot = fileURLToPath(new URL('../', import.meta.url));
 export const ACCOUNT_OPTIONS = [
   { id: 'gpt', label: '내 GPT(ChatGPT) 구독으로 진행', provider: 'codex' },
   { id: 'grok', label: '내 Grok 구독으로 진행', provider: 'grok' },
+  { id: 'both', label: 'GPT 원화 + Grok 동작으로 진행', provider: 'codex' },
   { id: 'stop', label: '지금은 생성하지 않고 멈춤', provider: null },
 ];
 
@@ -173,7 +175,9 @@ export function accountItem(choice) {
   if (!option) return { status: 'choice-required', options: ACCOUNT_OPTIONS.map(({ id, label }) => ({ id, label })), verification };
   if (option.id === 'stop') return { status: 'stopped', choice: option.id, verification };
   return { status: 'chosen-unverified', choice: option.id, provider: option.provider, verification,
-    nextCommands: [`npm run sprite -- workflow --kind image --confirmed-access ${option.provider}`,
+    imageProvider: option.provider, motionMethod: choice === 'gpt' ? 'gpt-rows' : 'grok-video',
+    // Choosing a provider is not a statement that its image/video entitlement was checked.
+    nextCommands: [`npm run sprite -- workflow --kind image --image-provider ${option.provider}`,
       'npm run creation:delivery -- preflight output/<sessionId>-work/delivery-check.json <현재-대화-ID>'] };
 }
 
@@ -191,20 +195,34 @@ export async function elicitAccount(lowLevelServer) {
   } catch { return { method: 'unsupported', choice: null }; }
 }
 
-export async function checkReadiness({ store, jobs, sessionId, account, purpose = 'generation', remoteActive, lowLevelServer, kit = {}, tools = {}, login = {} } = {}) {
+export async function checkReadiness({ store, jobs, sessionId, account, purpose = 'generation', remoteActive, lowLevelServer, kit = {}, tools = {}, login = {},
+  registrationMode = 'local', environment } = {}) {
   if (!['generation', 'connection', 'registration'].includes(purpose)) throw new Error('invalid-readiness-purpose');
   const needsGeneration = purpose === 'generation';
   const progress = await creationProgress({ store, jobs, sessionId });
-  let choice = account ?? null, elicitation = 'not-needed';
+  // A generation environment configured in this workspace keeps the provider the user stated there.
+  const workspace = needsGeneration ? environment ?? (store?.root ? createEnvironmentStore(store.root) : null) : null;
+  const saved = workspace ? await workspace.read() : null;
+  const savedChoice = ACCOUNT_OPTIONS.some(o => o.id === saved?.account) ? saved.account : null;
+  let choice = account ?? savedChoice, elicitation = savedChoice && !account ? 'saved-environment' : 'not-needed';
   if (needsGeneration && !choice) ({ method: elicitation, choice } = await elicitAccount(lowLevelServer));
-  const { infrastructure, ...connection } = await checkLogin({ remoteActive, ...login });
   const notRequired = { status: 'not-required', reason: 'no-generation-in-this-step', nextCommands: [] };
+  // A cloud workspace registers through the connected ODDBOUT tools; it never reads or offers a local account.
+  const { infrastructure, ...connection } = registrationMode === 'cloud'
+    ? { infrastructure: { status: 'not-required', reason: 'cloud-registration-route' }, status: 'connector-verification-required', userId: null,
+      route: 'oddbout-cloud', nextTools: ['get_profile', 'check_creation_readiness'],
+      note: 'Use the connected ODDBOUT tools in this conversation. Verify its account and readiness there. Do not run workspace login or transfer credentials. This result does not verify that connection.' }
+    : await checkLogin({ remoteActive, ...login });
   const spriteRoot = kit.spriteRoot ?? path.join(kit.root ?? kitRoot, 'vendor', 'sprite-gen');
   const items = { kit: needsGeneration ? await checkKit({ progress, ...kit }) : notRequired,
     // ffmpeg, ffprobe and img2webp -exact are required; RIFE only warns (loops cut as filmed).
     tools: needsGeneration ? await checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools }) : notRequired,
     infrastructure, login: connection,
     account: needsGeneration ? accountItem(choice) : notRequired, ...unverifiedCreation(choice) };
+  // Recorded environment preconditions are reported for the agent to resolve; they do not make generation ready here.
+  items.environment = !needsGeneration ? notRequired : workspace
+    ? { ...await workspace.inspect(), matchesChoice: saved?.account === choice, certifiesGeneration: false }
+    : { status: 'workspace-required', readyForGeneration: false, certifiesGeneration: false };
   const ready = ['ready', 'updated'].includes(items.kit.status) && !items.kit.restartRequired && items.kit.nextCommands.length === 0
     && items.tools.status === 'ready' && items.account.status === 'chosen-unverified';
   return { purpose, kitAndAccountReady: ready, readyForGeneration: false,

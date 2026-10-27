@@ -1,18 +1,25 @@
 ---
 name: create-fighter
-description: Create, revise, resume, validate or register an AI Fighter character using the local creator kit and the user's generation accounts. Use for actual fighter creation; process design and forwarded examples do not authorize generation.
+description: Create, revise, resume, validate or register an ODDBOUT fighter in a PC or supported Dots workspace using the user's generation account and connected ODDBOUT registration. Also inspect the user's registered fighters. Process design and forwarded examples do not authorize generation.
 ---
 
-# AI Fighter creator
+# ODDBOUT
 
-Use the bundled `ai-fighter-creator` MCP tools to keep the project and selected versions across chats.
-Local generation uses the installed creator kit's sprite-gen and the user's account.
+One workflow covers creation, review and registration. The connected ODDBOUT tools own the registration
+account; the workspace kit owns files, version selections and generation jobs. Do not ask the user to
+install AI Fighter Creator as a second plugin or choose between two product names.
+For registered-fighter lookup or status, use the connected ODDBOUT tools directly; no workspace setup is needed.
+For creation, read [workspace routing](references/workspace.md). Use the same project tools through
+`creation:tool` in the user's PC or the Dots workspace. Do not move work to a PC when the user chose Dots.
+Workspace generation uses the installed creator kit's sprite-gen and the user's account.
 For supported direct conversation appearance generation/display, check that route first under `docs/DELIVERY.md`;
 do not require a PC or leave the user's chosen VM scope. Packaging still uses the creator kit.
 
 ## Start or resume
 
-1. Read `get_fighter_spec` sections `context`, `overview`, and `creation`. The creation response supplies
+1. Read the connected ODDBOUT `get_fighter_spec` sections `overview` and `creation` using its actual schema.
+   The cloud connector does not necessarily support `context` or `guide`. Use workspace `get_fighter_spec`
+   through `creation:tool` for `context`, `guide`, and the kit's `creation` section. Its creation response supplies
    this user's runtime kit root (`tool.repositoryRoot`), workspace (`packageRoot`), sprite-gen skill path,
    and the full creation/interaction guides. In a portable installation the kit and workspace differ.
    Read those guides, `docs/AUTHORING.md` and `vendor/sprite-gen/SKILL.md` in the returned kit root.
@@ -119,7 +126,15 @@ then `package-review` with real validation reports and the user's final preview 
 The session review is a record, not a substitute for those validators or generation authorization.
 The final `get_creation_session` must have no blockers before submission.
 
-Use the current user's existing login only when registration is requested. Submit the immutable package
-using `submit_fighter_package`, preserving its idempotency key across identical retries. Changed bytes need
-a new key. A metadata-only final edit followed by an explicit registration request requires fresh file
-validation but no repeated animation approval. Report registration only after the returned status confirms it.
+Use the connected ODDBOUT account for registration from either workspace. Verify `get_profile` matches
+the user's intended account and call the cloud `check_creation_readiness`; a workspace readiness result
+does not verify that login. Never copy a CLI session into the connector or request local login for this route.
+Read the cloud tools' current schemas, then call `prepare_fighter_registration` with the actual approved
+manifest, `upload_fighter_asset` for each pending file, `submit_fighter_registration`, and
+`get_fighter_submission`. Pass actual host attachments/files, not rendered previews, made-up URLs, or
+paths on another machine. Materialize supported Library files with their original bytes and verify hashes.
+Preserve the submission ID and idempotency key across identical retries; inspect status before retrying
+an unknown response. Changed package bytes need a new key. A metadata-only final edit followed by an
+explicit registration request requires fresh validation, not repeated approval of unchanged animations.
+Report registration only after the response confirms it. If the connector or attachment route is missing,
+preserve the completed package and report that blocker; do not silently switch registration accounts.

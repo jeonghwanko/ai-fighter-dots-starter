@@ -1,0 +1,8 @@
+{
+  "model": "supertonic3",
+  "voice": "M1",
+  "language": "ko",
+  "speed": 0.85,
+  "response_format": "wav",
+  "input": "하암… 한 판만 하고, 다시 잘래."
+}

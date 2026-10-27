@@ -3,6 +3,7 @@ import { resolve, join, relative, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { homepageEntries } from './homepage-entry.mjs';
 import { writeSiteDiscovery } from './site-discovery.mjs';
+import { publishEnvironmentProfiles } from '../mcp/environment-profiles.mjs';
 import { buildPluginPolicySite, sitePrivacyNotice, policyFiles } from './build-plugin-policy-site.mjs';
 import { buildCloudConnect } from './build-cloud-connect.mjs';
 
@@ -76,6 +77,7 @@ if (config.customDomain) await writeFile(join(output, 'CNAME'), config.customDom
 // Policy files must exist before the artifact fingerprint is measured.
 await buildPluginPolicySite(join(output, 'ai-fighter-creator'), { publish: true });
 await buildCloudConnect(output);
+await publishEnvironmentProfiles(output);
 // Serve the actual homepage at /; retain the old filename as a compatible redirect.
 const homepage = await readFile(join(output, 'league.html'), 'utf8');
 for (const [path, html] of Object.entries(homepageEntries(homepage))) {

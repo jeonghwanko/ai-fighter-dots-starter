@@ -2,7 +2,7 @@ import { cp, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os';
 import { resolve, join, dirname } from 'node:path';
 import assert from 'node:assert/strict';
-import { hosting, git, verifyArtifact, verifyLiveSite, waitForJson } from './hosting-lib.mjs';
+import { hosting, git, verifyArtifact, verifyLiveSite, waitForJson, restoreCreatorKitReleases, assertCreatorKitsUnchanged } from './hosting-lib.mjs';
 
 const [output, option, ...extra] = process.argv.slice(2);
 if (!output || extra.length || (option && option !== '--dry-run')) {
@@ -10,6 +10,7 @@ if (!output || extra.length || (option && option !== '--dry-run')) {
 }
 const source = resolve(output);
 const release = await verifyArtifact(source);
+if ((await readdir(source)).includes('creator-kit')) throw Error('Publish immutable creator-kit files separately with publish-creator-kit.mjs');
 if (option === '--dry-run') {
   console.log(JSON.stringify({ status: 'verified-only', branch: hosting.branch, ...release }));
 } else {
@@ -43,7 +44,11 @@ if (option === '--dry-run') {
     git(checkout, 'config', 'user.name', 'AI Fighter deploy');
     git(checkout, 'config', 'user.email', '41898282+github-actions[bot]@users.noreply.github.com');
     git(checkout, 'config', 'core.autocrlf', 'false');
+    // Existing kit bytes are not part of the newly built game's fingerprint.
+    // Materialize their original Git objects before add -A could remove them.
+    restoreCreatorKitReleases(checkout);
     git(checkout, 'add', '-A');
+    assertCreatorKitsUnchanged(checkout);
     git(checkout, 'commit', '-m', `Deploy AI Fighter ${release.sourceCommit.slice(0, 12)}`);
     // No force: concurrent deploys must fail instead of replacing newer work.
     git(checkout, 'push', 'origin', `HEAD:refs/heads/${hosting.branch}`);

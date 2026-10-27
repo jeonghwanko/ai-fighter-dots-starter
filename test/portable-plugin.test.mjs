@@ -4,6 +4,7 @@ import { cp, mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import test from 'node:test';
+import { commitRuntime } from '../plugins/ai-fighter/launcher.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const sha = data => createHash('sha256').update(data).digest('hex');
@@ -46,4 +47,30 @@ test('portable startup rejects corrupt files, unsupported platforms and paths ou
   f.manifest.platform = process.platform; f.manifest.files = { '../outside': sha('ignored') }; await f.save();
   await assert.rejects(f.initialize({ base: f.base }), /Invalid bundled path/);
   await assert.rejects(f.initialize({ base: 'relative' }), /absolute directory/);
+});
+
+test('source distribution extracts on the host without native dependencies or a desktop platform requirement', async t => {
+  const f = await fixture(t);
+  f.manifest.distribution = 'source'; f.manifest.platform = 'any'; f.manifest.arch = 'any'; await f.save();
+  const result = await f.initialize({ base: f.base });
+  assert.equal(result.distribution, 'source');
+  assert.equal(result.registration, 'oddbout-cloud');
+  assert.equal(await readFile(path.join(result.runtime, 'entry.mjs'), 'utf8'), f.data);
+  await assert.rejects(readFile(path.join(result.runtime, 'node_modules', 'package.json')), { code: 'ENOENT' });
+});
+
+test('Windows scanner locks retry only the atomic install rename; permanent and unrelated failures propagate', async t => {
+  const f = await fixture(t), marker = path.join(f.scratch, 'absent-marker');
+  let calls = 0; const delays = [];
+  await commitRuntime('pending', 'target', marker, { platform: 'win32', wait: async ms => delays.push(ms),
+    move: async (source, target) => { assert.deepEqual([source, target], ['pending', 'target']); if (++calls < 3) throw Object.assign(Error('busy'), { code: 'EPERM' }); } });
+  assert.equal(calls, 3); assert.deepEqual(delays, [100, 200]);
+  calls = 0;
+  await assert.rejects(commitRuntime('pending', 'target', marker, { platform: 'win32', wait: async () => {},
+    move: async () => { calls++; throw Object.assign(Error('locked'), { code: 'EPERM' }); } }), /locked/);
+  assert.equal(calls, 7);
+  calls = 0;
+  await assert.rejects(commitRuntime('pending', 'target', marker, { platform: 'win32', wait: async () => assert.fail('no retry'),
+    move: async () => { calls++; throw Object.assign(Error('disk'), { code: 'ENOSPC' }); } }), /disk/);
+  assert.equal(calls, 1);
 });

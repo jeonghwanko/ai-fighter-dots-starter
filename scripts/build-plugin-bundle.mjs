@@ -8,19 +8,25 @@ import { localPath } from '../mcp/creation-store.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
 const runtimeFiles = [
-  'LICENSE', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'api/runtime-fetch.mjs', 'server/ai-fighter-package.mjs',
+  'LICENSE', 'AGENTS.md', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'api/runtime-fetch.mjs', 'server/ai-fighter-package.mjs',
   'deploy/creation-context-source.json', 'deploy/creator-site.json',
-  'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/run-creation-job.mjs',
+  'deploy/creation-environments.json', 'deploy/creation-environment-trust.json', 'scripts/connect-generation.mjs', 'docs/ENVIRONMENT-ONBOARDING.md',
+  'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/run-creation-job.mjs', 'scripts/creation-tool.mjs',
   'scripts/sprite-tools.mjs',
   'scripts/login.mjs', 'scripts/gait.mjs', 'scripts/contact.mjs', 'scripts/creation-context.mjs',
   'scripts/check-creation-delivery.mjs', 'scripts/check-connection.mjs', 'docs/DELIVERY.md',
   'tools/ai-fighter/gait.mjs', 'tools/ai-fighter/contact_evidence.py', 'tools/ai-fighter/validate-package.mjs',
   'docs/DOT-CREATION.md', 'docs/AUTHORING.md', 'docs/CREATION-UX.md', 'docs/GAIT-REVIEW.md',
   'docs/FOOT-EVIDENCE.md', 'docs/LOCAL-PLUGIN.md', 'docs/GAME-CREATION-CONTEXT.md', 'docs/OPEN-REGISTRATION.md',
-  'docs/EXECUTION-HOST.md', 'docs/CONNECTION-READINESS.md',
+  'docs/EXECUTION-HOST.md', 'docs/CONNECTION-READINESS.md', 'docs/ODDBOUT-PLUGIN.md',
 ];
 const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
-  'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run'];
+  'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run', 'creation:tool'];
+
+// Presentation media in the upstream documentation is not runtime/package data.
+// Keep all source, package assets, workflow text and licenses.
+export const bundlePolicy = Object.freeze({ id: 'source-without-doc-media-v1', omittedVendorPrefixes: ['docs/assets/'] });
+export const includeVendorFile = relative => !bundlePolicy.omittedVendorPrefixes.some(prefix => relative.startsWith(prefix));
 
 function run(command, args, { cwd = root, capture = false } = {}) {
   return new Promise((resolve, reject) => {
@@ -52,7 +58,6 @@ async function copy(relative, sourceRoot, targetRoot) {
 }
 
 export async function buildPluginBundle(destination) {
-  if (process.platform !== 'win32' || process.arch !== 'x64') throw Error('The first distribution targets Windows x64. Validate another platform before publishing it.');
   if (!destination.startsWith('output/')) throw Error('plugin-output-must-be-under-output');
   const out = await localPath(root, destination);
   if (await lstat(out).then(() => true, error => { if (error.code !== 'ENOENT') throw error; return false; })) throw Error('plugin-output-exists');
@@ -73,18 +78,24 @@ export async function buildPluginBundle(destination) {
   for (const file of runtimeFiles) await copy(file, root, runtime);
   for (const directory of ['mcp', 'contracts/ai-fighter'])
     for (const file of await files(path.join(root, directory))) await copy(`${directory}/${file}`, root, runtime);
-  for (const file of vendorFiles) await copy(file, vendor, path.join(runtime, 'vendor', 'sprite-gen'));
+  const omittedVendorFiles = [];
+  for (const file of vendorFiles) {
+    if (includeVendorFile(file)) await copy(file, vendor, path.join(runtime, 'vendor', 'sprite-gen'));
+    else {
+      const data = await readFile(await localPath(vendor, file));
+      omittedVendorFiles.push({ path: file, bytes: data.length, sha256: sha(data) });
+    }
+  }
   const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   pkg.scripts = Object.fromEntries(runtimeScripts.map(key => [key, pkg.scripts[key]]));
   await writeFile(path.join(runtime, 'package.json'), JSON.stringify(pkg, null, 2) + '\n', { flag: 'wx' });
-  const npm = process.env.npm_execpath || path.join(path.dirname(process.execPath), 'node_modules', 'npm', 'bin', 'npm-cli.js');
-  // Fresh locked production dependencies, no install lifecycle hooks and no copied user npm config.
-  await run(process.execPath, [npm, 'ci', '--omit=dev', '--ignore-scripts', '--no-audit', '--no-fund'], { cwd: runtime });
-  await run(process.execPath, ['--input-type=module', '-e', "import sharp from 'sharp'; await sharp({create:{width:1,height:1,channels:4,background:'#00000000'}}).webp().toBuffer();"], { cwd: runtime });
+  // Source-only: native Node packages are installed in the user's writable runtime on that host.
+  // Bundling Windows node_modules would break Dots/Linux and make the plugin desktop-only again.
   const hashes = {};
   for (const file of await files(runtime)) hashes[file] = sha(await readFile(path.join(runtime, file)));
   await writeFile(path.join(plugin, 'runtime-manifest.json'), JSON.stringify({ schemaVersion: 1,
-    platform: process.platform, arch: process.arch, spriteGenCommit: pinned, spriteGenSource, files: hashes }, null, 2) + '\n');
+    distribution: 'source', platform: 'any', arch: 'any', spriteGenCommit: pinned, spriteGenSource,
+    bundlePolicy, files: hashes }, null, 2) + '\n');
   await writeFile(path.join(plugin, 'mcp.json'), JSON.stringify({
     $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json', mcpServers: {
       'ai-fighter-creator': { type: 'stdio', command: 'node', args: ['${PLUGIN_ROOT}/launcher.mjs'], cwd: '${PLUGIN_ROOT}' },
@@ -93,20 +104,23 @@ export async function buildPluginBundle(destination) {
   const metadata = JSON.parse(await readFile(path.join(plugin, 'plugin.json'), 'utf8'));
   const marketDir = path.join(out, '.agents', 'plugins'); await mkdir(marketDir, { recursive: true });
   await writeFile(path.join(marketDir, 'marketplace.json'), JSON.stringify({ name: 'ai-fighter-local',
-    interface: { displayName: 'AI Fighter Creator' }, plugins: [{ name: metadata.name,
+    interface: { displayName: 'ODDBOUT' }, plugins: [{ name: metadata.name,
       source: { source: 'local', path: './plugins/ai-fighter' },
       policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' }, category: 'Productivity' }] }, null, 2) + '\n');
-  const zip = path.join(out, `${metadata.name}-${metadata.version}-${process.platform}-${process.arch}.zip`);
+  const zip = path.join(out, `${metadata.name}-${metadata.version}.zip`);
   const python = process.env.AI_FIGHTER_BOOTSTRAP_PYTHON || 'python';
   await run(python, [path.join(root, 'scripts', 'zip-plugin.py'), plugin, zip]);
-  const report = { version: metadata.version, platform: `${process.platform}-${process.arch}`, plugin, marketplace: out,
-    zip, sha256: sha(await readFile(zip)), runtimeFiles: Object.keys(hashes).length, spriteGenCommit: pinned, spriteGenSource,
+  const zipBytes = await readFile(zip);
+  if (zipBytes.length > 20_000_000) throw Error('Source bundle exceeds the 20 MB distribution budget; review contents before publishing.');
+  const report = { version: metadata.version, distribution: 'source', builtOn: `${process.platform}-${process.arch}`, plugin, marketplace: out,
+    zip, bytes: zipBytes.length, sha256: sha(zipBytes), runtimeFiles: Object.keys(hashes).length, spriteGenCommit: pinned, spriteGenSource,
+    bundlePolicy, omittedVendorFiles,
     listingURLs: Object.fromEntries(['websiteURL', 'supportURL', 'privacyPolicyURL', 'termsOfServiceURL']
       .map(key => [key, metadata.extensions['com.openai'].interface[key]])),
-    publicSubmissionReady: false, pending: ['OpenAI local MCP organization allowlisting', 'Verified developer identity',
-      'Reviewer access and executed review cases', 'Reviewer-accessible demo video'],
-    credentials: 'Only allowlisted source and clean npm production packages are bundled; no home, session, venv or output directories.',
-    runtime: 'Node.js 22.12+ must be available. The Python sprite runtime is set up explicitly on each user computer.' };
+    publicSubmissionReady: false, pending: ['Public With MCP submission using the ODDBOUT HTTPS server; private app mappings are not public submissions',
+      'Verified developer identity', 'Executed PC and hosted Dots creation/delivery review cases', 'Reviewer-accessible demo video'],
+    credentials: 'Only allowlisted source is bundled; no home, session, venv, node_modules or output directories.',
+    runtime: 'Node.js 22.12+ and Python 3.11+ in a per-user PC or Dots workspace. Install locked dependencies and sprite-gen explicitly in the writable runtime. Registration uses the connected ODDBOUT account.' };
   await writeFile(path.join(out, 'build-report.json'), JSON.stringify(report, null, 2) + '\n');
   return report;
 }

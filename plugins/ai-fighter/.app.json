@@ -1,0 +1,8 @@
+{
+  "apps": {
+    "oddbout": {
+      "id": "connector_6adc47b8f6f48191933eff5fb053e63c",
+      "required": true
+    }
+  }
+}

@@ -9,6 +9,7 @@
 - 생성 결과를 대화에 보여주는 경로와 혼잡·한도 오류 중단 방침: [DELIVERY.md](DELIVERY.md)
 - 제작 단계와 피드백: [DOT-CREATION.md](DOT-CREATION.md)
 - 사용자 연결과 초기 환경 준비자 역할·오류별 다음 행동: [CONNECTION-READINESS.md](CONNECTION-READINESS.md)
+- GPT 계정·환경 프로필·네트워크 승인 연결: [ENVIRONMENT-ONBOARDING.md](ENVIRONMENT-ONBOARDING.md)
 
 ## 1. 기본 형태
 
@@ -97,6 +98,8 @@ npm run sprite:status
 
   `kitAndAccountReady`는 키트와 생성 계정 선택만 확인한다. 이 도구는 생성·전달을 확인하지 않아 `readyForGeneration`은 false다.
   요청된 첫 생성은 [DELIVERY.md](DELIVERY.md)의 실제 사전 조건을 별도로 확인한다. 확인용 새 생성은 하지 않는다.
+  `environment`은 이 작업 공간에 기록된 생성 환경(로그인·호스트 네트워크·전달 사전 조건)을 보여 주지만,
+  기록일 뿐이라 `readyForGeneration`을 true로 만들지 않는다. 연결 방법은 [ENVIRONMENT-ONBOARDING.md](ENVIRONMENT-ONBOARDING.md).
   로그인 파일 존재도 유효한 서버 세션이나 사용자 계정 동일성의 증거로 확대하지 않는다.
   생성 접근, 이 대화에서의 실제 표시, 동작 품질은 실제 결과로만 확인된다.
   `creation:delivery`는 기록의 누락·모순을 검사할 뿐 표시를 증명하지 않는다.
@@ -170,6 +173,14 @@ npm run sprite:status
 - 작업 공간에서 다른 사용자의 데이터에 접근할 수 없어야 한다.
 
 ## 7. 등록
+
+**ODDBOUT 통합 플러그인(0.4.0 이상)의 기본 경로:** PC·Dots 모두 현재 대화의 클라우드 ODDBOUT
+`get_profile`, `check_creation_readiness`로 연결 계정을 확인하고 prepare/upload/submit/status 도구로 등록한다.
+작업 공간의 `creation:tool`은 제작·검증만 담당하고 등록용 로컬 세션을 읽지 않는다.
+따라서 연결된 클라우드 등록에는 아래 독립 CLI 로그인/기기 연결 절차를 적용하지 않는다.
+클라우드 접속 장애를 다른 로컬 계정으로 대체하지 않는다. [통합 플러그인](ODDBOUT-PLUGIN.md)을 참고한다.
+
+아래 내용은 기존 독립 CLI/stdio 등록 경로의 호환 안내다.
 
 - 등록은 사용자가 요청할 때만 한다.
   `deploy/creator-site.json`의 공개 설정으로 사용자 본인의 Google 로그인을 진행한 뒤 제출한다([OPEN-REGISTRATION.md](OPEN-REGISTRATION.md)).
