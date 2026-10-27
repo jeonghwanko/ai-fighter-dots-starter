@@ -62,6 +62,9 @@ Storage bucket은 비공개 `ai-fighter-beta`다. 기존 게임 테이블·로�
 - 버전(앞 14자리)은 파일마다 하나다. `20261021090000`을 두 파일이 함께 쓰던 것을 2026-10-27에
   `20261021090001_ai_fighter_worker_dispatch.sql`로 바꿨다(순서 동일). 운영은 `db push`를 쓰지 않고 파일별로
   적용하므로 운영 DB에는 영향이 없다. 운영 이력을 맞추려면 `migration repair --status applied 20261021090001`이 필요하다.
+- 함수 안의 `update`·`delete`는 `where`로 행을 고른다. 운영 API 역할(`authenticator`)은 `safeupdate`를 불러와 `where` 없는 문장을
+  거부한다. 이관은 postgres로 돌고 로컬 DB에는 `safeupdate`가 없어 둘 다 이 실패를 보이지 않는다. 한 행짜리 표도
+  `where singleton`처럼 적는다(2026-10-27 생성 워커 심장 박동이 모두 `database-unavailable`로 실패했다).
 
 Supabase CLI에서 계정 로그인·프로젝트 선택 후:
 
