@@ -203,7 +203,13 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at,moderation_reason,deleted_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();
         check(error); if (!data) throw new Problem(404, 'not-found');
         if (data.deleted_at) return json({ ok: true, stage: 'deleted', fighterId: data.id, deletedAt: data.deleted_at });
-        return json({ ok: true, stage: 'registered', fighter: data });
+        // His current combat (2026-10-27): the stats, the fighting style and the skill clip's kind — what a style edit starts from.
+        const { data: current, error: currentError } = await db.from('af_submissions').select('manifest').eq('id', data.submission_id)
+          .eq('owner_id', owner).maybeSingle();
+        check(currentError);
+        const manifest = current?.manifest;
+        return json({ ok: true, stage: 'registered', fighter: { ...data, ...(manifest ? { combat: { stats: manifest.combat?.stats ?? null,
+          style: manifest.combat?.style ?? null, skill: manifest.clips?.skill?.skill?.kind ?? null } } : {}) } });
       }
       if (isWorker && method === 'POST') {
         let body;

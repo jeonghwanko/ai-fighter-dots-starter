@@ -146,6 +146,9 @@ test('the fighting style is edited without new art; null removes it, and nothing
     const styled = await manifestOf(saved.submissionId);
     assert.deepEqual(styled.combat, { ...example.combat, style }); assert.deepEqual(styled.profile, example.profile);
     assert.deepEqual(styled.assets, example.assets); assert.equal(f.uploads.length, 0);
+    // The owner's lookup (get_registered_fighter) shows the combat a style edit starts from.
+    const owned = await (await f.handle(new Request(`http://localhost/ai-fighter/fighters/${id}`, { headers: { authorization: 'Bearer local-profile-test-token' } }))).json();
+    assert.deepEqual(owned.fighter.combat, { stats: example.combat.stats, style, skill: null });
     // The contract checks the style (fast is at most slam + combo); a body edits the profile, the style or both, never nothing.
     assert.equal((await patch(saved.manifestSha256, { style: { mix: { slam: 0, combo: 0, fast: 1 } } })).status, 422);
     assert.equal((await patch(saved.manifestSha256, { style: [] })).status, 422);

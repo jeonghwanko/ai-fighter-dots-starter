@@ -164,7 +164,7 @@ test('owned list excludes deleted rows and owned lookup returns only a deletion 
 
 test('agent tools list only with the arena key; reads are public, spars and cups carry the verified owner and the key', async () => {
   const calls = [], key = 'k'.repeat(64);
-  const arena = { url: 'https://arena.test/oddbout-arena', key, fetcher: async (url, init = {}) => {
+  const arena = { url: 'https://arena.test/oddbout-arena', key, pollMs: 1, pollTries: 2, fetcher: async (url, init = {}) => {
     calls.push({ url, method: init.method, headers: init.headers ?? {}, body: init.body ? JSON.parse(init.body) : undefined });
     if (url.endsWith('/fighters')) return Response.json({ ok: true, rules: 39, fighters: [{ id: 'kuma', name: 'KUMA' }] });
     if (url.includes('/agent/')) return Response.json({ ok: true, echo: JSON.parse(init.body) });
@@ -182,14 +182,17 @@ test('agent tools list only with the arena key; reads are public, spars and cups
   assert.equal(guide.ok, true); assert.deepEqual(guide.contract.temper, ['guard', 'retreat', 'measure', 'patience']);
   const bout = (await (await signedOut(request('tools/call', { name: 'read_bout', arguments: { a: 'kuma', b: 'yume', seed: 7 } }))).json()).result.structuredContent;
   assert.equal(bout.url, 'https://arena.test/oddbout-arena/bout?a=kuma&b=yume&seed=7');
-  assert.equal(calls.at(-1).headers['x-arena-agent'], undefined);
+  // A read goes on the arena's agent budget: signed out, every signed-out agent's together (`public`).
+  assert.equal(calls.at(-1).headers['x-arena-agent'], key); assert.equal(calls.at(-1).headers['x-arena-owner'], 'public');
   assert.equal((await (await signedOut(request('tools/call', { name: 'spar', arguments: { fighterId: 'kuma', opponentId: 'yume' } }))).status), 401);
   // Agent calls: the owner is the verified one, never an argument.
   const handle = createCloudHandler({ db: dbFor(), arena });
   const spar = (await call(handle, 'spar', { fighterId: 'kuma', opponentId: 'yume', seed: 3 })).structuredContent;
   assert.deepEqual(spar.echo, { owner, a: 'kuma', b: 'yume', seed: 3 }); assert.equal(calls.at(-1).headers['x-arena-agent'], key);
+  await call(handle, 'read_bout', { a: 'kuma', b: 'yume', seed: 7 }); assert.equal(calls.at(-1).headers['x-arena-owner'], owner);
   const fighter = crypto.randomUUID();
-  assert.deepEqual((await call(handle, 'enter_cup', { fighterId: fighter })).structuredContent.echo, { owner, fighter });
+  const entered = (await call(handle, 'enter_cup', { fighterId: fighter })).structuredContent;
+  assert.deepEqual(entered.echo, { owner, fighter }); assert.equal(entered.state, 'open'); assert.equal(entered.next, 'get_cup');
   assert.equal((await call(handle, 'read_bout', { cupId: fighter })).structuredContent.code, 'invalid-bout');
   const failing = createCloudHandler({ db: dbFor(), arena: { ...arena, fetcher: async () => { throw new Error('down'); } } });
   assert.equal((await call(failing, 'get_rankings', {})).structuredContent.code, 'arena-unavailable');
@@ -207,4 +210,24 @@ test('a style edit goes through the profile edit on the owner\'s current package
   // The in-process API asks the database next; this stub has none, so it stops there — after reading only the owner's own fighter.
   assert.equal(result.ok, false);
   assert.ok(filters.some(([k, v]) => k === 'owner_id' && v === owner)); assert.ok(filters.some(([k, v]) => k === 'id' && v === fighter));
+});
+
+test('MCP 점검: short UUID schemas without $schema; a cup entry waits for the finished cup; a record drops package pins', async () => {
+  const ticket = crypto.randomUUID(); let polls = 0;
+  const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), pollMs: 1, pollTries: 5, fetcher: async url => {
+    if (url.endsWith('/agent/cup')) return Response.json({ ok: true, ticket, seed: 1, rules: 39, bracket: [] });
+    if (url.includes('/cup?id=')) return Response.json({ ok: true, cup: { id: ticket, state: ++polls < 3 ? 'open' : 'done', bouts: [] } });
+    if (url.includes('/fighter?id=')) return Response.json({ ok: true, id: 'kuma', won: 1, lost: 0, recent: [{ cup: ticket, round: 0, slot: 0, registered: { x: 'a'.repeat(64) } }] });
+    return Response.json({ ok: true });
+  } };
+  const handle = createCloudHandler({ db: dbFor(), arena });
+  const listed = await (await handle(request('tools/list'))).json(), text = JSON.stringify(listed);
+  assert.equal(text.includes('json-schema.org'), false);
+  const uuid = listed.result.tools.find(t => t.name === 'enter_cup').inputSchema.properties.fighterId;
+  assert.ok(uuid.pattern.length < 80, uuid.pattern);
+  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID() })).structuredContent;
+  assert.equal(entered.cup.state, 'done'); assert.equal(polls, 3);
+  const record = (await call(handle, 'get_fighter_record', { fighterId: 'kuma' })).structuredContent;
+  assert.deepEqual(record.recent, [{ cup: ticket, round: 0, slot: 0 }]);
+  assert.equal((await call(handle, 'get_cup', { cupId: 'not-a-uuid' })).isError, true);
 });
