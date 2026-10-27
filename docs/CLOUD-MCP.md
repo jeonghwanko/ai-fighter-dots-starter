@@ -77,6 +77,7 @@ Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른�
 | `spar` | 필요 | 두 선수의 한 판(지금 패키지). 순위에 들지 않고 남지 않는다. 계정마다 분당 한도 |
 | `enter_cup` | 필요 | 연결 계정의 등록 선수로 16강 컵. 나머지 15명은 서버가 기본 선수에서 뽑는다. 결과는 컵 순위에 든다. 컵이 끝날 때까지(약 7초, 12초까지) 기다려 끝난 컵을 돌려준다. 사용자 요청이 있어야 한다 |
 | `update_fighter_style` | 필요 | 새 그림 없이 `combat.style`만 바꾼다(객체는 교체, null은 삭제). 프로필 고치기와 같은 길(`PATCH fighters/<id>/profile`의 `style`, 마이그레이션 `20261027170000_ai_fighter_style_edits`)이다. 사용자 승인이 있어야 한다 |
+| `update_fighter_profile` | 필요 | 새 그림 없이 프로필 글(이름·소개·언어·콘셉트·기술 설명·언어별 이름·경기 대사)만 바꾼다. 준 칸만 바뀌고, null은 언어별 이름·대사를 지운다. 같은 길(`PATCH fighters/<id>/profile`). 사용자 승인이 있어야 한다 |
 
 `get_registered_fighter`가 지금 성격(`fighter.combat` — 능력치·`style`·고유 기술 종류)을 준다. 성격 고치기는 통째로 바꾸므로 여기서 시작한다.
 

@@ -287,18 +287,29 @@ function registerAgentTools({ register, arena, db, identity, invoke, recordAgent
       }
       return { ...issued, state: 'open', next: 'get_cup' };
     }, { write: true, openWorld: true });
+  // The owner's current registered package hash (the version an edit is made on), or a 404.
+  const currentSha = async fighterId => {
+    const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', identity.owner)
+      .is('deleted_at', null).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    if (!fighter) throw new Problem(404, 'fighter-not-found');
+    return fighter.manifest_sha;
+  };
+  const edit = async (fighterId, change, idempotencyKey) => {
+    const result = await invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: await currentSha(fighterId), ...change }),
+      { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
+    if (result.ok) await recordAgent(result.submissionId);
+    return result;
+  };
+  register('update_fighter_profile', '프로필 고치기', 'Change the connected user\'s registered fighter\'s profile text without new art: name, description, language, concept, moves, per-language names or bout lines (challenge, win, lose). Give only the fields to change; null removes names or lines. Checked against the contract. Requires the user\'s approval of the change. Use a new UUID per change and the same UUID to retry it.',
+    { fighterId: UUID_ARG(), profile: z.object({ name: z.string().min(1).max(40), description: z.string().min(1).max(600), language: z.enum(['ko', 'en']),
+      concept: z.string().min(1).max(800), moves: z.record(z.string(), z.unknown()), names: z.union([z.record(z.string(), z.string()), z.null()]),
+      lines: z.union([z.record(z.string(), z.string()), z.null()]) }).partial().strict(), idempotencyKey: UUID_ARG() },
+    ({ fighterId, profile, idempotencyKey }) => Object.keys(profile).length ? edit(fighterId, { profile }, idempotencyKey) : { ok: false, code: 'invalid-profile' },
+    { write: true, publish: true, openWorld: true });
   register('update_fighter_style', '싸우는 성격 고치기', 'Change the connected user\'s registered fighter\'s fighting style (combat.style) without new art: an object replaces it, null removes it. Checked against the contract (get_style_guide). His next bouts fight the new style. Requires the user\'s approval of the change. Use a new UUID per change and the same UUID to retry it.',
     { fighterId: UUID_ARG(), style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: UUID_ARG() },
-    async ({ fighterId, style, idempotencyKey }) => {
-      const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', identity.owner)
-        .is('deleted_at', null).maybeSingle();
-      if (error) throw new Problem(503, 'database-unavailable');
-      if (!fighter) throw new Problem(404, 'fighter-not-found');
-      const result = await invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: fighter.manifest_sha, style }),
-        { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
-      if (result.ok) await recordAgent(result.submissionId);
-      return result;
-    }, { write: true, publish: true, openWorld: true });
+    ({ fighterId, style, idempotencyKey }) => edit(fighterId, { style }, idempotencyKey), { write: true, publish: true, openWorld: true });
 }
 
 export function createCloudHandler({ db, fetcher = fetch, arena = null }) {
