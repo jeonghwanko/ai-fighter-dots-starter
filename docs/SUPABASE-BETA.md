@@ -54,6 +54,15 @@ Storage bucket은 비공개 `ai-fighter-beta`다. 기존 게임 테이블·로�
 기존 프로젝트를 CLI에 연결할 때는 **그 프로젝트의 기존 마이그레이션 이력도 먼저 가져와 대조**한다.
 이 샘플 하나만으로 기존 프로젝트에 `db reset` 또는 무검토 `db push`를 실행하지 않는다.
 
+새 마이그레이션 작성 규칙(`test/migration-rules.test.mjs`가 검사한다):
+
+- 함수를 바꾸면 `create or replace function` 전체를 다시 쓴다. `pg_get_functiondef` 결과를 `replace()`로 고치는
+  방식은 쓰지 않는다. 결과 본문이 파일에 남지 않아 앞의 마이그레이션을 모두 따라가야 읽을 수 있다.
+  이미 운영에 적용된 두 파일(`20261024022222`, `20261024104406`)만 예외다.
+- 버전(앞 14자리)은 파일마다 하나다. `20261021090000`을 두 파일이 함께 쓰던 것을 2026-10-27에
+  `20261021090001_ai_fighter_worker_dispatch.sql`로 바꿨다(순서 동일). 운영은 `db push`를 쓰지 않고 파일별로
+  적용하므로 운영 DB에는 영향이 없다. 운영 이력을 맞추려면 `migration repair --status applied 20261021090001`이 필요하다.
+
 Supabase CLI에서 계정 로그인·프로젝트 선택 후:
 
 ```sh
@@ -348,6 +357,24 @@ V8 힙·픽셀 예산은 네이티브 메모리의 OS 강제 격리를 대신하
 패키지 10 MB, 단일 파일 4 MB, 사용자 요청 120회/분이다.
 전체 제출 예약은 **100 MB**로 제한한다. 20명 모두 최대 10 MB를 제출할 수 있다는 보장은 아니다.
 반려·만료 파일도 예약 용량에 포함한다. 기존 프로젝트의 다른 사용량은 별도 합산한다.
+
+**호출자별 제한(2026-10-28).** 로그인 없는 경기 요청(`POST /duels`)과 기기 연결 시작(`POST /device-logins`)은
+전체 한도(하루 100경기, 10분에 120회)만 있어 한 사람이 모두의 몫을 쓸 수 있었다. 이제 호출자 주소의 키 해시로
+호출자별 제한(경기 하루 25회, 기기 연결 10분에 10회)을 둔다(`api/client-limit.mjs`, `af_rate_hits`).
+주소 원문은 저장하지 않는다. 서버 비밀로 만든 HMAC-SHA256(구분·UTC 날짜·주소)만 하루 보관하고, 날짜가 들어가 날마다 다른 키가 된다.
+첫 `X-Forwarded-For` 값은 클라이언트가 직접 쓸 수 있으므로 쓰지 않는다
+([Supabase discussion #34647](https://github.com/orgs/supabase/discussions/34647)).
+
+켜는 순서(모두 운영자 승인 후):
+
+1. 마이그레이션 `20261028090000_ai_fighter_client_rate_limits.sql`을 적용한다.
+2. 임시 함수 `client-ip-probe`를 배포하고 `node scripts/probe-client-ip.mjs https://<ref>.supabase.co/functions/v1/client-ip-probe`로
+   위조 헤더를 보낸다. `trusted: true`인 출처만 쓴다. 확인 후 함수를 삭제한다.
+3. Edge 비밀 `AI_FIGHTER_CLIENT_LIMIT_SECRET`(32자 이상 무작위)과 `AI_FIGHTER_CLIENT_IP_SOURCE`(`cf-connecting-ip` 또는
+   `forwarded-last`)를 넣고 `ai-fighter` 함수를 배포한다. 둘 중 하나라도 없으면 제한은 꺼진 채로 전체 한도만 동작한다.
+4. 개인정보 처리방침에 이 처리를 적는다(초안은 PR에 있다).
+
+제한 기록 조회가 실패하면 요청을 막지 않고 전체 한도로 넘긴다.
 
 자동 파일 정리는 아직 없다. 업로드 만료 후에도 기록과 용량 예약이 유지되며 운영자가 정리해야 한다.
 운영자는 `af_settings.paused`로 새 제출을 멈추고, 초대·작업자 `enabled`로 접근을 취소할 수 있다.

@@ -120,6 +120,8 @@ npm run validate -- examples/sparring-bot/fighter.json
 npm run mcp:smoke
 ```
 
+`npm run test:fast`는 느린 이미지 패키징·프록시·Python 엔진 검사를 빼고 실행합니다(`npm run test:heavy`는 그것만 실행). 배포 전에는 전체 `npm test`를 실행합니다.
+
 예제 sparring-bot은 형식 검사용 기하학 견본입니다. 위 검사로 새 캐릭터가 생성되거나 등록되지는 않습니다. 자체 서버에서 경기를 실행하려면 별도로 관리하는 운영 게임 엔진 번들이 필요합니다.
 
 ## 라이선스

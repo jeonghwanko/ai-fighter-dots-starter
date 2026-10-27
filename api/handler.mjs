@@ -39,11 +39,11 @@ function check(error) {
  * `agentClient` (공방과 연대기, 2026-10-27): the cloud MCP's OAuth client for its in-process calls — the workshop labels notes and canon
  * versions with that agent's name. The public Edge handler never sets it.
  */
-export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null }) {
-  const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release});
+export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null, limiter = null }) {
+  const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release,limiter});
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
-  const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink });
+  const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink, limiter });
   const adminHandler = createAdminHandler({ db });
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
   async function present(row) {

@@ -11,7 +11,7 @@ import { walkPlan, loadSequence, requireReview } from '../tools/ai-fighter/gait.
 const root=fileURLToPath(new URL('../',import.meta.url));
 const python=path.join(root,'vendor/sprite-gen/.venv',process.platform==='win32'?'Scripts/python.exe':'bin/python');
 const installed=await access(python).then(()=>true,()=>false);
-const run=(command,args)=>spawnSync(command,args,{cwd:root,encoding:'utf8',windowsHide:true,env:{...process.env,PYTHONUTF8:'1'}});
+const run=(command,args)=>spawnSync(command,args,{cwd:root,encoding:'utf8',windowsHide:true,timeout:120_000,env:{...process.env,PYTHONUTF8:'1'}});
 
 function drawPreview(html, change='') {
   const calls=[], elements=new Map();

@@ -9,6 +9,7 @@ import { withFileLock } from './file-lock.mjs';
 import { bundledProfiles, canonical, profileHash, profileSchema, fetchProfileEnvelope } from './environment-profiles.mjs';
 import { inspectGenerationLogin } from './generation-connection.mjs';
 import { checkCreationDelivery } from '../scripts/check-creation-delivery.mjs';
+import { errorCode } from './error-code.mjs';
 
 export const accountChoice = z.enum(['gpt', 'grok', 'both', 'stop']);
 const text = z.string().trim().min(1).max(1000);
@@ -204,7 +205,7 @@ export function registerEnvironmentTools(server, { root, respond, outputSchema }
   const readonly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
   const handle = action => async args => {
     try { return respond({ ok: true, stage: 'creation-environment', data: await action(args) }); }
-    catch (error) { return respond({ ok: false, stage: 'creation-environment', code: /^[a-z][a-z0-9-]+$/.test(error.message) ? error.message : 'environment-request-invalid' }); }
+    catch (error) { return respond({ ok: false, stage: 'creation-environment', code: errorCode(error, 'environment-request-invalid') }); }
   };
   server.registerTool('get_creation_environment', {
     description: 'Inspect this workspace connection and its missing steps. No generation or permission change. Auth, user consent, host-reported permission, bootstrap reachability and delivery records are separate. Unknown stays unknown.',

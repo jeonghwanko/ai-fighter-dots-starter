@@ -68,7 +68,7 @@ Startup runs the real child-process WebP validator against the existing
 geometric test fixture. Health is available only after it passes. No fighter
 registration or gameplay approval is created by this readiness check.
 
-`20261021090000_ai_fighter_worker_dispatch.sql` installs a private dispatch
+`20261021090001_ai_fighter_worker_dispatch.sql` installs a private dispatch
 function and submission trigger. Supabase Vault stores
 `ai_fighter_worker_url` (the Render `/wake` URL) and `ai_fighter_wake_token`.
 Supabase Cron checks pending work each minute, and pg_net sends authenticated

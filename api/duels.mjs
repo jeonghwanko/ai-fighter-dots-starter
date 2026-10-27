@@ -1,5 +1,6 @@
 import { Problem, UUID, jsonResponse, readBody, sha256 } from './http.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
+import { CLIENT_LIMITS } from './client-limit.mjs';
 const CORS = {methods:'GET, POST, OPTIONS',headers:'Content-Type'};
 const reply = (body,status=200) => jsonResponse(body,status,CORS);
 const present = row => ({id:row.id,a:row.a,b:row.b,hashes:[row.hash_a,row.hash_b],seed:row.seed,engine:row.engine,
@@ -19,7 +20,7 @@ const ENGINE_NAME = /^[a-z0-9][a-z0-9.-]{0,63}$/;
  * `release` (2026-10-26): the deployed release's name (`release.mjs`, written by the game's Edge deploy), told by `GET rankings` so the deploy
  * sees its own upload answer — a change to this handler alone moves no engine name.
  */
-export function createDuelHandler({db,simulateDuel,engineVersion,engines=null,release=null}) {
+export function createDuelHandler({db,simulateDuel,engineVersion,engines=null,release=null,limiter=null}) {
   const kept=new Map(Object.entries(engines??{}).filter(([name,run])=>ENGINE_NAME.test(name) && typeof run==='function' && name!==engineVersion));
   const pick=request=>{ const wanted=new URL(request.url).searchParams.get('engine');
     return wanted && kept.has(wanted) ? [wanted,kept.get(wanted)] : [engineVersion,simulateDuel]; };
@@ -56,6 +57,9 @@ export function createDuelHandler({db,simulateDuel,engineVersion,engines=null,re
       catch(e) { if(e instanceof Problem) throw e; throw new Problem(422,'invalid-duel'); }
       if (!body || Object.keys(body).sort().join(',')!=='a,b,idempotencyKey' || ![body.a,body.b,body.idempotencyKey].every(x=>typeof x==='string' && UUID.test(x)) || body.a===body.b)
         throw new Problem(422,'invalid-duel');
+      // Guests need no account, so one caller is braked by a keyed hash of their address (api/client-limit.mjs).
+      const {bucket,limit,windowSeconds}=CLIENT_LIMITS.duel;
+      if (limiter && !await limiter.allow(request,bucket,limit,windowSeconds)) throw new Problem(429,'rate-limit');
       const row=await rpc('af_reserve_duel',{p_key:body.idempotencyKey,p_a:body.a,p_b:body.b,p_engine:engine});
       if (row.result) return reply({ok:true,match:present(row)});
       if(row.engine!==engine) throw new Problem(409,'engine-mismatch');

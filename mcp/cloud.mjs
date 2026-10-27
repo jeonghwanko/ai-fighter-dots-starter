@@ -6,6 +6,7 @@ import { registerFileInputProbe } from './file-input-probe.mjs';
 import { Problem, UUID, bearerToken, readBody, sha256 } from '../api/http.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
+import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 
 export const CLOUD_RESOURCE = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
 export const LEGACY_PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
@@ -328,8 +329,8 @@ function registerAgentTools({ register, arena, db, identity, invoke, recordAgent
     return result;
   };
   register('update_fighter_profile', '프로필 고치기', 'Change the connected user\'s registered fighter\'s profile text without new art: name, description, language, concept, moves, per-language names or bout lines (challenge, win, lose). Give only the fields to change; null removes names or lines. Checked against the contract. Requires the user\'s approval of the change. Use a new UUID per change and the same UUID to retry it.',
-    { fighterId: UUID_ARG(), profile: z.object({ name: z.string().min(1).max(40), description: z.string().min(1).max(600), language: z.enum(['ko', 'en']),
-      concept: z.string().min(1).max(800), moves: z.record(z.string(), z.unknown()), names: z.union([z.record(z.string(), z.string()), z.null()]),
+    { fighterId: UUID_ARG(), profile: z.object({ name: z.string().min(1).max(profileLimits.name), description: z.string().min(1).max(profileLimits.description),
+      language: z.enum(profileLimits.languages), concept: z.string().min(1).max(profileLimits.concept), moves: z.record(z.string(), z.unknown()), names: z.union([z.record(z.string(), z.string()), z.null()]),
       lines: z.union([z.record(z.string(), z.string()), z.null()]) }).partial().strict(), idempotencyKey: UUID_ARG() },
     ({ fighterId, profile, idempotencyKey }) => Object.keys(profile).length ? edit(fighterId, { profile }, idempotencyKey) : { ok: false, code: 'invalid-profile' },
     { write: true, publish: true, openWorld: true });

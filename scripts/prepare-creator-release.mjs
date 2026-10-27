@@ -6,6 +6,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 import { localPath } from '../mcp/creation-store.mjs';
+import { bootstrapPython } from './bootstrap-python.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const execute = promisify(execFile);
@@ -47,7 +48,7 @@ export async function prepareCreatorRelease(bundleDirectory, destination) {
   const candidate = path.join(out, 'verified-candidate.zip');
   await writeFile(candidate, bytes, { flag: 'wx' });
   const helper = path.join(root, 'scripts', 'fetch-creator-kit.py');
-  const { stdout } = await execute(process.env.AI_FIGHTER_BOOTSTRAP_PYTHON || 'python', [helper, 'inspect', candidate],
+  const { stdout } = await execute(bootstrapPython(), [helper, 'inspect', candidate],
     { windowsHide: true, timeout: 120000, maxBuffer: 1024 * 1024 });
   const archive = JSON.parse(stdout);
   if (archive.sha256 !== report.sha256 || archive.version !== report.version) throw Error('verified-bundle-mismatch');

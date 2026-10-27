@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inspectTools, inspectRife, installImg2webp, toolEnv, toolsItem } from './sprite-tools.mjs';
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
 export const kitRoot = fileURLToPath(new URL('../', import.meta.url));
 export const spriteRoot = path.join(kitRoot, 'vendor', 'sprite-gen');
@@ -35,12 +36,17 @@ export async function spriteStatus({ tools = true } = {}) {
   };
 }
 
+// Setup steps that can hang on a network or proxy get a bound; generation commands keep none (a video run takes minutes).
+const SETUP_TIMEOUT_MS = { git: 10 * 60_000, venv: 5 * 60_000, pip: 20 * 60_000, check: 60_000 };
 function run(command, args, { cwd = kitRoot, timeout = 0 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, stdio: 'inherit', shell: false, windowsHide: true, timeout,
       env: { ...toolEnv(spriteRoot), PYTHONUTF8: '1', SPRITE_GEN_ROOT: spriteRoot } });
     child.once('error', reject);
-    child.once('exit', (code, signal) => resolve(signal ? 1 : code ?? 1));
+    child.once('exit', (code, signal) => {
+      if (signal && timeout) console.error(`${path.basename(command)} stopped after ${Math.round(timeout / 1000)} s; check the network or proxy and rerun.`);
+      resolve(signal ? 1 : code ?? 1);
+    });
   });
 }
 
@@ -51,9 +57,9 @@ export async function main(args) {
     if (await exists(path.join(kitRoot, '.git'))) {
       // Follow a moved pin or URL. History is not needed to run the pinned commit; depth 1 skips the download.
       // Git refuses, and setup stops, when the checkout has local edits the pinned commit would overwrite.
-      const synced = await run('git', ['submodule', 'sync', '--', 'vendor/sprite-gen']);
+      const synced = await run('git', ['submodule', 'sync', '--', 'vendor/sprite-gen'], { timeout: SETUP_TIMEOUT_MS.git });
       if (synced) return synced;
-      const result = await run('git', ['submodule', 'update', '--init', '--depth', '1', '--', 'vendor/sprite-gen']);
+      const result = await run('git', ['submodule', 'update', '--init', '--depth', '1', '--', 'vendor/sprite-gen'], { timeout: SETUP_TIMEOUT_MS.git });
       if (result) return result;
     } else if (!(await exists(path.join(spriteRoot, 'SKILL.md')))) throw new Error('sprite-gen source missing and this folder is not a Git checkout. Clone AI Fighter with git; GitHub ZIP archives do not include submodules.');
     if (!(await exists(path.join(spriteRoot, 'SKILL.md')))) throw new Error('sprite-gen source missing. Clone AI Fighter with --recurse-submodules. GitHub ZIP archives do not include submodules.');
@@ -70,12 +76,12 @@ export async function main(args) {
         } catch (error) { if (error.code !== 'ENOENT') throw error; }
       }
       if (!bootstrap) throw new Error('Python 3.11+ with venv support is required. Set AI_FIGHTER_BOOTSTRAP_PYTHON to its executable.');
-      const created = await run(bootstrap[0], [...bootstrap[1], '-m', 'venv', path.join(spriteRoot, '.venv')]);
+      const created = await run(bootstrap[0], [...bootstrap[1], '-m', 'venv', path.join(spriteRoot, '.venv')], { timeout: SETUP_TIMEOUT_MS.venv });
       if (created) return created;
     }
-    const installed = await run(spritePython, ['-m', 'pip', 'install', '-e', spriteRoot]);
+    const installed = await run(spritePython, ['-m', 'pip', 'install', '-e', spriteRoot], { timeout: SETUP_TIMEOUT_MS.pip });
     if (installed) return installed;
-    const help = await run(spritePython, ['-m', 'sprite_gen.cli', '--help']);
+    const help = await run(spritePython, ['-m', 'sprite_gen.cli', '--help'], { timeout: SETUP_TIMEOUT_MS.check });
     if (help) return help;
     return setupTools();
   }
@@ -129,9 +135,9 @@ export async function requireMotionContract(args, cwd) {
   if (args[0] === 'gen-motion') {
     if (!option('--plan')) return; // the engine owns CLI errors/help
     const plan = JSON.parse(await readFile(path.resolve(cwd, option('--plan')), 'utf8'));
-    const expected = plan.motion === 'walk' ? 16 : plan.motion === 'run' ? 12 : null;
+    const expected = ['walk', 'run'].includes(plan.motion) ? spec.motions[plan.motion].frames : null;
     if (expected === null || plan.frames?.length !== expected)
-      throw Error(`AI Fighter pose plan needs ${expected ?? '16 walk / 12 run'} frames; diagnostic poses belong to that full plan`);
+      throw Error(`AI Fighter pose plan needs ${expected ?? `${spec.motions.walk.frames} walk / ${spec.motions.run.frames} run`} frames; diagnostic poses belong to that full plan`);
     if (option('--frame') && !args.includes('--reconcile') && plan.version !== 2)
       throw Error('POSE_BODY_CALIBRATION_REQUIRED: v5 generation needs a version 2 plan with observed original body landmarks; legacy runs remain available for inspection/reconciliation/export, not repeated uncalibrated generation');
     return;
@@ -146,8 +152,9 @@ export async function requireMotionContract(args, cwd) {
       throw Error(`MOTION_CONTRACT_REQUIRED: ${state}; use fighter:gait init and review key poses before a full GPT sequence`);
     if (locomotion && entry.motion.kind !== (locomotion[2].startsWith('walk') ? 'walk' : 'run'))
       throw Error(`Motion kind does not match state: ${state}`);
-    if (entry.motion?.stage === 'sequence' && entry.frames !== (entry.motion.kind === 'walk' ? 16 : 12))
-      throw Error(`AI Fighter full sequence needs ${entry.motion.kind === 'walk' ? 16 : 12} frames: ${state}`);
+    const sequenceFrames = spec.motions[entry.motion?.kind === 'walk' ? 'walk' : 'run'].frames;
+    if (entry.motion?.stage === 'sequence' && entry.frames !== sequenceFrames)
+      throw Error(`AI Fighter full sequence needs ${sequenceFrames} frames: ${state}`);
   }
 }
 

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { localPath } from '../mcp/creation-store.mjs';
 import { importClosure, packageName } from './import-graph.mjs';
+import { bootstrapPython } from './bootstrap-python.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
@@ -140,7 +141,7 @@ export async function buildPluginBundle(destination) {
       source: { source: 'local', path: './plugins/ai-fighter' },
       policy: { installation: 'AVAILABLE', authentication: 'ON_INSTALL' }, category: 'Productivity' }] }, null, 2) + '\n');
   const zip = path.join(out, `${metadata.name}-${metadata.version}.zip`);
-  const python = process.env.AI_FIGHTER_BOOTSTRAP_PYTHON || 'python';
+  const python = bootstrapPython();
   await run(python, [path.join(root, 'scripts', 'zip-plugin.py'), plugin, zip]);
   const zipBytes = await readFile(zip);
   if (zipBytes.length > 20_000_000) throw Error('Source bundle exceeds the 20 MB distribution budget; review contents before publishing.');
