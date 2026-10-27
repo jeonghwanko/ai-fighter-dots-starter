@@ -1,0 +1,260 @@
+// 호스팅 생성 (2026-10-27): a creator asks our generation worker to make his fighter. The creator's routes (`generations/…`, his own token)
+// and the worker's (`generation-worker/…`, a worker key of scope `generation`). The state machine, quotas and leases are the database's
+// (`supabase/migrations/20261028100000_oddbout_hosted_generation.sql`); pictures stay in the private bucket `af-generation` and reach a reader
+// only as signed URLs of ten minutes. The package the worker makes goes through the same submission checks as any other
+// (`submissions.mjs`) under the creator's account — the job row names the owner, never the worker.
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
+import { text } from './canon.mjs';
+import { probeImage } from './image-probe.mjs';
+import { Problem, UUID, jsonResponse, readBody } from './http.mjs';
+import { checkedManifest, storeAsset } from './submissions.mjs';
+
+export const GENERATION_BUCKET = 'af-generation';
+export const GENERATION_LIMITS = Object.freeze({ descriptionMin: 10, description: 600, refs: 2, refBytes: 4_000_000, refSide: Object.freeze([64, 4096]),
+  note: 200, artifactBytes: 8_000_000, result: 12_000, signedSeconds: 600 });
+const ARTIFACT = /^[a-z0-9][a-z0-9-]{0,47}$/;
+const MOTIONS = Object.keys(spec.motions);
+const CORS = { methods: 'GET, POST, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
+const STATUS = { 'generation-unavailable': 409, 'generation-quota': 409, 'generation-capacity': 409, 'generation-state': 409, 'revision-limit': 409,
+  'fighter-quota': 409, 'lease-lost': 409, 'rate-limit': 429, 'invalid-refs': 422, 'rights-required': 422, 'invalid-answer': 422,
+  'invalid-result': 422, 'not-found': 404, 'account-disabled': 403, 'invite-required': 403,
+  // The submission path's own refusals (`af_create_submission`, `af_submit`), as the creator's routes name them.
+  'submission-quota': 409, 'open-submission-exists': 409, 'idempotency-conflict': 409, 'upload-closed': 409, 'assets-incomplete': 409,
+  'submissions-paused': 503, 'storage-budget-full': 503, 'beta-capacity': 503 };
+/** Stats the contract takes: 1-5 each, summing to 9 (`contracts/ai-fighter/validate.mjs`). */
+export const STAT_TOTAL = 9;
+
+/** Is this path the hosted generation's? */
+export const generationRoute = parts => parts[0] === 'generations' || parts[0] === 'generation-worker';
+
+const id = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value.toLowerCase(); };
+const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+const fields = (body, allowed) => {
+  if (!isObject(body) || Object.keys(body).some(key => !allowed.includes(key))) throw new Problem(422, 'invalid-body');
+  return body;
+};
+async function readJson(request, limit) {
+  try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, limit))); }
+  catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
+}
+export const artifactPath = (job, name) => `jobs/${job}/${name}.webp`;
+
+/**
+ * The profile the creator confirms before registering: name and description (required), his fighter's names, bout lines and stats — each
+ * within the v1 contract's limits. Null fields are left out; the worker fills the rest from the brief.
+ */
+export function confirmedProfile(value) {
+  const body = fields(value, ['name', 'description', 'names', 'lines', 'stats']);
+  const out = { name: text(body.name, profileLimits.name, '/profile/name', { code: 'invalid-profile' }),
+    description: text(body.description, profileLimits.description, '/profile/description', { lines: true, code: 'invalid-profile' }) };
+  for (const [key, allowed, max] of [['names', profileLimits.languages, profileLimits.displayName], ['lines', profileLimits.lineKeys, profileLimits.line]]) {
+    if (body[key] === undefined || body[key] === null) continue;
+    const part = fields(body[key], allowed), kept = {};
+    for (const name of allowed) if (part[name] !== undefined && part[name] !== null && part[name] !== '')
+      kept[name] = text(part[name], max, `/profile/${key}/${name}`, { code: 'invalid-profile' });
+    if (Object.keys(kept).length) out[key] = kept;
+  }
+  if (body.stats !== undefined && body.stats !== null) {
+    const stats = fields(body.stats, ['power', 'toughness', 'speed']);
+    if (['power', 'toughness', 'speed'].some(key => !Number.isInteger(stats[key]) || stats[key] < 1 || stats[key] > 5)
+      || stats.power + stats.toughness + stats.speed !== STAT_TOTAL) throw new Problem(422, 'invalid-profile');
+    out.stats = { power: stats.power, toughness: stats.toughness, speed: stats.speed };
+  }
+  return out;
+}
+
+export function createGenerationHandler({ db, authenticate, present }) {
+  async function call(name, args) {
+    const { data, error } = await db.rpc(name, args);
+    if (!error) return data;
+    const known = Object.keys(STATUS).sort((x, y) => y.length - x.length).find(code => error.message?.includes(code));
+    if (known) throw new Problem(STATUS[known], known);
+    throw new Problem(503, 'database-unavailable');
+  }
+  const bucket = () => db.storage.from(GENERATION_BUCKET);
+  async function signed(paths) {
+    if (!paths.length) return new Map();
+    const { data, error } = await bucket().createSignedUrls(paths, GENERATION_LIMITS.signedSeconds);
+    if (error || !Array.isArray(data)) throw new Problem(503, 'storage-unavailable');
+    return new Map(data.filter(item => !item.error && typeof item.signedUrl === 'string').map(item => [item.path, item.signedUrl]));
+  }
+  const candidatesOf = row => Array.isArray(row.candidates) ? row.candidates.filter(name => ARTIFACT.test(name ?? '')) : [];
+  const previewOf = row => Array.isArray(row.preview) ? row.preview.filter(p => isObject(p) && MOTIONS.includes(p.clip) && ARTIFACT.test(p.name ?? '')) : [];
+  // A job as its creator reads it: no lease, no prompt, no brief beyond its profile draft; pictures as signed URLs.
+  async function view(row) {
+    const candidates = candidatesOf(row), preview = previewOf(row);
+    const urls = await signed([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name))]);
+    let submission = null;
+    if (row.submission_id) {
+      const { data, error } = await db.from('af_submissions').select('id,status,fighter_id').eq('id', row.submission_id).maybeSingle();
+      if (error) throw new Problem(503, 'database-unavailable');
+      if (data) submission = { id: data.id, stage: data.status, fighterId: data.fighter_id ?? null };
+    }
+    return { id: row.id, status: row.status, progress: row.progress, error: row.error_code ?? null, description: row.description, language: row.language,
+      createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
+      candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
+      revisionsLeft: { appearance: 2 - row.appearance_revisions, motions: 3 - row.motion_revisions },
+      preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null })), submission };
+  }
+  async function ownJob(owner, jobId) {
+    const { data, error } = await db.from('af_generation_jobs').select('*').eq('id', id(jobId)).eq('owner_id', owner).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    if (!data) throw new Problem(404, 'not-found');
+    return data;
+  }
+  // The job the worker holds for its submission routes: his lease, and the job registering.
+  async function heldForSubmission(request, jobId) {
+    const row = await call('af_generation_held', { p_id: id(jobId), p_token: id(request.headers.get('x-generation-lease')) });
+    if (row.status !== 'submitting') throw new Problem(409, 'generation-state');
+    return row;
+  }
+  async function jobSubmission(row) {
+    const { data, error } = await db.from('af_submissions').select('*').eq('owner_id', row.owner_id).eq('idempotency_key', row.id).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    if (!data) throw new Problem(404, 'not-found');
+    return data;
+  }
+
+  async function creator(request, parts, owner) {
+    const method = request.method, route = parts.join('/');
+    if (method === 'GET' && route === 'generations') {
+      const { data, error } = await db.from('af_generation_jobs').select('*').eq('owner_id', owner).order('created_at', { ascending: false }).limit(5);
+      if (error) throw new Problem(503, 'database-unavailable');
+      const jobs = await Promise.all((data ?? []).map(view));
+      // His one hosted fighter is taken by a job that is not over — a submitted package that failed its check frees it, as the database does.
+      return { ok: true, jobs, used: jobs.some(job => !['rejected', 'failed', 'cancelled', 'expired'].includes(job.status)
+        && !(job.status === 'submitted' && job.submission?.stage === 'rejected')),
+        capabilities: await call('af_generation_capabilities', {}) };
+    }
+    if (method === 'POST' && route === 'generations/uploads') {
+      const bytes = await readBody(request, GENERATION_LIMITS.refBytes), image = probeImage(bytes), [min, max] = GENERATION_LIMITS.refSide;
+      if (!image) throw new Problem(415, 'image-required');
+      if (image.width < min || image.height < min || image.width > max || image.height > max) throw new Problem(422, 'image-size');
+      const upload = crypto.randomUUID(), path = `refs/${owner}/${upload}.${image.ext}`;
+      const { error } = await bucket().upload(path, bytes, { contentType: image.type, upsert: false });
+      if (error) throw new Problem(503, 'storage-unavailable');
+      try {
+        await call('af_generation_upload', { p_owner: owner, p_id: upload, p_path: path, p_type: image.type, p_bytes: bytes.length, p_width: image.width, p_height: image.height });
+      } catch (problem) { await bucket().remove([path]).catch(() => {}); throw problem; }
+      return { ok: true, upload: { id: upload, width: image.width, height: image.height } };
+    }
+    if (method === 'POST' && route === 'generations') {
+      const key = id(request.headers.get('idempotency-key'));
+      const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed']);
+      if (!['ko', 'en'].includes(body.language)) throw new Problem(422, 'invalid-language');
+      if (body.refs !== undefined && (!Array.isArray(body.refs) || body.refs.length > GENERATION_LIMITS.refs)) throw new Problem(422, 'invalid-refs');
+      const refs = (body.refs ?? []).map(id);
+      const row = await call('af_generation_create', { p_owner: owner, p_key: key,
+        p_description: text(body.description, GENERATION_LIMITS.description, '/description', { min: GENERATION_LIMITS.descriptionMin, lines: true, code: 'invalid-description' }),
+        p_language: body.language, p_refs: refs, p_rights: body.rightsConfirmed === true });
+      return { ok: true, job: await view(row) };
+    }
+    if (parts[0] === 'generations' && parts.length === 2 && method === 'GET') return { ok: true, job: await view(await ownJob(owner, parts[1])) };
+    if (parts[0] === 'generations' && parts.length === 2 && method === 'DELETE')
+      return { ok: true, job: await view(await call('af_generation_cancel', { p_owner: owner, p_id: id(parts[1]) })) };
+    if (parts[0] === 'generations' && parts.length === 3 && method === 'POST') {
+      const job = id(parts[1]);
+      if (parts[2] === 'appearance') {
+        const body = fields(await readJson(request, 2000), ['choose', 'revise']);
+        if ((body.choose === undefined) === (body.revise === undefined)) throw new Problem(422, 'invalid-answer');
+        if (body.choose !== undefined && !['a', 'b'].includes(body.choose)) throw new Problem(422, 'invalid-answer');
+        const note = body.revise === undefined ? null : text(body.revise, GENERATION_LIMITS.note, '/revise', { min: 2, code: 'invalid-answer' });
+        return { ok: true, job: await view(await call('af_generation_appearance', { p_owner: owner, p_id: job, p_choice: body.choose ?? null, p_note: note })) };
+      }
+      if (parts[2] === 'motions') {
+        const body = fields(await readJson(request, 2000), ['revise']), revise = fields(body.revise, ['clip', 'note']);
+        if (!MOTIONS.includes(revise.clip)) throw new Problem(422, 'invalid-answer');
+        const note = text(revise.note, GENERATION_LIMITS.note, '/revise/note', { min: 2, code: 'invalid-answer' });
+        return { ok: true, job: await view(await call('af_generation_motion', { p_owner: owner, p_id: job, p_clip: revise.clip, p_note: note })) };
+      }
+      if (parts[2] === 'register') {
+        const body = fields(await readJson(request, 8000), ['profile']);
+        return { ok: true, job: await view(await call('af_generation_register', { p_owner: owner, p_id: job, p_profile: confirmedProfile(body.profile) })) };
+      }
+    }
+    throw new Problem(404, 'route-not-found');
+  }
+
+  async function worker(request, parts) {
+    const method = request.method, route = parts.join('/');
+    if (method === 'PUT' && parts[1] === 'jobs' && parts[3] === 'artifacts' && parts.length === 5) {
+      const row = await call('af_generation_held', { p_id: id(parts[2]), p_token: id(request.headers.get('x-generation-lease')) });
+      if (!ARTIFACT.test(parts[4])) throw new Problem(422, 'invalid-artifact');
+      const bytes = await readBody(request, GENERATION_LIMITS.artifactBytes);
+      if (probeImage(bytes)?.type !== 'image/webp') throw new Problem(415, 'webp-required');
+      // A stage made again writes its pictures again (a new round uses new names; a retried upload replaces its own).
+      const { error } = await bucket().upload(artifactPath(row.id, parts[4]), bytes, { contentType: 'image/webp', upsert: true });
+      if (error) throw new Problem(503, 'storage-unavailable');
+      return { ok: true, artifact: parts[4], bytes: bytes.length };
+    }
+    if (parts[1] === 'jobs' && parts[3] === 'submission') {
+      const row = await heldForSubmission(request, parts[2]);
+      if (method === 'POST' && parts.length === 4) {
+        const manifest = await checkedManifest(request);
+        const submission = await call('af_create_submission', { p_owner: row.owner_id, p_key: row.id, p_text: manifest.text, p_sha: manifest.sha,
+          p_bytes: manifest.bytes, p_fighter: null });
+        return present(submission);
+      }
+      if (method === 'PUT' && parts[4] === 'assets' && parts.length === 6) return storeAsset(db, await jobSubmission(row), parts[5], request);
+      if (method === 'POST' && parts[4] === 'submit' && parts.length === 5)
+        return present(await call('af_submit', { p_owner: row.owner_id, p_id: (await jobSubmission(row)).id }));
+      throw new Problem(404, 'route-not-found');
+    }
+    if (method !== 'POST') throw new Problem(404, 'route-not-found');
+    const body = await readJson(request, GENERATION_LIMITS.result + 2000);
+    if (route === 'generation-worker/heartbeat') {
+      const health = fields(body, ['health']).health;
+      if (!isObject(health) || JSON.stringify(health).length > 2000) throw new Problem(422, 'invalid-health');
+      return { ok: true, capabilities: await call('af_generation_heartbeat', { p_health: health }) };
+    }
+    if (route === 'generation-worker/claim') {
+      const row = await call('af_generation_claim', {});
+      if (!row?.id) return { ok: true, stage: 'idle' };
+      const { data: refs, error } = await db.from('af_generation_uploads').select('id,path,content_type,width,height').eq('job_id', row.id);
+      if (error) throw new Problem(503, 'database-unavailable');
+      const candidates = candidatesOf(row);
+      const urls = await signed([...(refs ?? []).map(ref => ref.path), ...candidates.map(name => artifactPath(row.id, name))]);
+      return { ok: true, job: { id: row.id, status: row.status, leaseToken: row.lease_token, owner: row.owner_id, createdAt: row.created_at, description: row.description,
+        language: row.language, brief: row.brief ?? null, choice: row.choice ?? null, appearanceNote: row.appearance_note ?? null,
+        appearanceRound: row.appearance_revisions, motionNote: row.motion_note ?? null, motionRound: row.motion_revisions, profile: row.profile ?? null,
+        refs: (refs ?? []).map(ref => ({ id: ref.id, contentType: ref.content_type, width: ref.width, height: ref.height, url: urls.get(ref.path) ?? null })),
+        candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', name, url: urls.get(artifactPath(row.id, name)) ?? null })),
+        preview: previewOf(row) } };
+    }
+    const lease = fields(body, ['jobId', 'leaseToken', 'progress', 'event', 'outcome', 'result']);
+    const at = { p_id: id(lease.jobId), p_token: id(lease.leaseToken) };
+    if (route === 'generation-worker/progress') {
+      if (lease.event !== undefined && (!isObject(lease.event) || JSON.stringify(lease.event).length > 2000)) throw new Problem(422, 'invalid-event');
+      const row = await call('af_generation_progress', { ...at, p_progress: Number.isInteger(lease.progress) ? lease.progress : null, p_event: lease.event ?? null });
+      return { ok: true, status: row.status, leaseExpiresAt: row.lease_expires_at };
+    }
+    if (route === 'generation-worker/finish') {
+      if (!['ok', 'rejected', 'review', 'failed', 'retry'].includes(lease.outcome)) throw new Problem(422, 'invalid-result');
+      const result = lease.result ?? {};
+      if (!isObject(result) || JSON.stringify(result).length > GENERATION_LIMITS.result) throw new Problem(422, 'invalid-result');
+      if (result.candidates !== undefined && (!Array.isArray(result.candidates) || result.candidates.some(name => !ARTIFACT.test(name ?? ''))))
+        throw new Problem(422, 'invalid-result');
+      if (result.preview !== undefined && (!Array.isArray(result.preview)
+        || result.preview.some(p => !isObject(p) || !MOTIONS.includes(p.clip) || !ARTIFACT.test(p.name ?? '')))) throw new Problem(422, 'invalid-result');
+      const row = await call('af_generation_finish', { ...at, p_outcome: lease.outcome, p_result: result });
+      return { ok: true, status: row.status };
+    }
+    throw new Problem(404, 'route-not-found');
+  }
+
+  return async (request, parts) => {
+    const isWorker = parts[0] === 'generation-worker';
+    const json = (body, status = 200) => jsonResponse(body, status, isWorker ? undefined : CORS);
+    try {
+      if (request.method === 'OPTIONS' && !isWorker) return json({ ok: true });
+      if (!isWorker && request.method === 'GET' && parts.join('/') === 'generations/capabilities')
+        return json({ ok: true, capabilities: await call('af_generation_capabilities', {}) });
+      if (isWorker) { await authenticate(request, 'generation'); return json(await worker(request, parts)); }
+      return json(await creator(request, parts, await authenticate(request, false)));
+    } catch (error) {
+      if (error instanceof Problem) return json({ ok: false, stage: 'generation', code: error.message, ...(error.errors ? { errors: error.errors } : {}) }, error.status);
+      return json({ ok: false, stage: 'generation', code: 'service-unavailable' }, 503);
+    }
+  };
+}
