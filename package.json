@@ -1,6 +1,6 @@
 {
   "name": "ai-fighter-dots-starter",
-  "version": "0.5.4",
+  "version": "0.5.5",
   "description": "Local Dot/Codex MCP starter for AI Fighter authoring and package validation",
   "private": true,
   "type": "module",
@@ -47,7 +47,9 @@
     "kit:release": "node scripts/prepare-creator-release.mjs",
     "worker:once": "node worker/run.mjs",
     "worker:watch": "node worker/run.mjs --watch",
-    "test:live": "node scripts/live-registration-test.mjs"
+    "test:live": "node scripts/live-registration-test.mjs",
+    "dots:start": "node scripts/dots-start.mjs",
+    "dots:source": "node scripts/dots-source.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "1.32.1",

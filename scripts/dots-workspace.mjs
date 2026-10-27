@@ -14,6 +14,10 @@ const jobId = /^[a-f0-9-]{36}$/i;
 const statuses = new Set(['prepared', 'running', 'succeeded', 'failed', 'needs-input', 'unknown', 'resolved', 'cancelled']);
 const nodeOkay = value => { const [major, minor] = value.split('.').map(Number); return major > 22 || major === 22 && minor >= 12; };
 export function runCommand(command, args, { cwd, env = process.env, timeout = 15000 } = {}) {
+  if (command === 'npm' && process.platform === 'win32') {
+    args = [path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'), ...args];
+    command = process.execPath;
+  }
   return new Promise(resolve => execFile(command, args, { cwd, env, timeout, windowsHide: true, maxBuffer: 2 * 1024 * 1024 },
     (error, stdout, stderr) => resolve({ code: error ? typeof error.code === 'number' ? error.code : 1 : 0,
       uncertain: Boolean(error?.killed || error?.signal),
@@ -202,7 +206,16 @@ export async function doctor(options, { run = runCommand, find = findBinary, now
   if (report.provider.status !== 'not-selected') blockers.push(report.provider.reason);
   Object.assign(report, await evidenceReport(workspace, options.evidence, environmentId, now));
   if (options.checkAuth) {
-    if ((options.provider ?? 'codex') !== 'codex') report.auth = { status: 'unknown', reason: 'official-status-adapter-unavailable' };
+    if (options.provider === 'grok') {
+      // The pinned engine's shared reader is authoritative for image/video credential precedence.
+      // No file contents, account claims, raw errors or token strings leave this subprocess.
+      const python = path.join(venvDir, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+      const probe = await run(python, ['-c', 'import json; from sprite_gen.workflow.access import probe_access; s=probe_access("grok"); print(json.dumps({k:s[k] for k in ("login","billing")}))'], { cwd: workspace, env: toolEnv });
+      let state; try { state = JSON.parse(probe.text); } catch { /* redacted unknown */ }
+      report.auth = { status: env.XAI_API_KEY?.trim() || state?.billing === 'api-credit' ? 'api-billing-blocked' : probe.code ? 'unknown' : state?.login === 'ready' ? 'signed-in' : state?.login === 'unavailable' ? 'sign-in-required' : 'unknown',
+        scope: 'pinned-engine-credential-probe', accountIdentity: 'unknown', imageAccess: 'unknown', videoAccess: 'unknown' };
+    }
+    else if ((options.provider ?? 'codex') !== 'codex') report.auth = { status: 'unknown', reason: 'official-status-adapter-unavailable' };
     else {
       const binary = await find('codex', env);
       const result = binary ? await run(binary, ['login', 'status'], { cwd: runtime, env }) : null;

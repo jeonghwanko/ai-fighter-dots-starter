@@ -10,7 +10,7 @@ import { assertCommitted, checkRuntimeImports, runtimeFileList } from '../script
 const repository = fileURLToPath(new URL('../', import.meta.url));
 // Side-effect-free entry modules (CLI mains are guarded); importing them evaluates the whole shipped graph.
 const entries = ['scripts/pack-fighter.mjs', 'scripts/gait.mjs', 'scripts/sprite-gen.mjs', 'scripts/run-creation-job.mjs',
-  'scripts/dots-workspace.mjs',
+  'scripts/dots-workspace.mjs', 'scripts/dots-start.mjs', 'scripts/dots-source.mjs',
   'scripts/creation-tool.mjs', 'scripts/check-connection.mjs', 'scripts/check-creation-delivery.mjs', 'scripts/connect-generation.mjs',
   'tools/ai-fighter/gait.mjs', 'server/ai-fighter-package.mjs', 'mcp/server.mjs'];
 let temporary;
@@ -22,7 +22,7 @@ test('the runtime file list is closed over imports and keeps the Edge-only cloud
   for (const required of ['tools/ai-fighter/projected-ground.mjs', 'tools/ai-fighter/gait.mjs', 'scripts/pack-fighter.mjs',
     'mcp/stdio.mjs', 'mcp/server.mjs', 'contracts/ai-fighter/v1/spec.json', 'server/ai-fighter-package.mjs'])
     assert.ok(files.includes(required), required);
-  for (const serverOnly of ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs', 'api/handler.mjs', 'api/http.mjs'])
+  for (const serverOnly of ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs', 'api/handler.mjs', 'api/http.mjs'])
     assert.ok(!files.includes(serverOnly), `${serverOnly} stays out of the local kit`);
 });
 

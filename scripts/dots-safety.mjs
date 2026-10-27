@@ -14,7 +14,8 @@ export async function safePath(value, { root } = {}) {
   if (!root && !path.isAbsolute(value)) fail('absolute-path-required');
   const target = root ? path.join(root, value) : path.resolve(value);
   const parsed = path.parse(target), parts = target.slice(parsed.root.length).split(path.sep);
-  if (parts.some(p => protectedPart.test(p))) fail('protected-path-not-allowed');
+  if (parts.some((p, i) => protectedPart.test(p) &&
+    !(p.toLowerCase() === '.codex' && parts[i + 1] === 'worktrees' && parts.length > i + 3))) fail('protected-path-not-allowed');
   let current = parsed.root;
   for (const part of parts) {
     current = path.join(current, part);

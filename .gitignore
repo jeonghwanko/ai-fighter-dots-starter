@@ -1,4 +1,6 @@
 node_modules/
+.oddbout-private/
+input/sources/
 .cache/
 .dots-runtime.json
 .dots-install.json

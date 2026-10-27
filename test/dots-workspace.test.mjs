@@ -116,7 +116,7 @@ test('bootstrap reuses locked dependencies, repairs partial installs, uses scope
       await f.put('node_modules/fixture/package.json', { version: '1.0.0' });
     } else if (args[1] === 'setup') {
       assert.equal(args[2], '--skip-rife');
-      const python = await f.put('vendor/sprite-gen/.venv/bin/python', '#!/bin/sh\nexit 0\n'); await chmod(python, 0o700);
+      const python = await f.put(`vendor/sprite-gen/.venv/${process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'}`, '#!/bin/sh\nexit 0\n'); await chmod(python, 0o700);
     }
     return { code: 0, text: '' };
   };
@@ -140,9 +140,12 @@ test('failed install stops once; interrupted lock and unwritable cache are prese
   await f.put('.dots-bootstrap.lock', 'unknown-owner');
   await assert.rejects(bootstrap({ ...f.options, install: true }, f.deps), /bootstrap-busy-or-interrupted/);
   assert.equal(await readFile(path.join(f.runtime, '.dots-bootstrap.lock'), 'utf8'), 'unknown-owner');
-  const cache = path.join(f.base, 'locked-cache'); await mkdir(cache, { mode: 0o500 });
+});
+
+test('POSIX unwritable cache blocks installation', { skip: process.platform === 'win32' ? 'Windows does not implement POSIX mode bits' : false }, async t => {
+  const f = await fixture(t), cache = path.join(f.base, 'locked-cache'); await mkdir(cache, { mode: 0o500 });
+  t.after(() => chmod(cache, 0o700));
   await assert.rejects(bootstrap({ ...f.options, cache, install: true }, f.deps), /installation-path-not-writable/);
-  await chmod(cache, 0o700);
 });
 
 test('installation timeout preserves an unknown lock and a second invocation cannot dispatch', async t => {
@@ -158,7 +161,7 @@ test('symlinked npm or pip cache children block installation before any dispatch
   const f = await fixture(t), cache = path.join(f.base, 'cache'), protectedDir = path.join(f.base, '.codex');
   await mkdir(cache); await mkdir(protectedDir);
   for (const name of ['npm', 'pip']) {
-    await symlink(protectedDir, path.join(cache, name));
+    await symlink(protectedDir, path.join(cache, name), process.platform === 'win32' ? 'junction' : 'dir');
     await assert.rejects(bootstrap({ ...f.options, cache, install: true }, f.deps), /symlink-not-allowed/);
     assert.equal(f.calls.length, 0); assert.equal(await exists(f.workspace), false);
     await rm(path.join(cache, name));
@@ -199,10 +202,15 @@ test('protected paths, traversal and artifact symlinks are rejected; normal exec
   const f = await fixture(t);
   for (const relative of ['../outside', '.codex/sessions/a', 'input/auth.json', 'https://example.com/file'])
     await assert.rejects(safePath(relative, { root: f.runtime }));
-  await symlink(f.runtime, path.join(f.base, 'link'));
+  await symlink(f.runtime, path.join(f.base, 'link'), process.platform === 'win32' ? 'junction' : 'dir');
   await assert.rejects(doctor({ ...f.options, workspace: path.join(f.base, 'link') }, f.deps), /symlink-not-allowed/);
+});
+
+test('normal executable symlinks work', async t => {
+  const f = await fixture(t);
   const binary = await f.put('bin/python-real', '#!/bin/sh\nexit 0\n'); await chmod(binary, 0o700);
-  await symlink(binary, path.join(f.runtime, 'bin/python3'));
+  try { await symlink(binary, path.join(f.runtime, 'bin/python3')); }
+  catch (e) { if (process.platform === 'win32' && e.code === 'EPERM') return t.skip('Windows file symlink privilege unavailable'); throw e; }
   assert.equal(await findBinary('python3', { PATH: path.join(f.runtime, 'bin') }), path.join(f.runtime, 'bin/python3'));
 });
 
@@ -260,7 +268,8 @@ test('launcher rejects symlink metadata before reading its contents', async t =>
   await mkdir(plugin); await cp(new URL('../plugins/ai-fighter/launcher.mjs', import.meta.url), path.join(plugin, 'launcher.mjs'));
   const launcher = await import(pathToFileURL(path.join(plugin, 'launcher.mjs')));
   const target = await f.put('.codex/auth.json', 'SECRET', f.base);
-  await symlink(target, path.join(plugin, 'runtime-manifest.json'));
+  try { await symlink(target, path.join(plugin, 'runtime-manifest.json')); }
+  catch (e) { if (process.platform === 'win32' && e.code === 'EPERM') return t.skip('Windows file symlink privilege unavailable'); throw e; }
   await assert.rejects(launcher.inspect({ base: path.join(f.base, 'user') }), /symlink/);
   await assert.rejects(launcher.initialize({ base: path.join(f.base, 'user') }), /symlink/);
 });

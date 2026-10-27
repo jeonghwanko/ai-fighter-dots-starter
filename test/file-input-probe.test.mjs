@@ -35,7 +35,7 @@ test('wire descriptor exposes the complete official file-input schema and keeps 
   const { body, status } = await runtime().request('tools/list');
   assert.equal(status, 200);
   const tools = body.result.tools, tool = tools.find(t => t.name === 'verify_creator_file_input');
-  assert.equal(tools.length, 12);
+  assert.equal(tools.length, 15);
   for (const name of ['get_profile', 'prepare_fighter_registration', 'upload_fighter_asset', 'submit_fighter_registration'])
     assert.ok(tools.some(t => t.name === name));
   assert.deepEqual(tool._meta['openai/fileParams'], ['file']);

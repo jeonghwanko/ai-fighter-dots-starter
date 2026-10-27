@@ -75,6 +75,8 @@ export function commandRoute(args, env = process.env) {
 export async function guardDotsExecution(runtime, workspace, args, env = process.env, { inspect = inspectProvider } = {}) {
   if (!routed.has(args[0]) || !await isDotsWorkspace(runtime, workspace, env)) return;
   const route = commandRoute(args, env);
+  if ((route.provider === 'grok' || route.imageProvider === 'grok') && env.XAI_API_KEY?.trim())
+    throw Error('dots-subscription-api-key-environment-blocked');
   if (route.provider !== 'codex' && route.imageProvider !== 'codex') return route;
   const capability = await inspect(runtime, 'codex');
   throw Error(capability.status === 'blocked' ? 'dots-protected-session-provider-blocked' : 'dots-generation-output-contract-unverified');

@@ -15,19 +15,26 @@ function child(root, relative) {
   return path.join(root, ...relative.split('/'));
 }
 
-async function safeLocation(target) {
+async function safeLocation(target, { source = false } = {}) {
   if (!path.isAbsolute(target)) throw Error('An absolute directory is required.');
+  target = path.resolve(target);
   const parsed = path.parse(target), parts = target.slice(parsed.root.length).split(path.sep);
   let current = parsed.root;
-  for (const part of parts) {
-    if (/^(?:\.codex|\.grok|\.ssh|\.aws|sessions|auth\.json)$/i.test(part)) throw Error('Protected location is not a kit directory.');
+  for (const [index, part] of parts.entries()) {
+    // Codex's code namespaces are not credential stores. Cache bytes are read-only;
+    // only this launcher's own directory may use that exception, never caller paths.
+    const ownSource = source && !path.relative(pluginRoot, target).startsWith('..') && !path.isAbsolute(path.relative(pluginRoot, target));
+    const codeNamespace = part.toLowerCase() === '.codex' &&
+      (parts[index + 1] === 'worktrees' && parts.length > index + 3 ||
+       ownSource && parts[index + 1] === 'plugins' && parts[index + 2] === 'cache' && parts.length > index + 3);
+    if (!codeNamespace && /^(?:\.codex|\.grok|\.ssh|\.aws|sessions|auth\.json|client\.json|pending-login\.json)$/i.test(part)) throw Error('Protected location is not a kit directory.');
     current = path.join(current, part);
     const info = await lstat(current).catch(e => { if (e.code !== 'ENOENT') throw e; return null; });
     if (info?.isSymbolicLink()) throw Error('Kit paths must not contain symlinks.');
   }
 }
 async function readMetadata(file) {
-  await safeLocation(file);
+  await safeLocation(file, { source: true });
   const info = await lstat(file);
   if (!info.isFile() || info.size > 2 * 1024 * 1024) throw Error('Invalid kit metadata file.');
   return readFile(file);
@@ -54,7 +61,7 @@ export async function inspect({ base = process.env.AI_FIGHTER_CREATOR_HOME || pa
   const installed = await exists(path.join(runtime, '.bundle-complete'));
   if (installed && String(await readMetadata(path.join(runtime, '.bundle-complete'))) !== digest) throw Error('Invalid runtime completion marker');
   for (const [relative, expected] of Object.entries(manifest.files)) {
-    const source = child(path.join(pluginRoot, 'runtime'), relative); await safeLocation(source);
+    const source = child(path.join(pluginRoot, 'runtime'), relative); await safeLocation(source, { source: true });
     if (!/^[a-f0-9]{64}$/.test(expected) || !(await lstat(source)).isFile() || hash(await readFile(source)) !== expected) throw Error('Bundle integrity check failed');
     if (installed) {
       const target = child(runtime, relative); await safeLocation(target);
@@ -109,7 +116,7 @@ export async function initialize({ base = process.env.AI_FIGHTER_CREATOR_HOME ||
     try {
       for (const [relative, expected] of Object.entries(manifest.files)) {
         const source = child(path.join(pluginRoot, 'runtime'), relative);
-        await safeLocation(source);
+        await safeLocation(source, { source: true });
         if (!(await lstat(source)).isFile()) throw Error('Bundle contains a non-regular file');
         const data = await readFile(source);
         if (hash(data) !== expected) throw Error(`Bundle integrity check failed: ${relative}`);

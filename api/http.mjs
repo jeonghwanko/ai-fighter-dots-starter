@@ -1,5 +1,6 @@
 // Shared by every Edge route. No Node-only imports: this file runs on Deno and Node.
-export const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
+import { UUID } from './bytes.mjs';
+export { UUID, Problem, sha256, readBody } from './bytes.mjs';
 const BASE_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
 
 /** JSON response. `cors` opens a browser route: { methods, headers? }. */
@@ -35,28 +36,6 @@ export async function verifiedUserId(db, request) {
     } catch { return null; }
   }
   return !error && data?.user && !data.user.is_anonymous && UUID.test(data.user.id ?? '') ? data.user.id : null;
-}
-
-export class Problem extends Error { constructor(status, code, errors) { super(code); this.status = status; this.errors = errors; } }
-export const sha256 = async bytes => Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', bytes)), b => b.toString(16).padStart(2, '0')).join('');
-
-/** Read at most `maximum` bytes, even when Content-Length is missing or false. */
-export async function readBody(request, maximum) {
-  if (Number(request.headers.get('content-length')) > maximum) throw new Problem(413, 'body-limit');
-  const reader = request.body?.getReader();
-  if (!reader) return new Uint8Array();
-  const parts = []; let count = 0;
-  try {
-    for (;;) {
-      const { done, value } = await reader.read(); if (done) break;
-      count += value.length;
-      if (count > maximum) { await reader.cancel(); throw new Problem(413, 'body-limit'); }
-      parts.push(value);
-    }
-  } finally { reader.releaseLock(); }
-  const result = new Uint8Array(count); let offset = 0;
-  for (const part of parts) { result.set(part, offset); offset += part.length; }
-  return result;
 }
 
 /** Postgres jsonb cannot store U+0000 or an unpaired surrogate. JSON.parse and the v1 schema accept both. */
