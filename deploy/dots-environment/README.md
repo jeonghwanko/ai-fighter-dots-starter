@@ -9,12 +9,18 @@ bash deploy/dots-environment/install.sh
 
 The script installs Node **22.22.2** with pinned official SHA-256, Python **3.11+**, venv, Git,
 ffmpeg/ffprobe, WebP `img2webp -exact`, Grok CLI **1.0.70** from its npm lock, and the pinned creation kit.
-OS packages follow the chosen base image's security repository; the installed versions are recorded by
-`dots:start`. This is an environment-preparer operation, before any user login or character work.
+Existing curl, Git, xz/tar, SHA-256, Python with SSL/venv/ensurepip, and ffmpeg/ffprobe are checked and reused.
+A complete managed base needs no sudo or system package changes. Only missing base tools trigger an apt
+installation when root or supported noninteractive sudo is already available; otherwise preparation stops
+with the exact missing list. OS packages follow the base image's security repository. `dots:start` records versions. This is an environment-preparer operation, before any user login or character work.
 Grok's npm lifecycle scripts are disabled: its official launcher supports in-package binary extraction
 when the home directory is unwritable. Do not change HOME/GROK_HOME to route around authentication or
 host restrictions. Confirm the actual launched CLI version; no login or agent prompt is used by installation.
 The script never logs in or generates. Do not run it over a user's active environment.
+
+Publishing captures prepared files. Saving an Install script does not prove it ran: execute the recipe in
+the environment preparer, inspect its exit code and env.sh, then publish that prepared filesystem. Verify
+the same files and versions in a new task explicitly selecting this saved environment.
 
 Set the Start skill to [DOTS-START.md](../../docs/DOTS-START.md), and save the repository front-door path.
 Every task sources `/workspace/.oddbout-tools/env.sh` before its first command. The runtime cache
