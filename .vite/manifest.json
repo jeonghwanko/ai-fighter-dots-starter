@@ -206,23 +206,23 @@
     "file": "assets/WebGl2Support-hZXjXmi-.js",
     "name": "WebGl2Support"
   },
-  "_accountControl-Ds71Fs4Q.js": {
-    "file": "assets/accountControl-Ds71Fs4Q.js",
+  "_accountControl-Ba1jbnnN.css": {
+    "file": "assets/accountControl-Ba1jbnnN.css",
+    "src": "_accountControl-Ba1jbnnN.css"
+  },
+  "_accountControl-CeDvz8H7.js": {
+    "file": "assets/accountControl-CeDvz8H7.js",
     "name": "accountControl",
     "imports": [
       "_oddboutSession-BLfvyrde.js"
     ],
     "css": [
-      "assets/accountControl-VJz_K6KY.css"
+      "assets/accountControl-Ba1jbnnN.css"
     ],
     "assets": [
       "assets/GoogleSans-Medium-CeUKoFDv.ttf",
       "assets/g-logo-CpxN0HWb.png"
     ]
-  },
-  "_accountControl-VJz_K6KY.css": {
-    "file": "assets/accountControl-VJz_K6KY.css",
-    "src": "_accountControl-VJz_K6KY.css"
   },
   "_arena-concept-runtime-BHN1CmLz.js": {
     "file": "assets/arena-concept-runtime-BHN1CmLz.js",
@@ -254,6 +254,10 @@
     "css": [
       "assets/communityRoster-CM2Fh51h.css"
     ]
+  },
+  "_creatorTheme-zKgTiTZp.css": {
+    "file": "assets/creatorTheme-zKgTiTZp.css",
+    "src": "_creatorTheme-zKgTiTZp.css"
   },
   "_dist-CuSK8MRy.js": {
     "file": "assets/dist-CuSK8MRy.js",
@@ -347,21 +351,21 @@
       "src/platform/woniSample.ts"
     ]
   },
-  "_infoPage-DDfLwIfF.css": {
-    "file": "assets/infoPage-DDfLwIfF.css",
-    "src": "_infoPage-DDfLwIfF.css"
-  },
-  "_infoPage-vq6VoeSF.js": {
-    "file": "assets/infoPage-vq6VoeSF.js",
+  "_infoPage-CR5KpGIT.js": {
+    "file": "assets/infoPage-CR5KpGIT.js",
     "name": "infoPage",
     "imports": [
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_siteChrome-C5-e4drx.js",
+      "_siteChrome-BBA38CDC.js",
       "_siteLinks-Cb1kHGko.js"
     ],
     "css": [
       "assets/infoPage-DDfLwIfF.css"
     ]
+  },
+  "_infoPage-DDfLwIfF.css": {
+    "file": "assets/infoPage-DDfLwIfF.css",
+    "src": "_infoPage-DDfLwIfF.css"
   },
   "_league-BqkgClzO.css": {
     "file": "assets/league-BqkgClzO.css",
@@ -393,17 +397,6 @@
     "file": "assets/palette-CoCtOR9y.js",
     "name": "palette"
   },
-  "_portraitLock-CWuP8ucL.css": {
-    "file": "assets/portraitLock-CWuP8ucL.css",
-    "src": "_portraitLock-CWuP8ucL.css"
-  },
-  "_portraitLock-D87EknFu.js": {
-    "file": "assets/portraitLock-D87EknFu.js",
-    "name": "portraitLock",
-    "css": [
-      "assets/portraitLock-CWuP8ucL.css"
-    ]
-  },
   "_preload-helper-Czpn1I53.js": {
     "file": "assets/preload-helper-Czpn1I53.js",
     "name": "preload-helper"
@@ -427,26 +420,16 @@
     "file": "assets/rolldown-runtime-B0Z9INg1.js",
     "name": "rolldown-runtime"
   },
-  "_siteBase-Q85EwuBo.css": {
-    "file": "assets/siteBase-Q85EwuBo.css",
-    "src": "_siteBase-Q85EwuBo.css"
-  },
-  "_siteChrome-B2CWFBx3.css": {
-    "file": "assets/siteChrome-B2CWFBx3.css",
-    "src": "_siteChrome-B2CWFBx3.css"
-  },
-  "_siteChrome-C5-e4drx.js": {
-    "file": "assets/siteChrome-C5-e4drx.js",
+  "_siteChrome-BBA38CDC.js": {
+    "file": "assets/siteChrome-BBA38CDC.js",
     "name": "siteChrome",
     "imports": [
-      "_accountControl-Ds71Fs4Q.js",
+      "_accountControl-CeDvz8H7.js",
       "_oddboutSession-BLfvyrde.js",
-      "_portraitLock-D87EknFu.js",
       "_OddboutCommunity-yZWAEfH9.js"
     ],
     "css": [
-      "assets/siteChrome-B2CWFBx3.css",
-      "assets/siteBase-Q85EwuBo.css"
+      "assets/siteChrome-BQJpHWAh.css"
     ],
     "assets": [
       "assets/Pretendard-Regular.subset.0-CLvkdWSe.woff2",
@@ -632,6 +615,10 @@
       "assets/Pretendard-Bold.subset.90-aWD9PU43.woff2",
       "assets/Pretendard-Bold.subset.91-DoowpukH.woff2"
     ]
+  },
+  "_siteChrome-BQJpHWAh.css": {
+    "file": "assets/siteChrome-BQJpHWAh.css",
+    "src": "_siteChrome-BQJpHWAh.css"
   },
   "_siteLinks-Cb1kHGko.js": {
     "file": "assets/siteLinks-Cb1kHGko.js",
@@ -641,223 +628,34 @@
     "file": "assets/storageKeys-Lf7lfo-I.js",
     "name": "storageKeys"
   },
-  "_style-BlYBj6Lk.css": {
-    "file": "assets/style-BlYBj6Lk.css",
-    "src": "_style-BlYBj6Lk.css"
-  },
   "_three.core-Dt6LFlTl.js": {
     "file": "assets/three.core-Dt6LFlTl.js",
     "name": "three.core"
   },
   "about.html": {
-    "file": "assets/about-sFkW7K8H.js",
+    "file": "assets/about-w62OVlT_.js",
     "name": "about",
     "src": "about.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-Ds71Fs4Q.js",
-      "_infoPage-vq6VoeSF.js"
+      "_accountControl-CeDvz8H7.js",
+      "_infoPage-CR5KpGIT.js"
     ]
   },
   "admin.html": {
-    "file": "assets/admin-Bna6aM2k.js",
+    "file": "assets/admin-D0koXaFl.js",
     "name": "admin",
     "src": "admin.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-Ds71Fs4Q.js",
+      "_accountControl-CeDvz8H7.js",
       "_oddboutSession-BLfvyrde.js",
       "_fighterCreator-B5d3PY3n.js",
-      "_palette-CoCtOR9y.js"
+      "_siteChrome-BBA38CDC.js"
     ],
     "css": [
-      "assets/admin-BwnEhG1v.css",
-      "assets/siteBase-Q85EwuBo.css",
-      "assets/style-BlYBj6Lk.css"
-    ],
-    "assets": [
-      "assets/Pretendard-Regular.subset.0-CLvkdWSe.woff2",
-      "assets/Pretendard-Regular.subset.1-BVqFoDjZ.woff2",
-      "assets/Pretendard-Regular.subset.2-yvaFdlZs.woff2",
-      "assets/Pretendard-Regular.subset.3-C9Tpixhb.woff2",
-      "assets/Pretendard-Regular.subset.4-BGFtMC3e.woff2",
-      "assets/Pretendard-Regular.subset.5-sliuPxIf.woff2",
-      "assets/Pretendard-Regular.subset.6-B5k_yUqt.woff2",
-      "assets/Pretendard-Regular.subset.7-DJUXMmnx.woff2",
-      "assets/Pretendard-Regular.subset.8-z1Wdyr3p.woff2",
-      "assets/Pretendard-Regular.subset.9-BlBUToJX.woff2",
-      "assets/Pretendard-Regular.subset.10-DTdwOQTA.woff2",
-      "assets/Pretendard-Regular.subset.11-DRkSlUm5.woff2",
-      "assets/Pretendard-Regular.subset.12-DFwM-W5f.woff2",
-      "assets/Pretendard-Regular.subset.13-D7_zCHDo.woff2",
-      "assets/Pretendard-Regular.subset.14-Bi8lmHnI.woff2",
-      "assets/Pretendard-Regular.subset.15-Hz9ATDJF.woff2",
-      "assets/Pretendard-Regular.subset.16-4qMG15x6.woff2",
-      "assets/Pretendard-Regular.subset.17-aLuDQMIi.woff2",
-      "assets/Pretendard-Regular.subset.18-DkYexm46.woff2",
-      "assets/Pretendard-Regular.subset.19-BF2Ja_M4.woff2",
-      "assets/Pretendard-Regular.subset.20-r5wxigYa.woff2",
-      "assets/Pretendard-Regular.subset.21-CN37rNdB.woff2",
-      "assets/Pretendard-Regular.subset.22-BIGh3MMA.woff2",
-      "assets/Pretendard-Regular.subset.23-DVqgWK0D.woff2",
-      "assets/Pretendard-Regular.subset.24-BFe-65yo.woff2",
-      "assets/Pretendard-Regular.subset.25-CkC0V2mk.woff2",
-      "assets/Pretendard-Regular.subset.26-CL_MrIn_.woff2",
-      "assets/Pretendard-Regular.subset.27-aleAX6Fv.woff2",
-      "assets/Pretendard-Regular.subset.28-w6RZIgAk.woff2",
-      "assets/Pretendard-Regular.subset.29-CXZoc9IN.woff2",
-      "assets/Pretendard-Regular.subset.30-BtoiFKRD.woff2",
-      "assets/Pretendard-Regular.subset.31-DbT4MEcl.woff2",
-      "assets/Pretendard-Regular.subset.32-DaI-s2Ht.woff2",
-      "assets/Pretendard-Regular.subset.33-C7C47Gl2.woff2",
-      "assets/Pretendard-Regular.subset.34-Drlq_G2G.woff2",
-      "assets/Pretendard-Regular.subset.35-PTe3TrP-.woff2",
-      "assets/Pretendard-Regular.subset.36-CI8Zmn3G.woff2",
-      "assets/Pretendard-Regular.subset.37-CUdPrEM2.woff2",
-      "assets/Pretendard-Regular.subset.38-DgckgUVf.woff2",
-      "assets/Pretendard-Regular.subset.39-dHwaNReA.woff2",
-      "assets/Pretendard-Regular.subset.40-__xIh32o.woff2",
-      "assets/Pretendard-Regular.subset.41-BnlHKs0e.woff2",
-      "assets/Pretendard-Regular.subset.42-Di0yTY5K.woff2",
-      "assets/Pretendard-Regular.subset.43-Jmy9lB6-.woff2",
-      "assets/Pretendard-Regular.subset.44-bCt39uYF.woff2",
-      "assets/Pretendard-Regular.subset.45-CpKCLeqj.woff2",
-      "assets/Pretendard-Regular.subset.46-Bp6gHNld.woff2",
-      "assets/Pretendard-Regular.subset.47-D-TQ2Dpe.woff2",
-      "assets/Pretendard-Regular.subset.48-CpUOPkpc.woff2",
-      "assets/Pretendard-Regular.subset.49-BFCe55dU.woff2",
-      "assets/Pretendard-Regular.subset.50-C0hS-48T.woff2",
-      "assets/Pretendard-Regular.subset.51-BM7aEno_.woff2",
-      "assets/Pretendard-Regular.subset.52-aQbNhxVW.woff2",
-      "assets/Pretendard-Regular.subset.53-CVyVV76U.woff2",
-      "assets/Pretendard-Regular.subset.54-CCaqh-Wb.woff2",
-      "assets/Pretendard-Regular.subset.55-D5HzRiiA.woff2",
-      "assets/Pretendard-Regular.subset.56-DQsKG79T.woff2",
-      "assets/Pretendard-Regular.subset.57-BHBjSRoS.woff2",
-      "assets/Pretendard-Regular.subset.58-BbKZplzG.woff2",
-      "assets/Pretendard-Regular.subset.59-BGn-xlCG.woff2",
-      "assets/Pretendard-Regular.subset.60-Bpn-X_60.woff2",
-      "assets/Pretendard-Regular.subset.61-DcY-UrqT.woff2",
-      "assets/Pretendard-Regular.subset.62-_K7zckZd.woff2",
-      "assets/Pretendard-Regular.subset.63-rllBUvx6.woff2",
-      "assets/Pretendard-Regular.subset.65-C11QvOfb.woff2",
-      "assets/Pretendard-Regular.subset.66-B6NcoCe7.woff2",
-      "assets/Pretendard-Regular.subset.67-Bpoh0lqZ.woff2",
-      "assets/Pretendard-Regular.subset.68-DlrU_wR_.woff2",
-      "assets/Pretendard-Regular.subset.69-YRxp0yrA.woff2",
-      "assets/Pretendard-Regular.subset.70-BomXJ8qi.woff2",
-      "assets/Pretendard-Regular.subset.71-65EIJBcG.woff2",
-      "assets/Pretendard-Regular.subset.72-BnY9n_Mj.woff2",
-      "assets/Pretendard-Regular.subset.73-O1E98iPB.woff2",
-      "assets/Pretendard-Regular.subset.74-CfbLEg7p.woff2",
-      "assets/Pretendard-Regular.subset.75-DzppOeWu.woff2",
-      "assets/Pretendard-Regular.subset.76-BUcgmqWO.woff2",
-      "assets/Pretendard-Regular.subset.77-C29jvt9x.woff2",
-      "assets/Pretendard-Regular.subset.78-Di1fo1-6.woff2",
-      "assets/Pretendard-Regular.subset.79-BXs_nTf_.woff2",
-      "assets/Pretendard-Regular.subset.80-B7hI_OTv.woff2",
-      "assets/Pretendard-Regular.subset.81-DPIdfzrH.woff2",
-      "assets/Pretendard-Regular.subset.82-C6Ij-OqK.woff2",
-      "assets/Pretendard-Regular.subset.83-B8ZdeZ2v.woff2",
-      "assets/Pretendard-Regular.subset.84-BirVK4H9.woff2",
-      "assets/Pretendard-Regular.subset.85-BAlM43J5.woff2",
-      "assets/Pretendard-Regular.subset.86-Zzc7ua_r.woff2",
-      "assets/Pretendard-Regular.subset.87-BjkG61uS.woff2",
-      "assets/Pretendard-Regular.subset.88-hrrXTjG5.woff2",
-      "assets/Pretendard-Regular.subset.89-elZC0DyK.woff2",
-      "assets/Pretendard-Regular.subset.90-CZ2yVr7J.woff2",
-      "assets/Pretendard-Regular.subset.91-DLuMSciM.woff2",
-      "assets/Pretendard-Bold.subset.0-DI-271U-.woff2",
-      "assets/Pretendard-Bold.subset.1-BRRWT-kM.woff2",
-      "assets/Pretendard-Bold.subset.2-Cexlqa70.woff2",
-      "assets/Pretendard-Bold.subset.3-Bl4i3r69.woff2",
-      "assets/Pretendard-Bold.subset.4-CXbiqweC.woff2",
-      "assets/Pretendard-Bold.subset.5-cDjVQeMI.woff2",
-      "assets/Pretendard-Bold.subset.6-BBBoNzaG.woff2",
-      "assets/Pretendard-Bold.subset.7-BSH3zjpr.woff2",
-      "assets/Pretendard-Bold.subset.8-CM_bVb9x.woff2",
-      "assets/Pretendard-Bold.subset.9-DN6f6aal.woff2",
-      "assets/Pretendard-Bold.subset.10-D5Ckv9YG.woff2",
-      "assets/Pretendard-Bold.subset.11-B1gRnSkd.woff2",
-      "assets/Pretendard-Bold.subset.12-j5ORzkeN.woff2",
-      "assets/Pretendard-Bold.subset.13-BOZItqG1.woff2",
-      "assets/Pretendard-Bold.subset.14-BNOTgc54.woff2",
-      "assets/Pretendard-Bold.subset.15-BeBSvWhq.woff2",
-      "assets/Pretendard-Bold.subset.16-1JP8UDJ7.woff2",
-      "assets/Pretendard-Bold.subset.17--zbCw3JP.woff2",
-      "assets/Pretendard-Bold.subset.18-BecALZMd.woff2",
-      "assets/Pretendard-Bold.subset.19-BZgCsGxG.woff2",
-      "assets/Pretendard-Bold.subset.20-P5oUxd0b.woff2",
-      "assets/Pretendard-Bold.subset.21-DCVme34P.woff2",
-      "assets/Pretendard-Bold.subset.22-IiR6S7ux.woff2",
-      "assets/Pretendard-Bold.subset.23-Bcuc9a8h.woff2",
-      "assets/Pretendard-Bold.subset.24-ChIspFtL.woff2",
-      "assets/Pretendard-Bold.subset.25-DT_eoyeX.woff2",
-      "assets/Pretendard-Bold.subset.26-CzOPEzNj.woff2",
-      "assets/Pretendard-Bold.subset.27-BCf8Y9rv.woff2",
-      "assets/Pretendard-Bold.subset.28-Dn9OZ7gK.woff2",
-      "assets/Pretendard-Bold.subset.29-C4bqRlR7.woff2",
-      "assets/Pretendard-Bold.subset.30-CEnytXAA.woff2",
-      "assets/Pretendard-Bold.subset.31-DSVHfO6M.woff2",
-      "assets/Pretendard-Bold.subset.32-CLq2SG_t.woff2",
-      "assets/Pretendard-Bold.subset.33-DVPq2PiX.woff2",
-      "assets/Pretendard-Bold.subset.34-C6AkQEW0.woff2",
-      "assets/Pretendard-Bold.subset.35-C4gJs43Y.woff2",
-      "assets/Pretendard-Bold.subset.36-BSTGVA8y.woff2",
-      "assets/Pretendard-Bold.subset.37-OpRtuglW.woff2",
-      "assets/Pretendard-Bold.subset.38-BSUZ0IED.woff2",
-      "assets/Pretendard-Bold.subset.39-CQILwqQt.woff2",
-      "assets/Pretendard-Bold.subset.40-CBj8JkiM.woff2",
-      "assets/Pretendard-Bold.subset.41-BkTvIRy0.woff2",
-      "assets/Pretendard-Bold.subset.42-Dxm--e8L.woff2",
-      "assets/Pretendard-Bold.subset.43-Bjth_ZHy.woff2",
-      "assets/Pretendard-Bold.subset.44-DrsfnaJG.woff2",
-      "assets/Pretendard-Bold.subset.45-3-E2CdQ5.woff2",
-      "assets/Pretendard-Bold.subset.46-CJDtHZku.woff2",
-      "assets/Pretendard-Bold.subset.47-DeuWUwZQ.woff2",
-      "assets/Pretendard-Bold.subset.48-kR8-bTj0.woff2",
-      "assets/Pretendard-Bold.subset.49-C-7uFl8R.woff2",
-      "assets/Pretendard-Bold.subset.50-CpbxBIRd.woff2",
-      "assets/Pretendard-Bold.subset.51-BzcAI4CC.woff2",
-      "assets/Pretendard-Bold.subset.52-DaVYTDiD.woff2",
-      "assets/Pretendard-Bold.subset.53-BfgVf2yk.woff2",
-      "assets/Pretendard-Bold.subset.54-CEnq6z3q.woff2",
-      "assets/Pretendard-Bold.subset.55-EqHF8uPM.woff2",
-      "assets/Pretendard-Bold.subset.56-D8xS_ZI5.woff2",
-      "assets/Pretendard-Bold.subset.57-D8xVm1sC.woff2",
-      "assets/Pretendard-Bold.subset.58-CNODPb29.woff2",
-      "assets/Pretendard-Bold.subset.59-Z68Ef1z2.woff2",
-      "assets/Pretendard-Bold.subset.60-BDtxBEUP.woff2",
-      "assets/Pretendard-Bold.subset.61-DTxpMu7s.woff2",
-      "assets/Pretendard-Bold.subset.62-Ew7L0dVK.woff2",
-      "assets/Pretendard-Bold.subset.63-Bu7qzEhQ.woff2",
-      "assets/Pretendard-Bold.subset.65-DewFSsH0.woff2",
-      "assets/Pretendard-Bold.subset.66-B4gpWdwU.woff2",
-      "assets/Pretendard-Bold.subset.67-Bo69LmZD.woff2",
-      "assets/Pretendard-Bold.subset.68-nVlfo4fD.woff2",
-      "assets/Pretendard-Bold.subset.69-uxq-xN90.woff2",
-      "assets/Pretendard-Bold.subset.70-B7Xjj8RR.woff2",
-      "assets/Pretendard-Bold.subset.71-udLph1Ne.woff2",
-      "assets/Pretendard-Bold.subset.72-CXAceLhm.woff2",
-      "assets/Pretendard-Bold.subset.73-CPSKLqdJ.woff2",
-      "assets/Pretendard-Bold.subset.74-DxY1_Zil.woff2",
-      "assets/Pretendard-Bold.subset.75-4JZdAVXy.woff2",
-      "assets/Pretendard-Bold.subset.76-aC77MvdV.woff2",
-      "assets/Pretendard-Bold.subset.77-BLftLGQA.woff2",
-      "assets/Pretendard-Bold.subset.78-COoje3nY.woff2",
-      "assets/Pretendard-Bold.subset.79-CwZ1xSqL.woff2",
-      "assets/Pretendard-Bold.subset.80-cJaFb9DW.woff2",
-      "assets/Pretendard-Bold.subset.81-D4G_6Jbq.woff2",
-      "assets/Pretendard-Bold.subset.82-CqQrq6lK.woff2",
-      "assets/Pretendard-Bold.subset.83-IQeHPxJV.woff2",
-      "assets/Pretendard-Bold.subset.84-D2t15K4I.woff2",
-      "assets/Pretendard-Bold.subset.85-Bk0HsLXN.woff2",
-      "assets/Pretendard-Bold.subset.86-Duq28nuO.woff2",
-      "assets/Pretendard-Bold.subset.87-DDIdDlrD.woff2",
-      "assets/Pretendard-Bold.subset.88-CwgMjdeO.woff2",
-      "assets/Pretendard-Bold.subset.89-BeAG6Wn1.woff2",
-      "assets/Pretendard-Bold.subset.90-aWD9PU43.woff2",
-      "assets/Pretendard-Bold.subset.91-DoowpukH.woff2"
+      "assets/admin-DerxEZPg.css",
+      "assets/creatorTheme-zKgTiTZp.css"
     ]
   },
   "assets/coop-campaign/animations/female-lupin-actions-v3-20261014.webp": {
@@ -869,12 +667,12 @@
     "src": "assets/coop-campaign/animations/handsome-actions-v2-20261014.webp"
   },
   "creator.html": {
-    "file": "assets/creator-Dudphf2d.js",
+    "file": "assets/creator-D69v7ogo.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-Ds71Fs4Q.js",
+      "_accountControl-CeDvz8H7.js",
       "_fighterLines-DQuiabXv.js",
       "_Locale-BoqNfY5_.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
@@ -885,7 +683,7 @@
       "_registeredFighters-cV5wg83O.js",
       "_fighterCreator-B5d3PY3n.js",
       "_communityRoster-DBAImfb2.js",
-      "_siteChrome-C5-e4drx.js",
+      "_siteChrome-BBA38CDC.js",
       "_OddboutCommunity-yZWAEfH9.js",
       "_siteLinks-Cb1kHGko.js",
       "_arena-concept-runtime-BHN1CmLz.js",
@@ -898,19 +696,19 @@
       "src/creator/leagueContent.ts"
     ],
     "css": [
-      "assets/creator-BYyk2nRg.css",
-      "assets/style-BlYBj6Lk.css"
+      "assets/creator-gFiX96yY.css",
+      "assets/creatorTheme-zKgTiTZp.css"
     ]
   },
   "credits.html": {
-    "file": "assets/credits-BOC3zFef.js",
+    "file": "assets/credits-CPhS1_iN.js",
     "name": "credits",
     "src": "credits.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-Ds71Fs4Q.js",
+      "_accountControl-CeDvz8H7.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_siteChrome-C5-e4drx.js",
+      "_siteChrome-BBA38CDC.js",
       "_leagueContent-CAVtHixG.js"
     ],
     "css": [
@@ -918,27 +716,26 @@
     ]
   },
   "docs.html": {
-    "file": "assets/docs-CyZYhOhw.js",
+    "file": "assets/docs-BcxnS-Qs.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-Ds71Fs4Q.js",
-      "_infoPage-vq6VoeSF.js"
+      "_accountControl-CeDvz8H7.js",
+      "_infoPage-CR5KpGIT.js"
     ]
   },
   "fighter.html": {
-    "file": "assets/fighter-DzGLHYrg.js",
+    "file": "assets/fighter-DkMNNJcx.js",
     "name": "fighter",
     "src": "fighter.html",
     "isEntry": true,
     "imports": [
       "_rolldown-runtime-B0Z9INg1.js",
-      "_accountControl-Ds71Fs4Q.js",
+      "_accountControl-CeDvz8H7.js",
       "_storageKeys-Lf7lfo-I.js",
       "_oddboutSession-BLfvyrde.js",
       "_registeredFighters-cV5wg83O.js",
-      "_portraitLock-D87EknFu.js",
       "_rankedDuels-DOPkUcRo.js",
       "_arenaRankings-DuZxNMTx.js",
       "_city-tournament-azouTl3-.js",
@@ -954,12 +751,12 @@
     ]
   },
   "fighters.html": {
-    "file": "assets/fighters-BJ1vTAXh.js",
+    "file": "assets/fighters-BcRn4DB7.js",
     "name": "fighters",
     "src": "fighters.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-Ds71Fs4Q.js",
+      "_accountControl-CeDvz8H7.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
       "_fighterStory-ui6srrdo.js",
       "_dist-CuSK8MRy.js",
@@ -967,7 +764,7 @@
       "_registeredFighters-cV5wg83O.js",
       "_fighterCreator-B5d3PY3n.js",
       "_communityRoster-DBAImfb2.js",
-      "_siteChrome-C5-e4drx.js",
+      "_siteChrome-BBA38CDC.js",
       "_siteLinks-Cb1kHGko.js",
       "_arenaRankings-DuZxNMTx.js",
       "_ArenaBoutLink-CHN2seHZ.js",
@@ -980,14 +777,14 @@
     ]
   },
   "league.html": {
-    "file": "assets/league-Dko0uUIH.js",
+    "file": "assets/league-D0C0JZEn.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-Ds71Fs4Q.js",
+      "_accountControl-CeDvz8H7.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_siteChrome-C5-e4drx.js",
+      "_siteChrome-BBA38CDC.js",
       "_OddboutCommunity-yZWAEfH9.js",
       "_siteLinks-Cb1kHGko.js",
       "_fighterFace-CR4nbOBD.js",
@@ -1015,13 +812,13 @@
     "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
   },
   "privacy.html": {
-    "file": "assets/privacy-DDzs_vqb.js",
+    "file": "assets/privacy-DHU54vt0.js",
     "name": "privacy",
     "src": "privacy.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-Ds71Fs4Q.js",
-      "_siteChrome-C5-e4drx.js"
+      "_accountControl-CeDvz8H7.js",
+      "_siteChrome-BBA38CDC.js"
     ],
     "css": [
       "assets/privacy-_4x5eeMt.css"
@@ -2054,18 +1851,18 @@
     ]
   },
   "world.html": {
-    "file": "assets/world-Bd8z65SD.js",
+    "file": "assets/world-C59M9FYv.js",
     "name": "world",
     "src": "world.html",
     "isEntry": true,
     "imports": [
-      "_accountControl-Ds71Fs4Q.js",
+      "_accountControl-CeDvz8H7.js",
       "_fighterStory-ui6srrdo.js",
       "_storageKeys-Lf7lfo-I.js",
       "_oddboutSession-BLfvyrde.js",
       "_registeredFighters-cV5wg83O.js",
       "_fighterCreator-B5d3PY3n.js",
-      "_siteChrome-C5-e4drx.js",
+      "_siteChrome-BBA38CDC.js",
       "_arenaRankings-DuZxNMTx.js"
     ],
     "css": [
