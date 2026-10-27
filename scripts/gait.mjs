@@ -3,7 +3,7 @@ import { spawn } from 'node:child_process';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import sharp from 'sharp';
-import { walkPlan, loadSequence, combineReview, commonGameRequest, validatePlan, digest } from '../tools/ai-fighter/gait.mjs';
+import { walkPlan, loadSequence, combineReview, commonGameRequest, validatePlan, digest, loopReview } from '../tools/ai-fighter/gait.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -142,11 +142,26 @@ async function review(planFile, out, annotationsFile) {
   return { ok: report.status === 'pass', status: report.status, sequenceSha256: sequence.sha256, errors: report.errors, missing: report.missing, out };
 }
 
+/**
+ * The hosted generation's walk/run record (reviewPolicy engine-loop). Config, paths relative to it: { motion, source: { file, animation }
+ * (the final game pack), strip (the cut's strip.json from video-loop / video-cycle-align), verdict (the judge's JSON: identity, anatomy,
+ * alternation, loop, notes), judge (who judged), stridePixels (walk) }.
+ */
+async function writeLoopReview(configFile, out) {
+  const config = await json(configFile), base = path.dirname(path.resolve(configFile));
+  const sequence = await loadSequence(config.source, base);
+  const review = loopReview({ motion: config.motion, sequence, strip: await json(path.resolve(base, config.strip)),
+    visual: await json(path.resolve(base, config.verdict)), judge: config.judge, stridePixels: config.stridePixels });
+  await save(out, review);
+  return { ok: review.status === 'pass', status: review.status, sequenceSha256: review.sequenceSha256, errors: review.errors, out };
+}
+
 async function main(args) {
   const [command, first, second, third] = args;
   if (command === 'init' && first) return init(first);
   if (command === 'bind-keyposes' && first && second && third) return bindKeyposes(first, second, third);
   if (command === 'review' && first && second) return review(first, second, third);
+  if (command === 'loop-review' && first && second) return writeLoopReview(first, second);
   if (command === 'game-request' && first && second) {
     const result = await commonGameRequest(await json(first), path.dirname(path.resolve(first)));
     // Resolve source files relative to the output request, not its input config.
@@ -154,7 +169,7 @@ async function main(args) {
     await save(second, result.request); await save(second + '.scale.json', { ...result, request: undefined });
     return { ok: true, out: second, referenceBodyHeight: result.referenceBodyHeight };
   }
-  throw Error('Usage: npm run fighter:gait -- init <new-directory> | bind-keyposes <request.json> <image.png> <review.json> | review <plan.json> <out-directory> [annotations.json] | game-request <config.json> <game.json>');
+  throw Error('Usage: npm run fighter:gait -- init <new-directory> | bind-keyposes <request.json> <image.png> <review.json> | review <plan.json> <out-directory> [annotations.json] | game-request <config.json> <game.json> | loop-review <config.json> <review.json>');
 }
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   main(process.argv.slice(2)).then(result => { console.log(JSON.stringify(result, null, 2)); if (result.ok === false) process.exitCode = 2; })

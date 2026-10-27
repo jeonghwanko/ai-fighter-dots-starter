@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { alphaBounds, walkPlan, sequenceHash, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence } from '../tools/ai-fighter/gait.mjs';
+import { alphaBounds, walkPlan, sequenceHash, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence, loopReview, requireLoopReview } from '../tools/ai-fighter/gait.mjs';
 import { preview } from '../scripts/gait.mjs';
 
 function frame(bottom = 70, mark = 0, height = 80) {
@@ -124,4 +124,19 @@ test('a game-pack sequence decodes each sheet once and keeps the exact per-cell 
       assert.deepEqual([sequence.frames[index].width, sequence.frames[index].height], [32, 32]);
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('a loop review fails on an engine retake reason, a failing verdict or an unmeasured walk stride, and binds to the frames', () => {
+  const seq = sequence(), verdicts = { identity: 'pass', anatomy: 'pass', alternation: 'pass', loop: 'pass', notes: 'Clean loop.' };
+  const pass = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: { from: 27 } }, visual: verdicts, judge: 'test', stridePixels: 90 });
+  assert.equal(pass.status, 'pass');
+  assert.equal(requireLoopReview(pass, seq, 'walk'), pass);
+  const retake = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: { retake: { reason: 'broken-beat', reasons: ['broken-beat'] } } },
+    visual: verdicts, judge: 'test', stridePixels: 90 });
+  assert.deepEqual(retake.errors.map(e => e.code), ['ENGINE_RETAKE']);
+  const judged = loopReview({ motion: 'walk', sequence: seq, strip: {}, visual: { ...verdicts, alternation: 'fail' }, judge: 'test' });
+  assert.deepEqual(judged.errors.map(e => e.code), ['VISUAL_ALTERNATION', 'STRIDE_UNMEASURED']);
+  assert.throws(() => requireLoopReview(judged, seq, 'walk'), /LOOP_REVIEW_REQUIRED/);
+  const changed = { ...seq, durations: seq.durations.map((ms, i) => i ? ms : ms + 1) };
+  assert.throws(() => requireLoopReview(pass, changed, 'walk'), /LOOP_REVIEW_STALE/);
 });

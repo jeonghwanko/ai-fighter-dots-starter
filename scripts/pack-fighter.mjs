@@ -11,7 +11,7 @@ import { z } from 'zod';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { validateFighterPackage } from '../server/ai-fighter-package.mjs';
-import { requireReview } from '../tools/ai-fighter/gait.mjs';
+import { requireLoopReview, requireReview } from '../tools/ai-fighter/gait.mjs';
 
 const BODY = spec.input.bodyHeight;
 const ALPHA = 32;              // measurement threshold: ignores faint anti-aliasing and soft shadows
@@ -34,6 +34,8 @@ const motionPlan = z.strictObject({
   origin: z.strictObject({ x: z.number(), y: z.number() }).optional(),
   stridePixels: z.number().positive().optional(),
   gaitReview: z.string().min(1).optional(),
+  // reviewPolicy engine-loop (hosted generation): the walk or run's loop review instead of a gait review.
+  loopReview: z.string().min(1).optional(),
   hitSequenceIndices: z.array(z.number().int().min(0)).optional(),
   landmarks: z.record(z.string(), z.unknown()).optional(),
   // The skill clip's rule and marks, all playback steps: a run's { windupTo, recoverFrom, run?, launch?, struck? } or a stance's
@@ -52,7 +54,8 @@ const planSchema = z.strictObject({
   encoding: z.enum(['lossless', 'lossy']).default('lossless'),
   quality: z.number().int().min(1).max(100).default(92),
   resample: z.enum(['lanczos3', 'nearest']).default('lanczos3'),
-  reviewPolicy: z.enum(['required', 'format-only']).default('required'),
+  // required: same-foot gait reviews (authoring); engine-loop: loop reviews (hosted generation, video loops); format-only: fixtures.
+  reviewPolicy: z.enum(['required', 'engine-loop', 'format-only']).default('required'),
   motions: z.strictObject({ ...Object.fromEntries(MOTIONS.map(name => [name, motionPlan])),
     ...Object.fromEntries(OPTIONAL_CLIPS.map(name => [name, motionPlan.optional()])) }),
 });
@@ -180,11 +183,13 @@ function checkPlanFields(name, motion) {
     name !== 'idle' && motion.frame !== undefined && 'frame',
     name !== 'walk' && motion.stridePixels !== undefined && 'stridePixels',
     !['walk', 'run'].includes(name) && motion.gaitReview !== undefined && 'gaitReview',
+    !['walk', 'run'].includes(name) && motion.loopReview !== undefined && 'loopReview',
     kind === 'gait' && motion.hitSequenceIndices !== undefined && 'hitSequenceIndices',
     kind === 'gait' && motion.landmarks !== undefined && 'landmarks',
     name !== 'skill' && motion.skill !== undefined && 'skill',
   ].filter(Boolean);
   if (misplaced.length) fail('PLAN_FIELD', `${name}: ${misplaced.join(', ')} not used by this motion`);
+  if (motion.gaitReview !== undefined && motion.loopReview !== undefined) fail('PLAN_FIELD', `${name}: choose gaitReview or loopReview, not both`);
   if (motion.getUpAnimation !== undefined && motion.landmarks?.getUp !== undefined)
     fail('PLAN_FIELD', 'fall: choose getUpAnimation or landmarks.getUp, not both');
 }
@@ -273,7 +278,7 @@ async function packMotion(name, motion, animation, plan) {
     clip.durationMs = steps[0].durationMs;
     if (name === 'walk') {
       const measured = measureStride(contacts);
-      clip.stridePixels = animation.gaitReview?.stridePixels ?? motion.stridePixels ?? (measured >= 1 ? measured : fail('STRIDE_UNMEASURED', 'walk: no verified stride; review actual same-foot stances'));
+      clip.stridePixels = animation.gaitReview?.stridePixels ?? animation.loopReview?.stridePixels ?? motion.stridePixels ?? (measured >= 1 ? measured : fail('STRIDE_UNMEASURED', 'walk: no verified stride; review actual same-foot stances'));
     }
   } else {
     clip.sequence = steps;
@@ -288,10 +293,12 @@ async function packMotion(name, motion, animation, plan) {
     contactsPerFrame: contacts.map(list => list.length), frameKeys: unique.map(u => u.key), events: animation.events,
     ...(animation.loop !== undefined && animation.loop !== motionSpec.loop ? { loopOverridden: { gamePack: animation.loop, contract: motionSpec.loop } } : {}),
     ...(animation.gaitReview ? { gaitReview: { status: 'pass', sequenceSha256: animation.gaitReview.sequenceSha256 } } : {}),
+    ...(animation.loopReview ? { loopReview: { status: 'pass', sequenceSha256: animation.loopReview.sequenceSha256, engine: animation.loopReview.engine,
+      judge: animation.loopReview.judge } } : {}),
     ...(getUp ? { getUp: { animation: motion.getUpAnimation, playbackSteps: getUp.length,
       frames: getUp.map(step => step.frame), frameKeys: animation.getUp.keys, events: animation.getUp.events } } : {}),
     ...(name === 'walk' ? { stride: { used: clip.stridePixels, measured: measureStride(contacts),
-      source: animation.gaitReview ? 'same-foot-review' : motion.stridePixels ? 'plan' : 'silhouette-estimate',
+      source: animation.gaitReview ? 'same-foot-review' : animation.loopReview ? 'loop-review' : motion.stridePixels ? 'plan' : 'silhouette-estimate',
       estimateWarning: 'Nearest silhouette matching may exchange feet and fills missing steps with a median; it is not verified contact.' } } : {}) };
   return { asset, bytes, clip, report, sheet, steps };
 }
@@ -340,6 +347,19 @@ export async function packFighter(planFile) {
     source.release();
     for (const name of ['walk', 'run']) {
       const motion = plan.motions[name];
+      if (plan.reviewPolicy === 'engine-loop') {
+        if (motion.gaitReview) fail('PLAN_FIELD', `${name}: reviewPolicy engine-loop takes loopReview, not gaitReview`);
+        if (!motion.loopReview) fail('LOOP_REVIEW_REQUIRED', `${name}: run fighter:gait loop-review on the final game-pack animation first`);
+        let review;
+        try {
+          review = requireLoopReview(JSON.parse(await readFile(path.resolve(base, motion.loopReview), 'utf8')),
+            { frames: animations[name].frames, durations: animations[name].sourceDurations }, name);
+        } catch (error) { fail(error.message.startsWith('LOOP_') ? error.message.split(':')[0] : 'LOOP_REVIEW_UNREADABLE', `${name}: ${error.message}`); }
+        if (motion.stridePixels !== undefined) fail('GAIT_STRIDE_OVERRIDE', `${name}: remove stridePixels; the loop review supplies it`);
+        animations[name].loopReview = structuredClone(review);
+        continue;
+      }
+      if (motion.loopReview) fail('PLAN_FIELD', `${name}: loopReview needs reviewPolicy engine-loop`);
       if (plan.reviewPolicy === 'required' || motion.gaitReview) {
         if (!motion.gaitReview) fail('GAIT_REVIEW_REQUIRED', `${name}: run fighter:gait review on the final game-pack animation first`);
         let review;
@@ -370,6 +390,7 @@ export async function packFighter(planFile) {
         animation.gaitReview.geometry.groundY *= ratio;
         animation.gaitReview.stridePixels *= ratio;
       }
+      if (animation.loopReview?.stridePixels) animation.loopReview.stridePixels *= ratio;
     }
     // Clips pack independently, and most of the time is libvips WebP encoding off the main thread: run a few at once.
     // Every clip finishes before the first failure in clip order is thrown, so the reported error stays the same.
@@ -408,6 +429,7 @@ export async function packFighter(planFile) {
       motions: Object.fromEntries(clips.map(name => [name, packed[name].report])),
       reviewPolicy: plan.reviewPolicy,
       review: plan.reviewPolicy === 'format-only' ? 'FORMAT ONLY: gait quality is unverified. This mode is for format fixtures; it is not visual approval.'
+        : plan.reviewPolicy === 'engine-loop' ? 'Walk/run passed the engine loop checks and a vision judge, bound to these pixels and durations, with a measured stride. No same-foot stance was measured.'
         : 'Walk/run evidence matches input pixels and durations. All actions still need visual review; file validation is not universal animation approval.' };
     if (!contract.ok) return { ok: false, stage: contract.stage, errors: contract.errors, report };
     // Stage beside the target, validate the staged files (decoded pixels, crops, alpha), then publish with one rename.

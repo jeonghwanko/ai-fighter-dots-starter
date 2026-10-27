@@ -200,6 +200,46 @@ export function requireReview(review, sequence, motion) {
   return review;
 }
 
+// The hosted generation's walk/run evidence (reviewPolicy `engine-loop`, 2026-10-28). A loop a video model filmed rolls its feet and
+// draws toes as bumps, so the same-foot stance measurement above rarely isolates one foot without luck in the pixels. This record
+// instead binds, to the final game-pack frames: the engine's own checks on the cut it took (sprite-gen video-loop and
+// video-cycle-align recorded no retake reason), a vision judge's four verdicts, and the stride the generator measured on the feet.
+// It is never a same-foot stance claim; packs that take it say so in their report.
+export const LOOP_VISUAL = ['identity', 'anatomy', 'alternation', 'loop'];
+const retakeReasons = record => record ? (Array.isArray(record.reasons) ? record.reasons : record.reason ? [record.reason] : ['unnamed']) : [];
+
+/** The loop review of `sequence` (the game-pack animation) from its strip's metadata, the judge's verdicts and the measured stride. */
+export function loopReview({ motion, sequence, strip, visual, judge, stridePixels }) {
+  const errors = [];
+  if (!['walk', 'run'].includes(motion)) throw Error('Loop reviews cover walk and run');
+  const expected = spec.motions[motion].frames;
+  if (sequence.frames.length !== expected) errors.push({ code: 'FRAME_COUNT', actual: sequence.frames.length, expected });
+  if (new Set(sequence.frames.map(f => digest(f.data))).size !== sequence.frames.length) errors.push({ code: 'DUPLICATE_FRAME' });
+  const retake = [...retakeReasons(strip?.retake), ...retakeReasons(strip?.cycle_align?.retake)];
+  if (retake.length) errors.push({ code: 'ENGINE_RETAKE', reasons: retake });
+  for (const item of LOOP_VISUAL) if (visual?.[item] !== 'pass') errors.push({ code: 'VISUAL_' + item.toUpperCase(), verdict: visual?.[item] ?? null });
+  if (typeof visual?.notes !== 'string' || !visual.notes.trim()) errors.push({ code: 'VISUAL_NOTES' });
+  if (typeof judge !== 'string' || !judge.trim()) errors.push({ code: 'JUDGE_UNNAMED' });
+  if (motion === 'walk' && !positive(stridePixels)) errors.push({ code: 'STRIDE_UNMEASURED' });
+  return { kind: 'ai-fighter-loop-review', version: 1, motion, status: errors.length ? 'fail' : 'pass', sequenceSha256: sequenceHash(sequence),
+    durationSeconds: sequence.durations.reduce((sum, ms) => sum + ms, 0) / 1000, errors,
+    engine: { kind: strip?.kind ?? null, cutFrames: strip?.cycle_align?.from ?? null, seam: strip?.cycle_align?.seam_ratio ?? null,
+      beatJolt: strip?.cycle_align?.beat?.jolt ?? null, retake },
+    visual: visual ? Object.fromEntries([...LOOP_VISUAL, 'notes'].map(key => [key, visual[key] ?? null])) : null, judge: judge ?? null,
+    stridePixels: motion === 'walk' && positive(stridePixels) ? round(stridePixels) : null,
+    scope: 'Engine loop checks, a vision judge and a measured stride; no same-foot stance measurement (hosted generation).' };
+}
+
+export function requireLoopReview(review, sequence, motion) {
+  if (review?.kind !== 'ai-fighter-loop-review' || review.version !== 1 || review.motion !== motion || review.status !== 'pass' ||
+      review.errors?.length !== 0) throw Error('LOOP_REVIEW_REQUIRED: ' + motion);
+  if (review.sequenceSha256 !== sequenceHash(sequence)) throw Error('LOOP_REVIEW_STALE: ' + motion);
+  if (!LOOP_VISUAL.every(key => review.visual?.[key] === 'pass') || !review.visual?.notes?.trim() || !review.judge?.trim() ||
+      !Array.isArray(review.engine?.retake) || review.engine.retake.length || (motion === 'walk' && !positive(review.stridePixels)))
+    throw Error('LOOP_REVIEW_INCOMPLETE: ' + motion);
+  return review;
+}
+
 // Assets already share a calibrated coordinate space. Measure neutral reference height once;
 // do not reinterpret a crouch, fall or extended attack's bounding box as standing body height.
 export async function commonGameRequest(config, base) {
