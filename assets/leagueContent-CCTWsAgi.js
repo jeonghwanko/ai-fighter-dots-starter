@@ -1,0 +1,1 @@
+import{r as e}from"./leagueContent-CPxtSCYe.js";export{e as profiles};

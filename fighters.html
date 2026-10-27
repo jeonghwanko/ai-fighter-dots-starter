@@ -28,7 +28,7 @@
       }
     } catch {}
   </script>
-  <script type="module" crossorigin src="/assets/fighters-Bwc0Z9Si.js"></script>
+  <script type="module" crossorigin src="/assets/fighters-DBe1Ao0_.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/_oddbout-analytics-CVMKP0F5.js">
   <link rel="modulepreload" crossorigin href="/assets/fighterCreatorLocale-Bh29uOe8.js">
   <link rel="modulepreload" crossorigin href="/assets/Locale-BoqNfY5_.js">
@@ -40,17 +40,17 @@
   <link rel="modulepreload" crossorigin href="/assets/arenaRankings-CL0F9ETr.js">
   <link rel="modulepreload" crossorigin href="/assets/ArenaBoutLink-CHN2seHZ.js">
   <link rel="modulepreload" crossorigin href="/assets/city-tournament-azouTl3-.js">
-  <link rel="modulepreload" crossorigin href="/assets/fighterStory-cuUMNFLS.js">
-  <link rel="modulepreload" crossorigin href="/assets/communityRoster-DCwqC7E4.js">
+  <link rel="modulepreload" crossorigin href="/assets/fighterStory-C3nlljEv.js">
+  <link rel="modulepreload" crossorigin href="/assets/communityRoster-BslOXrxd.js">
   <link rel="modulepreload" crossorigin href="/assets/portraitLock-DYcks80K.js">
   <link rel="modulepreload" crossorigin href="/assets/OddboutCommunity-yZWAEfH9.js">
   <link rel="modulepreload" crossorigin href="/assets/siteChrome-orbJmA5P.js">
   <link rel="modulepreload" crossorigin href="/assets/siteLinks-Cb1kHGko.js">
-  <link rel="modulepreload" crossorigin href="/assets/leagueContent-DSYeKxRL.js">
+  <link rel="modulepreload" crossorigin href="/assets/leagueContent-CPxtSCYe.js">
   <link rel="stylesheet" crossorigin href="/assets/communityRoster-CM2Fh51h.css">
   <link rel="stylesheet" crossorigin href="/assets/portraitLock-wH03GdfC.css">
   <link rel="stylesheet" crossorigin href="/assets/siteChrome-CJUCzMHH.css">
-  <link rel="stylesheet" crossorigin href="/assets/fighters-62vGVFgw.css">
+  <link rel="stylesheet" crossorigin href="/assets/fighters-BtNI4KP5.css">
   <link rel="stylesheet" crossorigin href="/assets/league-DFfqQdmM.css">
 </head>
 <body>
@@ -113,10 +113,13 @@
         <div class="profile-concept" id="profile-concept" hidden></div>
         <ul class="profile-tags" id="profile-tags" aria-label="캐릭터 특징" data-label="tags"></ul>
         <div class="profile-voice"><blockquote id="profile-quote"></blockquote><button id="profile-listen" class="profile-listen" aria-pressed="false"><svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M11 4 5 9H2v6h3l6 5V4Z"/><path d="M15 8a6 6 0 0 1 0 8m3-11a10 10 0 0 1 0 14"/></svg><span>목소리 듣기</span><span class="profile-wave" aria-hidden="true">▂ ▅ ▃ ▆</span></button></div>
-        <div class="profile-record" id="profile-record" hidden></div>
+        <div class="profile-record" id="profile-record" hidden><button type="button" class="record-total record-toggle" id="profile-record-toggle" aria-expanded="false" aria-controls="profile-record-panel"></button></div>
         <div class="profile-story" id="profile-story" hidden></div>
+        <div id="profile-world"></div>
         <div class="profile-actions"><span id="profile-status" class="profile-status" hidden></span><a id="profile-arena" class="button dark" href="./fighter.html?lang=ko" data-destination="fighter.html"><span>경기장 입장</span></a><a id="profile-join" href="#join"><span data-copy="profileCreate">선수 만들기 →</span></a></div>
       </div>
+      <!-- The record panel: the record line above opens it (2026-10-27 사용자: "현재 전적만 나오고, 그걸 눌러서 최신 승패 리스트와 평가를 볼 수 있게"). A wide screen widens the dialog by this column; a narrower one lays it over the words; a phone over the whole dialog. -->
+      <section class="record-panel" id="profile-record-panel" aria-labelledby="profile-record-toggle" tabindex="-1"><button type="button" class="record-panel-back" id="profile-record-back"></button><div class="record-list" id="profile-record-list" hidden></div><div class="story-section record-reviews" id="profile-record-reviews" hidden></div></section>
     </div>
     <div class="profile-footer"><button id="profile-prev" aria-label="이전 파이터 프로필" data-label="profilePrev">← <span id="profile-prev-name"></span></button><span id="profile-position">01 / 09</span><button id="profile-next" aria-label="다음 파이터 프로필" data-label="profileNext"><span id="profile-next-name"></span> →</button></div>
   </dialog>
