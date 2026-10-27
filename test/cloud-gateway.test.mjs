@@ -42,3 +42,32 @@ test('oversized requests and upstream failures do not leak OAuth tokens or retur
     assert.equal(failed.status,502);assert.ok(!(await failed.text()).includes('private-token'));
   });
 });
+async function streamingServer(fetcher,options,run) {
+  const server=createServer(async(req,res)=>{if(!await cloudGateway(req,res,fetcher,options)){res.writeHead(404);res.end();}});
+  await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
+  try{await run('http://127.0.0.1:'+server.address().port)}finally{server.closeAllConnections();await new Promise(resolve=>server.close(resolve));}
+}
+const events=(count,gapMs,signal)=>new ReadableStream({async start(controller){
+  for(let i=0;i<count;i++){await new Promise(r=>setTimeout(r,gapMs));if(signal?.aborted){controller.error(new Error('aborted'));return;}controller.enqueue(new TextEncoder().encode(`data: ${i}\n\n`));}
+  controller.close();}});
+test('a streamed MCP response may outlast the header timeout; only the wait for headers is bounded',async()=>{
+  await streamingServer(async(url,options)=>new Response(events(4,60,options.signal),{headers:{'content-type':'text/event-stream'}}),{headerTimeoutMs:50,totalTimeoutMs:5000},async base=>{
+    const response=await fetch(base+'/mcp',{method:'POST',body:'{}'});
+    assert.equal(response.status,200);
+    assert.equal((await response.text()).match(/data: /g).length,4,'all four events arrived although the stream took longer than the header timeout');
+  });
+  await streamingServer(async(url,options)=>new Promise((resolve,reject)=>options.signal.addEventListener('abort',()=>reject(new Error('aborted')))),{headerTimeoutMs:50,totalTimeoutMs:5000},async base=>{
+    assert.equal((await fetch(base+'/mcp',{method:'POST',body:'{}'})).status,502,'no headers in time');
+  });
+});
+test('a client that goes away stops the upstream request',async()=>{
+  let upstream;
+  await streamingServer(async(url,options)=>{upstream=options.signal;return new Response(events(50,40,options.signal),{headers:{'content-type':'text/event-stream'}});},{headerTimeoutMs:1000,totalTimeoutMs:10000},async base=>{
+    const client=new AbortController();
+    const response=await fetch(base+'/mcp',{method:'POST',body:'{}',signal:client.signal});
+    const reader=response.body.getReader(); await reader.read();
+    client.abort();
+    await new Promise(r=>setTimeout(r,200));
+    assert.equal(upstream.aborted,true);
+  });
+});
