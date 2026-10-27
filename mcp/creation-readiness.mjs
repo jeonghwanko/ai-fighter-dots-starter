@@ -101,8 +101,9 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
     if (changed('package.json') || changed('package-lock.json')) result.nextCommands.push('npm ci --ignore-scripts');
     if (changed('vendor/sprite-gen') || !present.source) result.nextCommands.push('npm run sprite:setup');
     result.nextCommands.push('npm run sprite:status');
-    // This MCP process still runs the code it started with.
-    result.restartRequired = result.changedFiles.some(f => /^(mcp|api|contracts|scripts)\//.test(f) || /^package(-lock)?\.json$/.test(f));
+    // This MCP process still runs the code it started with, while what it forks or spawns (server/ validator, tools/
+    // gait, scripts) loads the new code: restart so both sides agree. deploy/ JSON is read once at startup.
+    result.restartRequired = result.changedFiles.some(f => /^(mcp|api|contracts|scripts|server|deploy|tools)\//.test(f) || /^package(-lock)?\.json$/.test(f));
     return { ...result, status: 'updated' };
   }
   if (!present.source) return result; // checkKit adds the install commands
