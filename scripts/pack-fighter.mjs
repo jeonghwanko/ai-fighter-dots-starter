@@ -189,6 +189,21 @@ function checkPlanFields(name, motion) {
     fail('PLAN_FIELD', 'fall: choose getUpAnimation or landmarks.getUp, not both');
 }
 
+const PACK_CONCURRENCY = 4;
+/** `task` over `items`, at most `limit` at a time; results in item order, as Promise.allSettled reports them. */
+async function mapLimited(items, limit, task) {
+  const results = new Array(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      try { results[index] = { status: 'fulfilled', value: await task(items[index]) }; }
+      catch (reason) { results[index] = { status: 'rejected', reason }; }
+    }
+  }));
+  return results;
+}
+
 function encode(sheet, plan) {
   const image = sharp(sheet.data, { raw: { width: sheet.width, height: sheet.height, channels: 4 } });
   return (plan.encoding === 'lossless' ? image.webp({ lossless: true, effort: 6 })
@@ -356,8 +371,12 @@ export async function packFighter(planFile) {
         animation.gaitReview.stridePixels *= ratio;
       }
     }
-    const packed = {};
-    for (const name of clips) packed[name] = await packMotion(name, plan.motions[name], animations[name], plan);
+    // Clips pack independently, and most of the time is libvips WebP encoding off the main thread: run a few at once.
+    // Every clip finishes before the first failure in clip order is thrown, so the reported error stays the same.
+    const settled = await mapLimited(clips, PACK_CONCURRENCY, name => packMotion(name, plan.motions[name], animations[name], plan));
+    const failed = settled.find(result => result.status === 'rejected');
+    if (failed) throw failed.reason;
+    const packed = Object.fromEntries(clips.map((name, index) => [name, settled[index].value]));
     // Borrowed cells may name a playback step ({ clip, step }); deduplication decides its frame index.
     const borrow = (cell, at) => {
       if (!cell || typeof cell !== 'object' || cell.step === undefined) return cell;
