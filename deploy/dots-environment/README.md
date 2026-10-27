@@ -29,7 +29,10 @@ Every task sources `/workspace/.oddbout-tools/env.sh` before its first command. 
 is `/workspace/.oddbout/runtimes`; the new user's persistent workspace is `/workspace/oddbout-workspace`.
 The template-workspace has only setup receipts and must not be reused as a user's character workspace.
 No service keys, `.grok` login, ODDBOUT sessions, private source files, or character jobs belong in the image.
-The preparer's file-presence check is an aid, not a certificate that an arbitrary home directory is clean.
+The presence-only guard allows an empty `.grok` directory or only its official `bin` cache: launching
+`grok --version` may create that cache before login. Authentication, unknown/hidden entries, symlinked
+Grok/cache paths, ODDBOUT auth and injected API/service keys remain blocked. This is an aid, not a
+certificate that an arbitrary home directory is clean.
 
 Allow the actual package/login/media endpoints in the environment's network settings before publishing:
 
