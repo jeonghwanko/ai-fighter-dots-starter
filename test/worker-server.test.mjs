@@ -56,3 +56,28 @@ test('worker errors leave the service available for the next durable retry', asy
     assert.equal(calls, 2);
   } finally { await app.stop(); }
 });
+
+test('health reports a rejected worker credential distinctly and stays up for the gateway', async () => {
+  const logs = [];
+  let failure = Object.assign(new Error('invalid-worker-token'), { status: 401 });
+  const app = createWorkerServer({
+    wakeToken: 'c'.repeat(64), log: line => logs.push(JSON.parse(line)),
+    async run() { if (failure) throw failure; return { stage: 'idle' }; },
+  });
+  await new Promise(resolve => app.server.listen(0, '127.0.0.1', resolve));
+  const base = `http://127.0.0.1:${app.server.address().port}`;
+  const health = async () => { const response = await fetch(`${base}/health`); return [response.status, (await response.json()).queue.status]; };
+  const wake = async () => { await fetch(`${base}/wake`, { method: 'POST', headers: headers('c'.repeat(64)) }); await new Promise(resolve => setTimeout(resolve, 20)); };
+  try {
+    assert.deepEqual(await health(), [200, 'unknown']);
+    await wake();
+    assert.deepEqual(await health(), [200, 'credential-rejected']);
+    assert.ok(logs.some(entry => entry.stage === 'worker-credential-rejected'));
+    failure = new Error('fetch failed');
+    await wake();
+    assert.deepEqual(await health(), [200, 'api-unavailable']);
+    failure = null;
+    await wake();
+    assert.deepEqual(await health(), [200, 'ok']);
+  } finally { await app.stop(); }
+});

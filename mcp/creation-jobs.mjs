@@ -215,5 +215,6 @@ export async function runCreationJob(store, id, jobId, { execute = executeEngine
   } catch { job.status = 'unknown'; job.reason = 'runner-interrupted-or-unexpected-error'; }
   job.stage = stage; job.exitCode = result?.code ?? null; job.signal = result?.signal ?? null;
   job.finishedAt = new Date().toISOString();
-  return store.lock(id, async () => jobs.write(id, job));
+  // A finished (possibly paid) run must not be lost to a concurrent tool call: wait for the lock instead of failing.
+  return store.lock(id, async () => jobs.write(id, job), { waitMs: 10 * 60_000 });
 }

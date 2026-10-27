@@ -41,7 +41,8 @@ function run(command, args, { cwd = root, capture = false } = {}) {
     let stdout = '', stderr = '';
     if (capture) { child.stdout.on('data', chunk => stdout += chunk); child.stderr.on('data', chunk => stderr += chunk); }
     child.once('error', reject);
-    child.once('exit', code => code === 0 ? resolve(stdout) : reject(Error(`${path.basename(command)} exited ${code}: ${stderr.trim()}`)));
+    // 'close', not 'exit': captured output is complete only after the pipes close (git ls-files drives the file list).
+    child.once('close', code => code === 0 ? resolve(stdout) : reject(Error(`${path.basename(command)} exited ${code}: ${stderr.trim()}`)));
   });
 }
 async function files(directory, prefix = '') {
@@ -66,12 +67,18 @@ async function copy(relative, sourceRoot, targetRoot) {
 /** Every repository file the runtime ships: the declared files and directories plus their import closure. */
 export async function runtimeFileList({ sourceRoot = root } = {}) {
   const declared = [...runtimeFiles];
-  for (const directory of runtimeDirectories)
-    for (const file of await files(path.join(sourceRoot, directory))) declared.push(`${directory}/${file}`);
+  // Tracked files only: editor leftovers and untracked experiments in these directories never ship.
+  const tracked = await run('git', ['ls-files', '-z', '--', ...runtimeDirectories], { cwd: sourceRoot, capture: true });
+  declared.push(...tracked.split('\0').filter(Boolean));
   const { files: closure } = await importClosure(sourceRoot, declared.filter(file => !edgeOnlyFiles.includes(file)));
   const leaked = closure.filter(file => edgeOnlyFiles.includes(file));
   if (leaked.length) throw Error(`The local runtime imports Edge-only modules: ${leaked.join(', ')}`);
   return closure;
+}
+/** The kit must be reproducible from its recorded commit: refuse uncommitted, untracked or deleted shipped paths. */
+export async function assertCommitted(paths, { sourceRoot = root } = {}) {
+  const dirty = (await run('git', ['status', '--porcelain', '--', ...paths], { cwd: sourceRoot, capture: true })).trimEnd();
+  if (dirty) throw Error(`Commit runtime changes before bundling:\n${dirty}`);
 }
 /**
  * Fails unless every module in a built runtime resolves there: relative imports to bundled files,
@@ -99,11 +106,14 @@ export async function buildPluginBundle(destination) {
     throw Error('Local sprite-gen edits cannot be bundled; commit them to sprite-gen-agent and move the pin.');
   const vendorFiles = (await run('git', ['ls-files', '-z'], { cwd: vendor, capture: true })).split('\0').filter(Boolean);
   if (!vendorFiles.includes('LICENSE') || !vendorFiles.includes('NOTICE')) throw Error('Missing upstream license or notice');
+  const shipped = await runtimeFileList();
+  await assertCommitted([...shipped, 'package.json', 'plugins/ai-fighter']);
+  const sourceCommit = (await run('git', ['rev-parse', 'HEAD'], { capture: true })).trim();
   const plugin = path.join(out, 'plugins', 'ai-fighter');
   await mkdir(path.dirname(plugin), { recursive: true });
   await cp(path.join(root, 'plugins', 'ai-fighter'), plugin, { recursive: true, force: false, errorOnExist: true });
   const runtime = path.join(plugin, 'runtime'); await mkdir(runtime);
-  for (const file of await runtimeFileList()) await copy(file, root, runtime);
+  for (const file of shipped) await copy(file, root, runtime);
   const omittedVendorFiles = [];
   for (const file of vendorFiles) {
     if (includeVendorFile(file)) await copy(file, vendor, path.join(runtime, 'vendor', 'sprite-gen'));
@@ -135,7 +145,7 @@ export async function buildPluginBundle(destination) {
   const zipBytes = await readFile(zip);
   if (zipBytes.length > 20_000_000) throw Error('Source bundle exceeds the 20 MB distribution budget; review contents before publishing.');
   const report = { version: metadata.version, distribution: 'source', builtOn: `${process.platform}-${process.arch}`, plugin, marketplace: out,
-    zip, bytes: zipBytes.length, sha256: sha(zipBytes), runtimeFiles: Object.keys(hashes).length, spriteGenCommit: pinned, spriteGenSource,
+    zip, bytes: zipBytes.length, sha256: sha(zipBytes), runtimeFiles: Object.keys(hashes).length, sourceCommit, spriteGenCommit: pinned, spriteGenSource,
     bundlePolicy, omittedVendorFiles,
     listingURLs: Object.fromEntries(['websiteURL', 'supportURL', 'privacyPolicyURL', 'termsOfServiceURL']
       .map(key => [key, metadata.extensions['com.openai'].interface[key]])),

@@ -322,7 +322,10 @@ npm run worker:watch
 
 **판정과 인프라 실패를 구분한다.** 패키지 결함(계약 위반·해시·디코딩·빈 프레임)만 `rejected`로 확정한다.
 다운로드 실패·저장소 바이트 불일치·작업 시간 초과·검사 프로세스 오류는 확정하지 않고 `retry-later`로 끝낸다.
-임대가 끝나면 다른 실행이 다시 가져간다. 세 번 모두 실패하면 서버가 `worker-attempt-limit`로 반려한다.
+작업자는 자기 임대로 `worker/release`(`af_release`)를 호출해 작업을 바로 대기열로 돌려준다. 이때 시도 횟수는
+돌려주고 `infra_failures`만 하나 늘린다. 인프라 실패가 연속 10번이면 검사기를 매번 멈추게 하는 패키지로 보고
+`worker-infrastructure-limit`로 반려한다. 돌려주기에 실패하면(옛 API·장애) 예전처럼 임대가 끝난 뒤 다시 가져가며
+시도를 센다. 세 번 모두 실패하면 서버가 `worker-attempt-limit`로 반려한다.
 따라서 일시적인 네트워크 오류가 제작자의 제출 횟수를 쓰지 않는다.
 
 **검사기 버전.** 작업자는 `VALIDATOR_VERSION`을 영수증에 적고 서버는 `af_settings.validator_versions`에 있는 값만 받는다.

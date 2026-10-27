@@ -126,3 +126,20 @@ test('a page plays the engine it names when the server keeps it; any other name 
     assert.equal(await engineOf(await handle(new Request('https://test/ai-fighter/duels',{method:'POST',body}))),'test-v0');
   } finally {await sql.close();}
 });
+
+test('an abandoned reservation stops holding the duel budget; a recent unfinished one still counts',async t=>{
+  // The pair budget counts today's matches (UTC); a six-minute-old reservation is still today only after 00:06.
+  const now=new Date();
+  if(now.getUTCHours()===0 && now.getUTCMinutes()<6) return t.skip('within six minutes of UTC midnight');
+  const {sql,ids}=await duelFixture();
+  try {
+    const reserve=()=>sql.query('select (af_reserve_duel($1,$2,$3,$4)).id',[crypto.randomUUID(),ids[0],ids[1],'test-v1']);
+    // Twenty reservations whose Edge run was killed before it completed or failed.
+    for(let i=0;i<20;i++) await reserve();
+    await assert.rejects(reserve(),/duel-budget/,'in flight within five minutes: the pair budget is held');
+    await sql.query("update af_duels set created_at=now()-interval '6 minutes'");
+    await reserve(); // Abandoned after five minutes: no longer in flight.
+    assert.equal((await sql.query('select count(*)::int as n from af_duels where result is null and failed_at is null')).rows[0].n,21,
+      'abandoned rows are kept for their key retries, only uncounted');
+  } finally {await sql.close();}
+});
