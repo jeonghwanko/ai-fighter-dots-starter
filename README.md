@@ -17,6 +17,8 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 The kit includes sprite-gen, creation workflows, validation tools, and an MCP server for connecting your assistant to the game. The game engine is maintained separately.
 
+In this kit, "sprite-gen" means the sprite-gen engine and CLI pinned at `vendor/sprite-gen`, which comes from [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent), our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen). Commands, paths and the Python package keep the name `sprite-gen`.
+
 ## Register from Dots without a PC
 
 Connect the hosted **ODDBOUT** MCP in ChatGPT Plugins, sign in with Google, then select

@@ -49,6 +49,8 @@ This repository lets each user create their own fighter through Dot. Read
   Recover existing outputs before any retry; a delivery failure is not permission to regenerate. New
   generation needs an explicit new-generation/edit request. Respect capacity stop conditions and the
   selected model; no automatic model/provider switch or helper/security-rule bypass.
+- "sprite-gen" in this repository means the engine and CLI pinned at `vendor/sprite-gen`, from sprite-gen-agent (our fork of
+  Alex Kim's sprite-gen; see the pin note at the end). Commands, paths and the Python package keep the name `sprite-gen`.
 - For local generation, use the bundled `vendor/sprite-gen/SKILL.md` and its referenced workflow. `npm run sprite:setup`
   installs this checkout's source in its own venv. `npm run sprite -- <command>` runs that environment.
 - Use the current user's generation account. Never copy the maintainer's credentials, home paths,

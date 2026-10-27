@@ -27,7 +27,7 @@ npm run plugin:bundle -- output/oddbout-0.4.0
 ```
 
 첫 명령은 이 사용자의 체크아웃/작업 공간을 가리키는 개발용 빌드다. 다른 기기 배포에는 두 번째 명령의
-`oddbout-0.4.0.zip`을 사용한다. ZIP은 원본 소스와 고정된 sprite-gen, LICENSE/NOTICE를 포함하며
+`oddbout-0.4.0.zip`을 사용한다. ZIP은 원본 소스와 고정된 sprite-gen-agent(`vendor/sprite-gen`), 그 LICENSE/NOTICE를 포함하며
 OS별 node_modules·venv·로그인·사용자 결과물은 제외한다. 의존성은 추출한 런타임에서 잠금 파일로 설치한다.
 
 기존 `ai-fighter-local` 마켓플레이스의 소스를 새 디렉터리로 전환하고 `oddbout@ai-fighter-local`을 설치한다.

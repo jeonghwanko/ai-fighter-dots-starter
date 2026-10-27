@@ -1,6 +1,7 @@
 # Dot에서 내 선수 만들기
 
 Dot은 외형을 실제로 보여준 뒤 선택된 원화로 애니메이션을 만든다. 로컬 제작에는 이 저장소의 **sprite-gen**을 사용한다.
+이 문서에서 "sprite-gen"은 `vendor/sprite-gen`에 고정된 sprite-gen 엔진·CLI를 말하며, Alex Kim의 [sprite-gen](https://github.com/aldegad/sprite-gen)을 포크한 [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent)에서 가져온다. 명령·경로·Python 패키지 이름은 그대로 `sprite-gen`이다.
 사용자는 만들고 싶은 캐릭터를 설명한다. Dot은 제작 도구 실행, AI Fighter 패키징, 검사와 요청받은 등록을 맡는다.
 본인의 생성 계정과 선택한 실행 환경을 사용한다. 지원되는 직접 표시 외형 시안에는 PC가 필수가 아니다. 제작자의 로그인·토큰·서비스 키를 배포하지 않는다.
 
