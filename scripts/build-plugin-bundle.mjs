@@ -96,11 +96,6 @@ export async function buildPluginBundle(destination) {
   await writeFile(path.join(plugin, 'runtime-manifest.json'), JSON.stringify({ schemaVersion: 1,
     distribution: 'source', platform: 'any', arch: 'any', spriteGenCommit: pinned, spriteGenSource,
     bundlePolicy, files: hashes }, null, 2) + '\n');
-  await writeFile(path.join(plugin, 'mcp.json'), JSON.stringify({
-    $schema: 'https://agent-plugins.org/schemas/1.0.0/mcp.schema.json', mcpServers: {
-      'ai-fighter-creator': { type: 'stdio', command: 'node', args: ['${PLUGIN_ROOT}/launcher.mjs'], cwd: '${PLUGIN_ROOT}' },
-    },
-  }, null, 2) + '\n');
   const metadata = JSON.parse(await readFile(path.join(plugin, 'plugin.json'), 'utf8'));
   const marketDir = path.join(out, '.agents', 'plugins'); await mkdir(marketDir, { recursive: true });
   await writeFile(path.join(marketDir, 'marketplace.json'), JSON.stringify({ name: 'ai-fighter-local',
