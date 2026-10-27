@@ -280,3 +280,14 @@ test('a cup entry stops waiting at its deadline and hands over to get_cup', asyn
   assert.deepEqual([entered.state, entered.next], ['open', 'get_cup']);
   assert.ok(Date.now() - started < 1000, `waited ${Date.now() - started} ms`);
 });
+
+test('browser calls are taken from the agents that connect (ChatGPT, Grok, Grok Bot) and refused from other sites', async () => {
+  // 2026-10-27: Grok's custom connectors and Cursor's Grok Bot connect too (web/cloud-connect agentOf).
+  const handle = createCloudHandler({ db: dbFor() });
+  const preflight = origin => handle(new Request(CLOUD_RESOURCE, { method: 'OPTIONS', headers: { origin } }));
+  for (const origin of ['https://chatgpt.com', 'https://grok.com', 'https://www.grok.com', 'https://www.cursor.com']) {
+    const response = await preflight(origin);
+    assert.equal(response.status, 204, origin); assert.equal(response.headers.get('access-control-allow-origin'), origin);
+  }
+  for (const origin of ['https://evil.example', 'https://grok.com.evil.example', 'http://grok.com']) assert.equal((await preflight(origin)).status, 403, origin);
+});

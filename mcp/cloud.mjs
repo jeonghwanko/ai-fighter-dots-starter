@@ -451,7 +451,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null }) {
       authorization_servers: [CLOUD_ISSUER], scopes_supported: ['openid', 'email', 'profile'],
       resource_name: 'ODDBOUT character registration', resource_documentation: 'https://oddbout.com/docs.html' });
     if (route) return json({ error: 'not_found' }, 404);
-    if (request.headers.has('origin') && !['https://chatgpt.com','https://chat.openai.com','https://platform.openai.com','https://oddbout.com'].includes(request.headers.get('origin')))
+    if (request.headers.has('origin') && !['https://chatgpt.com','https://chat.openai.com','https://platform.openai.com','https://oddbout.com','https://grok.com','https://www.grok.com','https://cursor.com','https://www.cursor.com'].includes(request.headers.get('origin')))
       return json({ error: 'origin_not_allowed' }, 403);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
       'access-control-allow-origin': request.headers.get('origin') ?? 'https://chatgpt.com',

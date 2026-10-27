@@ -15,6 +15,13 @@ Dots의 플러그인에서 ODDBOUT을 연결하고 Google 로그인과 연결 �
 Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른다.
 공개 플러그인 디렉터리 등록은 별도의 OpenAI 심사 절차이며 서버 배포와 다르다.
 
+Grok 연결(2026-10-27): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. 서버 URL은 위 주소, 인증은 OAuth다.
+동의 화면(`web/cloud-connect/connect.mjs`의 `agentOf`)은 에이전트가 돌아갈 주소로 요청한 쪽을 가린다. ChatGPT(Dots)는 두 호스트 어디로든,
+Grok은 `https://grok.com/connectors-oauth-exchange-code/`, Cursor의 Grok Bot(웹)은 `https://www.cursor.com/agents/mcp/oauth/callback`·
+`https://www.cursor.com/bot/mcp/oauth/callback`로만 돌아간다. 데스크톱 클라이언트의 loopback·앱 스킴 주소는 받지 않는다. 화면의 문구와
+"돌아가기" 링크도 그 에이전트를 따른다. xAI는 이 콜백을 문서로 내지 않아 사용자 보고에서 가져왔다. 실제 Grok 연결로 한 번 확인한다.
+MCP 함수의 브라우저 Origin 허용 목록에도 `grok.com`·`www.grok.com`·`cursor.com`·`www.cursor.com`이 있다.
+
 연결 후 대화 입력창에서 `@ODDBOUT`을 입력하고 **플러그인 항목을 선택**한다.
 일반 텍스트로 이름만 입력한 것과 실제 플러그인 선택은 다르다.
 기존 도구 목록이 남아 있으면 설정 → 플러그인 → ODDBOUT → `도구 새로 고침`을 누른다.
