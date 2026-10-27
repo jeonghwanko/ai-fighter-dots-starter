@@ -17,7 +17,7 @@ Dot은 먼저 `get_fighter_spec`의 `creation`과 [사용자별 제작 흐름](D
 ## 제작 흐름
 
 기본은 [대화하며 한 단계씩 만들기](DOT-CREATION.md#0-대화하며-한-단계씩-만들기)다.
-외형, 대기·이동, 공격, 방어·피격, 최종 확인의 다섯 묶음으로 진행한다.
+외형, 대기·이동, 공격, 방어·피격, 최종 확인의 다섯 묶음으로 진행한다. 게임 문맥에 있으면 방어·피격 뒤에 선택 묶음(싸우는 성격·고유 기술)을 한 번 제안한다.
 묶음 안에서는 생성·검수를 이어서 처리하고 결과를 함께 보여준 뒤 피드백을 기다린다. 동작마다 진행 허락을 묻지 않는다.
 피드백 단계를 건너뛰는 것은 사용자가 위임한 범위에 한한다.
 
@@ -76,15 +76,21 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
 | `profile` | 이름, 소개, 초상·미리보기의 애셋 ID와 crop |
 | `profile.language`, `profile.concept`, `profile.moves` | 선택. 작성 언어(`ko`·`en`), 컨셉(세계관, 800자), 표준 동작 `combo`·`slam`·`dash`·`block` 네 개의 기술 이름(24자)·설명(160자). 넣을 때는 네 개 모두 넣는다 |
 | `combat.kitId` | `standard-duel`. 서버가 관리할 규칙의 예약 ID |
+| `profile.lines` | 선택. 경기 전 도전 대사 `challenge`, 경기 뒤 승리 대사 `win`·패배 대사 `lose`(각 40자, 하나 이상). 무투장 말풍선에만 쓴다 |
 | `combat.stats` | 선택. 능력치 등급 `power`·`toughness`·`speed`, 각 1–5, 합은 정확히 9. 없으면 모두 3이다 |
+| `combat.style` | 선택. 싸우는 성격. 닫힌 선택지와 작은 등급만 고른다([계약 안내의 Fighting style](../contracts/ai-fighter/v1/README.md#fighting-style)). 없으면 표준 키트 그대로다 |
 | `appearance` | 정사영, 16도, 오른쪽 원본, 왼쪽 반전, 몸높이 400, 배율 1 |
 | `assets` | 실제 파일의 ID, 경로, MIME, SHA-256, 바이트, 너비·높이 |
-| `clips` | 필수 동작의 시트, 프레임, 기준점, 시간, 접촉 표식 |
+| `clips` | 필수 동작과 [선택 동작](#선택-동작)의 시트, 프레임, 기준점, 시간, 접촉 표식 |
 
 허용하지 않은 필드는 거절한다. 소유자 ID, 선수 ID, 승인 상태, HP, 피해, 사거리, 실행 코드는 서버가 소유한다.
 `combat.stats`는 등급 배분일 뿐이다. 서버가 등급을 자체 수치로 바꾸고, 등록 선수끼리의 AI 대결에만 쓴다.
+`combat.style`도 수치가 아니다. 공격 섞기(`mix`)·특수(`special`)·필살기(`super`)·교전 거리(`distance`)·충격파(`shockwave`)·소환물(`summon`)·
+기질(`temper`)·교전 성향(`exchanges`)을 고르면 서버가 자체 수치로 바꾼다. `skill` 클립·`summon`·`shockwave`는 합쳐서 두 개까지다.
 성격·소개·컨셉·기술 이름은 표시용 데이터다. 새 동작을 만들거나 AI나 게임에 실행을 지시하는 문장이 아니다.
-새 필드는 서버의 `/spec` `features`에 `profile-extras-1`·`combat-stats-1`이 있을 때만 제출한다. 없으면 제출 도구가 업로드 전에 멈춘다.
+새 필드는 서버의 `/spec` `features`에 해당 기능이 있을 때만 제출한다. 없으면 제출 도구가 업로드 전에 멈춘다.
+`language`·`concept`·`moves`는 `profile-extras-1`, `profile.names`는 `profile-names-1`, `profile.lines`는 `profile-lines-1`,
+`combat.stats`는 `combat-stats-1`, `combat.style`은 `combat-style-1`, 선택 동작 `skill`·`entrance`·`victory`는 `extra-clips-1`이다.
 계정당 선수는 최대 3명이다. 새 선수 등록 시 `fighterId`를 생략하고, 기존 선수를 수정할 때만 해당 ID를 지정한다. 나중에 컨셉·기술 이름·능력치·원화를 바꾸려면 다시 패키징해 같은 선수의 `fighterId`로 제출한다(`submit_fighter_package`의 `fighterId`). 선수 ID와 전적은 유지되고, 지난 경기는 당시 패키지 기준 기록으로 남는다.
 `standard-duel`을 선택해도 경쟁 규칙의 통합이나 서버 연결이 완료되지는 않는다.
 
@@ -132,6 +138,24 @@ MCP 파일 경로는 `AI_FIGHTER_ROOT`를 기준으로 `output/my-fighter/fighte
   `getUp`은 `{ clip, frame, durationMs }` 배열이다. 일어서기의 합산 시간도 10초 이하다.
 
 접촉 표식은 그림의 박자다. 실제 공격 횟수·피해·판정 시간은 신뢰된 게임 규칙이 정한다.
+
+## 선택 동작
+
+필수 동작 밖에 세 동작을 더 넣을 수 있다(`spec.json` `optionalClips`). 형식과 시간 규칙은 필수 전투 동작과 같다.
+
+| 동작 | 내용 | 시간·표식 |
+| --- | --- | --- |
+| `skill` | 고유 기술 한 동작: 예고·접촉(또는 돌진, 자세 창)·회수 | 접촉 0~1개, `skill.kind`와 표식 |
+| `entrance` | 경기 시작 전 제자리 등장 | 접촉 없음 |
+| `victory` | 이긴 뒤 승리 자세 반복 | 접촉 없음, 반복 |
+
+- `skill.kind`는 `stretch`·`pincer`·`flight`·`feint`·`slide`·`counter`·`brace` 가운데 하나다. 기술의 규칙 수치는 서버가 정한다.
+- `stretch`·`pincer`는 접촉 1개이고 첫 접촉이 360 ms 이후에 시작한다.
+- `flight`·`feint`·`slide`는 `skill.windupTo`(예고가 끝나는 단계) < `skill.recoverFrom`(회수가 시작하는 단계)이고 `windupTo`가 240 ms 이후에 시작한다.
+  선택 표식 `run`(돌진 동안 번갈아 그릴 두 단계), `launch`, `struck`도 재생 단계 번호다.
+- `counter`(반격)·`brace`(버티기)는 접촉 1개이고 `skill.windowFrom` < `windowTo` ≤ `strikeFrom` ≤ 접촉 < `strikeTo`다.
+  `windowFrom`..`windowTo`가 자세 창(200~1000 ms), `strikeFrom`..`strikeTo`가 쳐내는 구간이며 `windowFrom`은 100 ms 이후에 시작한다.
+- 자세한 뜻과 오류 코드는 [계약 안내의 Optional clips](../contracts/ai-fighter/v1/README.md#optional-clips)를 따른다.
 샘플 로봇은 파일 형식 시험용이다. 넘어짐·연타 등의 연기 품질을 보여주는 작품이 아니다.
 
 ## 검사 결과 읽기

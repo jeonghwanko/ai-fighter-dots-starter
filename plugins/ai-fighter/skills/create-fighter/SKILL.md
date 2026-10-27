@@ -51,6 +51,7 @@ do not require a PC or leave the user's chosen VM scope. Packaging still uses th
 ## Work in review groups
 
 Complete appearance, locomotion, attacks, defense, and final review in the game's order.
+Offer the optional style group (skill, entrance and victory clips, fighting style) once after defense when the context lists it; skip it if the user declines.
 Finish the agreed group autonomously, show its actual images/animations together, and wait for feedback.
 Positive feedback advances when all other current versions are already accepted and checks pass.
 Praise plus a requested change is a revision. Later delegation does not waive an earlier pending group.

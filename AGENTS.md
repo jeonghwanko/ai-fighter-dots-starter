@@ -16,6 +16,8 @@ This repository lets each user create their own fighter through Dot. Read
 
 - Creation is conversational in meaningful review groups: appearance (concept/idle), locomotion
   (fightIdle/walk/run), attacks (combo/slam/dash), defense and reactions (block/hit/groggy/fall), then final review.
+  When the game context lists the optional style group (skill/entrance/victory clips and the fighting style), offer it once
+  after defense and skip it when the user declines; it never blocks final, but each optional clip a package carries needs a selected, checked version.
   Complete the agreed group autonomously, show its actual previews together, and wait for feedback at the
   group boundary, not after every motion. A positive response advances to the next group without another
   permission question. Only skip review boundaries when the user explicitly delegates those groups.

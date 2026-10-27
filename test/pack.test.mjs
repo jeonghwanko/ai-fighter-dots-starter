@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import sharp from 'sharp';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
+import { toDuelStyle } from '../contracts/ai-fighter/validate.mjs';
 import { packFighter } from '../scripts/pack-fighter.mjs';
 import { loadSequence, sequenceHash } from '../tools/ai-fighter/gait.mjs';
 
@@ -89,6 +90,23 @@ async function addGetUp(directory, change = () => {}) {
 function useGetUp(value) {
   value.motions.fall.getUpAnimation = 'bot/get_up';
   delete value.motions.fall.landmarks.getUp;
+}
+
+// Format fixtures only: the skill replays the slam slower (its contact starts at 2 × skillMs), entrance and victory replay the guard.
+async function addOptionalClips(directory, skillMs = 200) {
+  const file = path.join(directory, 'game-pack.json'), pack = JSON.parse(await readFile(file, 'utf8'));
+  const slam = pack.animations['bot/slam'], guard = pack.animations['bot/fightIdle'];
+  pack.animations['bot/skill'] = { ...structuredClone(slam), durations_ms: slam.frames.map(() => skillMs) };
+  pack.animations['bot/entrance'] = { ...structuredClone(guard), loop: false };
+  pack.animations['bot/victory'] = structuredClone(guard);
+  await writeFile(file, JSON.stringify(pack));
+}
+const style = { mix: { slam: 1, combo: 3, fast: 2 }, special: 'fast', super: 'dash', distance: 4, summon: 'crane',
+  temper: { guard: 2, retreat: 4 }, exchanges: { cross: 3, rush: 1 } };
+function useOptionalClips(value) {
+  value.motions.skill = { animation: 'bot/skill', hitSequenceIndices: [2], skill: { kind: 'pincer' } };
+  value.motions.entrance = { animation: 'bot/entrance' };
+  value.motions.victory = { animation: 'bot/victory' };
 }
 
 test('separate get-up cells share fall storage without entering fall playback, including dedupe', async () => {
@@ -197,6 +215,75 @@ test('a game pack becomes a package that passes full file validation', async () 
   assert.equal(report.scale.resampled, false);
   assert.equal(typeof report.motions.walk.stride.measured, 'number');
   assert.equal(report.motions.walk.stride.source, 'plan');
+});
+test('optional clips, names, bout lines, grades and fighting style pass through to fighter.json', async () => {
+  const directory = await gamePack('optional');
+  await addOptionalClips(directory);
+  const names = { ko: '포장 로봇', en: 'Packed Bot' }, lines = { challenge: 'Ready.', win: 'Format kept.', lose: 'Recalibrating.' };
+  const stats = { power: 4, toughness: 2, speed: 3 };
+  const result = await run(directory, plan(directory, 'fighter', value => {
+    useOptionalClips(value); Object.assign(value.profile, { names, lines, stats, style });
+  }));
+  assert.equal(result.ok, true, JSON.stringify(result.errors));
+  assert.equal(result.stage, 'bytes-hashes-and-full-decode');
+  const fighter = JSON.parse(await readFile(path.join(directory, 'fighter', 'fighter.json'), 'utf8'));
+  assert.deepEqual(fighter.profile.names, names); assert.deepEqual(fighter.profile.lines, lines);
+  assert.deepEqual(fighter.combat, { kitId: 'standard-duel', stats, style });
+  // The skill marks are playback steps, carried as given; the sheet, origins and hashes are measured like every action.
+  const { skill, entrance, victory } = fighter.clips;
+  assert.deepEqual(skill.skill, { kind: 'pincer' }); assert.deepEqual(skill.hitSequenceIndices, [2]);
+  assert.ok(skill.sequence.every(step => step.durationMs === 200));
+  assert.equal(entrance.loop, false); assert.equal(victory.loop, true);
+  assert.deepEqual(entrance.hitSequenceIndices, []); assert.equal(victory.landmarks, undefined);
+  for (const name of ['skill', 'entrance', 'victory']) assert.ok(fighter.assets.some(asset => asset.id === fighter.clips[name].assetId), name);
+  assert.equal(fighter.assets.length, 14);
+  assert.deepEqual(toDuelStyle(fighter), { ...style, skill: 'pincer' });
+  const report = JSON.parse(await readFile(result.report, 'utf8'));
+  assert.deepEqual(Object.keys(report.motions).slice(-3), ['skill', 'entrance', 'victory']);
+  // A stance skill carries its window and strike marks the same way.
+  const stance = { kind: 'counter', windowFrom: 1, windowTo: 2, strikeFrom: 2, strikeTo: 3 };
+  const countered = await run(directory, plan(directory, 'counter', value => { useOptionalClips(value); value.motions.skill.skill = stance; }));
+  assert.equal(countered.ok, true, JSON.stringify(countered.errors));
+  const counter = JSON.parse(await readFile(path.join(directory, 'counter', 'fighter.json'), 'utf8'));
+  assert.deepEqual(counter.clips.skill.skill, stance); assert.equal(toDuelStyle(counter).skill, 'counter');
+  // Without the optional fields the package is the one it always was.
+  const plain = await run(directory, plan(directory, 'plain'));
+  assert.equal(plain.ok, true, JSON.stringify(plain.errors));
+  const baseline = JSON.parse(await readFile(path.join(directory, 'plain', 'fighter.json'), 'utf8'));
+  assert.deepEqual(Object.keys(baseline.clips), Object.keys(example.clips));
+  assert.deepEqual(baseline.combat, { kitId: 'standard-duel' }); assert.equal(toDuelStyle(baseline), null);
+});
+test('optional clips are checked by the plan and by the contract before anything is written', async () => {
+  const directory = await gamePack('optional-invalid');
+  await addOptionalClips(directory);
+  // A stance whose 1200 ms window (one step) outlasts the bout's rhythm.
+  const packFile = path.join(directory, 'game-pack.json'), source = JSON.parse(await readFile(packFile, 'utf8'));
+  source.animations['bot/skill-long'] = { ...source.animations['bot/skill'], durations_ms: [200, 1200, 200, 200] };
+  await writeFile(packFile, JSON.stringify(source));
+  for (const [label, change, code] of [
+    ['skill-on-slam', p => { p.motions.slam.skill = { kind: 'pincer' }; }, 'PLAN_FIELD'],
+    ['unknown-clip', p => { p.motions.taunt = { animation: 'bot/fightIdle' }; }, 'PLAN_SCHEMA'],
+    ['missing-animation', p => { p.motions.victory.animation = 'bot/missing'; }, 'ANIMATION_NOT_FOUND'],
+    ['no-kind', p => { delete p.motions.skill.skill; }, 'SCHEMA_REQUIRED'],
+    ['no-contact', p => { p.motions.skill.hitSequenceIndices = []; }, 'SKILL_CONTACT'],
+    ['run-marks', p => { p.motions.skill = { animation: 'bot/skill', skill: { kind: 'flight', windupTo: 3, recoverFrom: 1 } }; }, 'SKILL_RUN_MARKS'],
+    ['stance-marks', p => { p.motions.skill.skill = { kind: 'counter', windowFrom: 1, windowTo: 3, strikeFrom: 3, strikeTo: 3 }; }, 'SKILL_STANCE_MARKS'],
+    ['stance-window', p => { p.motions.skill.skill = { kind: 'brace', windowFrom: 1, windowTo: 2, strikeFrom: 2, strikeTo: 3 };
+      p.motions.skill.animation = 'bot/skill-long'; }, 'SKILL_WINDOW'],
+    ['mix', p => { p.profile.style = { mix: { slam: 0, combo: 1, fast: 2 } }; }, 'STYLE_MIX'],
+    ['extras', p => { p.profile.style = { summon: 'bolt', shockwave: true }; }, 'STYLE_EXTRAS'],
+    ['long-line', p => { p.profile.lines = { win: 'x'.repeat(41) }; }, 'SCHEMA_MAXLENGTH'],
+  ]) {
+    const result = await run(directory, plan(directory, label, p => { useOptionalClips(p); change(p); }));
+    assert.equal(result.ok, false, label);
+    assert.ok(result.errors.some(e => e.code === code), label + JSON.stringify(result.errors));
+    assert.equal(await stat(path.join(directory, label)).then(() => true, () => false), false, label);
+  }
+  // A contact sooner than the tell floor (two 90 ms steps) is too fast to read.
+  const quick = await gamePack('optional-quick');
+  await addOptionalClips(quick, 90);
+  const tell = await run(quick, plan(quick, 'fighter', useOptionalClips));
+  assert.ok(tell.errors.some(e => e.code === 'SKILL_TELL' && e.path === '/clips/skill/hitSequenceIndices/0'), JSON.stringify(tell.errors));
 });
 test('packing is deterministic, never overwrites and writes nothing for an invalid plan', async () => {
   const directory = await gamePack('repeat-run');

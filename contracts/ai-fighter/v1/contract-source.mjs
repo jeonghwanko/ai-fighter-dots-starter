@@ -29,6 +29,43 @@ export const motions = {
 };
 
 /**
+ * Optional clips (2026-10-27, 전투 스타일 v2 — docs/Plan/2026-10-27-oddbout-agent-world 2단계): a fighter may add them; none is required. The
+ * skill clip IS his skill — its `skill.kind` picks one of the engine's closed skill rules and its marks time it (`combatStyle.skillKinds`).
+ */
+export const optionalClips = {
+  skill: { kind: 'action', loop: false, minHits: 0, maxHits: 1, purpose: '고유 기술 한 동작: 예고·접촉(또는 돌진, 자세 창)·회수. 종류는 skill.kind.' },
+  entrance: { kind: 'action', loop: false, minHits: 0, maxHits: 0, purpose: '경기 시작 전 제자리 등장 동작.' },
+  victory: { kind: 'action', loop: true, minHits: 0, maxHits: 0, purpose: '이긴 뒤 승리 자세 반복.' },
+};
+
+/**
+ * The fighting style a creator picks (2026-10-27): closed choices and small grades only — the server maps each to its own tuning
+ * (`RegisteredDuelStyle.ts`). Skill kinds are the engine's rules a single skill clip can time: a strike with one contact (stretch, pincer), a
+ * run with a tell and a recovery (flight, feint, slide), or a stance with a window and a strike segment (counter, brace — 2026-10-27).
+ * `extrasBudget`: of the skill clip, a summon and the shockwave, at most this many.
+ */
+export const combatStyle = Object.freeze({
+  skillKinds: Object.freeze(['stretch', 'pincer', 'flight', 'feint', 'slide', 'counter', 'brace']),
+  strikeKinds: Object.freeze(['stretch', 'pincer']),
+  stanceKinds: Object.freeze(['counter', 'brace']),
+  actions: Object.freeze(['slam', 'combo', 'fast']),
+  supers: Object.freeze(['slam', 'combo', 'fast', 'dash']),
+  summons: Object.freeze(['crane', 'bolt', 'sportsCar', 'roadster']),
+  mix: Object.freeze({ min: 0, max: 4 }),
+  grade: Object.freeze({ min: 1, max: 5 }),
+  temper: Object.freeze(['guard', 'retreat', 'measure', 'patience']),
+  exchanges: Object.freeze({ keys: Object.freeze(['cross', 'pinball', 'rush']), min: 0, max: 3 }),
+  extrasBudget: 2,
+  // The tell a person must be able to read: a strike's first contact, a run's tell end, a stance's window start, at least this far in.
+  tellFloorMs: Object.freeze({ strike: 360, run: 240, stance: 100 }),
+  // A stance's window (windowFrom..windowTo): long enough to meet a swing, never a guard that outlasts the bout's rhythm.
+  stanceWindowMs: Object.freeze({ min: 200, max: 1000 }),
+});
+
+/** Display lines (2026-10-27): what he says before a bout and after it. Text only — the arena shows them. */
+export const profileLines = Object.freeze({ keys: Object.freeze(['challenge', 'win', 'lose']), maxLength: 40 });
+
+/**
  * The standard-duel kit's four moves a creator may name (display only — the moves themselves are the kit's), and the duel grades a creator
  * allocates (2026-10-23). Grades are not HP or damage: the server maps each grade to its own tuning (`RegisteredDuelStats.ts`).
  */
@@ -60,9 +97,22 @@ function clipSchema(name, motion) {
     fields.sequence = array(object({ frame: integer(0, 63), durationMs: number(1, 2000) }), 1, 128);
     fields.hitSequenceIndices = { ...array(step, motion.minHits, motion.maxHits), uniqueItems: true };
     if (landmarks[name]) fields.landmarks = landmarks[name];
+    // The skill clip names its rule and carries its run's or its stance's marks (a strike's contact is `hitSequenceIndices`).
+    if (name === 'skill') fields.skill = optionalObject({ kind: { enum: combatStyle.skillKinds }, windupTo: step, recoverFrom: step,
+      run: pair, launch: step, struck: step, windowFrom: step, windowTo: step, strikeFrom: step, strikeTo: step }, ['kind']);
   }
   return { ...object(fields), description: motion.purpose };
 }
+
+const grades = keys => optionalObject(Object.fromEntries(keys.map(key => [key, integer(combatStyle.grade.min, combatStyle.grade.max)])), []);
+const style = optionalObject({
+  mix: object(Object.fromEntries(combatStyle.actions.map(action => [action, integer(combatStyle.mix.min, combatStyle.mix.max)]))),
+  special: { enum: combatStyle.actions }, super: { enum: combatStyle.supers },
+  distance: integer(combatStyle.grade.min, combatStyle.grade.max),
+  shockwave: { const: true }, summon: { enum: combatStyle.summons },
+  temper: grades(combatStyle.temper),
+  exchanges: optionalObject(Object.fromEntries(combatStyle.exchanges.keys.map(key => [key, integer(combatStyle.exchanges.min, combatStyle.exchanges.max)])), []),
+}, []);
 
 export const schema = {
   $schema: 'http://json-schema.org/draft-07/schema#',
@@ -74,14 +124,18 @@ export const schema = {
     profile: optionalObject({ name: text(40), description: text(600), language: { enum: ['ko', 'en'] }, concept: text(800),
       // The name per page language (2026-10-24): shown where that language is on; `name` stays the identity and the fallback.
       names: { type: 'object', additionalProperties: false, minProperties: 1, properties: { ko: text(40), en: text(40) } },
+      // What he says before a bout and after it (2026-10-27): shown by the arena, text only.
+      lines: { type: 'object', additionalProperties: false, minProperties: 1,
+        properties: Object.fromEntries(profileLines.keys.map(key => [key, text(profileLines.maxLength)])) },
       moves: object(Object.fromEntries(namedMoves.map(move => [move, object({ name: text(24), description: text(160) })]))),
       portrait: ref('imageView'), preview: ref('imageView') }, ['name', 'description', 'portrait', 'preview']),
     combat: optionalObject({ kitId: { const: 'standard-duel' },
-      stats: object(Object.fromEntries(combatStats.keys.map(key => [key, integer(combatStats.min, combatStats.max)]))) }, ['kitId']),
+      stats: object(Object.fromEntries(combatStats.keys.map(key => [key, integer(combatStats.min, combatStats.max)]))), style }, ['kitId']),
     appearance: object({ projection: { const: 'orthographic' }, elevationDegrees: { const: 16 },
       sourceFacing: { const: 'right' }, leftFacing: { const: 'mirror' }, bodyHeight: { const: 400 }, bodyScale: { const: 1 } }),
     assets: array(ref('asset'), 1, limits.assetCount),
-    clips: object(Object.fromEntries(Object.entries(motions).map(([name, motion]) => [name, clipSchema(name, motion)]))),
+    clips: optionalObject(Object.fromEntries(Object.entries({ ...motions, ...optionalClips }).map(([name, motion]) => [name, clipSchema(name, motion)])),
+      Object.keys(motions)),
   }),
   definitions: {
     asset: object({ id, path: { type: 'string', maxLength: 100, pattern: '^assets/[a-z][a-z0-9-]{0,47}\\.webp$' },
@@ -101,15 +155,18 @@ export const spec = {
     imageEncoding: 'static-webp-with-alpha', frameIndex: 'zero-based-row-major', originUnit: 'frame-local-pixels',
     durationUnit: 'milliseconds', frames: 'contiguous-zero-based', landmarks: 'sequence-step-indices-except-borrowed-frame',
     mirror: 'right-source-left-runtime-flip', bodyHeight: 400, cameraElevationDegrees: 16 },
-  limits, motions,
+  limits, motions, optionalClips,
   // A reader that predates a feature rejects manifests using it (additionalProperties: false): writers emit it only when listed here.
-  features: ['profile-extras-1', 'combat-stats-1', 'profile-names-1'],
+  features: ['profile-extras-1', 'combat-stats-1', 'profile-names-1', 'combat-style-1', 'extra-clips-1', 'profile-lines-1'],
   profileExtras: { languages: ['ko', 'en'], conceptMaxLength: 800, namedMoves, moveNameMaxLength: 24, moveDescriptionMaxLength: 160, nameMaxLength: 40,
     names: '선택. profile.names.ko·en 은 그 언어 화면에 띄울 이름(각 40자). 없는 언어는 profile.name 을 띄운다.',
     note: '컨셉과 기술 이름·설명은 표시용 소개 텍스트다. 기술 이름은 표준 키트의 고정 동작에 붙는다. 새 동작이나 AI 지시가 아니다.' },
   combatStats: { ...combatStats,
     note: '제작자는 등급 배분만 제출한다. 모든 등급의 합은 budget과 같아야 한다. 없으면 모두 default다. 서버가 등급을 자체 수치로 바꾼다.' },
-  combatKits: [{ id: 'standard-duel', description: '서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다. 능력치 등급 배분(combat.stats)만 고른다.',
+  combatStyle: { ...combatStyle,
+    note: '선택. 싸우는 성격을 닫힌 선택지와 작은 등급으로만 고른다(공격 섞기·특수·필살기·교전 거리·충격파·소환물·기질·교전 성향). 서버가 각 값을 자체 수치로 바꾼다. 공격 섞기는 하나 이상이 0보다 크고 fast 는 slam + combo 이하다. 기술은 skill 클립(skill.kind)이 정한다. 기술 클립·소환물·충격파 가운데 extrasBudget 개까지. 없으면 표준 키트 그대로다.' },
+  profileLines: { ...profileLines, note: '선택. 경기 전 도전 대사와 경기 뒤 승리·패배 대사(각 40자). 화면 표시용이다.' },
+  combatKits: [{ id: 'standard-duel', description: '서버가 관리하는 기본 대결 규칙. 제작자는 HP·피해·사거리·코드·AI 지시를 제출하지 않는다. 능력치 등급 배분(combat.stats)과 싸우는 성격(combat.style)만 고른다.',
     integration: 'pending-game-integration',
     currentConsumers: { player: 'FighterFightSkin / Lupin rules', opponent: 'NativeCityKumaArt / CityFighters rules' },
     warning: '현재 플레이어와 AI 상대 규칙은 다르다. 이 ID는 서버 연결 계약이며 통합 경쟁 규칙 구현을 뜻하지 않는다.' }],
