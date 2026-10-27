@@ -87,10 +87,13 @@ async function measure(sequence, plan, stance, out, annotationsBase) {
   args.push('--source', sequence.measurementFile,
     '--contacts', `${stance.start}:${stance.end}`, '--foot-box', stance.box.join(','), '--facing', plan.facing, '--out', out);
   await new Promise((resolve, reject) => {
-    const child = spawn(python, args, { cwd: root, env: { ...process.env, PYTHONUTF8: '1' }, windowsHide: true });
+    // A measurement of one stance interval takes seconds; a bound keeps a stuck engine from holding the review forever.
+    const child = spawn(python, args, { cwd: root, env: { ...process.env, PYTHONUTF8: '1' }, windowsHide: true, timeout: 5 * 60_000 });
     let error = '';
     child.stdout.resume(); child.stderr.on('data', chunk => { error += chunk; });
-    child.on('error', reject); child.on('close', code => code === 0 ? resolve() : reject(Error('inspect-motion failed: ' + error.slice(-3000))));
+    child.on('error', reject);
+    child.on('close', (code, signal) => code === 0 ? resolve()
+      : reject(Error(signal ? `inspect-motion stopped after 5 minutes (${signal})` : 'inspect-motion failed: ' + error.slice(-3000))));
   });
   return json(out);
 }

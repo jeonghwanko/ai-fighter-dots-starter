@@ -28,7 +28,7 @@ test('official game-pack preserves vertical travel of full-canvas external frame
       frames: [0, 1, 2].map(i => ({ file: `${i}.png`, duration: .1 })) }));
     await writeFile(path.join(dir, 'game.json'), JSON.stringify({ version: 1, assets: [{ id: 'run', source: 'run.asset.json', display: { height: 80 }, resample: 'nearest' }] }));
     const packed = spawnSync(python, ['-m', 'sprite_gen.cli', 'game-pack', '--request', path.join(dir, 'game.json'), '--out-dir', path.join(dir, 'pack')],
-      { cwd: root, encoding: 'utf8', windowsHide: true, env: { ...process.env, PYTHONUTF8: '1' } });
+      { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 120_000, env: { ...process.env, PYTHONUTF8: '1' } });
     assert.equal(packed.status, 0, packed.stdout + packed.stderr);
     const result = await loadSequence({ file: 'pack/game-pack.json', animation: 'run' }, dir);
     assert.deepEqual(result.frames.map(f => alphaBounds(f).bottom), [70, 60, 70]);
@@ -63,7 +63,7 @@ test('real bundled inspect-motion verifies both known fixture tracks and rejects
       visual: { identity: 'pass', anatomy: 'pass', alternation: 'pass', loop: 'pass', notes: 'Known-coordinate measurement fixture only.' },
       stances: [{ foot: 'near', start: 1, end: 3, box: [30, 64, 24, 6] }, { foot: 'far', start: 9, end: 11, box: [30, 64, 24, 6] }] };
     await writeFile(path.join(dir, 'annotations.json'), JSON.stringify(annotation));
-    const run = spawnSync(process.execPath, ['scripts/gait.mjs', 'review', path.join(dir, 'plan.json'), path.join(dir, 'review'), path.join(dir, 'annotations.json')], { cwd: root, encoding: 'utf8', windowsHide: true });
+    const run = spawnSync(process.execPath, ['scripts/gait.mjs', 'review', path.join(dir, 'plan.json'), path.join(dir, 'review'), path.join(dir, 'annotations.json')], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 120_000 });
     assert.equal(run.status, 0, run.stdout + run.stderr);
     const report = JSON.parse(await readFile(path.join(dir, 'review/review.json'), 'utf8'));
     assert.equal(report.status, 'pass'); assert.equal(report.stridePixels, 64);
@@ -79,7 +79,7 @@ test('real bundled inspect-motion verifies both known fixture tracks and rejects
     const descriptor = JSON.parse(await readFile(path.join(dir, 'review/measurement/sequence.json'), 'utf8'));
     descriptor.frames[2].file = '2.png.new.png';
     await writeFile(path.join(dir, 'review/measurement/jump.json'), JSON.stringify(descriptor));
-    const inspect = spawnSync(python, ['-m', 'sprite_gen.cli', 'inspect-motion', '--source', path.join(dir, 'review/measurement/jump.json'), '--contacts', '1:3', '--foot-box', '30,62,24,8', '--facing', 'right', '--out', path.join(dir, 'jump.json')], { cwd: root, encoding: 'utf8', windowsHide: true, env: { ...process.env, PYTHONUTF8: '1' } });
+    const inspect = spawnSync(python, ['-m', 'sprite_gen.cli', 'inspect-motion', '--source', path.join(dir, 'review/measurement/jump.json'), '--contacts', '1:3', '--foot-box', '30,62,24,8', '--facing', 'right', '--out', path.join(dir, 'jump.json')], { cwd: root, encoding: 'utf8', windowsHide: true, timeout: 120_000, env: { ...process.env, PYTHONUTF8: '1' } });
     assert.equal(inspect.status, 0, inspect.stdout + inspect.stderr);
     const failed = JSON.parse(await readFile(path.join(dir, 'jump.json'), 'utf8'));
     assert.equal(failed.stride_verified, false);

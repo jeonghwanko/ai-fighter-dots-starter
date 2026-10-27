@@ -9,6 +9,7 @@ import { promisify } from 'node:util';
 import { setTimeout as delay } from 'node:timers/promises';
 import { localPath } from '../mcp/creation-store.mjs';
 import { kitOrigin, releaseMetadata } from './prepare-creator-release.mjs';
+import { bootstrapPython } from './bootstrap-python.mjs';
 
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -76,7 +77,7 @@ export async function validateCandidate(directory, expectedManifestHash) {
   const manifest = JSON.parse(manifestBytes), version = report.relative.split('/')[1];
   const archiveFile = path.join(release, `oddbout-${version}.zip`);
   if (!(await lstat(archiveFile)).isFile()) throw Error('archive-not-regular');
-  const { stdout } = await execute(process.env.AI_FIGHTER_BOOTSTRAP_PYTHON || 'python',
+  const { stdout } = await execute(bootstrapPython(),
     [path.join(root, 'scripts/fetch-creator-kit.py'), 'inspect', archiveFile],
     { windowsHide: true, timeout: 120000, maxBuffer: 1024 * 1024 });
   const archive = JSON.parse(stdout), helper = await readFile(path.join(release, 'fetch-creator-kit.py'));
