@@ -6,7 +6,7 @@
 
 ODDBOUT is a fighting game where you play with a character you create. This repository contains the open-source tools for making that character. Work with an AI assistant to turn a description or reference image into artwork, animations, and a fighter package for the game. The tools and docs also use the name AI Fighter.
 
-[Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Creation guide](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
+[Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Creation guide](START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
 
 ## Gameplay preview
 
@@ -30,13 +30,13 @@ The kit includes sprite-gen, creation workflows, validation tools, and an MCP se
 Connect the hosted **ODDBOUT** MCP in ChatGPT Plugins, sign in with Google, then select
 `@ODDBOUT` in your Dots conversation. The cloud connector handles account checks,
 file transfer and registration; no local MCP installation, API key or callback copying is needed.
-See [cloud connection instructions](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/CLOUD-MCP.md) for the endpoint and first-time setup.
+See [cloud connection instructions](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CLOUD-MCP.md) for the endpoint and first-time setup.
 Image generation, previews and package review still use the selected host and your own generation account.
 The setup below is for running the creation kit in a workspace; it is not required to authenticate the cloud connector.
 
 ## Create with the local kit
 
-Send the [start link](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md) to a new chat with an assistant that can run local commands and access files, such as a supported Dot, Codex, or Claude setup. Add an idea or a reference image. For example:
+Send the [start link](START-HERE.md) to a new chat with an assistant that can run local commands and access files, such as a supported Dot, Codex, or Claude setup. Add an idea or a reference image. For example:
 
 > Make a cat boxer in blue armor for ODDBOUT using this kit.
 > Show me the concept first so we can get the appearance right.
@@ -67,25 +67,21 @@ Using the local kit takes setup and several rounds of review. Time, usage limits
 
 Your assistant shows you actual previews and waits for your feedback after each group. It revises the affected assets and keeps your other selections. You can also ask it to handle later groups on its own. Alongside file checks, the assistant reviews character consistency, movement, foot contact, and timing. You review the results before moving on.
 
-See the [full creation workflow](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/DOT-CREATION.md) for generation, revision, and packaging.
+See the [full creation workflow](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/DOT-CREATION.md) for generation, revision, and packaging.
 
-## Set up the kit yourself
+## Set up the saved Dots VM
 
-Use the **codex/creator-hosting** branch, which contains the public service configuration. For a new installation:
+Start with [one entry point](START-HERE.md). The environment preparer follows [the install recipe](deploy/dots-environment/README.md) once. In the prepared environment:
 
 ```sh
-git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
-npm ci --ignore-scripts
-npm run sprite:setup
-npm run sprite:status
+node dots.mjs --install
 ```
 
-Setup downloads the pinned sprite-gen source into this checkout and installs it in a dedicated Python environment. Use Git clone; the GitHub source ZIP does not contain the submodule files. The status command checks installation, not generation access or quota. Keep an in-progress character workspace in place and avoid pulling repository updates during creation.
+Later requests run `node dots.mjs`. It checks and recovers the same pinned runtime and workspace. Grok device login is connected per user; no login is put into the saved image. The **0.5.5 candidate** is undergoing saved-VM acceptance and is not yet certified for complete creation. Main's historical 0.2.0 package is not used by this Dots entry point.
 
-To connect the tools, follow the [local Codex plugin guide](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/LOCAL-PLUGIN.md). For a manual MCP connection, run `node scripts/print-install.mjs` and follow the printed installation command. Other local hosts can connect `mcp/stdio.mjs` with `AI_FIGHTER_ROOT` set to the checkout.
-
-The [Windows bundle guide](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/PLUGIN-DISTRIBUTION.md) covers a portable package. A local plugin installation does not mean the plugin is listed in a public directory.
+For PC creation and bundle setup, read the [pinned runtime guide](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/ODDBOUT-PLUGIN.md). Execute that runtime's commands in its own checkout, not in this front-door checkout.
 
 ## Register and play
 
@@ -93,23 +89,23 @@ When you choose the final result and ask to register it, your assistant checks t
 
 The server checks your uploaded files before making your fighter available in the game. Your assistant then checks the result to confirm that the fighter is registered and ready to play. The queue can take time to process.
 
-Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same Google account to see your fighter. See [registration, limits, and profile edits](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/OPEN-REGISTRATION.md) for details. Keep login links, callback URLs, and session files private.
+Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same Google account to see your fighter. See [registration, limits, and profile edits](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/OPEN-REGISTRATION.md) for details. Keep login links, callback URLs, and session files private.
 
 ## Help and contributions
 
 If setup, generation, sign-in, registration, or gameplay fails, [open an issue](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues) with the failing step, expected and actual behavior, error message, and tool version or commit. Exclude credentials and private files. For generation or upload timeouts, check existing requests and outputs before retrying.
 
-Bug reports, clearer setup instructions, and reproducible examples are welcome. Read [AGENTS.md](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/AGENTS.md) before using an assistant to change this repository.
+Bug reports, clearer setup instructions, and reproducible examples are welcome. Read [AGENTS.md](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/AGENTS.md) before using an assistant to change this repository.
 
 | Resource | Use it for |
 | --- | --- |
-| [Cloud connection](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/CLOUD-MCP.md) · [Connection recovery](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/CONNECTION-READINESS.md) | Google sign-in, account checks, and cloud registration |
-| [Authoring guide](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/AUTHORING.md) | Fighter files and the package contract |
-| [Creation UX](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/CREATION-UX.md) | Character intake, feedback, and version selection |
-| [Game creation context](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/GAME-CREATION-CONTEXT.md) | Current motions, controls, and timing |
-| [Gait review](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/GAIT-REVIEW.md) | Walk/run quality and contact evidence |
-| [Execution environment](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/EXECUTION-HOST.md) · [Preview delivery](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/DELIVERY.md) | Account isolation, local execution, and actual media display |
-| [Hosting](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/CREATOR-HOSTING.md) · [Security](SECURITY.md) | Deployment and security boundaries |
+| [Cloud connection](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CLOUD-MCP.md) · [Connection recovery](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CONNECTION-READINESS.md) | Google sign-in, account checks, and cloud registration |
+| [Authoring guide](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/AUTHORING.md) | Fighter files and the package contract |
+| [Creation UX](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CREATION-UX.md) | Character intake, feedback, and version selection |
+| [Game creation context](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/GAME-CREATION-CONTEXT.md) | Current motions, controls, and timing |
+| [Gait review](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/GAIT-REVIEW.md) | Walk/run quality and contact evidence |
+| [Execution environment](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/EXECUTION-HOST.md) · [Preview delivery](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/DELIVERY.md) | Account isolation, local execution, and actual media display |
+| [Hosting](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CREATOR-HOSTING.md) · [Security](SECURITY.md) | Deployment and security boundaries |
 
 Local development checks, after installing dependencies:
 

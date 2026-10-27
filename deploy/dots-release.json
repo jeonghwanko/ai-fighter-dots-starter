@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "repository": "https://github.com/jeonghwanko/ai-fighter-dots-starter.git",
+  "commit": "66aab684addabdf211b5d23cd41536aa0bfb33f2",
+  "version": "0.5.5",
+  "provider": "grok",
+  "channel": "candidate",
+  "savedVmAcceptance": "pending",
+  "startInstructions": "docs/DOTS-START.md"
+}

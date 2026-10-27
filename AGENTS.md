@@ -1,5 +1,18 @@
 # AI Fighter creator kit
 
+## Dots entry point
+
+For a repository URL or Dots creation request, read `START-HERE.md` first. Use the dependency-free
+`node dots.mjs --install` front door in the prepared saved VM, and `node dots.mjs` for later requests.
+`deploy/dots-release.json` selects an immutable runtime commit. Do not install the historical package
+on this main checkout for Dots creation. Read the returned runtime's AGENTS.md, creation, delivery and
+account instructions; it owns the supported workflow. Existing workspaces keep their bound version.
+The product path is Dots orchestration with this user's Grok subscription. Preserve originals and
+unknown jobs, never copy credentials or fall back to API billing, and retain group review boundaries.
+The current candidate's actual VM creation acceptance remains pending; never infer success from setup.
+
+## Historical source development
+
 This repository lets each user create their own fighter through Dot. Read
 `docs/DOT-CREATION.md`, `docs/AUTHORING.md`, and the live AI Fighter spec before creating a package.
 
