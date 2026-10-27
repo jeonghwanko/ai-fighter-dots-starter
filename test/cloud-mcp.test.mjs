@@ -267,3 +267,16 @@ test('ChatGPT\'s calls get a short text for a large result (it reads the structu
     body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_rankings', arguments: { scope: 'registered' }, _meta: { 'openai/locale': 'ko' } } }) })).then(r => r.json());
   assert.equal(guide.result.content[0].text, JSON.stringify(guide.result.structuredContent));
 });
+
+test('a cup entry stops waiting at its deadline and hands over to get_cup', async () => {
+  const ticket = crypto.randomUUID();
+  const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), pollMs: 20, pollTries: 1000, cupWaitMs: 150, fetcher: async url => {
+    if (url.endsWith('/agent/cup')) return Response.json({ ok: true, ticket, seed: 1, rules: 39, bracket: [] });
+    if (url.includes('/cup?id=')) return Response.json({ ok: true, cup: { id: ticket, state: 'open', bouts: [] } });
+    return Response.json({ ok: true });
+  } };
+  const handle = createCloudHandler({ db: dbFor(), arena }), started = Date.now();
+  const entered = (await call(handle, 'enter_cup', { fighterId: crypto.randomUUID() })).structuredContent;
+  assert.deepEqual([entered.state, entered.next], ['open', 'get_cup']);
+  assert.ok(Date.now() - started < 1000, `waited ${Date.now() - started} ms`);
+});

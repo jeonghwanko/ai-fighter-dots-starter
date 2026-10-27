@@ -2,6 +2,7 @@ import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
 import { createHandler } from '../api/handler.mjs';
+import { note as checkNote } from '../api/canon.mjs';
 import { registerFileInputProbe } from './file-input-probe.mjs';
 import { Problem, UUID, bearerToken, readBody, sha256 } from '../api/http.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
@@ -243,7 +244,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, host 
 }
 
 /** One arena call: a GET, or a POST with the agent key. A network failure or a body that is not JSON is `arena-unavailable`. */
-async function arenaCall(arena, path, body, owner) {
+const CUP_WAIT_MS = 25_000;
+async function arenaCall(arena, path, body, owner, timeoutMs = 20000) {
   // A read made for someone (`owner`: the connected owner, or `public`) carries the key: the arena counts it against that owner, not this
   // function's one address (MCP 점검 2026-10-27 — every agent together had six reads a minute).
   const headers = body !== undefined ? { 'content-type': 'application/json', 'x-arena-agent': arena.key }
@@ -251,7 +253,7 @@ async function arenaCall(arena, path, body, owner) {
   let response;
   try {
     response = await (arena.fetcher ?? fetch)(`${arena.url}/${path}`, { method: body === undefined ? 'GET' : 'POST', redirect: 'error',
-      signal: AbortSignal.timeout(20000), headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      signal: AbortSignal.timeout(timeoutMs), headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   } catch { throw new Problem(503, 'arena-unavailable'); }
   let value;
   try { value = await response.json(); } catch { throw new Problem(503, 'arena-unavailable'); }
@@ -307,9 +309,11 @@ function registerAgentTools({ register, arena, db, identity, invoke, recordAgent
       const issued = await call('agent/cup', { owner: identity.owner, fighter: fighterId });
       if (!issued.ok) return issued;
       // A cup is fought in about seven seconds: wait for it here so the agent needs no second call (MCP 점검 2026-10-27).
-      for (let i = 0; i < (arena.pollTries ?? 12); i++) {
-        await new Promise(done => setTimeout(done, arena.pollMs ?? 1000));
-        const cup = await call(`cup?id=${issued.ticket}`).catch(() => null);
+      // The whole wait ends by CUP_WAIT_MS, each read bounded by the time left, well inside the Edge request limit.
+      const deadline = Date.now() + (arena.cupWaitMs ?? CUP_WAIT_MS), pollMs = arena.pollMs ?? 1000;
+      for (let i = 0; i < (arena.pollTries ?? 12) && Date.now() + pollMs < deadline; i++) {
+        await new Promise(done => setTimeout(done, pollMs));
+        const cup = await arenaCall(arena, `cup?id=${issued.ticket}`, undefined, undefined, Math.max(1, Math.min(20000, deadline - Date.now()))).catch(() => null);
         if (cup?.ok && cup.cup && cup.cup.state !== 'open') return { ...issued, cup: cup.cup };
       }
       return { ...issued, state: 'open', next: 'get_cup' };
@@ -379,9 +383,12 @@ function registerWorkshopTools({ register, arena, invoke }) {
       proposal: z.object({ canon: z.record(z.string(), z.unknown()).optional(), style: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
         remake: z.string().min(2).max(400).optional() }).strict().optional(), nickname: NICKNAME.optional() },
     async ({ fighterId, kind, body, evidence, proposal, nickname }) => {
-      const failed = await named(nickname); if (failed) return failed;
       const bouts = (evidence ?? []).map(({ cupId, round, slot, a, b, seed }) => cupId !== undefined ? { cup: cupId, round, slot } : { a, b, seed });
-      return send('notes', 'POST', { fighter: fighterId, kind, body, ...(bouts.length ? { evidence: bouts } : {}), ...(proposal ? { proposal } : {}) });
+      const payload = { fighter: fighterId, kind, body, ...(bouts.length ? { evidence: bouts } : {}), ...(proposal ? { proposal } : {}) };
+      // The API's own note check runs here first, so a note it would refuse does not change the public name (set once).
+      try { checkNote(payload); } catch (error) { if (error instanceof Problem) return { ok: false, stage: 'api', code: error.message }; throw error; }
+      const failed = await named(nickname); if (failed) return failed;
+      return send('notes', 'POST', payload);
     }, { write: true, publish: true, openWorld: true });
   register('get_workshop_inbox', '내 공방 받은 글', `The connected user's workshop inbox: open notes about his fighters (the newest 100), relations waiting for him or proposed by him (otherKind: the kind as the other fighter sees it), his fighters' current canon (version: the baseVersion to write over) and his public name. ${DATA_NOTE}`,
     {}, () => invoke('me/workshop'));
@@ -392,9 +399,10 @@ function registerWorkshopTools({ register, arena, invoke }) {
     { action: z.enum(['propose', 'accept', 'decline', 'remove']), fighterId: UUID_ARG().optional(), otherId: UUID_ARG().optional(),
       kind: z.enum(['rival', 'comrade', 'mentor', 'student']).optional(), relationId: UUID_ARG().optional(), nickname: NICKNAME.optional() },
     async ({ action, fighterId, otherId, kind, relationId, nickname }) => {
+      // An incomplete request is refused before the public name changes.
+      if (action === 'propose' ? !(fighterId && otherId && kind) : !relationId) return { ok: false, code: 'invalid-relation' };
       const failed = await named(nickname); if (failed) return failed;
-      if (action === 'propose') return fighterId && otherId && kind ? send('relations', 'POST', { fighter: fighterId, other: otherId, kind }) : { ok: false, code: 'invalid-relation' };
-      if (!relationId) return { ok: false, code: 'invalid-relation' };
+      if (action === 'propose') return send('relations', 'POST', { fighter: fighterId, other: otherId, kind });
       return action === 'remove' ? invoke(`relations/${relationId}`, 'DELETE') : send(`relations/${relationId}/answer`, 'POST', { accept: action === 'accept' });
     }, { write: true, publish: true, openWorld: true });
   register('get_world', '세계', `No worldId: the published worlds and the covers a new world may wear. A worldId: its text, factions, cast, canon chronicle (posts its owner raised) and its fighters' recent cup bouts and reviews. ${DATA_NOTE}`,
