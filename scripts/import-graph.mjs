@@ -1,12 +1,12 @@
-// Module specifiers a JavaScript source imports: static, re-exported, side-effect and literal dynamic imports.
-// Shared by the Edge and plugin bundles so a file list derived from imports cannot miss a module form.
+// The plugin bundle's import graph. The specifier parser lives in edge-bundle.mjs, which must stay a standalone file
+// (the game's Edge deploy stages it alone); both bundles share it so a file list cannot miss a module form.
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
+import { importSpecifiers } from './edge-bundle.mjs';
 
-const SPECIFIER = /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|(?:^|[\s;])import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
 const SCRIPT = /\.(?:mjs|js|ts)$/;
 
-export const importSpecifiers = source => [...source.matchAll(SPECIFIER)].map(match => match[1] ?? match[2] ?? match[3]);
+export { importSpecifiers };
 /** The npm package a bare specifier names (`@scope/name/sub` → `@scope/name`), or null for `node:` builtins. */
 export const packageName = specifier => specifier.startsWith('node:') ? null
   : specifier.split('/').slice(0, specifier.startsWith('@') ? 2 : 1).join('/');

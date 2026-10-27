@@ -27,3 +27,9 @@ test('an import the Edge runtime cannot resolve fails before deploy', async () =
   await writeFile(path.join(temporary, 'fn', 'decode.mjs'), "import sharp from 'sharp';\nexport const decode = sharp;\n");
   await assert.rejects(edgeFiles({ root: temporary, entry: 'fn/index.ts', importMap: 'fn/deno.json', lock: 'fn/deno.lock' }), /sharp/);
 });
+test('edge-bundle.mjs stands alone: the game deploy stages only this file of scripts/', async () => {
+  // crashbang-heroes tools/deploy/ai-fighter-edge.mjs copies api/, contracts/, the function folder and this one script.
+  const { importSpecifiers } = await import('../scripts/edge-bundle.mjs');
+  const source = await (await import('node:fs/promises')).readFile(path.join(repository, 'scripts/edge-bundle.mjs'), 'utf8');
+  assert.deepEqual(importSpecifiers(source).filter(specifier => !specifier.startsWith('node:')), []);
+});

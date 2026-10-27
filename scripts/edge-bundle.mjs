@@ -3,7 +3,12 @@
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { importSpecifiers } from './import-graph.mjs';
+
+// The game's Edge deploy (crashbang-heroes `npm run fighter:edge`) stages this file alone, so it imports no other
+// repository module; scripts/import-graph.mjs reuses this parser for the plugin bundle (test/edge-bundle.test.mjs).
+const SPECIFIER = /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|(?:^|[\s;])import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+/** Module specifiers a source imports: static, re-exported, side-effect and literal dynamic imports. */
+export const importSpecifiers = source => [...source.matchAll(SPECIFIER)].map(match => match[1] ?? match[2] ?? match[3]);
 
 const REPOSITORY = fileURLToPath(new URL('../', import.meta.url));
 const ENTRY = 'supabase/functions/ai-fighter/index.ts';
