@@ -1,19 +1,19 @@
 import { updateFighterProfile } from './fighter-profile.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
-import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { createAccountHandler } from './account.mjs';
 import { createDeviceLoginHandler } from './device-login.mjs';
 import { createAdminHandler } from './admin.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
 import { createWorkshopHandler, workshopRoute } from './workshop.mjs';
-import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, unstorableTextPath, verifiedUserId } from './http.mjs';
+import { createGenerationHandler, generationRoute } from './generations.mjs';
+import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, verifiedUserId } from './http.mjs';
+import { BUCKET, checkedManifest, objectKey, storeAsset } from './submissions.mjs';
 
 export { Problem, readBody, sha256 } from './http.mjs';
-export const BUCKET = 'ai-fighter-beta';
+export { BUCKET, objectKey } from './submissions.mjs';
 // The worker stamps this on every receipt. af_settings.validator_versions lists the versions af_finish accepts.
 export const VALIDATOR_VERSION = 'ai-fighter-validator-0.2.0';
-export const objectKey = (submission, asset) => `${submission.owner_id}/${submission.asset_source_submission ?? submission.id}/${asset.id}.webp`;
 const ROSTER_CORS = { methods: 'GET, OPTIONS' };
 const requireId = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value; };
 // rejected and expired uploads are final: nothing remains to wait for, so pending is empty.
@@ -70,13 +70,15 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       return item.signedUrl;
     });
   }
+  // `worker`: false for a creator; 'validation' or 'generation' for a worker key of that scope (2026-10-27 — the generation worker has its own).
   async function authenticate(request, worker) {
     const token = bearerToken(request);
     if (!token) throw new Problem(401, 'authentication-required');
     if (worker) {
       if (!/^afw_[a-f0-9]{64}$/.test(token)) throw new Problem(403, 'worker-required');
       const hash = await sha256(new TextEncoder().encode(token));
-      const { data, error } = await db.from('af_workers').select('token_hash').eq('token_hash', hash).eq('enabled', true).gt('expires_at', new Date().toISOString()).maybeSingle();
+      const { data, error } = await db.from('af_workers').select('token_hash').eq('token_hash', hash).eq('enabled', true).eq('scope', worker)
+        .gt('expires_at', new Date().toISOString()).maybeSingle();
       check(error); if (!data) throw new Problem(403, 'worker-required');
       return null;
     }
@@ -86,6 +88,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
     return owner;
   }
   const workshopHandler = createWorkshopHandler({ db, authenticate: request => authenticate(request, false), rpc, agentClient });
+  const generationHandler = createGenerationHandler({ db, authenticate, present });
   async function ownSubmission(owner, id) {
     const { data, error } = await db.from('af_submissions').select('*').eq('id', requireId(id)).eq('owner_id', owner).maybeSingle();
     check(error); if (!data) throw new Problem(404, 'not-found'); return data;
@@ -109,6 +112,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       }
       if (parts[0] === 'admin') return adminHandler(request, parts);
       if (workshopRoute(parts)) return workshopHandler(request, parts);
+      if (generationRoute(parts)) return generationHandler(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
       // Device-connection sign-in: start and poll are unauthenticated; approve verifies the user itself.
@@ -157,7 +161,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       }
       if (parts.join('/') === 'analytics/context' && request.method === 'OPTIONS' && analytics) return analytics.preflight();
       const isWorker = parts[0] === 'worker';
-      const owner = await authenticate(request, isWorker);
+      const owner = await authenticate(request, isWorker ? 'validation' : false);
       if (!isWorker && parts.join('/') === 'analytics/context' && analytics) return analytics.context(request, owner);
       if (profileRoute && method === 'PATCH') {
         const row = await updateFighterProfile({ request, owner, id: requireId(parts[1]), key: requireId(request.headers.get('idempotency-key')), db, rpc });
@@ -168,19 +172,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         // ?fighter=<id> replaces the package of the caller's own fighter in place (2026-10-23); absent, it registers another fighter within the account quota.
         const target = new URL(request.url).searchParams.get('fighter');
         if (target !== null && !UUID.test(target)) throw new Problem(422, 'invalid-fighter');
-        let text;
-        try { text = new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, spec.limits.jsonBytes)); }
-        catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-utf8'); }
-        const parsed = parseFighterJson(text);
-        if (!parsed.ok) throw new Problem(422, 'invalid-manifest', parsed.errors.slice(0, 20));
-        const result = validateFighter(parsed.data);
-        if (!result.ok) throw new Problem(422, 'invalid-manifest', result.errors.slice(0, 20));
-        // Reject here with 422. Otherwise the jsonb cast in af_create_submission fails and the API returns 503.
-        const unstorable = unstorableTextPath(parsed.data);
-        if (unstorable !== null) throw new Problem(422, 'invalid-manifest', [{ code: 'UNSUPPORTED_TEXT', path: unstorable,
-          expected: 'text without U+0000 or unpaired surrogates', actual: 'unsupported character' }]);
-        const sha = await sha256(new TextEncoder().encode(text));
-        const row = await rpc('af_create_submission', { p_owner: owner, p_key: key, p_text: text, p_sha: sha, p_bytes: result.assetBytes, p_fighter: target });
+        const manifest = await checkedManifest(request);
+        const row = await rpc('af_create_submission', { p_owner: owner, p_key: key, p_text: manifest.text, p_sha: manifest.sha, p_bytes: manifest.bytes, p_fighter: target });
         return json(await present(row), 200);
       }
       if (parts[0] === 'submissions' && parts.length >= 2) {
@@ -188,23 +181,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         if (method === 'GET' && parts.length === 2) return json(await present(row));
         if (method === 'POST' && parts.length === 3 && parts[2] === 'submit')
           return json(await present(await rpc('af_submit', { p_owner: owner, p_id: row.id })));
-        if (method === 'PUT' && parts.length === 4 && parts[2] === 'assets') {
-          if (row.status !== 'uploading' || new Date(row.expires_at).getTime() <= Date.now()) throw new Problem(409, 'upload-closed');
-          const asset = row.manifest.assets.find(a => a.id === parts[3]);
-          if (!asset) throw new Problem(404, 'asset-not-found');
-          if (request.headers.get('content-type') !== 'image/webp') throw new Problem(415, 'webp-required');
-          const bytes = await readBody(request, asset.bytes);
-          if (bytes.length !== asset.bytes || await sha256(bytes) !== asset.sha256) throw new Problem(422, 'asset-hash-or-size');
-          if (new TextDecoder().decode(bytes.slice(0, 4)) !== 'RIFF' || new TextDecoder().decode(bytes.slice(8, 12)) !== 'WEBP') throw new Problem(422, 'webp-required');
-          const bucket = db.storage.from(BUCKET), path = objectKey(row, asset);
-          const { error } = await bucket.upload(path, bytes, { contentType: 'image/webp', cacheControl: '31536000', upsert: false });
-          if (error) {
-            // An existing immutable object is a successful retry only if its actual bytes still match.
-            const { data, error: getError } = await bucket.download(path);
-            if (getError || !data || data.size !== asset.bytes || await sha256(await data.arrayBuffer()) !== asset.sha256) throw new Problem(503, 'storage-unavailable');
-          }
-          return json({ ok: true, stage: 'uploaded', assetId: asset.id, bytes: bytes.length });
-        }
+        if (method === 'PUT' && parts.length === 4 && parts[2] === 'assets') return json(await storeAsset(db, row, parts[3], request));
       }
       if (method === 'GET' && parts[0] === 'fighters' && parts.length === 2) {
         const { data, error } = await db.from('af_fighters').select('id,submission_id,manifest_sha,profile,status,review_state,runtime_approved,runtime_scope,duel_approved,created_at,moderation_reason,deleted_at').eq('id', requireId(parts[1])).eq('owner_id', owner).maybeSingle();

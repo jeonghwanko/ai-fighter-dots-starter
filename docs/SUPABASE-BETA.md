@@ -291,6 +291,10 @@ Dot에서 첫 실제 등록:
 | GET /worlds · GET /worlds/:id | 없음 | 공개 세계 목록·표지, 세계 하나(진영·소속 선수·정사) |
 | POST /worlds · PATCH /worlds/:id · POST /worlds/:id/posts | 사용자 JWT | 세계 열기(계정당 둘)·고치기(진영·정사·선수 빼기)·라운지 글(그 사람으로) |
 | PUT /fighters/:id/world | 소유자 | 선수를 남이 연 세계·진영에 두기, `world: null`이면 빼기 |
+| GET /generations/capabilities | 없음 | 호스팅 생성(2026-10-27): 지금 신청을 받는지(`hosted`)와 이유·대기 작업 수 |
+| GET /generations · POST /generations · POST /generations/uploads | 사용자 JWT | 내 최근 생성 작업 다섯과 무료 사용 여부, 신청(`Idempotency-Key`, 설명·언어·그림 id·권리 확인), 참조 그림 올리기(PNG·JPG·WebP, 4 MB) |
+| GET·DELETE /generations/:id · POST /generations/:id/appearance·motions·register | 사용자 JWT | 작업 읽기(그림은 10분 서명 URL)·취소, 외형 고르기·수정, 동작 수정, 프로필 확인과 등록 |
+| POST /generation-worker/heartbeat·claim·progress·finish · PUT /generation-worker/jobs/:id/artifacts/:name · /generation-worker/jobs/:id/submission… | 생성 작업자(`scope = generation`) | 심장 박동·임대·연장·단계 결과, 후보·미리보기 그림, 신청자 계정으로 패키지 제출 |
 | POST /worker/claim | 작업자 | 큐 임대·일시 다운로드 URL 발급 |
 | POST /worker/finish | 작업자 | 동일 임대·manifest 해시로 검사 확정 |
 
