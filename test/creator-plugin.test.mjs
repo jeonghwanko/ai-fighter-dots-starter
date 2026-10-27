@@ -55,6 +55,19 @@ function plan(overrides = {}) {
     outputs: [`output/${sessionId}-work/artifacts/idle/v1/image.png`], ...overrides };
 }
 
+test('Dots output contract blocks an existing prepared job before workflow or generation dispatch', async t => {
+  const f = await fixture(t), key = randomUUID();
+  await f.jobs.prepare(sessionId, 1, key, plan());
+  await f.put('output/creation-environment/environment.json', JSON.stringify({ host: 'dots' }));
+  let dispatches = 0;
+  await assert.rejects(runCreationJob(f.store, sessionId, key, { execute: async () => { dispatches++; return { code: 0 }; } }),
+    /dots-(?:protected-session-provider-blocked|generation-output-contract-unverified)/);
+  assert.equal(dispatches, 0); assert.equal((await f.jobs.read(sessionId, key)).attempt, 0);
+  const job = await f.jobs.read(sessionId, key); job.status = 'unknown'; job.attempt = 1; await f.jobs.write(sessionId, job);
+  const recovered = await runCreationJob(f.store, sessionId, key, { execute: async () => { dispatches++; return { code: 0 }; } });
+  assert.equal(recovered.status, 'unknown'); assert.equal(dispatches, 0);
+});
+
 test('versions survive source overwrites; revised motions preserve other choices and old files', async t => {
   const f = await fixture(t);
   await f.record('idle'); await f.review('idle'); await f.select('idle'); await f.change({ type: 'advance' });

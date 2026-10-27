@@ -10,7 +10,9 @@ AI Fighter Creator라는 두 번째 플러그인 설치나 작업 공간의 별�
 - `.app.json`: 기존 ODDBOUT 연결을 참조한다. 계정·토큰을 포함하지 않는다. 이 개발 연결에 접근 가능한
   사용자/워크스페이스용이다. 공개 디렉터리 배포 때는 공식 With MCP 제출로 HTTPS 서버를 등록해야 한다.
 - `skills/create-fighter`: PC/Dots 실행 환경, 사용자 피드백, 패키지 검증, 공통 클라우드 등록을 안내한다.
-- `launcher.mjs --status`: 소스 해시를 검증하고 사용자 쓰기 가능 경로에 도구를 풀거나 개발 체크아웃을 찾는다.
+- 새 launcher의 `--status`: 소스·기존 runtime 해시를 검증하고 경로만 보고한다. 파일을 만들지 않는다.
+- `launcher.mjs --install --manifest-sha256 <검토된-runtime-manifest-SHA256>`: 명시적으로 사용자 runtime에 복사한다.
+  기존 릴리스의 명령 의미와 구분하며 [Dots 준비 안내](DOTS-QUICKSTART.md)를 따른다.
 - `scripts/creation-tool.mjs`: 기존 MCP 도구를 같은 스키마 검증과 잠금으로 한 번씩 호출한다.
   등록용 로컬 세션을 읽지 않고 클라우드 계정 확인을 안내한다. 준비와 실행은 기존처럼 분리된다.
 - 로컬 stdio MCP는 예전 클라이언트 호환용으로 남는다. 통합 플러그인은 이를 자동 실행하지 않는다.

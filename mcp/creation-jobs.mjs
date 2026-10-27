@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { atomicJson, digest, fail, localPath, readJson, unchanged } from './creation-store.mjs';
 import { reviewCreationProgress } from './creation-context.mjs';
+import { guardDotsExecution } from '../scripts/dots-provider.mjs';
 
 const generating = new Set(['gen', 'gen-set', 'video', 'video-set', 'video-resume']);
 const spriteCommands = new Set([...generating, 'workflow', 'prepare', 'extract', 'compose-atlas', 'compose-gif',
@@ -66,6 +67,7 @@ export function createJobStore(store) {
   }
   async function gate(state, plan) {
     validatePlan(jobPlanSchema.parse(plan));
+    if (plan.engine === 'sprite') await guardDotsExecution(fileURLToPath(new URL('../', import.meta.url)), store.root, plan.args);
     if (state.mode !== 'creation') fail('dialogue-only-no-execution');
     const context = await store.latestContext();
     if (context.revision !== state.contextRevision) fail('context-changed');

@@ -1,4 +1,6 @@
 import { test } from 'node:test';
+import { run, setupTools } from '../scripts/sprite-gen.mjs';
+import { INSTALL_OUTCOME_UNKNOWN } from '../scripts/dots-safety.mjs';
 import assert from 'node:assert/strict';
 import { access, chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -40,6 +42,23 @@ test('tools are classified as sprite-gen sees them: missing, broken (img2webp wi
   assert.equal(item.ffprobe.install.actor, 'user'); assert.equal(item.ffprobe.install.sudo, true);
   const ready = toolsItem(await inspectTools({ env: {}, platform: 'linux', arch: 'x64', rife: false, ...machine({ ffmpeg, ffprobe: ffmpeg, img2webp: newWebp }) }));
   assert.deepEqual([ready.status, ready.img2webp.status, ready.img2webp.version, ready.nextCommands, ready.nextAction], ['ready', 'ok', '1.6.0', [], undefined]);
+});
+
+test('light setup omits RIFE probing and download while repairing required img2webp', async () => {
+  let installed = false;
+  const forbidden = () => assert.fail('Optional RIFE must not be probed or installed');
+  assert.equal(await setupTools({ includeRife: false, inspectOptional: forbidden, execute: forbidden, log: () => {},
+    installWebp: async () => { installed = true; return '/fixture/img2webp'; },
+    inspect: async options => {
+      assert.equal(options.rife, false);
+      return { ffmpeg: { status: 'ok' }, ffprobe: { status: 'ok' },
+        img2webp: { status: installed ? 'ok' : 'missing', install: { actor: 'agent', command: 'fixture' } } };
+    } }), 0);
+  assert.equal(installed, true);
+});
+
+test('an interrupted setup subprocess preserves its unknown outcome exit code', async () => {
+  assert.equal(await run(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { timeout: 50 }), INSTALL_OUTCOME_UNKNOWN);
 });
 
 test('a broken ffmpeg is reported with its own message, not as missing', async () => {

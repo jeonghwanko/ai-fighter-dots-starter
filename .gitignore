@@ -1,4 +1,8 @@
 node_modules/
+.cache/
+.dots-runtime.json
+.dots-install.json
+.dots-bootstrap.lock
 __pycache__/
 output/
 .env
