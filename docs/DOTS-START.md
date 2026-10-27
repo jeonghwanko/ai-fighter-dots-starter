@@ -3,9 +3,9 @@
 The saved VM product path is **Dots + this user's Grok subscription**. Read
 [DOTS-VM-ARCHITECTURE.md](DOTS-VM-ARCHITECTURE.md) and
 [the environment preparation recipe](../deploy/dots-environment/README.md).
-Source `$HOME/.local/share/oddbout-tools/env.sh` in each new shell. From the saved front-door checkout,
+Source `/workspace/.oddbout-tools/env.sh` in each new shell. From the saved front-door checkout,
 run `node dots.mjs --install` for a new workspace or `node dots.mjs` thereafter. The default workspace is
-`$HOME/.oddbout/workspace`; honor an explicit existing workspace via `--workspace <absolute-path>`.
+`/workspace/oddbout-workspace`; honor an explicit existing workspace via `--workspace <absolute-path>`.
 The release descriptor pins the runtime commit. Never replace an existing workspace's binding.
 
 Follow the returned `nextAction`, resolve its single blocker, then rerun. A required Grok login uses

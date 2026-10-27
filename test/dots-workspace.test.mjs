@@ -144,8 +144,8 @@ test('failed install stops once; interrupted lock and unwritable cache are prese
 
 test('POSIX unwritable cache blocks installation', { skip: process.platform === 'win32' ? 'Windows does not implement POSIX mode bits' : false }, async t => {
   const f = await fixture(t), cache = path.join(f.base, 'locked-cache'); await mkdir(cache, { mode: 0o500 });
-  t.after(() => chmod(cache, 0o700));
-  await assert.rejects(bootstrap({ ...f.options, cache, install: true }, f.deps), /installation-path-not-writable/);
+  try { await assert.rejects(bootstrap({ ...f.options, cache, install: true }, f.deps), /installation-path-not-writable/); }
+  finally { await chmod(cache, 0o700); }
 });
 
 test('installation timeout preserves an unknown lock and a second invocation cannot dispatch', async t => {
@@ -272,4 +272,15 @@ test('launcher rejects symlink metadata before reading its contents', async t =>
   catch (e) { if (process.platform === 'win32' && e.code === 'EPERM') return t.skip('Windows file symlink privilege unavailable'); throw e; }
   await assert.rejects(launcher.inspect({ base: path.join(f.base, 'user') }), /symlink/);
   await assert.rejects(launcher.initialize({ base: path.join(f.base, 'user') }), /symlink/);
+});
+
+test('a known WebP network failure identifies the preparer without leaking child output', async t => {
+  const f = await fixture(t);
+  const result = await bootstrap({ ...f.options, install: true }, { ...f.deps, run: async (c, a, o) => {
+    if (c === 'git') return f.run(c, a, o);
+    return c === 'npm' ? { code: 0, text: '' } : { code: 1,
+      text: 'SECRET=never-report\nimg2webp: network network-connect-forbidden host=storage.googleapis.com\n' };
+  } });
+  assert.deepEqual(result.diagnostic, { actor: 'environment-preparer', reason: 'network-connect-forbidden', host: 'storage.googleapis.com' });
+  assert.equal(result.automaticRetry, false); assert.doesNotMatch(JSON.stringify(result), /SECRET|never-report/);
 });

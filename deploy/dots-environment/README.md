@@ -11,11 +11,14 @@ The script installs Node **22.22.2** with pinned official SHA-256, Python **3.11
 ffmpeg/ffprobe, WebP `img2webp -exact`, Grok CLI **1.0.70** from its npm lock, and the pinned creation kit.
 OS packages follow the chosen base image's security repository; the installed versions are recorded by
 `dots:start`. This is an environment-preparer operation, before any user login or character work.
+Grok's npm lifecycle scripts are disabled: its official launcher supports in-package binary extraction
+when the home directory is unwritable. Do not change HOME/GROK_HOME to route around authentication or
+host restrictions. Confirm the actual launched CLI version; no login or agent prompt is used by installation.
 The script never logs in or generates. Do not run it over a user's active environment.
 
 Set the Start skill to [DOTS-START.md](../../docs/DOTS-START.md), and save the repository front-door path.
-Every task sources `$HOME/.local/share/oddbout-tools/env.sh` before its first command. The runtime cache
-is `$HOME/.oddbout/runtimes`; the new user's persistent workspace is `$HOME/.oddbout/workspace`.
+Every task sources `/workspace/.oddbout-tools/env.sh` before its first command. The runtime cache
+is `/workspace/.oddbout/runtimes`; the new user's persistent workspace is `/workspace/oddbout-workspace`.
 The template-workspace has only setup receipts and must not be reused as a user's character workspace.
 No service keys, `.grok` login, ODDBOUT sessions, private source files, or character jobs belong in the image.
 The preparer's file-presence check is an aid, not a certificate that an arbitrary home directory is clean.
@@ -26,6 +29,7 @@ Allow the actual package/login/media endpoints in the environment's network sett
 | --- | --- |
 | Git source and submodule | github.com (and the host's actual Git download endpoints) |
 | Node and npm | nodejs.org, registry.npmjs.org |
+| Kit's pinned WebP binary fallback | storage.googleapis.com (needed only if the base image has no working WebP tools) |
 | Python dependencies | pypi.org, files.pythonhosted.org; any separately declared engine dependency host |
 | OS packages | The selected Debian/Ubuntu mirror and security repositories |
 | Grok device login / CLI | auth.x.ai, cli-chat-proxy.grok.com |

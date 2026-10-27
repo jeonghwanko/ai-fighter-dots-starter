@@ -66,6 +66,10 @@ export async function launch(argv, { run = exec, releasePath = new URL('./deploy
   return JSON.parse(result.stdout);
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  try { console.log(JSON.stringify(await launch(process.argv.slice(2)), null, 2)); }
+  try {
+    const result = await launch(process.argv.slice(2));
+    console.log(JSON.stringify(result, null, 2));
+    if (result.ok === false || result.nextAction?.action === 'repair-installation') process.exitCode = 1;
+  }
   catch (e) { console.error(JSON.stringify({ ok: false, code: /^[a-z][a-z-]+$/.test(e.message) ? e.message : 'front-door-failed-inspect-existing-runtime' })); process.exitCode = 1; }
 }

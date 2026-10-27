@@ -213,6 +213,7 @@ export async function doctor(options, { run = runCommand, find = findBinary, now
       const probe = await run(python, ['-c', 'import json; from sprite_gen.workflow.access import probe_access; s=probe_access("grok"); print(json.dumps({k:s[k] for k in ("login","billing")}))'], { cwd: workspace, env: toolEnv });
       let state; try { state = JSON.parse(probe.text); } catch { /* redacted unknown */ }
       report.auth = { status: env.XAI_API_KEY?.trim() || state?.billing === 'api-credit' ? 'api-billing-blocked' : probe.code ? 'unknown' : state?.login === 'ready' ? 'signed-in' : state?.login === 'unavailable' ? 'sign-in-required' : 'unknown',
+        ...(env.XAI_API_KEY?.trim() ? { reason: 'xai-api-key-environment' } : {}),
         scope: 'pinned-engine-credential-probe', accountIdentity: 'unknown', imageAccess: 'unknown', videoAccess: 'unknown' };
     }
     else if ((options.provider ?? 'codex') !== 'codex') report.auth = { status: 'unknown', reason: 'official-status-adapter-unavailable' };
@@ -290,7 +291,13 @@ export async function bootstrap(options, { run = runCommand, ...deps } = {}) {
       if (result.uncertain || step === 'sprite' && result.code === INSTALL_OUTCOME_UNKNOWN) {
         preserveLock = true; return { status: 'blocked', reason: 'installation-outcome-unknown', steps, automaticRetry: false };
       }
-      if (result.code) return { status: 'blocked', reason: `${step}-installation-failed`, steps, automaticRetry: false, generationVerified: false };
+      if (result.code) {
+        // Recognize only the installer's fixed diagnostic. Never expose arbitrary child output or URLs.
+        const network = result.text?.match(/^img2webp: network (network-connect-forbidden|network-timeout|network-dns-failed|api-unreachable) host=storage\.googleapis\.com$/m);
+        return { status: 'blocked', reason: `${step}-installation-failed`, steps,
+          ...(network ? { diagnostic: { actor: 'environment-preparer', reason: network[1], host: 'storage.googleapis.com' } } : {}),
+          automaticRetry: false, generationVerified: false };
+      }
       receipt = { ...(receipt?.key === meta.key ? receipt : {}), schemaVersion: 1, key: meta.key, [step]: true };
       await writeFile(receiptPath, JSON.stringify(receipt) + '\n', { mode: 0o600 });
     }

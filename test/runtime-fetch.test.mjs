@@ -5,7 +5,7 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 
 const exec = promisify(execFile);
-const modules = Object.fromEntries(['api/client.mjs', 'api/runtime-fetch.mjs', 'mcp/connection-readiness.mjs']
+const modules = Object.fromEntries(['api/client.mjs', 'api/runtime-fetch.mjs', 'mcp/connection-readiness.mjs', 'scripts/sprite-tools.mjs']
   .map(file => [file, new URL(`../${file}`, import.meta.url).href]));
 const imports = `import { apiRequest, createRemoteClient } from ${JSON.stringify(modules['api/client.mjs'])};
 import { runtimeFetch } from ${JSON.stringify(modules['api/runtime-fetch.mjs'])};
@@ -102,4 +102,23 @@ test('an invalid proxy fails safely without falling back to a direct request', a
   { HTTP_PROXY: 'invalid://fixture-user:fixture-secret@127.0.0.1' });
   assert.deepEqual(value, { code: 'api-unreachable', message: 'api-unreachable' });
   assert.equal(requests, 0); assert.doesNotMatch(stderr, /fixture-secret|fixture-user/);
+});
+
+test('pinned WebP download uses the inherited proxy and reports a sanitized denial', async t => {
+  const tunnels = [], proxy = await server(t);
+  proxy.instance.on('connect', (request, socket) => {
+    tunnels.push(request.url); socket.end('HTTP/1.1 403 Forbidden\r\nContent-Length: 0\r\nConnection: close\r\n\r\n');
+  });
+  const { value, stderr } = await child(`
+    import { installImg2webp } from ${JSON.stringify(modules['scripts/sprite-tools.mjs'])};
+    import { mkdtemp, rm } from 'node:fs/promises';
+    import os from 'node:os'; import path from 'node:path';
+    const dir = await mkdtemp(path.join(os.tmpdir(), 'webp-proxy-'));
+    try { await installImg2webp({ spriteRoot: dir, python: 'unused', platform: 'linux', arch: 'x64', log: () => {} }); }
+    catch (error) { console.log(JSON.stringify({ message: error.message })); }
+    finally { await rm(dir, { recursive: true, force: true }); }
+  `, { HTTPS_PROXY: proxy.url });
+  assert.equal(value.message, 'img2webp: network network-connect-forbidden host=storage.googleapis.com');
+  assert.ok(tunnels.length > 0); assert.ok(tunnels.every(host => host === 'storage.googleapis.com:443'));
+  assert.doesNotMatch(stderr, /fixture-secret|fixture-user/);
 });

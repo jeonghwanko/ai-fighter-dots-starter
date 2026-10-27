@@ -7,12 +7,15 @@ import { readRecord, safePath } from './dots-safety.mjs';
 
 const unobserved = new Set(['grok-generation-and-delivery-unverified']);
 export function nextAction(report) {
-  if (report.status === 'blocked' && report.reason) return { actor: 'agent', action: 'repair-installation', reason: report.reason, dispatch: false };
+  if (report.status === 'blocked' && report.reason) return { actor: report.diagnostic?.actor ?? 'agent', action: 'repair-installation',
+    reason: report.diagnostic?.reason ?? report.reason, ...(report.diagnostic?.host ? { host: report.diagnostic.host } : {}), dispatch: false };
   const recovery = report.recovery;
   if (recovery?.blockers.length) return { actor: 'agent', action: 'recover-original-job', reason: recovery.blockers[0], dispatch: false };
   const installation = report.blockers?.filter(code => !unobserved.has(code)) ?? [];
   if (installation.length) return { actor: /ffmpeg|ffprobe|node-|python3|not-writable/.test(installation[0]) ? 'environment-preparer' : 'agent',
     action: 'repair-installation', reason: installation[0], dispatch: false };
+  if (report.auth?.reason === 'xai-api-key-environment') return { actor: 'environment-preparer',
+    action: 'remove-api-key-from-vm-environment', reason: 'grok-subscription-only', dispatch: false };
   if (report.auth?.status !== 'signed-in') return { actor: report.auth?.status === 'api-billing-blocked' ? 'user' : 'agent-and-user',
     action: 'connect-grok-subscription', reason: report.auth?.status ?? 'unknown', command: ['grok', 'login', '--device-auth'], dispatch: false };
   if (recovery?.sessions.length) return { actor: 'agent', action: 'resume-creation-session', sessionId: recovery.sessions[0].sessionId,

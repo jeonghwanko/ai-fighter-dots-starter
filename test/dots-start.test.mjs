@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { launch } from '../dots.mjs';
 import { nextAction, start } from '../scripts/dots-start.mjs';
 import { guardDotsExecution } from '../scripts/dots-provider.mjs';
@@ -27,6 +30,8 @@ test('startup returns one concrete action without treating login or mock evidenc
   assert.equal(nextAction({ status: 'blocked', reason: 'sprite-installation-failed' }).reason, 'sprite-installation-failed');
   assert.equal(nextAction({ ...report(), auth: { status: 'sign-in-required' } }).action, 'connect-grok-subscription');
   assert.equal(nextAction({ ...report(), recovery: pending }).action, 'recover-original-job');
+  assert.equal(nextAction({ status: 'blocked', reason: 'sprite-installation-failed', diagnostic: { actor: 'environment-preparer', reason: 'network-connect-forbidden', host: 'storage.googleapis.com' } }).actor, 'environment-preparer');
+  assert.equal(nextAction({ ...report(), auth: { status: 'api-billing-blocked', reason: 'xai-api-key-environment' } }).action, 'remove-api-key-from-vm-environment');
 });
 test('front door fetches exact commit, preserves a workspace binding and returns completed doctor failures', async t => {
   const f = await fixture(t), releasePath = path.join(f.base, 'release.json'), commit = 'b'.repeat(40), calls = [];
@@ -46,4 +51,14 @@ test('front door fetches exact commit, preserves a workspace binding and returns
 test('fixed Grok VM route rejects API-key billing before dispatch, including video', async () => {
   for (const args of [['gen','--provider','grok'],['video'],['video-resume']])
     await assert.rejects(guardDotsExecution('', '', args, { AI_FIGHTER_EXECUTION_HOST: 'dots', XAI_API_KEY: 'never-print' }), /subscription-api-key-environment-blocked/);
+});
+
+test('front door CLI returns a failing exit code while preserving its actionable JSON', async t => {
+  const f = await fixture(t);
+  await assert.rejects(promisify(execFile)(process.execPath, [fileURLToPath(new URL('../dots.mjs', import.meta.url)),
+    '--workspace', f.workspace, '--runtime-home', path.join(f.base, 'not-installed')]), error => {
+    assert.equal(error.code, 1);
+    assert.equal(JSON.parse(error.stdout).action, 'install-reviewed-release');
+    return true;
+  });
 });
