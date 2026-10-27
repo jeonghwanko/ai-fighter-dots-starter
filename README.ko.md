@@ -21,6 +21,8 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 키트에는 sprite-gen, 제작 절차, 파일 검사 도구, AI와 게임을 연결하는 MCP 서버가 포함됩니다. 게임 엔진은 별도로 관리합니다.
 
+이 키트에서 "sprite-gen"은 `vendor/sprite-gen`에 고정된 sprite-gen 엔진·CLI를 말하며, Alex Kim의 [sprite-gen](https://github.com/aldegad/sprite-gen)을 포크한 [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent)에서 가져옵니다. 명령·경로·Python 패키지 이름은 그대로 `sprite-gen`입니다.
+
 ## PC 없이 Dots에서 등록하기
 
 ChatGPT 플러그인에서 **ODDBOUT** 클라우드 MCP를 연결하고 Google로 로그인한 뒤,

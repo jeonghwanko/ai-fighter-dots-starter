@@ -83,7 +83,7 @@ When `ai-fighter-local` is already configured from a different build directory, 
 `codex plugin marketplace remove ai-fighter-local` before adding the new directory, then run
 `codex plugin add ai-fighter-creator@ai-fighter-local` to refresh the installed version.
 
-The builder uses the pinned clean sprite-gen tree, retains its Apache-2.0 LICENSE and NOTICE,
+The builder uses the pinned clean sprite-gen-agent tree (`vendor/sprite-gen`), retains its Apache-2.0 LICENSE and NOTICE,
 and installs Node production dependencies from the lockfile with lifecycle scripts disabled.
 It never copies the source checkout's output, venv, user home, credentials or npm configuration.
 The ZIP contains `plugin.json` at its root, one stdio server in `mcp.json`, the creation skill, an icon,
