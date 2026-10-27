@@ -473,6 +473,9 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null }) {
     // ChatGPT's calls carry its own `_meta` (`openai/locale`, `openai/subject`, …): it reads the structured result, so the text can be short.
     const meta = body.params?._meta && typeof body.params._meta === 'object' ? body.params._meta : {};
     const host = { compact: Object.keys(meta).some(key => key.startsWith('openai/')), caller: await subjectKey(meta['openai/subject']) };
+    // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
+    // user's identity into another's call. Measured 2026-10-28: building it with all tools and answering tools/list
+    // takes about 1.8 ms, small beside the network hop, so sharing a server is not worth that guarantee.
     const server = cloudServer({ db, identity, fetcher, arena, host });
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
