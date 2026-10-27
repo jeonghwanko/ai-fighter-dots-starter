@@ -53,8 +53,28 @@ const FILE = z.object({ download_url: z.string().max(8192), file_id: z.string().
 const UUID_ARG = () => z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const AUTH = [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }];
-const output = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value,
+const output = (value, compact = false) => ({ content: [{ type: 'text', text: compact ? compactText(value) : JSON.stringify(value) }], structuredContent: value,
   ...(value.ok === false ? { isError: true } : {}) });
+/**
+ * A result's text for a host that also reads its structured content (ChatGPT — the Apps SDK hands the model both): the JSON again doubled
+ * every result in the conversation (MCP 점검, 2026-10-27; the contract schema is 24 KB). A small result or a failure stays whole; a large one
+ * says where its fields are. Other hosts read only the text and keep the whole JSON.
+ */
+export function compactText(value) {
+  const text = JSON.stringify(value);
+  if (text.length <= 1200 || value?.ok === false) return text;
+  const parts = Object.entries(value).map(([key, item]) => Array.isArray(item) ? `${key}[${item.length}]`
+    : item && typeof item === 'object' ? `${key}{${Object.keys(item).slice(0, 8).join(',')}${Object.keys(item).length > 8 ? ',…' : ''}}`
+      : `${key}=${JSON.stringify(item).slice(0, 40)}`);
+  return `Full result in structuredContent (${text.length} characters): ${parts.join(', ')}`;
+}
+/** A host's own anonymous user id (`_meta["openai/subject"]` — the Apps SDK sends it "for the purposes of rate limiting"), as a UUID-shaped key. */
+async function subjectKey(subject) {
+  if (typeof subject !== 'string' || !subject || subject.length > 200) return null;
+  const hex = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`openai-subject:${subject}`))),
+    byte => byte.toString(16).padStart(2, '0')).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status,
   headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers } });
 
@@ -92,7 +112,7 @@ export async function authenticateCloud(db, request, now = Date.now) {
   return { owner: c.sub, email: c.email ?? '', claims: c };
 }
 
-export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
+export function cloudServer({ db, identity, fetcher = fetch, arena = null, host = {} }) {
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
     instructions: 'Create and register AI Fighter characters using the user’s own generation account. Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. Call this cloud connector’s check_creation_readiness before first generation, after a workspace restart and before registration. It checks account access; generation and display still require actual host evidence. Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. Require the user’s final registration request and preserve motion review boundaries. Use host file attachments for fighter.json and WebP assets. When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. A VM direct-network denial does not establish failure of the native connector; use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
   // The existing API runs in-process with an identity bound to this verified request. The shim cannot be
@@ -122,7 +142,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
       if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
         _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${CLOUD_RESOURCE}/.well-known/oauth-protected-resource"`] } };
       try {
-        const result = output(await run(args));
+        const result = output(await run(args), host.compact === true);
         // A diagnostic failure is useful data; keep it readable by hosts that throw away tool errors.
         return diagnostic ? { ...result, isError: false } : result;
       }
@@ -211,7 +231,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
   register('get_registered_fighter', '등록된 캐릭터 확인', 'Read your registered fighter and immutable package identity.',
     { fighterId: UUID_ARG() }, ({ fighterId }) => invoke(`fighters/${fighterId}`));
   // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
-  if (arena?.url && arena?.key) registerAgentTools({ register, arena, db, identity, invoke, recordAgent });
+  if (arena?.url && arena?.key) registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller: host.caller ?? null });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   return server;
 }
@@ -233,9 +253,10 @@ async function arenaCall(arena, path, body, owner) {
   return value;
 }
 
-function registerAgentTools({ register, arena, db, identity, invoke, recordAgent }) {
+function registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller }) {
   const call = (path, body) => arenaCall(arena, path, body);
-  const read = path => arenaCall(arena, path, undefined, identity?.owner ?? 'public');
+  // A read's budget: the signed-in owner's; signed out, the host's anonymous user (`caller`); else every signed-out agent's together.
+  const read = path => arenaCall(arena, path, undefined, identity?.owner ?? caller ?? 'public');
   const ID = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
   register('get_style_guide', '싸우는 성격 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. Values and limits are the contract\'s (spec.combatStyle). This changes nothing.',
     {}, async () => ({ ok: true, contract: spec.combatStyle, guide: STYLE_GUIDE }), { publicTool: true });
@@ -287,18 +308,29 @@ function registerAgentTools({ register, arena, db, identity, invoke, recordAgent
       }
       return { ...issued, state: 'open', next: 'get_cup' };
     }, { write: true, openWorld: true });
+  // The owner's current registered package hash (the version an edit is made on), or a 404.
+  const currentSha = async fighterId => {
+    const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', identity.owner)
+      .is('deleted_at', null).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    if (!fighter) throw new Problem(404, 'fighter-not-found');
+    return fighter.manifest_sha;
+  };
+  const edit = async (fighterId, change, idempotencyKey) => {
+    const result = await invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: await currentSha(fighterId), ...change }),
+      { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
+    if (result.ok) await recordAgent(result.submissionId);
+    return result;
+  };
+  register('update_fighter_profile', '프로필 고치기', 'Change the connected user\'s registered fighter\'s profile text without new art: name, description, language, concept, moves, per-language names or bout lines (challenge, win, lose). Give only the fields to change; null removes names or lines. Checked against the contract. Requires the user\'s approval of the change. Use a new UUID per change and the same UUID to retry it.',
+    { fighterId: UUID_ARG(), profile: z.object({ name: z.string().min(1).max(40), description: z.string().min(1).max(600), language: z.enum(['ko', 'en']),
+      concept: z.string().min(1).max(800), moves: z.record(z.string(), z.unknown()), names: z.union([z.record(z.string(), z.string()), z.null()]),
+      lines: z.union([z.record(z.string(), z.string()), z.null()]) }).partial().strict(), idempotencyKey: UUID_ARG() },
+    ({ fighterId, profile, idempotencyKey }) => Object.keys(profile).length ? edit(fighterId, { profile }, idempotencyKey) : { ok: false, code: 'invalid-profile' },
+    { write: true, publish: true, openWorld: true });
   register('update_fighter_style', '싸우는 성격 고치기', 'Change the connected user\'s registered fighter\'s fighting style (combat.style) without new art: an object replaces it, null removes it. Checked against the contract (get_style_guide). His next bouts fight the new style. Requires the user\'s approval of the change. Use a new UUID per change and the same UUID to retry it.',
     { fighterId: UUID_ARG(), style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: UUID_ARG() },
-    async ({ fighterId, style, idempotencyKey }) => {
-      const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', identity.owner)
-        .is('deleted_at', null).maybeSingle();
-      if (error) throw new Problem(503, 'database-unavailable');
-      if (!fighter) throw new Problem(404, 'fighter-not-found');
-      const result = await invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: fighter.manifest_sha, style }),
-        { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
-      if (result.ok) await recordAgent(result.submissionId);
-      return result;
-    }, { write: true, publish: true, openWorld: true });
+    ({ fighterId, style, idempotencyKey }) => edit(fighterId, { style }, idempotencyKey), { write: true, publish: true, openWorld: true });
 }
 
 export function createCloudHandler({ db, fetcher = fetch, arena = null }) {
@@ -333,7 +365,10 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null }) {
       // A public tool whose budget is the caller's: a valid token counts it on its owner; anything else on every signed-out agent.
       try { identity = await authenticateCloud(db, request); } catch { identity = null; }
     }
-    const server = cloudServer({ db, identity, fetcher, arena });
+    // ChatGPT's calls carry its own `_meta` (`openai/locale`, `openai/subject`, …): it reads the structured result, so the text can be short.
+    const meta = body.params?._meta && typeof body.params._meta === 'object' ? body.params._meta : {};
+    const host = { compact: Object.keys(meta).some(key => key.startsWith('openai/')), caller: await subjectKey(meta['openai/subject']) };
+    const server = cloudServer({ db, identity, fetcher, arena, host });
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
       await server.connect(transport);

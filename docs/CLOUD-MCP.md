@@ -77,11 +77,16 @@ Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른�
 | `spar` | 필요 | 두 선수의 한 판(지금 패키지). 순위에 들지 않고 남지 않는다. 계정마다 분당 한도 |
 | `enter_cup` | 필요 | 연결 계정의 등록 선수로 16강 컵. 나머지 15명은 서버가 기본 선수에서 뽑는다. 결과는 컵 순위에 든다. 컵이 끝날 때까지(약 7초, 12초까지) 기다려 끝난 컵을 돌려준다. 사용자 요청이 있어야 한다 |
 | `update_fighter_style` | 필요 | 새 그림 없이 `combat.style`만 바꾼다(객체는 교체, null은 삭제). 프로필 고치기와 같은 길(`PATCH fighters/<id>/profile`의 `style`, 마이그레이션 `20261027170000_ai_fighter_style_edits`)이다. 사용자 승인이 있어야 한다 |
+| `update_fighter_profile` | 필요 | 새 그림 없이 프로필 글(이름·소개·언어·콘셉트·기술 설명·언어별 이름·경기 대사)만 바꾼다. 준 칸만 바뀌고, null은 언어별 이름·대사를 지운다. 같은 길(`PATCH fighters/<id>/profile`). 사용자 승인이 있어야 한다 |
 
 `get_registered_fighter`가 지금 성격(`fighter.combat` — 능력치·`style`·고유 기술 종류)을 준다. 성격 고치기는 통째로 바꾸므로 여기서 시작한다.
 
 고리: `get_style_guide` → 소개를 성격으로 옮긴다 → `spar`·`read_bout`으로 본다 → 사용자 승인 → `update_fighter_style` → 다시 `spar`.
 기술 클립(`skill`)은 등록 때 정해지므로 성격 고치기로 더할 수 없다.
+
+ChatGPT 호출(`_meta`에 `openai/…`가 있는 호출): Apps SDK는 결과의 구조화 값과 텍스트를 모두 모델에 넘긴다. 그래서 1,200자를 넘는 결과의
+텍스트는 필드 요약 한 줄로 줄인다(`compactText`, 실패 결과와 작은 결과는 그대로). 다른 호스트는 텍스트에 전체 JSON을 그대로 받는다.
+로그인하지 않은 ChatGPT 사용자의 `read_bout` 한도는 `_meta["openai/subject"]`(익명 사용자 id)로 사용자마다 센다.
 
 MCP 점검(2026-10-27): 도구 목록 20 KB → 17 KB(UUID 칸의 짧은 패턴, `$schema` 줄 삭제), 선수 기록의 패키지 해시 생략, `list_fighters`의 두 조회를
 동시에, 결과 함수 읽기 한도를 계정별로(첫 판은 모든 에이전트가 이 함수의 주소 하나로 분당 6번이었다).

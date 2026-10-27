@@ -174,7 +174,7 @@ test('agent tools list only with the arena key; reads are public, spars and cups
   assert.equal((await names(createCloudHandler({ db: dbFor() }))).includes('spar'), false);
   assert.equal((await names(createCloudHandler({ db: dbFor(), arena: { url: arena.url, key: null } }))).includes('spar'), false);
   const listed = await names(createCloudHandler({ db: dbFor(), arena }));
-  for (const tool of ['get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout', 'spar', 'enter_cup', 'update_fighter_style'])
+  for (const tool of ['get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout', 'spar', 'enter_cup', 'update_fighter_style', 'update_fighter_profile'])
     assert.ok(listed.includes(tool), tool);
   // Public reads need no connected account and send no key.
   const signedOut = createCloudHandler({ db: { auth: { getClaims: async () => ({ data: null }) }, rpc: async () => ({ data: false }) }, arena });
@@ -230,4 +230,40 @@ test('MCP 점검: short UUID schemas without $schema; a cup entry waits for the 
   const record = (await call(handle, 'get_fighter_record', { fighterId: 'kuma' })).structuredContent;
   assert.deepEqual(record.recent, [{ cup: ticket, round: 0, slot: 0 }]);
   assert.equal((await call(handle, 'get_cup', { cupId: 'not-a-uuid' })).isError, true);
+});
+
+test('a profile edit goes through the same edit on the owner\'s current package, only the fields given', async () => {
+  const fighter = crypto.randomUUID(), filters = [];
+  const query = { select() { return this; }, eq(k, v) { filters.push([k, v]); return this; }, is(k, v) { filters.push([k, v]); return this; },
+    async maybeSingle() { return { data: { manifest_sha: 'c'.repeat(64) } }; } };
+  const handle = createCloudHandler({ db: { ...dbFor(), from: () => query }, arena: { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true }) } });
+  const tool = (await (await handle(request('tools/list'))).json()).result.tools.find(t => t.name === 'update_fighter_profile');
+  assert.equal(tool.annotations.destructiveHint, true); assert.deepEqual(Object.keys(tool.inputSchema.properties.profile.properties).sort(),
+    ['concept', 'description', 'language', 'lines', 'moves', 'name', 'names']);
+  assert.equal((await call(handle, 'update_fighter_profile', { fighterId: fighter, profile: {}, idempotencyKey: crypto.randomUUID() })).structuredContent.code, 'invalid-profile');
+  assert.equal((await call(handle, 'update_fighter_profile', { fighterId: fighter, profile: { portrait: 'x' }, idempotencyKey: crypto.randomUUID() })).isError, true);
+  await call(handle, 'update_fighter_profile', { fighterId: fighter, profile: { lines: { win: 'Again!' } }, idempotencyKey: crypto.randomUUID() });
+  assert.ok(filters.some(([k, v]) => k === 'owner_id' && v === owner)); assert.ok(filters.some(([k, v]) => k === 'id' && v === fighter));
+});
+
+test('ChatGPT\'s calls get a short text for a large result (it reads the structured one) and its anonymous user as the read budget', async () => {
+  const calls = [], arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async (url, init = {}) => {
+    if (url.includes('rankings')) return Response.json({ ok: true, scope: 'registered', minBouts: 5, rankings: [] });
+    calls.push(init.headers ?? {}); return Response.json({ ok: true, rules: 39, fighters: Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, name: `Fighter ${i}` })) });
+  } };
+  const handle = createCloudHandler({ db: dbFor(), arena });
+  const ask = meta => handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read_bout', arguments: { a: 'kuma', b: 'yume', seed: 1 }, ...(meta ? { _meta: meta } : {}) } }) }))
+    .then(r => r.json()).then(j => j.result);
+  const plain = await ask(), chat = await ask({ 'openai/locale': 'ko', 'openai/subject': 'user-123' }), other = await ask({ 'openai/subject': 'user-456' });
+  assert.equal(plain.content[0].text, JSON.stringify(plain.structuredContent));
+  assert.match(chat.content[0].text, /^Full result in structuredContent \(\d+ characters\): ok=true, rules=39, fighters\[40\]$/);
+  assert.deepEqual(chat.structuredContent, plain.structuredContent);
+  assert.equal(calls[0]['x-arena-owner'], 'public');
+  assert.match(calls[1]['x-arena-owner'], /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-8[0-9a-f]{3}-[0-9a-f]{12}$/);
+  assert.notEqual(calls[1]['x-arena-owner'], calls[2]['x-arena-owner']);
+  // A small result stays whole.
+  const guide = await handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'get_rankings', arguments: { scope: 'registered' }, _meta: { 'openai/locale': 'ko' } } }) })).then(r => r.json());
+  assert.equal(guide.result.content[0].text, JSON.stringify(guide.result.structuredContent));
 });
