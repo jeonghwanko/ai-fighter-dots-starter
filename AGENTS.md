@@ -94,7 +94,7 @@ This repository lets each user create their own fighter through Dot. Read
   Render and review the authored phase/IK/foot-lock proxy before any new generation.
   Proxy joints, depth and contacts are design ground truth, never observations of generated artwork.
   Show actual normal/slow previews and keep visible part masks distinct from X-ray joints.
-- GPT locomotion uses this kit's hash-bound sprite-gen motion patch. Run through `npm run sprite --`.
+- GPT locomotion uses the motion engine in the pinned sprite-gen-agent. Run through `npm run sprite --`.
   If the user chooses authored joint pose guidance, use the v5 measured `gen-motion` route documented in
   `docs/GAIT-REVIEW.md` and `vendor/sprite-gen/docs/pose-motion.md`: one whole-body pose per call,
   target guide + immutable appearance-only identity + reviewed anchors, 16/12-frame plans, then pose and cycle review.
@@ -138,7 +138,7 @@ This repository lets each user create their own fighter through Dot. Read
   Never overwrite a registered immutable package.
 - Preserve unrelated working-tree changes. Run only relevant tests. Do not run CI unless explicitly requested.
 
-The sprite-gen gitlink pins the upstream revision. Keep its Apache-2.0 LICENSE and NOTICE.
-Do not update the pin or modify vendor code as part of ordinary character creation.
-The reviewed `patches/sprite-gen-gpt-motion.json` is applied by the kit at setup/run time and included in plugin builds.
-Its hashes must match; never overwrite an unknown upstream/local change to force the patch to apply.
+`vendor/sprite-gen` pins a commit of [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent),
+our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen) that carries the motion engine.
+Keep its Apache-2.0 LICENSE and NOTICE. Do not update the pin or modify vendor code as part of ordinary character creation.
+Engine changes are committed to sprite-gen-agent first; then move the pin. Setup and bundling refuse local vendor edits.

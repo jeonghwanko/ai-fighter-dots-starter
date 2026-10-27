@@ -4,7 +4,7 @@ import { execFile } from 'node:child_process';
 import { access, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ensureSpritePatch, inspectSpritePatch } from '../scripts/sprite-patch.mjs';
+import { inspectSpriteEngine } from '../scripts/sprite-gen.mjs';
 import { checkTools } from '../scripts/sprite-tools.mjs';
 import { defaultSessionPath } from '../scripts/login.mjs';
 import { connectionAction } from '../api/connection-errors.mjs';
@@ -43,7 +43,7 @@ export async function creationProgress({ store, jobs, sessionId } = {}) {
 }
 
 /**
- * Bring the kit and its hash-bound sprite-gen motion patch current, but only before a character starts.
+ * Bring the kit and its pinned sprite-gen-agent engine current, but only before a character starts.
  * Fast-forward only, on the published branch, with no tracked local edits. Slow installs are returned as commands.
  */
 export async function checkKit({ installed, ...options } = {}) {
@@ -64,18 +64,18 @@ async function installedSpriteGen(spriteRoot) {
 }
 
 async function checkKitCore({ progress, present, fetchRemote = true, git = runGit, root = kitRoot, spriteRoot,
-  inspectPatch = inspectSpritePatch, ensurePatch = ensureSpritePatch }) {
-  const result = { status: 'ready', branch: null, behind: null, ahead: null, remoteChecked: false, patch: null,
+  inspectEngine = inspectSpriteEngine }) {
+  const result = { status: 'ready', branch: null, behind: null, ahead: null, remoteChecked: false, engine: null,
     changedFiles: [], nextCommands: [], restartRequired: false, reason: null };
-  const readPatch = async () => !present.source ? { applied: false, error: 'sprite-gen-not-installed' }
-    : inspectPatch(spriteRoot).then(s => ({ id: s.manifest.id, applied: s.applied }), e => ({ applied: false, error: e.message }));
+  const readEngine = async () => !present.source ? { version: null, motion: false, error: 'sprite-gen-not-installed' }
+    : inspectEngine(spriteRoot);
   const head = await git(['rev-parse', '--abbrev-ref', 'HEAD'], { cwd: root });
   result.branch = head.stdout;
-  result.patch = await readPatch();
+  result.engine = await readEngine();
   // A packaged plugin runtime is not a checkout: its version comes with the package, so report only.
-  if (head.code !== 0) return { ...result, status: result.patch.applied ? 'ready' : 'action-required', reason: 'not-a-git-checkout' };
+  if (head.code !== 0) return { ...result, status: result.engine.motion ? 'ready' : 'action-required', reason: 'not-a-git-checkout' };
   if (result.branch !== KIT_BRANCH) return { ...result, status: 'blocked', reason: 'wrong-branch' };
-  // A patched submodule is always "dirty"; only tracked edits in this checkout or a moved gitlink count.
+  // Edits inside the submodule are checked below; here only tracked edits in this checkout or a moved gitlink count.
   const dirty = (await git(['status', '--porcelain', '--untracked-files=no', '--ignore-submodules=dirty'], { cwd: root })).stdout;
   if (fetchRemote) result.remoteChecked = (await git(['fetch', '--quiet', 'origin', KIT_BRANCH], { cwd: root, timeout: 60000 })).code === 0;
   if (result.remoteChecked) {
@@ -86,7 +86,7 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
     // In progress, or unknown without a workspace: report only, change nothing.
     const reason = progress.inProgress === null ? 'progress-unknown-no-workspace' : 'character-in-progress';
     if (result.behind > 0) return { ...result, status: 'deferred', reason };
-    return { ...result, status: result.patch.applied ? 'ready' : 'action-required', reason: result.patch.applied ? null : reason };
+    return { ...result, status: result.engine.motion ? 'ready' : 'action-required', reason: result.engine.motion ? null : reason };
   }
   if (dirty) return { ...result, status: 'blocked', reason: 'local-changes' };
   if (result.ahead > 0) return { ...result, status: 'blocked', reason: 'diverged-from-published-branch' };
@@ -98,18 +98,17 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
     const changed = file => result.changedFiles.includes(file);
     if (changed('package.json') || changed('package-lock.json')) result.nextCommands.push('npm ci --ignore-scripts');
     if (changed('vendor/sprite-gen') || !present.source) result.nextCommands.push('npm run sprite:setup');
-    else result.patch = await ensurePatch(spriteRoot).then(s => ({ id: s.manifest.id, applied: s.applied }), e => ({ applied: false, error: e.message }));
     result.nextCommands.push('npm run sprite:status');
     // This MCP process still runs the code it started with.
     result.restartRequired = result.changedFiles.some(f => /^(mcp|api|contracts|scripts)\//.test(f) || /^package(-lock)?\.json$/.test(f));
     return { ...result, status: 'updated' };
   }
   if (!present.source) return result; // checkKit adds the install commands
-  if (result.patch.error) return { ...result, status: 'blocked', reason: 'vendor-local-changes' };
-  if (!result.patch.applied) {
-    result.patch = await ensurePatch(spriteRoot).then(s => ({ id: s.manifest.id, applied: s.applied }), e => ({ applied: false, error: e.message }));
-    return { ...result, status: result.patch.applied ? 'patched' : 'blocked', reason: result.patch.applied ? null : 'patch-apply-failed' };
-  }
+  // Recorded attempts name the pinned engine; an edited one is not that engine.
+  if ((await git(['status', '--porcelain', '--untracked-files=no'], { cwd: spriteRoot })).stdout)
+    return { ...result, status: 'blocked', reason: 'vendor-local-changes' };
+  if (!result.engine.motion) // a checkout still on the pre-fork upstream pin
+    return { ...result, status: 'action-required', reason: 'motion-engine-missing', nextCommands: ['npm run sprite:setup', 'npm run sprite:status'] };
   return { ...result, reason: result.remoteChecked ? null : 'remote-unreachable-current-unknown' };
 }
 
@@ -206,7 +205,7 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
     tools: needsGeneration ? await checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools }) : notRequired,
     infrastructure, login: connection,
     account: needsGeneration ? accountItem(choice) : notRequired, ...unverifiedCreation(choice) };
-  const ready = ['ready', 'updated', 'patched'].includes(items.kit.status) && !items.kit.restartRequired && items.kit.nextCommands.length === 0
+  const ready = ['ready', 'updated'].includes(items.kit.status) && !items.kit.restartRequired && items.kit.nextCommands.length === 0
     && items.tools.status === 'ready' && items.account.status === 'chosen-unverified';
   return { purpose, kitAndAccountReady: ready, readyForGeneration: false,
     readyForRegistration: items.login.status === 'connected' && items.login.canSubmit === true, progress, elicitation, items,

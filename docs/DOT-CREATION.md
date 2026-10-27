@@ -349,5 +349,6 @@ Google 로그인 후 누구나 제작·업로드할 수 있다. **초대나 사�
 > 외형이 정해지면 대기·이동, 공격, 방어·피격 묶음으로 보여주고 묶음마다 내 피드백을 반영해줘.
 > 최종 동작이 정해지면 fighter.json과 WebP를 검사해 내 계정에 등록하고 결과를 이 대화에서 알려줘.
 
-sprite-gen은 [공식 저장소](https://github.com/aldegad/sprite-gen)의 고정 커밋을 서브모듈로 포함한다.
+sprite-gen은 Alex Kim의 [sprite-gen](https://github.com/aldegad/sprite-gen)을 포크해 모션 엔진을 더한
+[sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent)의 고정 커밋을 서브모듈로 포함한다.
 원본 Apache-2.0 [LICENSE](../vendor/sprite-gen/LICENSE)와 [NOTICE](../vendor/sprite-gen/NOTICE)를 보존한다.

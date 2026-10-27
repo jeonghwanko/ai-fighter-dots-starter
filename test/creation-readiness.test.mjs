@@ -18,13 +18,13 @@ const publicProbe = supported => async (_url, { spec = false } = {}) => spec
   : { status: 'reachable' };
 
 /** A scripted git: answers by the first arguments and records every call. */
-function fakeGit({ branch = KIT_BRANCH, dirty = '', fetch = 0, counts = '0\t3', merge = 0, changed = '' } = {}) {
+function fakeGit({ branch = KIT_BRANCH, dirty = '', vendorDirty = '', fetch = 0, counts = '0\t3', merge = 0, changed = '' } = {}) {
   const calls = [];
-  const git = async args => {
+  const git = async (args, { cwd } = {}) => {
     calls.push(args.join(' '));
     if (args[0] === 'rev-parse' && args[1] === '--abbrev-ref') return { code: 0, stdout: branch };
     if (args[0] === 'rev-parse') return { code: 0, stdout: 'before-sha' };
-    if (args[0] === 'status') return { code: 0, stdout: dirty };
+    if (args[0] === 'status') return { code: 0, stdout: path.basename(cwd ?? '') === 'sprite-gen' ? vendorDirty : dirty };
     if (args[0] === 'fetch') return { code: fetch, stdout: '' };
     if (args[0] === 'rev-list') return { code: 0, stdout: counts };
     if (args[0] === 'merge') return { code: merge, stdout: '' };
@@ -33,54 +33,52 @@ function fakeGit({ branch = KIT_BRANCH, dirty = '', fetch = 0, counts = '0\t3', 
   };
   return { git, calls };
 }
-const patchState = applied => async () => ({ manifest: { id: 'ai-fighter-gpt-motion-v8-semantic-coverage' }, applied });
+const engineState = motion => async () => ({ version: '3.4.0', motion });
 
-test('before a character starts, a behind checkout fast-forwards, applies the patch and names slow installs', async () => {
+test('before a character starts, a behind checkout fast-forwards and names slow installs', async () => {
   const { git, calls } = fakeGit({ changed: 'mcp/server.mjs\npackage-lock.json\ndocs/START-HERE.md' });
-  let ensured = 0;
-  const result = await checkKit({ progress: { inProgress: false }, installed, git, inspectPatch: patchState(false),
-    ensurePatch: async () => { ensured++; return { manifest: { id: 'v8' }, applied: true }; } });
+  const result = await checkKit({ progress: { inProgress: false }, installed, git, inspectEngine: engineState(true) });
   assert.equal(result.status, 'updated');
   assert.ok(calls.includes(`merge --ff-only origin/${KIT_BRANCH}`));
-  assert.equal(ensured, 1);
   assert.deepEqual(result.nextCommands, ['npm ci --ignore-scripts', 'npm run sprite:status']);
   assert.equal(result.restartRequired, true);
-  // A moved sprite-gen pin needs the full setup instead of an in-place patch.
+  // A moved sprite-gen pin needs the full setup.
   const pinned = await checkKit({ progress: { inProgress: false }, installed, git: fakeGit({ changed: 'vendor/sprite-gen' }).git,
-    inspectPatch: patchState(true), ensurePatch: async () => assert.fail('setup owns a moved pin') });
+    inspectEngine: engineState(true) });
   assert.deepEqual(pinned.nextCommands, ['npm run sprite:setup', 'npm run sprite:status']);
 });
 
 test('a character in progress, unknown progress, local edits, a wrong branch or divergence never update', async () => {
-  const never = async () => assert.fail('must not patch');
   for (const progress of [{ inProgress: true }, { inProgress: null }]) {
     const { git, calls } = fakeGit();
-    const result = await checkKit({ progress, installed, git, inspectPatch: patchState(true), ensurePatch: never });
+    const result = await checkKit({ progress, installed, git, inspectEngine: engineState(true) });
     assert.equal(result.status, 'deferred');
     assert.ok(!calls.some(call => call.startsWith('merge')));
   }
   const cases = [[{ dirty: ' M AGENTS.md' }, 'local-changes'], [{ branch: 'main' }, 'wrong-branch'], [{ counts: '1\t2' }, 'diverged-from-published-branch']];
   for (const [options, reason] of cases) {
     const { git, calls } = fakeGit(options);
-    const result = await checkKit({ progress: { inProgress: false }, installed, git, inspectPatch: patchState(true), ensurePatch: never });
+    const result = await checkKit({ progress: { inProgress: false }, installed, git, inspectEngine: engineState(true) });
     assert.deepEqual([result.status, result.reason], ['blocked', reason]);
     assert.ok(!calls.some(call => call.startsWith('merge')));
   }
 });
 
-test('an up-to-date checkout applies a missing patch; a fresh workspace gets install commands, not a local-change error', async () => {
-  const patched = await checkKit({ progress: { inProgress: false }, installed, git: fakeGit({ counts: '0\t0' }).git,
-    inspectPatch: patchState(false), ensurePatch: patchState(true) });
-  assert.equal(patched.status, 'patched');
+test('an up-to-date checkout on the pre-fork pin is sent to setup, engine edits block; a fresh workspace gets install commands', async () => {
+  const old = await checkKit({ progress: { inProgress: false }, installed, git: fakeGit({ counts: '0\t0' }).git, inspectEngine: engineState(false) });
+  assert.deepEqual([old.status, old.reason, old.nextCommands], ['action-required', 'motion-engine-missing', ['npm run sprite:setup', 'npm run sprite:status']]);
+  const edited = await checkKit({ progress: { inProgress: false }, installed, git: fakeGit({ counts: '0\t0', vendorDirty: ' M sprite_gen/cli.py' }).git,
+    inspectEngine: engineState(true) });
+  assert.deepEqual([edited.status, edited.reason], ['blocked', 'vendor-local-changes']);
   const fresh = await checkKit({ progress: { inProgress: false }, installed: { source: false, environment: false }, git: fakeGit({ counts: '0\t0' }).git,
-    inspectPatch: async () => { throw new Error('SPRITE_PATCH_SOURCE_CHANGED'); }, ensurePatch: async () => assert.fail('nothing to patch yet') });
+    inspectEngine: async () => assert.fail('nothing installed to inspect') });
   assert.deepEqual([fresh.status, fresh.reason], ['action-required', 'sprite-gen-not-installed']);
   assert.deepEqual(fresh.nextCommands, ['npm ci --ignore-scripts', 'npm run sprite:setup', 'npm run sprite:status']);
-  const offline = await checkKit({ progress: { inProgress: false }, installed, git: fakeGit({ fetch: 1 }).git, inspectPatch: patchState(true) });
+  const offline = await checkKit({ progress: { inProgress: false }, installed, git: fakeGit({ fetch: 1 }).git, inspectEngine: engineState(true) });
   assert.deepEqual([offline.status, offline.reason], ['ready', 'remote-unreachable-current-unknown']);
-  // A packaged plugin runtime is not a git checkout: report the patch, never touch git further.
+  // A packaged plugin runtime is not a git checkout: report the engine, never touch git further.
   const calls = [];
-  const packaged = await checkKit({ progress: { inProgress: false }, installed, inspectPatch: patchState(true),
+  const packaged = await checkKit({ progress: { inProgress: false }, installed, inspectEngine: engineState(true),
     git: async args => { calls.push(args[0]); return { code: 128, stdout: '' }; } });
   assert.deepEqual([packaged.status, packaged.reason, calls], ['ready', 'not-a-git-checkout', ['rev-parse']]);
 });
@@ -193,7 +191,7 @@ test('ODDBOUT and kit success never verify generation or parent display, and exi
   const state = { items: { idle: { versions: { v1: {} } } } }, work = [{ status: 'unknown' }];
   const result = await checkReadiness({ store: { list: async () => [{ sessionId: 'existing' }], read: async () => state },
     jobs: { list: async () => work }, account: 'gpt', remoteActive: true,
-    kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectPatch: patchState(true), ensurePatch: async () => assert.fail('existing work') },
+    kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectEngine: engineState(true) },
     tools: workingTools,
     login: { sessionPath, probe: publicProbe(true), request: async () => ({ ok: true, account: { invited: true, canSubmit: true } }) } });
   assert.equal(result.readyForRegistration, true); assert.equal(result.kitAndAccountReady, true);
@@ -206,7 +204,7 @@ test('ODDBOUT and kit success never verify generation or parent display, and exi
 
 test('a missing required system tool keeps generation from being ready and names who installs it', async () => {
   const result = await checkReadiness({ account: 'gpt', remoteActive: false,
-    kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectPatch: patchState(true), fetchRemote: false },
+    kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectEngine: engineState(true), fetchRemote: false },
     tools: { inspect: async () => ({ ffmpeg: { status: 'missing', install: { actor: 'user', command: 'sudo apt install ffmpeg' } },
       ffprobe: { status: 'missing', install: { actor: 'user', command: 'sudo apt install ffmpeg' } },
       img2webp: { status: 'broken', install: { actor: 'agent', command: 'npm run sprite:setup' } }, rife: { status: 'ok' } }) },
@@ -245,7 +243,7 @@ test('connection and registration never ask generation questions or touch the en
   for (const purpose of ['connection', 'registration']) {
     const result = await checkReadiness({ purpose, remoteActive: true,
       lowLevelServer: { getClientCapabilities: () => assert.fail('no generation prompt') },
-      kit: { git: () => assert.fail('no git or install'), inspectPatch: () => assert.fail('no patch') },
+      kit: { git: () => assert.fail('no git or install'), inspectEngine: () => assert.fail('no engine read') },
       login: { sessionPath, probe: publicProbe(true), request: async () => ({ ok: true, account: { canSubmit: true } }) } });
     assert.equal(result.purpose, purpose); assert.equal(result.readyForRegistration, true);
     assert.equal(result.elicitation, 'not-needed'); assert.equal(result.items.account.status, 'not-required');

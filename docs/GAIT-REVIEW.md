@@ -1,7 +1,7 @@
 # 보행 설계와 등록 전 검수
 
-sprite-gen은 이 저장소의 `vendor/sprite-gen` 고정 커밋과 `patches/sprite-gen-gpt-motion.json`의 검토된 패치로 설치된다.
-`npm run sprite:setup`과 `npm run sprite --`가 원본/수정본 해시를 확인해 적용한다. 알 수 없는 로컬 수정은 덮어쓰지 않는다.
+sprite-gen은 이 저장소의 `vendor/sprite-gen`에 고정된 [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent) 커밋으로 설치된다.
+모션 엔진은 그 커밋에 들어 있다. `npm run sprite:setup`은 고정 커밋을 받아 설치하며, 알 수 없는 로컬 수정은 덮어쓰지 않는다.
 설치만으로 모든 검수가 자동 실행되는 것은 아니다.
 추출·아틀라스 검사, `qa-motion.md`의 시각 검수 절차, `inspect-motion`의 조건부 접지 측정이 각각 있다.
 이 저장소의 `fighter:gait`는 이 결과를 한 흐름으로 연결하고, `fighter:pack`은 기본적으로 현재 walk/run과 일치하는 검수 결과를 요구한다.
