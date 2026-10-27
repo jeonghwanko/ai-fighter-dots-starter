@@ -33,13 +33,16 @@ test('startup returns one concrete action without treating login or mock evidenc
   assert.equal(nextAction({ status: 'blocked', reason: 'sprite-installation-failed', diagnostic: { actor: 'environment-preparer', reason: 'network-connect-forbidden', host: 'storage.googleapis.com' } }).actor, 'environment-preparer');
   assert.equal(nextAction({ ...report(), auth: { status: 'api-billing-blocked', reason: 'xai-api-key-environment' } }).action, 'remove-api-key-from-vm-environment');
 });
-test('front door fetches exact commit, preserves a workspace binding and returns completed doctor failures', async t => {
+test('front door fetches exact commit, preserves a workspace binding and returns actionable failures', async t => {
   const f = await fixture(t), releasePath = path.join(f.base, 'release.json'), commit = 'b'.repeat(40), calls = [];
   await writeFile(releasePath, JSON.stringify({ schemaVersion: 1, repository: 'https://github.com/jeonghwanko/ai-fighter-dots-starter.git', provider: 'grok', commit, version: '0.5.5' }));
-  const run = async (cmd,args) => { calls.push([cmd,args]); if (args[0] === 'rev-parse') return { stdout: commit };
-    if (cmd === process.execPath) throw Object.assign(Error('doctor'), { code: 1, stdout: JSON.stringify({ nextAction: { action: 'repair-installation' } }) });
-    return { stdout: '' }; };
-  const result = await launch(['--workspace', f.workspace, '--runtime-home', path.join(f.base,'runtimes'), '--install'], { releasePath, run });
+  const run = async (cmd,args) => { calls.push([cmd,args]); assert.equal(cmd, 'git');
+    return { stdout: args[0] === 'rev-parse' ? commit : '' }; };
+  const loadRuntime = async url => { assert.ok(url.endsWith('/scripts/dots-start.mjs'));
+    return { start: async options => { assert.equal(options.install, true);
+      assert.equal(options.workspace, f.workspace);
+      return { nextAction: { action: 'repair-installation' } }; } }; };
+  const result = await launch(['--workspace', f.workspace, '--runtime-home', path.join(f.base,'runtimes'), '--install'], { releasePath, run, loadRuntime });
   assert.equal(result.nextAction.action, 'repair-installation');
   assert.ok(calls.some(([,args]) => args[0] === 'fetch' && args.at(-1) === commit));
   await mkdir(path.join(f.workspace,'output'));
@@ -61,4 +64,26 @@ test('front door CLI returns a failing exit code while preserving its actionable
     assert.equal(JSON.parse(error.stdout).action, 'install-reviewed-release');
     return true;
   });
+});
+
+test('front door imports the bound runtime without relying on child Node stdout', async t => {
+  const f = await fixture(t), commit = 'd'.repeat(40), releasePath = path.join(f.base, 'release.json');
+  await writeFile(releasePath, JSON.stringify({ schemaVersion: 1, repository: 'https://github.com/jeonghwanko/ai-fighter-dots-starter.git', provider: 'grok', commit: 'e'.repeat(40), version: '0.5.5' }));
+  await mkdir(path.join(f.workspace, 'output'));
+  await writeFile(path.join(f.workspace, 'output/dots-workspace.json'), JSON.stringify({ schemaVersion: 1, provider: 'grok', commit, runtime: f.runtime }));
+  await mkdir(path.join(f.runtime, 'scripts'));
+  await writeFile(path.join(f.runtime, 'scripts/dots-start.mjs'), `export async function start(options) {
+    return { schemaVersion: 1, received: options, automaticGeneration: false,
+      nextAction: { action: 'connect-grok-subscription' } };
+  }`);
+  const calls = [], run = async (cmd, args) => {
+    calls.push([cmd, args]); assert.equal(cmd, 'git'); assert.deepEqual(args, ['rev-parse', 'HEAD']);
+    return { stdout: commit };
+  };
+  const result = await launch(['--workspace', f.workspace], { releasePath, run });
+  assert.deepEqual(result.received, { runtime: f.runtime, workspace: f.workspace, install: false });
+  assert.equal(result.nextAction.action, 'connect-grok-subscription');
+  assert.equal(result.automaticGeneration, false);
+  assert.equal(calls.length, 1); // No fetch, install or child Node after a workspace is bound.
+  await assert.rejects(launch(['--workspace', f.workspace], { releasePath, run, loadRuntime: async () => ({}) }), /runtime-start-contract-missing/);
 });

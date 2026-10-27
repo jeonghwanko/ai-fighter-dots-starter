@@ -19,7 +19,8 @@ async function plainDirectory(value) {
   }
   return target;
 }
-export async function launch(argv, { run = exec, releasePath = new URL('./deploy/dots-release.json', import.meta.url) } = {}) {
+export async function launch(argv, { run = exec, loadRuntime = url => import(url),
+  releasePath = new URL('./deploy/dots-release.json', import.meta.url) } = {}) {
   const options = {};
   for (let i = 0; i < argv.length; i++) {
     const key = { '--workspace': 'workspace', '--runtime-home': 'runtimeHome', '--install': 'install' }[argv[i]];
@@ -53,17 +54,13 @@ export async function launch(argv, { run = exec, releasePath = new URL('./deploy
   const cfg = { cwd: runtime, windowsHide: true, timeout: 15000, maxBuffer: 1024 * 1024 };
   const head = await run('git', ['rev-parse', 'HEAD'], cfg);
   if (head.stdout.trim() !== expected) throw Error('runtime-commit-mismatch');
-  const runner = path.join(runtime, 'scripts/dots-start.mjs');
-  const args = [runner, '--workspace', workspace, ...(options.install ? ['--install'] : [])];
-  let result;
-  try { result = await run(process.execPath, args, { ...cfg, timeout: 1800000,
-    env: { ...process.env, AI_FIGHTER_EXECUTION_HOST: 'dots', SPRITE_GEN_DEFAULT_PROVIDER: 'grok' } }); }
-  catch (error) {
-    // A completed doctor can return a useful action with exit 1. A timeout is never success.
-    if (error.killed || error.signal || typeof error.code !== 'number' || !error.stdout) throw error;
-    result = error;
-  }
-  return JSON.parse(result.stdout);
+  const runner = await plainDirectory(path.join(runtime, 'scripts/dots-start.mjs'));
+  // Some managed VMs lose Node-to-Node pipe output even for console.log. Keep the
+  // pinned runtime's typed result in this process instead of parsing a child CLI.
+  // start explicitly selects Grok; bootstrap writes the Dots marker before setup.
+  const entry = await loadRuntime(pathToFileURL(runner).href);
+  if (typeof entry.start !== 'function') throw Error('runtime-start-contract-missing');
+  return entry.start({ runtime, workspace, install: Boolean(options.install) });
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try {
