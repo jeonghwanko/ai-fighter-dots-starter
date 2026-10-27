@@ -18,7 +18,7 @@ test('published policies have effective dates and working local links, while pre
     for (const file of policyFiles.filter(file => file.endsWith('.html'))) {
       const html = await readFile(join(root, file), 'utf8');
       assert.match(html, /Lucas Foundation/);
-      assert.match(html, /Effective: 22 October 2026|시행일: 2026-10-22/);
+      assert.match(html, /Effective: 27 October 2026|시행일: 2026-10-27/);
       assert.match(html, /rel="canonical"/);
       assert.doesNotMatch(html, /POLICY PREVIEW|publication pending|공개 준비본|name="robots" content="noindex"|Supervillain Labs/);
       for (const match of html.matchAll(/(?:href|src)="\.\/([^"#]+)(?:#[^"]*)?"/g)) {

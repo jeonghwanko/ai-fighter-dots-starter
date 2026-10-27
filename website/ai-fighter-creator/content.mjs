@@ -1,5 +1,5 @@
-export const prepared = '22 October 2026';
-export const effectiveDate = '2026-10-22';
+export const prepared = '27 October 2026';
+export const effectiveDate = '2026-10-27';
 const email = '<a href="mailto:turbo08@gmail.com">turbo08@gmail.com</a>';
 const repo = 'https://github.com/jeonghwanko/ai-fighter-dots-starter';
 export const pages = [
