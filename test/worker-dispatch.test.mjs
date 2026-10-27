@@ -26,7 +26,7 @@ test('dispatch wakes only pending work, retries expired leases, and hides its cr
         ('ai_fighter_worker_url','https://example.onrender.com/wake'),
         ('ai_fighter_wake_token',repeat('a',64));
     `);
-    const migration = await readFile(new URL('../supabase/migrations/20261021090000_ai_fighter_worker_dispatch.sql', import.meta.url), 'utf8');
+    const migration = await readFile(new URL('../supabase/migrations/20261021090001_ai_fighter_worker_dispatch.sql', import.meta.url), 'utf8');
     await db.exec(migration.replace(/^create extension .*;$/gm, ''));
     await db.exec(await readFile(new URL('../supabase/migrations/20261021092000_ai_fighter_signed_dispatch.sql', import.meta.url), 'utf8'));
     const count = async () => (await db.query('select count(*)::int as n from net.calls')).rows[0].n;
