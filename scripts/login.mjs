@@ -219,7 +219,8 @@ export async function startDeviceLogin({ argv = [], log = console.error, post = 
   catch (error) { if (error.code !== 'ENOENT') throw new Error('pending-device-login-invalid'); }
   if (existing !== undefined) {
     if (existing?.version !== 1 || !Number.isFinite(Date.parse(existing.expiresAt))) throw new Error('pending-device-login-invalid');
-    if (Date.parse(existing.expiresAt) > Date.now()) throw new Error('device-login-already-pending');
+    // An approved or redeemed request outlives the pairing code: finish it with --device-wait instead of a new approval.
+    if (Date.parse(existing.expiresAt) > Date.now() || existing.tokenHash || existing.session) throw new Error('device-login-already-pending');
   }
   const { url, publishableKey } = await projectSettings({ argv, sessionPath });
   let started;
@@ -249,15 +250,19 @@ export async function startDeviceLogin({ argv = [], log = console.error, post = 
  * Stops at `timeoutSeconds` while still pending (the request stays open for another wait), or at expiry.
  */
 export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.error, post = devicePost, request = apiRequest,
-  sessionPath = defaultSessionPath(),
+  sessionPath = defaultSessionPath(), replace = false,
   createAuthClient = createClient, now = Date.now, sleep = ms => new Promise(resolve => setTimeout(resolve, ms)) } = {}) {
   const pendingPath = pendingDeviceLoginPath(sessionPath);
   const pending = await readSession(pendingPath);
   if (!pending || pending.version !== 1 || !DEVICE_CODE.test(pending.deviceCode ?? '') || !validProjectUrl(pending.url)
     || !isPublishableKey(pending.publishableKey)) throw new Error('pending-device-login-missing');
   const close = () => rm(pendingPath, { force: true });
+  // Each step after approval is saved here before the next one runs. The server answers the token only once, so a
+  // network failure, or a sign-in that needs --replace, resumes from the saved step instead of a new approval.
+  const record = async change => { Object.assign(pending, change); await writeSessionFile(pendingPath, pending); };
+  if (pending.session) return finishDeviceLogin({ pending, replace, close, sessionPath, log, request });
   const expiry = Date.parse(pending.expiresAt), deadline = Math.min(expiry, now() + timeoutSeconds * 1000);
-  let interval = pending.interval * 1000, answer = null;
+  let interval = pending.interval * 1000, answer = pending.tokenHash ? { tokenHash: pending.tokenHash } : null;
   while (!answer) {
     if (now() >= expiry) { await close(); throw new Error('device-login-expired'); }
     try {
@@ -277,14 +282,29 @@ export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.erro
     }
     await sleep(interval);
   }
-  await close(); // the approval is spent on the server either way
-  if (typeof answer.tokenHash !== 'string' || !/^[a-f0-9]{40,128}$/.test(answer.tokenHash)) throw new Error('invalid-api-response');
+  if (typeof answer.tokenHash !== 'string' || !/^[a-f0-9]{40,128}$/.test(answer.tokenHash)) { await close(); throw new Error('invalid-api-response'); }
+  if (!pending.tokenHash) await record({ tokenHash: answer.tokenHash }); // the approval is spent on the server now
   const auth = createAuthClient(pending.url, pending.publishableKey, { global: { fetch: runtimeFetch }, auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false } });
-  const verified = await auth.auth.verifyOtp({ type: 'email', token_hash: answer.tokenHash });
+  let verified;
+  try { verified = await auth.auth.verifyOtp({ type: 'email', token_hash: answer.tokenHash }); }
+  catch { throw new Error('device-login-redeem-retry'); }
+  // Unreachable Auth (status 0 or 5xx) keeps the token for another try; a refused token cannot be used again.
+  if (verified.error) {
+    if (verified.error.name === 'AuthRetryableFetchError' || !(verified.error.status >= 400 && verified.error.status < 500)) throw new Error('device-login-redeem-retry');
+    await close(); throw new Error('device-login-redeem-failed');
+  }
   const session = verified.data?.session;
-  if (verified.error || !session?.access_token || !session.refresh_token || !session.user?.id) throw new Error('device-login-redeem-failed');
+  if (!session?.access_token || !session.refresh_token || !session.user?.id) { await close(); throw new Error('device-login-redeem-failed'); }
+  await record({ tokenHash: undefined, session: { access_token: session.access_token, refresh_token: session.refresh_token,
+    user: { id: session.user.id, ...(session.user.email ? { email: session.user.email } : {}) } } });
+  return finishDeviceLogin({ pending, replace, close, sessionPath, log, request });
+}
+/** The redeemed session becomes the session file; only then does the pending request go. `--replace` may resume it. */
+async function finishDeviceLogin({ pending, replace, close, sessionPath, log, request }) {
   const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
-  return saveSignIn({ session, replace: pending.replace, previousUser, sessionPath, url: pending.url, publishableKey: pending.publishableKey, log, request });
+  const result = await saveSignIn({ session: pending.session, replace: pending.replace || replace, previousUser, sessionPath, url: pending.url, publishableKey: pending.publishableKey, log, request });
+  await close();
+  return result;
 }
 
 /** The loopback callback address inside pasted text, bound to the pending state and port; never a bare code. */
@@ -382,6 +402,7 @@ const messages = {
   'device-login-consumed': '이 기기 연결 요청은 이미 사용되었습니다. npm run login -- --device 부터 다시 실행하세요.',
   'device-login-not-found': '서버에서 이 기기 연결 요청을 찾지 못했습니다. npm run login -- --device 부터 다시 실행하세요.',
   'device-login-redeem-failed': '승인된 로그인을 세션으로 바꾸지 못했습니다. npm run login -- --device 부터 다시 실행하세요.',
+  'device-login-redeem-retry': '승인은 받았지만 로그인 서버에 닿지 못했습니다. 승인을 다시 받지 말고 연결을 확인한 뒤 npm run login -- --device-wait 를 다시 실행하세요.',
   'invalid-api-response': '서버 응답을 이해하지 못했습니다. 잠시 후 다시 실행하세요.',
   'pending-login-missing': '진행 중인 로그인이 없습니다. npm run login -- --paste 부터 다시 실행하세요.',
   'pending-login-expired': '로그인 시작 후 10분이 지났습니다. npm run login -- --paste 부터 다시 실행하세요.',
@@ -405,7 +426,7 @@ if (isEntry()) {
   const argv = process.argv.slice(2), finish = argv.indexOf('--finish');
   const timeout = argv.indexOf('--timeout');
   const run = argv[0] === 'logout' ? logout()
-    : argv.includes('--device-wait') ? waitDeviceLogin({ timeoutSeconds: timeout >= 0 ? Number(argv[timeout + 1]) || 600 : 600 })
+    : argv.includes('--device-wait') ? waitDeviceLogin({ timeoutSeconds: timeout >= 0 ? Number(argv[timeout + 1]) || 600 : 600, replace: argv.includes('--replace') })
     : argv.includes('--device') ? startDeviceLogin({ argv })
     : finish >= 0 ? (argv.length > finish + 1 ? Promise.resolve(argv.slice(finish + 1).join(' ')) : readTerminalLine('로그인 후 주소창 주소: '))
       .then(pasted => finishPasteLogin({ pasted }))

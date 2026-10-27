@@ -212,6 +212,10 @@ npm run sprite:status
     요청은 10분 뒤 만료된다. 폴링은 5초 간격이며 너무 빠르면 늦춘다. 승인은 사용자당 시간당 10회로 제한된다.
     `--device-wait --timeout <초>`는 아직 승인 전이면 요청을 유지한 채 끝난다.
     전송 장애도 기존 요청을 보존하고 멈춘다. 복구 후 같은 `--device-wait`로 재개하며 새 `--device` 요청을 만들지 않는다.
+    승인 뒤의 단계도 같다. 받은 일회용 토큰과 바꾼 세션을 대기 파일(0600)에 먼저 저장하고, 세션 파일이 저장된 뒤에만 지운다.
+    로그인 서버에 닿지 못하면(`device-login-redeem-retry`) 승인을 다시 받지 않고 `--device-wait`로 이어 가며, 세션 파일에 다른
+    사용자가 있으면(`session-user-differs`) `--device-wait --replace`로 마친다. 토큰이 거절되면(`device-login-redeem-failed`)만
+    요청을 지우고 `--device`부터 다시 한다.
 
 ## 8. 종료와 정리
 
