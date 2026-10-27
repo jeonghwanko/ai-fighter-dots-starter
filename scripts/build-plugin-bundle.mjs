@@ -4,9 +4,12 @@ import { cp, lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { localPath } from '../mcp/creation-store.mjs';
+import { importClosure, packageName } from './import-graph.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const sha = value => createHash('sha256').update(value).digest('hex');
+// Entry points, data and docs. Modules they import are added from the import graph (`runtimeFileList`),
+// so a new relative import cannot be left out of the kit (0.5.0 shipped without tools/ai-fighter/projected-ground.mjs).
 const runtimeFiles = [
   'LICENSE', 'AGENTS.md', 'package-lock.json', 'api/client.mjs', 'api/connection-errors.mjs', 'api/runtime-fetch.mjs', 'server/ai-fighter-package.mjs',
   'deploy/creation-context-source.json', 'deploy/creator-site.json',
@@ -20,6 +23,9 @@ const runtimeFiles = [
   'docs/FOOT-EVIDENCE.md', 'docs/LOCAL-PLUGIN.md', 'docs/GAME-CREATION-CONTEXT.md', 'docs/OPEN-REGISTRATION.md',
   'docs/EXECUTION-HOST.md', 'docs/CONNECTION-READINESS.md', 'docs/ODDBOUT-PLUGIN.md',
 ];
+const runtimeDirectories = ['mcp', 'contracts/ai-fighter'];
+// The cloud MCP and its file-input probe run only in the Edge function (supabase/functions/ai-fighter-mcp) and import the server API.
+const edgeOnlyFiles = ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs'];
 const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
   'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run', 'creation:tool'];
 
@@ -57,6 +63,28 @@ async function copy(relative, sourceRoot, targetRoot) {
   await cp(source, target, { errorOnExist: true, force: false });
 }
 
+/** Every repository file the runtime ships: the declared files and directories plus their import closure. */
+export async function runtimeFileList({ sourceRoot = root } = {}) {
+  const declared = [...runtimeFiles];
+  for (const directory of runtimeDirectories)
+    for (const file of await files(path.join(sourceRoot, directory))) declared.push(`${directory}/${file}`);
+  const { files: closure } = await importClosure(sourceRoot, declared.filter(file => !edgeOnlyFiles.includes(file)));
+  const leaked = closure.filter(file => edgeOnlyFiles.includes(file));
+  if (leaked.length) throw Error(`The local runtime imports Edge-only modules: ${leaked.join(', ')}`);
+  return closure;
+}
+/**
+ * Fails unless every module in a built runtime resolves there: relative imports to bundled files,
+ * bare imports to the runtime package.json dependencies. Runs on the copied files, so it checks what ships.
+ */
+export async function checkRuntimeImports(runtime) {
+  const { dependencies = {} } = JSON.parse(await readFile(path.join(runtime, 'package.json'), 'utf8'));
+  const scripts = (await files(runtime)).filter(file => !file.startsWith('vendor/') && /\.(?:mjs|js)$/.test(file));
+  const { bare } = await importClosure(runtime, scripts);
+  const missing = bare.map(packageName).filter(name => name && !(name in dependencies));
+  if (missing.length) throw Error(`Runtime imports packages it does not depend on: ${[...new Set(missing)].join(', ')}`);
+}
+
 export async function buildPluginBundle(destination) {
   if (!destination.startsWith('output/')) throw Error('plugin-output-must-be-under-output');
   const out = await localPath(root, destination);
@@ -75,9 +103,7 @@ export async function buildPluginBundle(destination) {
   await mkdir(path.dirname(plugin), { recursive: true });
   await cp(path.join(root, 'plugins', 'ai-fighter'), plugin, { recursive: true, force: false, errorOnExist: true });
   const runtime = path.join(plugin, 'runtime'); await mkdir(runtime);
-  for (const file of runtimeFiles) await copy(file, root, runtime);
-  for (const directory of ['mcp', 'contracts/ai-fighter'])
-    for (const file of await files(path.join(root, directory))) await copy(`${directory}/${file}`, root, runtime);
+  for (const file of await runtimeFileList()) await copy(file, root, runtime);
   const omittedVendorFiles = [];
   for (const file of vendorFiles) {
     if (includeVendorFile(file)) await copy(file, vendor, path.join(runtime, 'vendor', 'sprite-gen'));
@@ -89,6 +115,7 @@ export async function buildPluginBundle(destination) {
   const pkg = JSON.parse(await readFile(path.join(root, 'package.json'), 'utf8'));
   pkg.scripts = Object.fromEntries(runtimeScripts.map(key => [key, pkg.scripts[key]]));
   await writeFile(path.join(runtime, 'package.json'), JSON.stringify(pkg, null, 2) + '\n', { flag: 'wx' });
+  await checkRuntimeImports(runtime);
   // Source-only: native Node packages are installed in the user's writable runtime on that host.
   // Bundling Windows node_modules would break Dots/Linux and make the plugin desktop-only again.
   const hashes = {};

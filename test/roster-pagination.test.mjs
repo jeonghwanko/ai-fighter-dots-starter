@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { createHandler } from '../api/handler.mjs';
 const rows = Array.from({ length: 25 }, (_, i) => ({ id: '00000000-0000-4000-8000-' + String(i).padStart(12, '0'),
   created_at: new Date(Date.UTC(2026, 9, i + 1)).toISOString(), manifest_sha: 'a'.repeat(64), runtime_manifest_sha: 'a'.repeat(64),
-  runtime_approved: true, runtime_scope: 'arena-player-v1', review_state: 'approved', profile: { name: 'Fighter ' + i } }));
+  runtime_approved: true, runtime_scope: 'arena-player-v1', review_state: 'approved', listed: true, profile: { name: 'Fighter ' + i } }));
 function handler(source) {
   return createHandler({ db: { from() {
     let data = [...source], order = [];
@@ -50,9 +50,9 @@ test('invalid cursors cannot inject PostgREST filters', async () => {
     assert.equal((await handle(request(cursor))).status, 400);
   }
 });
-test('removed, pending and hash-mismatched packages are excluded without losing the next page', async () => {
+test('removed, pending, unlisted and hash-mismatched packages are excluded without losing the next page', async () => {
   const source = rows.map((row, i) => i >= 5 ? { ...row, runtime_manifest_sha: 'b'.repeat(64) } : row);
-  source.push({ ...rows[0], review_state: 'removed' }, { ...rows[1], runtime_approved: false });
+  source.push({ ...rows[0], review_state: 'removed' }, { ...rows[1], runtime_approved: false }, { ...rows[2], listed: false });
   const handle = handler(source), first = await (await handle(request())).json();
   assert.equal(first.fighters.length, 0); assert.equal(first.hasMore, true);
   const second = await (await handle(request(first.nextCursor))).json();

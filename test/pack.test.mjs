@@ -297,6 +297,15 @@ test('packing is deterministic, never overwrites and writes nothing for an inval
   assert.ok(missingHits.errors.some(e => e.path === '/clips/combo/hitSequenceIndices'), JSON.stringify(missingHits.errors));
   assert.deepEqual((await readdir(directory)).filter(name => name.includes('invalid')), ['plan-invalid.json']);
 });
+test('a package that fails file validation is never published, so the corrected plan can reuse the folder', async () => {
+  const directory = await gamePack('pixel-check');
+  // In bounds for the contract, but over transparent pixels: only the decoded-pixel check can reject it.
+  const empty = await run(directory, plan(directory, 'pixel', value => { value.profile.portraitCrop = { x: 0, y: 0, width: 16, height: 16 }; }));
+  assert.equal(empty.ok, false);
+  assert.ok(empty.errors.some(e => e.code === 'EMPTY_PROFILE_CROP'), JSON.stringify(empty.errors));
+  assert.deepEqual((await readdir(directory)).filter(name => name.includes('pixel')), ['plan-pixel.json'], 'no package or staging folder is left');
+  assert.equal((await run(directory, plan(directory, 'pixel'))).ok, true);
+});
 test('a walk that repeats a frame is refused instead of padded', async () => {
   const directory = await gamePack('repeated-walk', { repeat: 'walk' });
   const result = await run(directory, plan(directory, 'fighter'));
