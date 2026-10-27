@@ -13,19 +13,51 @@
 - Startup returns one next action and recovers unknown jobs before any new work. Creation then follows
   the existing review groups; source receipt, generation, display and acceptance stay distinct.
 
-## Evidence collected on Windows (2026-10-28 KST)
+## Evidence collected (2026-10-28 KST)
 
-Related suites: `creator-sources`, `dots-start`, `dots-workspace`, `portable-plugin`, `cloud-mcp`,
-`plugin-bundle`, `migration-rules`, `api`, `file-input-probe`, `runtime-fetch`,
-`cloud-plugin-publication`, `creator-plugin`.
+On Windows, the 13 related suites (creator-sources, dots-start, dots-workspace, portable-plugin,
+cloud-mcp, plugin-bundle, migration-rules, api, file-input-probe, runtime-fetch,
+cloud-plugin-publication, creator-plugin, sprite-tools) report **115 passed, 0 failed, 5 skipped**.
+Skipped checks require POSIX permissions/symlinks or the Linux WebP fixture. Directory junction rejection
+did run on Windows. Actual npm --version through the repaired launcher returned **10.9.7**.
+The Linux shell recipe passes Bash syntax validation; it has not been installed as a fresh saved image.
 
-After fixing the failing cases: **105 passed, 0 failed, 3 skipped** across these 12 suites.
-The skipped checks require POSIX mode bits or Windows file-symlink privilege and must run in the Linux VM.
-Directory junction rejection did run on Windows. Actual Windows `npm --version` through the repaired
-launcher returned **10.9.7**. Bash syntax check passed; the Linux installer was not run on this PC.
-The SQL test uses migrated PostgreSQL (PGlite) and simulated Storage, not the production Storage service.
-Proxy tests include inherited proxy use and denied CONNECT without a direct fallback.
-The source engine remains pinned to `0dc264ba257c0d417f86ef797bc503f933e1e142`.
+The existing Dots VM task **ODDBOUT 0.4.0 분리 설치 검증** ran the candidate in
+/workspace/oddbout-dots-vm-acceptance-20261028, preserving the original checkouts.
+The task title is not the installed version: its old light kit was actually 0.3.0.
+The tested front door was c6ebe4a, runtime 66aab684addabdf211b5d23cd41536aa0bfb33f2, kit 0.5.5,
+engine pin **0dc264ba257c0d417f86ef797bc503f933e1e142**.
+
+- Real VM tools: Node 24.19.0, npm 11.9.0, Python 3.12.14, ffmpeg/ffprobe 7.1.5.
+  The pinned Python engine installed as 3.4.0. This is not the new image's Node 22.22.2 recipe.
+- npm installation succeeded; WebP was missing and its download prevented full setup.
+  Fixed in the follow-up: use inherited proxy transport, return a nonzero front-door exit on
+  installation failure, and report only a sanitized known blocker/host.
+- Reinvoking the entry preserved the same six monitored files, hashes and mtimes; no pull, reinstall,
+  or generation dispatch occurred. A real VM restart was not performed.
+- Grok 1.0.70 initially failed in its npm postinstall at the unwritable home directory.
+  The same official lock with npm ci --ignore-scripts --no-audit --no-fund succeeded;
+  its unmodified launcher returned **grok 1.0.70 (f50904eaee6c)**, exit 0.
+  No HOME/GROK_HOME changes, authentication copying, source patches or login occurred.
+- Linux's original 12 Codex fixture failures came from running mock PC tests inside a marked Dots
+  runtime. On a clean checkout, **107 passed, 1 failed** across the original 108 tests.
+  The remaining POSIX cleanup-hook order is fixed in the follow-up; Linux retest is pending.
+- The VM network policy lacks storage.googleapis.com and
+  ztfxxhtmtrvxvuxlqmgz.supabase.co. The saved environment must be republished and a fresh VM
+  validated; neither repository code nor relogin changes this host policy.
+
+The private-source migration is applied and MCP **v30** deployed. Production checks confirmed a private
+16 MiB PNG bucket, owner checks, service-only table/RPC access and unauthenticated HTTP 401.
+The public tool list contains save/get/grant, but the already-running app/VM tool catalog still lacks
+these three tools after requesting the app's official refresh. Native file ingress remains unverified.
+Local tests use migrated PostgreSQL (PGlite) and simulated Storage, not an actual user upload.
+
+## Open acceptance gates
+
+The reviewed release remains a candidate. Still required: fresh saved-image install and restart;
+official Grok login plus actual image/video entitlement; native original ingress and sealed VM transfer;
+visible delivery to the current conversation; requested character creation, group review and final package.
+No successful actual generation, displayed VM output or complete fighter is claimed.
 
 ## Required saved-VM evidence (still pending)
 
@@ -46,6 +78,5 @@ The old task title is not a version source: record actual kit manifest/version, 
 8. Continue authorized groups to eleven motions, actual gait review and validated packaging; registration
    requires the user's final registration request. Do not call an example fixture a generated fighter.
 
-No saved VM has yet run this candidate. No successful actual Grok generation, VM-to-conversation preview,
-or complete fighter is claimed by this record. Main must not advertise this candidate as verified until
-that evidence exists. Publishing/Republishing the saved environment is a host operation outside the kit.
+The existing VM has run the initial candidate as recorded above; the revised saved image and complete
+creation path remain unverified. Main must not advertise this candidate as verified until that evidence exists. Publishing/Republishing the saved environment is a host operation outside the kit.

@@ -3,7 +3,9 @@
 set -euo pipefail
 umask 077
 repo="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd -P)"
-tools_dir="$HOME/.local/share/oddbout-tools"
+tools_dir="${ODDBOUT_TOOLS_HOME:-/workspace/.oddbout-tools}"
+runtime_home="${ODDBOUT_RUNTIME_HOME:-/workspace/.oddbout/runtimes}"
+workspace="${AI_FIGHTER_ROOT:-/workspace/oddbout-workspace}"
 for credential_dir in "$HOME/.grok" "$HOME/.oddbout/auth"; do
   if [[ -e "$credential_dir" ]]; then
     echo 'snapshot-has-personal-auth: prepare a fresh environment before publishing' >&2; exit 1
@@ -34,13 +36,17 @@ export PATH="$node_dir/bin:$tools_dir/grok/node_modules/.bin:$PATH"
 [[ "$(node --version)" == v22.22.2 ]] || { echo 'node-version-mismatch' >&2; exit 1; }
 mkdir -p "$tools_dir/grok"
 cp "$repo/deploy/dots-environment/package.json" "$repo/deploy/dots-environment/package-lock.json" "$tools_dir/grok/"
-npm ci --prefix "$tools_dir/grok" --omit=dev --no-audit --no-fund
-grok --version
+npm ci --prefix "$tools_dir/grok" --ignore-scripts --omit=dev --no-audit --no-fund
+# The unmodified official launcher supports in-package extraction on an unwritable home.
+# Never relocate HOME/GROK_HOME or copy authentication to install the executable.
+grok_version="$(grok --version)"
+[[ "$grok_version" == "grok 1.0.70 "* ]] || { echo 'grok-version-mismatch' >&2; exit 1; }
+printf '%s\n' "$grok_version"
 ffmpeg -version >/dev/null
 ffprobe -version >/dev/null
-img2webp -h 2>&1 | grep -q -- '-exact'
-printf 'export PATH="%s/bin:%s/grok/node_modules/.bin:$PATH"\n' "$node_dir" "$tools_dir" > "$tools_dir/env.sh"
+printf 'export PATH=%q:$PATH\n' "$node_dir/bin:$tools_dir/grok/node_modules/.bin" > "$tools_dir/env.sh"
+printf 'export ODDBOUT_RUNTIME_HOME=%q\nexport AI_FIGHTER_ROOT=%q\n' "$runtime_home" "$workspace" >> "$tools_dir/env.sh"
 cd "$repo"
-# Install the immutable release into the eventual user's runtime home. No login or generation.
-node dots.mjs --install --workspace "$HOME/.oddbout/template-workspace"
+# Install the immutable release into the saved workspace. The kit installs pinned WebP if the OS copy lacks -exact. No login or generation.
+node dots.mjs --install --runtime-home "$runtime_home" --workspace /workspace/.oddbout-template-workspace
 printf '%s\n' 'Tools prepared. Review docs/DOTS-START.md, publish without user data, then connect the user in the running VM.'

@@ -9,7 +9,7 @@ the historical 0.2.0 package still present on main. Saved-VM creation acceptance
 2. In the user's running VM, read [the Start instructions](docs/DOTS-START.md) and run:
 
    ```sh
-   . "$HOME/.local/share/oddbout-tools/env.sh"
+   . "/workspace/.oddbout-tools/env.sh"
    node dots.mjs --install
    ```
 

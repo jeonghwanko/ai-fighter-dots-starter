@@ -30,7 +30,7 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 ChatGPT 플러그인에서 **ODDBOUT** 클라우드 MCP를 연결하고 Google로 로그인한 뒤,
 Dots 대화에서 `@ODDBOUT`을 선택하세요. 계정 확인·파일 전달·등록은 클라우드 연결이
 처리합니다. 로컬 MCP 설치, API 키 입력, 로그인 콜백 복사는 필요하지 않습니다.
-서버 주소와 최초 연결 순서는 [클라우드 연결 안내](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CLOUD-MCP.md)에 있습니다.
+서버 주소와 최초 연결 순서는 [클라우드 연결 안내](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/CLOUD-MCP.md)에 있습니다.
 이미지 생성·미리보기·최종 검토는 선택한 실행 환경과 본인의 생성 계정을 사용합니다.
 아래 설치 과정은 제작 키트를 작업 공간에서 실행할 때의 안내이며 클라우드 로그인에는 필요하지 않습니다.
 
@@ -67,7 +67,7 @@ Dots 대화에서 `@ODDBOUT`을 선택하세요. 계정 확인·파일 전달·�
 
 AI는 한 묶음이 끝날 때마다 실제 결과를 보여주고 의견을 기다립니다. 수정할 부분만 다시 만들고 나머지 선택은 보존합니다. 이후 단계는 알아서 진행해 달라고 맡길 수도 있습니다. AI가 파일 검사와 함께 캐릭터의 일관성, 움직임, 발이 땅에 닿는 모습, 동작 타이밍을 검토하고, 사용자는 결과를 확인한 뒤 다음 단계로 넘어갑니다.
 
-생성·수정·패키징의 자세한 절차는 [전체 제작 흐름](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/DOT-CREATION.md)에 있습니다.
+생성·수정·패키징의 자세한 절차는 [전체 제작 흐름](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/DOT-CREATION.md)에 있습니다.
 
 ## Dots 저장 VM 준비하기
 
@@ -81,7 +81,7 @@ node dots.mjs --install
 
 다음 요청부터는 `node dots.mjs`로 같은 고정 버전과 작업을 점검·재개합니다. 본인의 Grok 구독을 공식 기기 로그인으로 연결하며 로그인 정보를 게시 이미지에 넣지 않습니다. **0.5.5 후보**의 실제 저장 VM 제작 검증은 진행 중입니다. main에 남아 있는 0.2.0 패키지를 이 Dots 경로에서 직접 설치하지 않습니다.
 
-PC 제작과 번들은 [고정 런타임 안내](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/ODDBOUT-PLUGIN.md)를 따르며, 반환된 런타임 디렉터리에서 명령을 실행합니다.
+PC 제작과 번들은 [고정 런타임 안내](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/ODDBOUT-PLUGIN.md)를 따르며, 반환된 런타임 디렉터리에서 명령을 실행합니다.
 
 ## 등록하고 플레이하기
 
@@ -89,23 +89,23 @@ PC 제작과 번들은 [고정 런타임 안내](https://github.com/jeonghwanko/
 
 서버가 업로드된 파일을 검사한 뒤 게임에서 쓸 수 있게 합니다. AI가 처리 결과까지 확인해 내 캐릭터가 실제로 등록됐고 게임에서 이용 가능한지 알려줍니다. 대기열 상황에 따라 시간이 걸릴 수 있습니다.
 
-같은 Google 계정으로 [제작자 페이지](https://oddbout.com/creator.html?lang=ko)에 로그인하면 내 선수를 확인할 수 있습니다. 이용 한도와 프로필 수정은 [등록 안내](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/OPEN-REGISTRATION.md)를 참고하세요. 로그인 링크, 콜백 주소, 세션 파일은 공개하지 마세요.
+같은 Google 계정으로 [제작자 페이지](https://oddbout.com/creator.html?lang=ko)에 로그인하면 내 선수를 확인할 수 있습니다. 이용 한도와 프로필 수정은 [등록 안내](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/OPEN-REGISTRATION.md)를 참고하세요. 로그인 링크, 콜백 주소, 세션 파일은 공개하지 마세요.
 
 ## 문제 제보와 기여
 
 설치·생성·로그인·등록·게임 이용 중 문제가 생기면 실패한 단계, 기대한 결과와 실제 결과, 오류 메시지, 도구 버전이나 커밋을 [이슈](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)에 남겨주세요. 인증 정보와 비공개 파일은 제외합니다. 생성이나 업로드가 시간 초과된 경우에는 기존 요청과 결과물부터 확인한 뒤 재시도합니다.
 
-버그 제보, 설치 안내 개선, 재현 가능한 예제를 환영합니다. AI와 함께 저장소를 수정할 때는 [AGENTS.md](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/AGENTS.md)를 먼저 읽어주세요.
+버그 제보, 설치 안내 개선, 재현 가능한 예제를 환영합니다. AI와 함께 저장소를 수정할 때는 [AGENTS.md](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/AGENTS.md)를 먼저 읽어주세요.
 
 | 문서 | 내용 |
 | --- | --- |
-| [클라우드 연결](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CLOUD-MCP.md) · [연결 복구](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CONNECTION-READINESS.md) | Google 로그인, 계정 확인, 클라우드 등록 |
-| [제작 규격](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/AUTHORING.md) | 선수 파일과 패키지 규격 |
-| [제작 UX](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CREATION-UX.md) | 캐릭터 입력, 피드백, 버전 선택 |
-| [게임 제작 데이터](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/GAME-CREATION-CONTEXT.md) | 현재 동작·조작·시간 규칙 |
-| [보행 검수](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/GAIT-REVIEW.md) | 걷기·달리기 품질과 접지 근거 |
-| [실행 환경](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/EXECUTION-HOST.md) · [미리보기 전달](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/DELIVERY.md) | 계정 분리, 로컬 실행, 실제 결과 표시 |
-| [호스팅](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CREATOR-HOSTING.md) · [보안](SECURITY.md) | 배포와 보안 경계 |
+| [클라우드 연결](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/CLOUD-MCP.md) · [연결 복구](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/CONNECTION-READINESS.md) | Google 로그인, 계정 확인, 클라우드 등록 |
+| [제작 규격](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/AUTHORING.md) | 선수 파일과 패키지 규격 |
+| [제작 UX](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/CREATION-UX.md) | 캐릭터 입력, 피드백, 버전 선택 |
+| [게임 제작 데이터](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/GAME-CREATION-CONTEXT.md) | 현재 동작·조작·시간 규칙 |
+| [보행 검수](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/GAIT-REVIEW.md) | 걷기·달리기 품질과 접지 근거 |
+| [실행 환경](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/EXECUTION-HOST.md) · [미리보기 전달](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/DELIVERY.md) | 계정 분리, 로컬 실행, 실제 결과 표시 |
+| [호스팅](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/CREATOR-HOSTING.md) · [보안](SECURITY.md) | 배포와 보안 경계 |
 
 의존성 설치 후 로컬 개발 검사는 다음 명령으로 실행합니다.
 

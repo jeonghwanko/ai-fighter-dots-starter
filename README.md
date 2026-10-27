@@ -30,7 +30,7 @@ The kit includes sprite-gen, creation workflows, validation tools, and an MCP se
 Connect the hosted **ODDBOUT** MCP in ChatGPT Plugins, sign in with Google, then select
 `@ODDBOUT` in your Dots conversation. The cloud connector handles account checks,
 file transfer and registration; no local MCP installation, API key or callback copying is needed.
-See [cloud connection instructions](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CLOUD-MCP.md) for the endpoint and first-time setup.
+See [cloud connection instructions](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/CLOUD-MCP.md) for the endpoint and first-time setup.
 Image generation, previews and package review still use the selected host and your own generation account.
 The setup below is for running the creation kit in a workspace; it is not required to authenticate the cloud connector.
 
@@ -67,7 +67,7 @@ Using the local kit takes setup and several rounds of review. Time, usage limits
 
 Your assistant shows you actual previews and waits for your feedback after each group. It revises the affected assets and keeps your other selections. You can also ask it to handle later groups on its own. Alongside file checks, the assistant reviews character consistency, movement, foot contact, and timing. You review the results before moving on.
 
-See the [full creation workflow](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/DOT-CREATION.md) for generation, revision, and packaging.
+See the [full creation workflow](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/DOT-CREATION.md) for generation, revision, and packaging.
 
 ## Set up the saved Dots VM
 
@@ -81,7 +81,7 @@ node dots.mjs --install
 
 Later requests run `node dots.mjs`. It checks and recovers the same pinned runtime and workspace. Grok device login is connected per user; no login is put into the saved image. The **0.5.5 candidate** is undergoing saved-VM acceptance and is not yet certified for complete creation. Main's historical 0.2.0 package is not used by this Dots entry point.
 
-For PC creation and bundle setup, read the [pinned runtime guide](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/ODDBOUT-PLUGIN.md). Execute that runtime's commands in its own checkout, not in this front-door checkout.
+For PC creation and bundle setup, read the [pinned runtime guide](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/ODDBOUT-PLUGIN.md). Execute that runtime's commands in its own checkout, not in this front-door checkout.
 
 ## Register and play
 
@@ -89,23 +89,23 @@ When you choose the final result and ask to register it, your assistant checks t
 
 The server checks your uploaded files before making your fighter available in the game. Your assistant then checks the result to confirm that the fighter is registered and ready to play. The queue can take time to process.
 
-Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same Google account to see your fighter. See [registration, limits, and profile edits](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/OPEN-REGISTRATION.md) for details. Keep login links, callback URLs, and session files private.
+Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same Google account to see your fighter. See [registration, limits, and profile edits](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/OPEN-REGISTRATION.md) for details. Keep login links, callback URLs, and session files private.
 
 ## Help and contributions
 
 If setup, generation, sign-in, registration, or gameplay fails, [open an issue](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues) with the failing step, expected and actual behavior, error message, and tool version or commit. Exclude credentials and private files. For generation or upload timeouts, check existing requests and outputs before retrying.
 
-Bug reports, clearer setup instructions, and reproducible examples are welcome. Read [AGENTS.md](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/AGENTS.md) before using an assistant to change this repository.
+Bug reports, clearer setup instructions, and reproducible examples are welcome. Read [AGENTS.md](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/AGENTS.md) before using an assistant to change this repository.
 
 | Resource | Use it for |
 | --- | --- |
-| [Cloud connection](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CLOUD-MCP.md) · [Connection recovery](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CONNECTION-READINESS.md) | Google sign-in, account checks, and cloud registration |
-| [Authoring guide](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/AUTHORING.md) | Fighter files and the package contract |
-| [Creation UX](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CREATION-UX.md) | Character intake, feedback, and version selection |
-| [Game creation context](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/GAME-CREATION-CONTEXT.md) | Current motions, controls, and timing |
-| [Gait review](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/GAIT-REVIEW.md) | Walk/run quality and contact evidence |
-| [Execution environment](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/EXECUTION-HOST.md) · [Preview delivery](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/DELIVERY.md) | Account isolation, local execution, and actual media display |
-| [Hosting](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/66aab684addabdf211b5d23cd41536aa0bfb33f2/docs/CREATOR-HOSTING.md) · [Security](SECURITY.md) | Deployment and security boundaries |
+| [Cloud connection](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/CLOUD-MCP.md) · [Connection recovery](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/CONNECTION-READINESS.md) | Google sign-in, account checks, and cloud registration |
+| [Authoring guide](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/AUTHORING.md) | Fighter files and the package contract |
+| [Creation UX](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/CREATION-UX.md) | Character intake, feedback, and version selection |
+| [Game creation context](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/GAME-CREATION-CONTEXT.md) | Current motions, controls, and timing |
+| [Gait review](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/GAIT-REVIEW.md) | Walk/run quality and contact evidence |
+| [Execution environment](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/EXECUTION-HOST.md) · [Preview delivery](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/DELIVERY.md) | Account isolation, local execution, and actual media display |
+| [Hosting](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/97890ddf399cbbaae9351ee6d11ac0776714d7b0/docs/CREATOR-HOSTING.md) · [Security](SECURITY.md) | Deployment and security boundaries |
 
 Local development checks, after installing dependencies:
 
