@@ -81,6 +81,10 @@ Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른�
 고리: `get_style_guide` → 소개를 성격으로 옮긴다 → `spar`·`read_bout`으로 본다 → 사용자 승인 → `update_fighter_style` → 다시 `spar`.
 기술 클립(`skill`)은 등록 때 정해지므로 성격 고치기로 더할 수 없다.
 
+만든 에이전트: 이 MCP가 준비한 등록과 성격 고치기는 그 OAuth 클라이언트 이름을 남긴다(`af_record_submission_agent`,
+마이그레이션 `20261027180000_ai_fighter_made_with`). 명단(`GET /roster`, `/roster/:id`)은 선수의 가장 이른 기록을 `madeWith`로 보인다.
+이름은 클라이언트가 동적 등록 때 스스로 정한 것(예: `ChatGPT`)이고 40자까지다. 제작자 페이지·키트로 만든 선수는 없다.
+
 ## 운영 설정과 배포
 
 ### 본인 소유 캐릭터 삭제

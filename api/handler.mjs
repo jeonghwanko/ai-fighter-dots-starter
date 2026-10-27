@@ -47,6 +47,14 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
     check(error); return view(row, data);
   }
   /** One Storage call signs every asset of a submission, in manifest order. */
+  // The agent that made each fighter (`af_fighter_agents`, 2026-10-27). Not knowing it never fails a roster read.
+  async function madeWith(ids) {
+    if (!ids.length) return new Map();
+    try {
+      const { data, error } = await db.from('af_fighter_agents').select('fighter_id,client_name').in('fighter_id', ids);
+      return error || !Array.isArray(data) ? new Map() : new Map(data.map(row => [row.fighter_id, row.client_name]));
+    } catch { return new Map(); }
+  }
   async function signedUrls(row, seconds) {
     const paths = row.manifest.assets.map(asset => objectKey(row, asset));
     const { data, error } = await db.storage.from(BUCKET).createSignedUrls(paths, seconds);
@@ -122,11 +130,11 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
           }
           query = query.order('created_at', { ascending: false }).order('id');
           const { data, error } = await query.limit(21); check(error);
-          const last = data[19], hasMore = data.length > 20;
+          const last = data[19], hasMore = data.length > 20, shown = data.slice(0, 20).filter(f => f.runtime_manifest_sha === f.manifest_sha);
+          const makers = await madeWith(shown.map(f => f.id));
           return reply({ ok: true, hasMore, nextCursor: hasMore ? `${last.created_at}|${last.id}` : null,
-            fighters: data.slice(0, 20).filter(f => f.runtime_manifest_sha === f.manifest_sha)
-            .map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, ...(f.profile.names ? { names: f.profile.names } : {}), runtimeScope: f.runtime_scope,
-              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha })) });
+            fighters: shown.map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, ...(f.profile.names ? { names: f.profile.names } : {}), runtimeScope: f.runtime_scope,
+              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha, ...(makers.has(f.id) ? { madeWith: makers.get(f.id) } : {}) })) });
         }
         if (parts.length !== 2 || !UUID.test(parts[1])) return reply({ ok: false, code: 'not-found' }, 404);
         const { data: fighter, error } = await query.eq('id', parts[1]).maybeSingle(); check(error);
@@ -134,11 +142,11 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         const { data: row, error: readError } = await db.from('af_submissions').select('*').eq('id', fighter.submission_id).eq('status', 'registered').maybeSingle();
         check(readError);
         if (!row || row.manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
-        const urls = await signedUrls(row, 600);
+        const urls = await signedUrls(row, 600), maker = (await madeWith([fighter.id])).get(fighter.id);
         const files = row.manifest.assets.map((asset, index) => ({ id: asset.id, downloadUrl: urls[index] }));
         return reply({ ok: true, fighterId: fighter.id, manifestSha256: fighter.manifest_sha, runtimeApproved: true,
           runtimeScope: fighter.runtime_scope, duelApproved: fighter.duel_approved === true && fighter.duel_manifest_sha === fighter.manifest_sha,
-          manifestText: row.manifest_text, files });
+          manifestText: row.manifest_text, files, ...(maker ? { madeWith: maker } : {}) });
       }
       if (parts.join('/') === 'analytics/context' && request.method === 'OPTIONS' && analytics) return analytics.preflight();
       const isWorker = parts[0] === 'worker';

@@ -100,6 +100,12 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
       method, headers: { authorization: 'Bearer internal-request-identity', ...headers }, ...(body === undefined ? {} : { body }) }));
     return response.json();
   };
+  // Which agent made a submission (`af_record_submission_agent`, 2026-10-27): the roster shows a fighter's maker. Never fails the call.
+  const recordAgent = async submissionId => {
+    if (!identity || !UUID.test(submissionId ?? '')) return;
+    try { await db.rpc('af_record_submission_agent', { p_owner: identity.owner, p_submission: submissionId, p_client: identity.claims.client_id }); }
+    catch { /* the maker is a label, not a gate */ }
+  };
   const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
     server.registerTool(name, { title, description, inputSchema,
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
@@ -174,6 +180,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
     { manifest: FILE, idempotencyKey: z.string().uuid() }, async ({ manifest, idempotencyKey }) => {
       const bytes = await downloadHostFile(manifest, spec.limits.jsonBytes, fetcher);
       const result = await invoke('submissions', 'POST', bytes, { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
+      if (result.ok) await recordAgent(result.submissionId);
       if (!result.ok || result.stage !== 'uploading') return result;
       const { data, error } = await db.from('af_submissions').select('manifest').eq('id', result.submissionId).eq('owner_id', identity.owner).single();
       if (error) throw new Problem(503, 'database-unavailable');
@@ -197,7 +204,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
   register('get_registered_fighter', '등록된 캐릭터 확인', 'Read your registered fighter and immutable package identity.',
     { fighterId: z.string().uuid() }, ({ fighterId }) => invoke(`fighters/${fighterId}`));
   // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
-  if (arena?.url && arena?.key) registerAgentTools({ register, arena, db, identity, invoke });
+  if (arena?.url && arena?.key) registerAgentTools({ register, arena, db, identity, invoke, recordAgent });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   return server;
 }
@@ -216,7 +223,7 @@ async function arenaCall(arena, path, body) {
   return value;
 }
 
-function registerAgentTools({ register, arena, db, identity, invoke }) {
+function registerAgentTools({ register, arena, db, identity, invoke, recordAgent }) {
   const call = (path, body) => arenaCall(arena, path, body);
   const ID = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
   register('get_style_guide', '싸우는 성격 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. Values and limits are the contract\'s (spec.combatStyle). This changes nothing.',
@@ -261,8 +268,10 @@ function registerAgentTools({ register, arena, db, identity, invoke }) {
         .is('deleted_at', null).maybeSingle();
       if (error) throw new Problem(503, 'database-unavailable');
       if (!fighter) throw new Problem(404, 'fighter-not-found');
-      return invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: fighter.manifest_sha, style }),
+      const result = await invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: fighter.manifest_sha, style }),
         { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
+      if (result.ok) await recordAgent(result.submissionId);
+      return result;
     }, { write: true, publish: true, openWorld: true });
 }
 

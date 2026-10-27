@@ -10,7 +10,7 @@ export async function supabasePlatform() {
   const db = new PGlite();
   await db.exec(`create role anon; create role authenticated; create role service_role bypassrls; create role supabase_auth_admin;
     create schema auth; create table auth.users(id uuid primary key,email text,encrypted_password text);
-    create table auth.oauth_clients(id uuid primary key, deleted_at timestamptz);
+    create table auth.oauth_clients(id uuid primary key, deleted_at timestamptz, client_name text);
     create table auth.sessions(id uuid primary key,user_id uuid,oauth_client_id uuid,not_after timestamptz,scopes text);
     create table auth.oauth_consents(user_id uuid,client_id uuid,revoked_at timestamptz,scopes text);
     create function auth.uid() returns uuid language sql as 'select nullif(current_setting(''request.jwt.claim.sub'',true),'''')::uuid';
