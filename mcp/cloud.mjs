@@ -25,6 +25,8 @@ export const ARENA_URL = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/
  * while the arena key is configured (`ODDBOUT_ARENA_AGENT_KEY`), so a release of this code alone does not change the published tool list.
  */
 export const PUBLIC_TOOLS = new Set(['get_fighter_spec', 'get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout']);
+/** Public tools that spend an arena budget: a signed-in caller's call counts on his owner (MCP 점검, 2026-10-27). */
+export const OWNER_BUDGET_TOOLS = new Set(['read_bout']);
 /**
  * How a fighter's `combat.style` reads (the game contract's README, 싸우는 성격; values in `spec.combatStyle`). An agent translates the
  * fighter's concept into these closed choices itself; the server only checks them. Grade 3 and missing values are the standard kit.
@@ -44,6 +46,11 @@ export const STYLE_GUIDE = Object.freeze({
 });
 const FILE = z.object({ download_url: z.string().max(8192), file_id: z.string().min(1).max(256),
   mime_type: z.string().max(128).optional(), file_name: z.string().max(512).optional() }).strict();
+/**
+ * A UUID argument. zod's `uuid()` writes a 168-character pattern into every tool's schema (13 of them, 2.2 KB of each tools/list, every
+ * conversation — MCP 점검 2026-10-27); the server checks the ids again (`api/http.mjs` UUID), so a short pattern is enough here.
+ */
+const UUID_ARG = () => z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 const AUTH = [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }];
 const output = value => ({ content: [{ type: 'text', text: JSON.stringify(value) }], structuredContent: value,
@@ -167,17 +174,17 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
     return data;
   };
   register('prepare_fighter_deletion', '캐릭터 삭제 확인', 'After a deletion request, verify ownership and return the exact account, fighter, effects and a 10-minute confirmation. This does not delete. Show the result to the user. Deletion removes the fighter from owned/public lists and new matches, frees its slot, and retains private package bytes and history. Never interpret preparation alone as approval.',
-    { fighterId: z.string().uuid() }, async ({ fighterId }) => ({
+    { fighterId: UUID_ARG() }, async ({ fighterId }) => ({
       ...await deletionRpc('af_prepare_fighter_deletion', { p_fighter: fighterId }),
       account: { id: identity.owner, email: identity.email },
     }), { write: true });
   register('delete_fighter', '내 캐릭터 삭제', 'Execute only the user’s explicit deletion instruction for the exact account and fighter returned by prepare_fighter_deletion. Pass that token and exact confirmName, with confirm=true. Existing approval counts only if it unambiguously matches this unchanged fighter and deletion scope; otherwise ask first. Ownership, live session, expiry and package/profile identity are rechecked atomically. This is soft deletion: private package bytes and history remain. Retry only with identical confirmation arguments.',
-    { fighterId: z.string().uuid(), confirmationToken: z.string().uuid(), confirmName: z.string().min(1).max(200), confirm: z.literal(true) },
+    { fighterId: UUID_ARG(), confirmationToken: UUID_ARG(), confirmName: z.string().min(1).max(200), confirm: z.literal(true) },
     ({ fighterId, confirmationToken, confirmName }) => deletionRpc('af_delete_owned_fighter', {
       p_fighter: fighterId, p_token: confirmationToken, p_confirm_name: confirmName,
     }), { write: true, publish: true, openWorld: true });
   register('prepare_fighter_registration', '캐릭터 등록 준비', 'After the user requests registration and approves the final package, create/resume a private upload from the actual fighter.json file. Use a new UUID for changed package bytes and the same UUID for immutable retries. This does not publish. Return pending asset IDs for upload_fighter_asset.',
-    { manifest: FILE, idempotencyKey: z.string().uuid() }, async ({ manifest, idempotencyKey }) => {
+    { manifest: FILE, idempotencyKey: UUID_ARG() }, async ({ manifest, idempotencyKey }) => {
       const bytes = await downloadHostFile(manifest, spec.limits.jsonBytes, fetcher);
       const result = await invoke('submissions', 'POST', bytes, { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
       if (result.ok) await recordAgent(result.submissionId);
@@ -187,7 +194,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
       return { ...result, assets: data.manifest.assets.map(({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 })) };
     }, { write: true, openWorld: true, files: ['manifest'] });
   register('upload_fighter_asset', '캐릭터 파일 전달', 'Upload one actual WebP file to your private submission. Its size and SHA-256 must match fighter.json. Repeat safely with identical bytes; never regenerate for a delivery failure.',
-    { submissionId: z.string().uuid(), assetId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), file: FILE }, async ({ submissionId, assetId, file }) => {
+    { submissionId: UUID_ARG(), assetId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), file: FILE }, async ({ submissionId, assetId, file }) => {
       const { data: row, error } = await db.from('af_submissions').select('manifest,status,expires_at').eq('id', submissionId).eq('owner_id', identity.owner).maybeSingle();
       if (error) throw new Problem(503, 'database-unavailable'); if (!row) throw new Problem(404, 'not-found');
       if (row.status !== 'uploading' || Date.parse(row.expires_at) <= Date.now()) throw new Problem(409, 'upload-closed');
@@ -198,11 +205,11 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
       return invoke(`submissions/${submissionId}/assets/${assetId}`, 'PUT', bytes, { 'content-type': 'image/webp' });
     }, { write: true, openWorld: true, files: ['file'] });
   register('submit_fighter_registration', '캐릭터 등록', 'Publish the user-approved uploaded package after authoritative validation. Requires the user’s explicit registration request. All asset uploads and visual reviews must be complete. Queued/validating is not registered; follow get_fighter_submission until final.',
-    { submissionId: z.string().uuid() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true, publish: true, openWorld: true });
+    { submissionId: UUID_ARG() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true, publish: true, openWorld: true });
   register('get_fighter_submission', '등록 진행 상태', 'Read your submission. Only registered confirms registration; rejected contains the validation failure. Do not regenerate automatically.',
-    { submissionId: z.string().uuid() }, ({ submissionId }) => invoke(`submissions/${submissionId}`));
+    { submissionId: UUID_ARG() }, ({ submissionId }) => invoke(`submissions/${submissionId}`));
   register('get_registered_fighter', '등록된 캐릭터 확인', 'Read your registered fighter and immutable package identity.',
-    { fighterId: z.string().uuid() }, ({ fighterId }) => invoke(`fighters/${fighterId}`));
+    { fighterId: UUID_ARG() }, ({ fighterId }) => invoke(`fighters/${fighterId}`));
   // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
   if (arena?.url && arena?.key) registerAgentTools({ register, arena, db, identity, invoke, recordAgent });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
@@ -210,12 +217,15 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null }) {
 }
 
 /** One arena call: a GET, or a POST with the agent key. A network failure or a body that is not JSON is `arena-unavailable`. */
-async function arenaCall(arena, path, body) {
+async function arenaCall(arena, path, body, owner) {
+  // A read made for someone (`owner`: the connected owner, or `public`) carries the key: the arena counts it against that owner, not this
+  // function's one address (MCP 점검 2026-10-27 — every agent together had six reads a minute).
+  const headers = body !== undefined ? { 'content-type': 'application/json', 'x-arena-agent': arena.key }
+    : owner !== undefined ? { 'x-arena-agent': arena.key, 'x-arena-owner': owner } : {};
   let response;
   try {
     response = await (arena.fetcher ?? fetch)(`${arena.url}/${path}`, { method: body === undefined ? 'GET' : 'POST', redirect: 'error',
-      signal: AbortSignal.timeout(20000), headers: body === undefined ? {} : { 'content-type': 'application/json', 'x-arena-agent': arena.key },
-      ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
+      signal: AbortSignal.timeout(20000), headers, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
   } catch { throw new Problem(503, 'arena-unavailable'); }
   let value;
   try { value = await response.json(); } catch { throw new Problem(503, 'arena-unavailable'); }
@@ -225,16 +235,18 @@ async function arenaCall(arena, path, body) {
 
 function registerAgentTools({ register, arena, db, identity, invoke, recordAgent }) {
   const call = (path, body) => arenaCall(arena, path, body);
+  const read = path => arenaCall(arena, path, undefined, identity?.owner ?? 'public');
   const ID = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
   register('get_style_guide', '싸우는 성격 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. Values and limits are the contract\'s (spec.combatStyle). This changes nothing.',
     {}, async () => ({ ok: true, contract: spec.combatStyle, guide: STYLE_GUIDE }), { publicTool: true });
   register('list_fighters', 'ODDBOUT 선수 명단', 'List ODDBOUT\'s fighters: the built-in roster and the listed registered fighters (id and name). Use the ids for records, spars and bouts.',
     {}, async () => {
-      const builtins = await call('fighters');
+      // The arena's list and the roster's first page at once (the two hops were 650 ms in a row).
+      const [builtins, first] = await Promise.all([call('fighters'), invoke('roster')]);
       if (!builtins.ok) return builtins;
       const registered = [];
       for (let cursor = null, page = 0; page < 5; page++) {
-        const list = await invoke(`roster${cursor ? `?after=${encodeURIComponent(cursor)}` : ''}`);
+        const list = page === 0 ? first : await invoke(`roster?after=${encodeURIComponent(cursor)}`);
         if (!list.ok) return list;
         registered.push(...list.fighters.map(({ id, name, names }) => ({ id, name, ...(names ? { names } : {}) })));
         if (!list.hasMore) break;
@@ -245,24 +257,38 @@ function registerAgentTools({ register, arena, db, identity, invoke, recordAgent
   register('get_rankings', 'ODDBOUT 순위', 'Read the cup rankings: built-in fighters by cup points, or registered fighters by cup win rate (a minimum number of bouts).',
     { scope: z.enum(['builtin', 'registered']).default('builtin') }, ({ scope }) => call(scope === 'registered' ? 'rankings?scope=registered' : 'rankings'), { publicTool: true });
   register('get_fighter_record', '선수 공개 기록', 'Read a fighter\'s public cup record: wins, losses, recent bouts (with each cup\'s seed for read_bout) and the rivals he met most.',
-    { fighterId: ID }, ({ fighterId }) => call(`fighter?id=${encodeURIComponent(fighterId)}`), { publicTool: true });
+    { fighterId: ID }, async ({ fighterId }) => {
+      const record = await call(`fighter?id=${encodeURIComponent(fighterId)}`);
+      // Each bout's package pins are 64-character hashes an agent never uses; read_bout finds them from the cup.
+      return record.ok && Array.isArray(record.recent) ? { ...record, recent: record.recent.map(({ registered, ...bout }) => bout) } : record;
+    }, { publicTool: true });
   register('get_cup', '컵 결과', 'Read a cup by its id (one enter_cup returned, or a week\'s): its bracket, state and every played bout with its winner and finish.',
-    { cupId: z.string().uuid() }, ({ cupId }) => call(`cup?id=${cupId}`), { publicTool: true });
+    { cupId: UUID_ARG() }, ({ cupId }) => call(`cup?id=${cupId}`), { publicTool: true });
   register('read_bout', '경기 기록 읽기', 'Fight a bout again and read its record: who won and how, HP left, hits landed and the highlights (super, air combo, throw, wall, big hit, comeback, KO, clutch) with their times. Give a played cup bout (cupId, round 0-3, slot) or a pair and seed (current packages). The page link plays it in the browser.',
-    { cupId: z.string().uuid().optional(), round: z.number().int().min(0).max(3).optional(), slot: z.number().int().min(0).max(7).optional(),
+    { cupId: UUID_ARG().optional(), round: z.number().int().min(0).max(3).optional(), slot: z.number().int().min(0).max(7).optional(),
       a: ID.optional(), b: ID.optional(), seed: z.number().int().min(0).max(0xffffffff).optional() },
     async ({ cupId, round, slot, a, b, seed }) => {
-      if (cupId !== undefined && round !== undefined && slot !== undefined) return call(`bout?cup=${cupId}&round=${round}&slot=${slot}`);
-      if (a !== undefined && b !== undefined && seed !== undefined) return call(`bout?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&seed=${seed}`);
+      if (cupId !== undefined && round !== undefined && slot !== undefined) return read(`bout?cup=${cupId}&round=${round}&slot=${slot}`);
+      if (a !== undefined && b !== undefined && seed !== undefined) return read(`bout?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&seed=${seed}`);
       return { ok: false, code: 'invalid-bout' };
     }, { publicTool: true });
   register('spar', '스파링', 'Spar: one bout between two fighters on their current packages, read back with its record (as read_bout). Not ranked and not kept. Use it to see how a fighter fights, before and after a style change. Give a seed to fight the same bout again.',
     { fighterId: ID, opponentId: ID, seed: z.number().int().min(0).max(0xffffffff).optional() },
     ({ fighterId, opponentId, seed }) => call('agent/spar', { owner: identity.owner, a: fighterId, b: opponentId, ...(seed === undefined ? {} : { seed }) }));
-  register('enter_cup', '16강 컵 출전', 'Enter the connected user\'s registered fighter in a 16-fighter cup. The server draws the other fifteen from the built-in roster and fights every bout; the results count in the cup rankings. Requires the user\'s request. Read the results with get_cup.',
-    { fighterId: z.string().uuid() }, ({ fighterId }) => call('agent/cup', { owner: identity.owner, fighter: fighterId }), { write: true, openWorld: true });
+  register('enter_cup', '16강 컵 출전', 'Enter the connected user\'s registered fighter in a 16-fighter cup. The server draws the other fifteen from the built-in roster and fights every bout; the results count in the cup rankings. Requires the user\'s request. Returns the finished cup (a few seconds); if it is still running, read it with get_cup.',
+    { fighterId: UUID_ARG() }, async ({ fighterId }) => {
+      const issued = await call('agent/cup', { owner: identity.owner, fighter: fighterId });
+      if (!issued.ok) return issued;
+      // A cup is fought in about seven seconds: wait for it here so the agent needs no second call (MCP 점검 2026-10-27).
+      for (let i = 0; i < (arena.pollTries ?? 12); i++) {
+        await new Promise(done => setTimeout(done, arena.pollMs ?? 1000));
+        const cup = await call(`cup?id=${issued.ticket}`).catch(() => null);
+        if (cup?.ok && cup.cup && cup.cup.state !== 'open') return { ...issued, cup: cup.cup };
+      }
+      return { ...issued, state: 'open', next: 'get_cup' };
+    }, { write: true, openWorld: true });
   register('update_fighter_style', '싸우는 성격 고치기', 'Change the connected user\'s registered fighter\'s fighting style (combat.style) without new art: an object replaces it, null removes it. Checked against the contract (get_style_guide). His next bouts fight the new style. Requires the user\'s approval of the change. Use a new UUID per change and the same UUID to retry it.',
-    { fighterId: z.string().uuid(), style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: z.string().uuid() },
+    { fighterId: UUID_ARG(), style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: UUID_ARG() },
     async ({ fighterId, style, idempotencyKey }) => {
       const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', identity.owner)
         .is('deleted_at', null).maybeSingle();
@@ -303,6 +329,9 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null }) {
     if (body.method === 'tools/call' && !PUBLIC_TOOLS.has(body.params?.name)) {
       try { identity = await authenticateCloud(db, request); } catch { /* fail closed */ }
       if (!identity) return json({ error: 'invalid_token' }, 401, { 'www-authenticate': `Bearer resource_metadata="${metadataUrl}", scope="openid email profile"` });
+    } else if (body.method === 'tools/call' && OWNER_BUDGET_TOOLS.has(body.params?.name) && request.headers.has('authorization')) {
+      // A public tool whose budget is the caller's: a valid token counts it on its owner; anything else on every signed-out agent.
+      try { identity = await authenticateCloud(db, request); } catch { identity = null; }
     }
     const server = cloudServer({ db, identity, fetcher, arena });
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
@@ -312,7 +341,11 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null }) {
       // SDK 1.32 serializes custom auth metadata only in _meta. Publish the current host's top-level contract too.
       if (body.method === 'tools/list' && response.status === 200) {
         const result = await response.json();
-        for (const tool of result.result?.tools ?? []) tool.securitySchemes = tool._meta.securitySchemes;
+        for (const tool of result.result?.tools ?? []) {
+          tool.securitySchemes = tool._meta.securitySchemes;
+          // Every schema names its JSON Schema draft (1.1 KB of each list, every conversation); hosts do not need it.
+          delete tool.inputSchema?.$schema; delete tool.outputSchema?.$schema;
+        }
         return json(result);
       }
       return response;
