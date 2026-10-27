@@ -51,9 +51,30 @@ engine pin **0dc264ba257c0d417f86ef797bc503f933e1e142**.
 
 The private-source migration is applied and MCP **v30** deployed. Production checks confirmed a private
 16 MiB PNG bucket, owner checks, service-only table/RPC access and unauthenticated HTTP 401.
-The public tool list contains save/get/grant, but the already-running app/VM tool catalog still lacks
-these three tools after requesting the app's official refresh. Native file ingress remains unverified.
+The public tool list contains store_creator_source, get_creator_source and prepare_creator_source_download.
+The old VM catalog remains stale; after the official app refresh, a newly created Work task exposed all
+three with their input schemas. Native file ingress remains unverified.
 Local tests use migrated PostgreSQL (PGlite) and simulated Storage, not an actual user upload.
+
+## Published environment and remaining host-selection blocker
+
+With the user's explicit approval, the saved ai-fighter-dots-starter environment was published on
+2026-10-28 KST. Its install script pins front door 1f110b3e37c4cfbc965014960e937d646c57b630,
+which pins runtime 97890ddf399cbbaae9351ee6d11ac0776714d7b0. Its Start instructions use the
+/workspace tools/runtime/user-workspace paths and the full Grok creation/recovery flow.
+The exact three hosts nodejs.org, storage.googleapis.com and ztfxxhtmtrvxvuxlqmgz.supabase.co
+were added (8 -> 11 custom hosts). Unrestricted Internet remains off; no proxy secrets or environment
+credentials were added. The UI confirmed publication and loaded a new draft from that published version.
+
+The authorized new Work verification task (6ae0cf8e-5e78-83ec-88e7-116b2ed2066e) instead started
+a default Work host, not the selected saved Codex environment. Observed host e359ea652db4 had cwd
+/workspace/scratch/feab6b495011, Node 24.22.1, no target checkout or prepared env.sh, and no Grok/WebP
+on PATH. The task-creation tool provides no saved-environment selector. It correctly stopped before
+installation and did not label this host as the published image.
+
+Next host action: start a new cloud task explicitly attached to the published ai-fighter-dots-starter
+saved environment, then verify its actual install log, pinned tools, network and unchanged resume binding.
+Publishing settings alone is not a successful fresh-image install, restart or creation test.
 
 ## Open acceptance gates
 
