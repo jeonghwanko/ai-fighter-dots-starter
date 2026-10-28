@@ -304,16 +304,19 @@ export function createGenerationHandler({ db, authenticate, present }) {
       if (!isObject(health) || JSON.stringify(health).length > 2000) throw new Problem(422, 'invalid-health');
       return { ok: true, capabilities: await call('af_generation_host_heartbeat', { p_host: host, p_health: health }) };
     }
-    // Which of this host's jobs are over (the worker closes their folders): only his own, only the ended ones.
+    // Which of this host's jobs are over for him (the worker closes their folders). A community host: his own jobs that ended. The official
+    // host writes every job's brief, so it also hears of jobs that ended anywhere, and of jobs another host took after its brief (2026-10-28 —
+    // the brief folder of the first test host's job stayed open on the office PC and blocked og setup).
     if (route === 'generation-worker/ended') {
       const jobs = fields(body, ['jobs']).jobs;
       if (!Array.isArray(jobs) || jobs.length > 50) throw new Problem(422, 'invalid-body');
       if (!jobs.length) return { ok: true, ended: [] };
-      const ids = jobs.map(id), mine = host ?? await call('af_generation_official', {});
+      const ids = jobs.map(id), official = host ? null : await call('af_generation_official', {});
       const { data, error } = await db.from('af_generation_jobs').select('id,status,assigned_host').in('id', ids);
       if (error) throw new Problem(503, 'database-unavailable');
-      return { ok: true, ended: (data ?? []).filter(row => ['cancelled', 'expired', 'rejected', 'failed', 'submitted'].includes(row.status)
-        && (row.assigned_host === mine || (!host && row.assigned_host === null))).map(row => row.id) };
+      const over = row => ['cancelled', 'expired', 'rejected', 'failed', 'submitted'].includes(row.status);
+      return { ok: true, ended: (data ?? []).filter(row => host ? row.assigned_host === host && over(row)
+        : over(row) || (row.assigned_host !== null && row.assigned_host !== official)).map(row => row.id) };
     }
     if (route === 'generation-worker/claim') {
       const row = await call('af_generation_claim_for', { p_host: host });
