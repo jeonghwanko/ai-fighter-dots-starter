@@ -208,7 +208,7 @@ file_access_confirmed: true, matching byte_size and sha256. The exact native Mar
 read back; the browser screenshot showed the complete yellow TEST / TRANSFER FIXTURE image. The parent's
 read_page_reference returned actual PNG pixels, and the user explicitly confirmed seeing that image
 in the parent conversation. Target-conversation still-image display is verified through this route.
-Animation playback remains unverified. Private transfer or a source receipt alone does not prove display.
+Animation playback was not verified in this TEST-only trial; subsequent character evidence is recorded below. Private transfer or a source receipt alone does not prove display.
 
 ## Official Grok authentication storage
 
@@ -259,8 +259,30 @@ through read_page_reference, but the user explicitly reported that these charact
 visible in this conversation. A browser subsequently opened the actual Page full-body preview successfully and preserved a screenshot.
 The user then explicitly confirmed seeing the Page preview and selected this appearance. This verifies
 the Page-preview review route; the earlier read_page_reference-only inline failure remains recorded.
-Locomotion was authorized next. Video playback, all eleven motions and full creation acceptance remain
+Locomotion was authorized next; its subsequent results are recorded below. All eleven motions and full creation acceptance remain
 unverified until their own observed results.
+
+## Actual locomotion generation and review
+
+The same runtime 52db965 / engine 0dc264b generated real Grok subscription videos for fightIdle,
+walk and run. The initial three loop checks failed and all original outputs/reports were retained.
+Walk and run were recovered through the official non-generative motion-auto cutting workflow:
+walk has 16 distinct frames / 960 ms; run has 12 distinct frames / 720 ms after rejecting a
+shorter conversion that repeated frames. FightIdle v2 was generated once after the confirmed v1
+failure and passed its numeric loop check. These are draft previews, not a validated game package.
+
+The three GIFs were uploaded to the same owner-private Page and read back. The parent browser
+opened the actual previews and captured changing walk/run poses. The user then explicitly confirmed
+that the three GIFs move and chose to retain the current poses, including the two-front-paw blaster
+grip while running. This confirms the Page animation delivery/review route. It does not repair the
+earlier native inline display failure or certify gameplay, grounding or anatomy.
+
+The walk near/far-foot ROI checks did not establish stride_verified. Walk/run game timing, contact
+and final pixel-bound gait review remain open gates; user aesthetic selection does not override them.
+Original videos, request evidence, failed loop reports and previews remain in
+/workspace/oddbout-gun-meme-cat/output/gun-meme-cat-work/locomotion/.
+The next attacks group was authorized after the user's locomotion selection. Defense, all eleven
+validated motions, final packaging and registration are not established by this partial result.
 
 ## Related animation change
 
@@ -278,7 +300,7 @@ before a new immutable pin, without upgrading a character already in progress.
 
 The reviewed release remains a candidate. Prepared-image publication and fresh-task verification passed; an actual VM restart remains unverified;
 official Grok login and one actual still generation passed in the existing VM. Remaining gates are
-video entitlement/playback, all remaining motion groups and final package. The user reviewed and
+final gait/contact validation, remaining motion groups and final package. Actual locomotion videos and Page playback subsequently passed; the user reviewed and
 selected the appearance through the actual Page preview. One generated appearance is not a completed fighter.
 
 ## Saved-VM acceptance checklist (remaining gates noted above)
