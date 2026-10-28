@@ -8,7 +8,8 @@
 //   맡기기 (a job its creator left to us): a look judge (codex, tools off) picks one, and the job goes on to the motions without him.
 // motions (P2, 2026-10-28): the chosen look → six GPT keypose rows (prepare → gen-set → extract, assembled by motions.py) and a Grok walk
 //   and run (video-set → the engine's cut and cycle alignment, its retake reasons and a vision judge as the gate; a retake films from a relaxed,
-//   depth-shaded still of the look, and one alignment runs at a time on the GPU), the three at once, packed with
+//   depth-shaded still of the look, and one alignment runs at a time on the GPU; a run the gate refused is made from the walk that passed,
+//   played faster, and its preview says so), the three at once, packed with
 //   reviewPolicy engine-loop, one preview per clip. A creator's change to one clip remakes that clip only: an action clip's rows drawn
 //   again with his words (its cells alone replace the first run's), a walk or run filmed again with them; idle is the look (an operator's).
 //   A seventh, optional row (2026-10-28) draws the entrance and the victory beside the six; when it fails the fighter goes without them.
@@ -206,6 +207,14 @@ export const GAIT_MOTION = Object.freeze(Object.fromEntries(Object.entries({
 // A retake asks for an even beat as well (2026-10-28): the 냥잽 cat's best run, filmed from the relaxed still, broke its beat once, snapping
 // from its long stride into the gathered pose (jolt 0.39 against the engine's 0.25).
 export const EVEN_BEAT = ' The motion flows at one steady speed through the whole stride: no pause, hitch or sudden snap between steps, each leg swinging through as smoothly as the last.';
+/**
+ * A run made from the walk (2026-10-29): when no run take passes the gate and the walk did, the walk's own cut is aligned to the run's
+ * frames, judged again and played RUN_FROM_WALK_PACE times its filmed length. Hosted runs failed far more often than walks (the 냥잽 cat:
+ * six run cuts broke their beat while its first walk passed), and a fighter waiting on its run waited for an operator. Its preview
+ * carries RUN_FROM_WALK, so the creator keeps it or asks for the run again with his words (a motion change films it again).
+ */
+export const RUN_FROM_WALK = 'run-from-walk';
+export const RUN_FROM_WALK_PACE = 0.6;
 /** A walk or run filmed again for a creator's change: the house sentence of the take with his words quoted as a description of the motion. */
 export function gaitChangeMotion(gait, note, take) {
   const base = GAIT_MOTION[gait][take];
@@ -352,6 +361,33 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
   }
 
   /** One loop (walk or run) the engine cut without a retake reason and the judge passed, or the reason none was. */
+  /** RUN_FROM_WALK: the walk's cut (before its alignment) aligned to the run's frames and judged as a run, or null. Its folder names the
+   * walk's strip, so a walk made again makes the run again; a stage run again with the same walk reuses the alignment and the verdict. */
+  async function runFromWalk(walkLoop, look, m) {
+    const cut = path.dirname(walkLoop.strip).replace(/-\d+$/, '');
+    const folder = path.join(m, `run-from-walk-${createHash('sha256').update(walkLoop.strip).digest('hex').slice(0, 8)}`);
+    const strip = path.join(folder, path.basename(walkLoop.strip));
+    if ((await readJson(strip).catch(() => null))?.cycle_align?.to !== GAIT_FRAMES.run) {
+      await rm(folder, { recursive: true, force: true });
+      await cp(cut, folder, { recursive: true });
+      const args = ['video-cycle-align', '--loop-dir', folder, '--length', String(GAIT_FRAMES.run), '--view', 'side@right', '--start-foot', 'left'];
+      if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
+    }
+    const meta = await readJson(strip).catch(() => null);
+    if (!meta || meta.frames !== GAIT_FRAMES.run || retakeReasons(meta).length || !namedFeet(meta)) return null;
+    const judge = path.join(folder, 'judge');
+    if ((await motionsPy(['judge-request', 'run', judge])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judge, 'sheet.png')])).code !== 0)
+      return null;
+    const verdictFile = path.join(judge, 'verdict.json');
+    let verdict = checkedVerdict(await readJson(verdictFile).catch(() => null));
+    if (!verdict) {
+      const { code } = await og(briefCommand({ schema: path.join(judge, 'judge-schema.json'), out: verdictFile, refs: [look, path.join(judge, 'sheet.png')] }),
+        { stdin: await readFile(path.join(judge, 'judge-prompt.txt'), 'utf8') });
+      verdict = code === 0 ? checkedVerdict(await readJson(verdictFile).catch(() => null)) : null;
+    }
+    return verdict && LOOP_VISUAL.every(key => verdict[key] === 'pass') ? { strip, verdict: verdictFile, note: RUN_FROM_WALK } : null;
+  }
+
   /** `change`: the creator's latest change to this gait ({ round, note }) — its takes film the change, quoted, and nothing else is tried. */
   async function gaitLoop(gait, look, stills, character, m, change = null) {
     const tried = [];
@@ -570,12 +606,13 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       if (input.retry) return input;
       if (delayMs) await new Promise(done => setTimeout(done, delayMs));
       const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null);
-      if (loop.strip && !loop.retry && !loop.review) {
-        const file = path.join(draftDir, `${gait}.webp`);
-        await mkdir(draftDir, { recursive: true });
-        if ((await motionsPy(['strip-preview', loop.strip, file])).code === 0) await draft([file]);
-      }
+      if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip);
       return loop;
+    };
+    const gaitDraft = async (gait, strip) => {
+      const file = path.join(draftDir, `${gait}.webp`);
+      await mkdir(draftDir, { recursive: true });
+      if ((await motionsPy(['strip-preview', strip, file])).code === 0) await draft([file]);
     };
     // The rows, the walk and the run need nothing of each other, so they run at once (2026-10-28 — one after another the stage took
     // about 8 to 15 minutes). The run films a few seconds after the walk (the xAI quota counts starts per second). The stage waits for
@@ -585,12 +622,20 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
     let ended = 0;
     const settle = branch => branch().catch(error => ({ retry: String(error.code ?? 'stage-error').slice(0, 60) }))
       .finally(() => report(5 + 20 * ++ended));
-    const [actions, walk, run] = await Promise.all([settle(actionRows), settle(gaitBranch('walk', 0)), settle(gaitBranch('run', gaitStaggerMs))]);
+    const [actions, walk, filmed] = await Promise.all([settle(actionRows), settle(gaitBranch('walk', 0)), settle(gaitBranch('run', gaitStaggerMs))]);
+    // A run the gate refused (or could not align) while the walk passed: the walk makes it (RUN_FROM_WALK); otherwise the stage stops as before.
+    let run = filmed;
+    if (['run-not-clean', 'run-align'].includes(filmed.review) && walk.strip && !actions.review && !actions.retry) {
+      const made = await runFromWalk(walk, look, m);
+      if (made) { run = made; await gaitDraft('run', made.strip); }
+    }
     const branches = [actions, walk, run], stopped = branches.find(b => b.review) ?? branches.find(b => b.retry);
     if (stopped) return stopped.review ? { outcome: 'review', result: { code: stopped.review } } : { outcome: 'retry', result: { code: stopped.retry } };
     const loops = { walk, run };
-    for (const gait of ['walk', 'run'])
-      if ((await motionsPy(['add-gait', asm, gait, loops[gait].strip])).code !== 0) return { outcome: 'review', result: { code: `${gait}-add` } };
+    for (const gait of ['walk', 'run']) {
+      const pace = loops[gait].note === RUN_FROM_WALK ? [String(RUN_FROM_WALK_PACE)] : [];
+      if ((await motionsPy(['add-gait', asm, gait, loops[gait].strip, ...pace])).code !== 0) return { outcome: 'review', result: { code: `${gait}-add` } };
+    }
     // 3. The game pack, the loop reviews bound to its frames, the package, the previews.
     await report(80);
     if ((await og(sprite('game-pack', '--request', path.join(asm, 'game-request.json'), '--out-dir', path.join(asm, 'pack')))).code !== 0)
@@ -604,7 +649,8 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       const folder = path.join(asm, 'loop', gait), config = path.join(folder, 'config.json');
       await mkdir(folder, { recursive: true });
       await writeFile(config, JSON.stringify({ motion: gait, source: { file: path.join(asm, 'pack', 'game-pack.json'), animation: gait },
-        strip: loops[gait].strip, verdict: loops[gait].verdict, judge: `codex ${MODELS.text} (og harden, tools off)`,
+        strip: loops[gait].strip, verdict: loops[gait].verdict,
+        judge: `codex ${MODELS.text} (og harden, tools off)${loops[gait].note === RUN_FROM_WALK ? '; the run is the walk\'s cut aligned to its frames' : ''}`,
         ...(gait === 'walk' ? { stridePixels } : {}) }));
       if ((await og(['npm', 'run', 'fighter:gait', '--', 'loop-review', config, path.join(folder, 'review.json')])).code !== 0)
         return { outcome: 'review', result: { code: `${gait}-loop-review` } };
@@ -623,7 +669,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       if (!existsSync(file)) return { outcome: 'review', result: { code: `preview-${clip}` } };
       const name = previewName(clip, job.motionRound);
       await api.artifact(job, name, await readFile(file));
-      preview.push({ clip, name });
+      preview.push({ clip, name, ...(clip === 'run' && run.note ? { note: run.note } : {}) });
     }
     return { outcome: 'ok', result: { preview } };
   }
