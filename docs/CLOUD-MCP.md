@@ -136,7 +136,8 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
   `hostConsent: true`가 있어야 한다. 브리프(안전 판정)는 늘 공식 호스트가 쓴다. 그 뒤 단계를 처음 가져간 호스트가 끝까지 맡는다.
   공식 호스트는 다른 호스트가 켜져 있으면 `any` 신청을 3분 기다려 준다.
 - `list_generation_hosts`(로그인 없음): 승인되고 켜진 호스트의 id·이름·켜짐·`any` 받기·오늘 남은 수.
-- 호스트 되기는 API로 한다(사이트 화면은 다음 단계): `POST /generations/host`(이름·`billing` `subscription`|`api-key`·약관 동의) →
+- 호스트 되기와 생성기 설치·운영은 `npm run host -- …`([생성 호스트 되기](GENERATION-HOST.md), 생성기 `host/`)가 아래 API를 부른다(사이트 화면은 다음 단계):
+  `POST /generations/host`(이름·`billing` `subscription`|`api-key`·약관 동의) →
   운영자 승인(`af_generation_hosts.approved`) → `POST /generations/host/keys`(워커 열쇠, 한 번만 보인다, 90일, 둘까지) →
   `PATCH /generations/host`(켜짐·`any` 받기·하루 한도 0~50), `DELETE /generations/host/keys`(열쇠 모두 끄기). 공개 목록은 `GET /generations/hosts`.
 - 하루 한도와 심장 박동은 호스트마다 `af_generation_hosts`에 있다(공식 호스트도). `af_generation_settings`에는 서비스 스위치 `enabled`만 남는다.

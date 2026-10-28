@@ -1,22 +1,48 @@
 #!/usr/bin/env bash
-# ODDBOUT hosted fighter generation, phase P0 (operator-driven) on ODDBOUT's generation PC. Runbook: README.md beside this file.
-# One file, two roles. The operator's copy (~/.local/bin/og) only reads the operator's own login identities and runs
-# this script again as the service user through sudo. Every generation runs as that unix user: its HOME holds the
-# dedicated GPT/Grok logins, and it cannot read the operator's home (750) — ssh keys, personal logins, tokens.
+# ODDBOUT hosted fighter generation: the generation PC's tool. Runbook: README.md beside this file.
+# Two installs (2026-10-28, 커뮤니티 호스트).
+# - Service (ODDBOUT's own PC, the official host): one file, two roles. The operator's copy (~/.local/bin/og) only reads the
+#   operator's own login identities and runs this script again as the service user through sudo. Every generation runs as
+#   that unix user: its HOME holds the dedicated GPT/Grok logins, and it cannot read the operator's home (750).
+# - User (a community host, `npm run host:setup`, scripts/host.mjs): the files sit in <root>/bin beside <root>/host.env and
+#   everything runs as the host's own unix account, no sudo. The providers still sign in inside the root (HOME=<root> for every
+#   provider run), so the host's own ~/.codex — its MCP servers, plugins and shell tools — never sees a requester's text.
 set -euo pipefail
 
-SVC_USER=${OG_SVC_USER:-oddbout-gen}
-G=${OG_ROOT:-/srv/oddbout-gen}
+SELF_DIR=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
+if [ -f "$SELF_DIR/../host.env" ]; then
+  MODE=user
+  G=$(cd "$SELF_DIR/.." && pwd)
+  # KEY=value lines written by scripts/host.mjs; read one key at a time, never sourced.
+  host_value() { sed -n "s/^$1=//p" "$G/host.env" | tail -n1; }
+  SVC_USER=$(id -un)
+  OG_NODE_BIN=${OG_NODE_BIN:-$(host_value NODE_BIN)}
+  TOOL_PATH=$(host_value TOOL_PATH)
+  BOOTSTRAP_PYTHON=$(host_value PYTHON)
+  SLICE=oddbout-host.slice
+  SLICE_MEMORY=${OG_SLICE_MEMORY:-$(host_value MEMORY)}
+  SLOTS=${CODEX_SLOTS:-$(host_value SLOTS)}
+  SLOT_DIR=${CODEX_SLOT_DIR:-$G/slots}
+  WORKER_UNIT=oddbout-host-worker.service
+else
+  MODE=service
+  SVC_USER=${OG_SVC_USER:-oddbout-gen}
+  G=${OG_ROOT:-/srv/oddbout-gen}
+  TOOL_PATH= BOOTSTRAP_PYTHON=
+  SLICE=oddbout-gen.slice
+  SLICE_MEMORY=${OG_SLICE_MEMORY:-}
+  SLOTS=${CODEX_SLOTS:-}
+  SLOT_DIR=${CODEX_SLOT_DIR:-/tmp/codex-slots}
+  WORKER_UNIT=oddbout-gen-worker.service
+fi
+SLICE_MEMORY=${SLICE_MEMORY:-8G}
+SLOTS=${SLOTS:-3}
 KIT=$G/kit
 KIT_URL=https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 KIT_REF=${OG_KIT_REF:-43c63da3a1362aa113763a8f1f2802c639705a02}
 CODEX_VERSION=0.157.1
 GROK_VERSION=1.0.52
-SLICE=oddbout-gen.slice
-SLICE_MEMORY=${OG_SLICE_MEMORY:-8G}
 RUN_TIMEOUT=${OG_RUN_TIMEOUT:-5400}
-SLOTS=${CODEX_SLOTS:-3}
-SLOT_DIR=${CODEX_SLOT_DIR:-/tmp/codex-slots}
 LEDGER=$G/ledger.jsonl
 PINS=$G/accounts.json
 # sprite-gen-agent 3.4 tools that never reach a provider, and the Grok video/audio ones. Any other sprite tool may call
@@ -75,6 +101,8 @@ fi
 # ---------------------------------------------------------------- service role
 PERSONAL=
 if [ "${1:-}" = --personal ]; then PERSONAL=$2; shift 2; fi
+# systemd reads user units from the account's own home: the root itself for the service user, the host's home in user mode.
+UNIT_DIR=${OG_UNIT_DIR:-$(getent passwd "$(id -un)" | cut -d: -f6)/.config/systemd/user}
 export HOME=$G XDG_RUNTIME_DIR=/run/user/$(id -u)
 export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
 cd "$G"
@@ -82,12 +110,15 @@ umask 027
 NODE_BIN=${OG_NODE_BIN:-$G/node/bin}
 NODE=$NODE_BIN/node
 HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+[ -x "$NODE" ] || die "node not found at $NODE"
 
 # Nothing from the caller's environment; codex stays the default provider and a codex that cannot run asks instead
 # of silently switching to grok or a per-call API key.
+# A host's ffmpeg, img2webp or Python may sit outside the system folders (host.env TOOL_PATH, PYTHON — found by host:setup).
 SVC_ENV=(env -i HOME="$G" USER="$SVC_USER" LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM="${TERM:-dumb}"
-  PATH="$G/tools/node_modules/.bin:$NODE_BIN:/usr/local/bin:/usr/bin:/bin" AI_FIGHTER_ROOT="$KIT"
+  PATH="$G/tools/node_modules/.bin:$NODE_BIN${TOOL_PATH:+:$TOOL_PATH}:/usr/local/bin:/usr/bin:/bin" AI_FIGHTER_ROOT="$KIT"
   SPRITE_GEN_CODEX_UNAVAILABLE=ask)
+[ -z "$BOOTSTRAP_PYTHON" ] || SVC_ENV+=(AI_FIGHTER_BOOTSTRAP_PYTHON="$BOOTSTRAP_PYTHON")
 svc_env() { "${SVC_ENV[@]}" "$@"; }
 
 ledger() { "$NODE" "$HERE/ledger-report.mjs" --append "$LEDGER" "$@" || echo "og: ledger write failed" >&2; }
@@ -99,7 +130,7 @@ in_slice() {
     echo "og: user systemd unreachable — running WITHOUT the memory cap (OG_ALLOW_NO_SLICE=1)" >&2
     "$@"
   else
-    die "user systemd for $SVC_USER is unreachable (linger?) — refusing to run without the $SLICE memory cap"
+    die "user systemd for $SVC_USER is unreachable (linger? loginctl enable-linger $SVC_USER) — refusing to run without the $SLICE memory cap"
   fi
 }
 
@@ -140,6 +171,8 @@ guard_account() {
   [ -n "$pin" ] || die "$p identity was never pinned — og login $p"
   [ "$cur" = "$pin" ] || die "$p login is $cur but the pinned service account is $pin"
   RUN_ACCOUNT=service
+  # A community host generates on his own subscription by design (host terms); the pin only keeps the account from changing.
+  if [ $MODE = user ]; then RUN_ACCOUNT=host; return 0; fi
   # The worker calls og as the service user without the operator's emails: the allowed personal account is then known by its pin.
   if is_personal "$cur" || [ "$(personal_allowed "$p")" = "$cur" ]; then
     [ "$(personal_allowed "$p")" = "$cur" ] || die "$p login $cur is the operator's personal account"
@@ -245,9 +278,9 @@ cmd_setup() {
   git -C "$KIT" submodule update --init --recursive --quiet
   (cd "$KIT" && svc_env npm ci --ignore-scripts --no-fund --no-audit --loglevel=error)
   (cd "$KIT" && svc_env npm run --silent sprite:setup >/dev/null && svc_env npm run --silent sprite:status >/dev/null)
-  mkdir -p "$G/.config/systemd/user"
-  printf '[Unit]\nDescription=ODDBOUT hosted fighter generation P0 (memory cap)\n\n[Slice]\nMemoryMax=%s\nMemorySwapMax=0\n' \
-    "$SLICE_MEMORY" >"$G/.config/systemd/user/$SLICE"
+  mkdir -p "$UNIT_DIR"
+  printf '[Unit]\nDescription=ODDBOUT hosted fighter generation (memory cap)\n\n[Slice]\nMemoryMax=%s\nMemorySwapMax=0\n' \
+    "$SLICE_MEMORY" >"$UNIT_DIR/$SLICE"
   systemctl --user daemon-reload
   cmd_status
 }
@@ -282,7 +315,9 @@ cmd_login() {
     pins.personal ??= {};
     if (allow) pins.personal[p] = { email, allowedAt: new Date().toISOString() }; else delete pins.personal[p];
     fs.writeFileSync(file, JSON.stringify(pins, null, 2) + "\n", { mode: 0o600 });' "$PINS" "$p" "$cur" "$allow"
-  if [ -n "$allow" ]; then
+  if [ $MODE = user ]; then
+    echo "og: $p pinned: $(emails_of "$NODE" "$G/.$p/auth.json" --describe) — this host's own subscription; og health next"
+  elif [ -n "$allow" ]; then
     echo "og: $p pinned to the operator's PERSONAL account $(emails_of "$NODE" "$G/.$p/auth.json" --describe) — allowed until a dedicated subscription exists; every run is marked personal in the ledger"
   else
     echo "og: $p service account pinned: $(emails_of "$NODE" "$G/.$p/auth.json" --describe) — check this is the dedicated account, then og health"
@@ -322,7 +357,11 @@ cmd_health() {
   rm -f "$err"
 }
 
+# The P0 manual flow (a Discord request, a ZIP handed over, closed by hand) is the official host's; a community host runs the worker only.
+service_only() { [ $MODE = service ] || die "$1 is the official host's manual flow — a community host's PC runs the worker only (npm run host -- …)"; }
+
 cmd_new() {
+  service_only new
   local slug=${1:-} discord=${2:-} account=${3:-} id dir description
   [[ $slug =~ ^[a-z0-9][a-z0-9-]{1,40}$ ]] && [ -n "$discord" ] && [[ $account == *@* ]] ||
     die "usage: og new <slug> <discord-user-id> <oddbout-account-email> < description.txt"
@@ -427,6 +466,7 @@ cmd_run() {
 }
 
 cmd_deliver() {
+  service_only deliver
   local job=${1:-} dir manifest pkg stage check zipfile sha
   dir=$(job_dir "$job")
   if [ -n "${2:-}" ]; then manifest=$dir/$2/fighter.json; else
@@ -466,6 +506,7 @@ cmd_deliver() {
 }
 
 cmd_close() {
+  service_only close
   local job=${1:-} fighter=${2:-} dir
   dir=$(job_dir "$job")
   [ -f "$dir/.delivered" ] || die "$job was not delivered (or changed after delivery)"
@@ -486,7 +527,7 @@ cmd_purge() {
   echo "og: $job purged"
 }
 cmd_prune() {
-  local days=${1:-30}
+  local days=${1:-30} idle
   [[ $days =~ ^[0-9]+$ ]] || die "usage: og prune [days]"
   find "$G/.codex/sessions" "$G/.codex/generated_images" -type f -mtime "+$days" -delete 2>/dev/null || true
   local r d
@@ -494,7 +535,14 @@ cmd_prune() {
     [ -f "$r" ] || continue
     d=$(dirname "$r"); [ -n "$(find "$r" -mtime "+$days")" ] && cmd_purge "$(basename "$d")"
   done
-  echo "og: provider sessions and closed jobs older than $days days removed"
+  # A worker job the API cancelled or expired never gets .closed (the worker only learns it lost the lease). No file of it
+  # changed in 14 days (or $days, when longer) — past the 7-day wait for its creator — means it is over: its request text and pictures go.
+  idle=$((days > 14 ? days : 14))
+  for d in "$KIT"/output/*-gen-*/; do
+    [ -f "$d/request.json" ] && [ ! -f "$d/.closed" ] || continue
+    [ -z "$(find "$d" -newermt "-$idle days" -print -quit)" ] && cmd_purge "$(basename "$d")" --cancelled
+  done
+  echo "og: provider sessions and closed jobs older than $days days removed, idle worker jobs older than $idle"
 }
 
 # One file of a job to stdout, for the operator to look at and show the requester (sprite-gen writes 600 files).
@@ -508,7 +556,7 @@ cmd_cat() {
 }
 
 cmd_status() {
-  echo "root    $G (user $SVC_USER)"
+  echo "root    $G (user $SVC_USER, $MODE install)"
   echo "kit     $(git -C "$KIT" rev-parse --short HEAD 2>/dev/null || echo missing) (pinned ${KIT_REF:0:7})"
   echo "codex   $(svc_env codex --version 2>/dev/null || echo missing)   pinned: $(pinned codex || true)"
   echo "grok    $(svc_env grok --version 2>/dev/null | head -1 || echo missing)   pinned: $(pinned grok || true)"
@@ -526,6 +574,7 @@ cmd_report() { "$NODE" "$HERE/ledger-report.mjs" "$LEDGER" "$@"; }
 
 # Replace this tool's own files from a tar on stdin (the operator cannot write here directly).
 cmd_self_update() {
+  [ $MODE = service ] || die "a community host updates with npm run host -- update (from the kit checkout)"
   local tmp; tmp=$(mktemp -d)
   tar -x -C "$tmp" og ledger-report.mjs ledger-report.test.mjs generation-stages.mjs generation-worker.mjs motions.py
   sed -i 's/\r$//' "$tmp"/*
@@ -572,12 +621,11 @@ cmd_harden() {
 }
 
 # ---- the hosted generation worker (P1, 2026-10-27): generation-worker.mjs as a systemd user service of the service user.
-WORKER_UNIT=oddbout-gen-worker.service
 cmd_worker() {
-  local unit_dir=$G/.config/systemd/user base key
+  local unit_dir=$UNIT_DIR base key
   case ${1:-} in
     run) shift; codex_hardened || die "og harden first — the worker runs player text through codex"
-      exec "$NODE" "$HERE/generation-worker.mjs" "$@" ;;
+      OG_ROOT=$G exec "$NODE" "$HERE/generation-worker.mjs" "$@" ;;
     key)
       # The API base on the command line, the worker key (afw_…, scope generation) on stdin — never in argv or the ledger.
       base=${2:-}
@@ -604,9 +652,13 @@ Slice=$SLICE
 WantedBy=default.target
 UNIT
       systemctl --user daemon-reload && systemctl --user enable --now "$WORKER_UNIT" && echo "og: worker installed and started" ;;
+    uninstall)
+      systemctl --user disable --now "$WORKER_UNIT" 2>/dev/null || true
+      rm -f "$unit_dir/$WORKER_UNIT"; systemctl --user daemon-reload 2>/dev/null || true
+      echo "og: worker stopped and its unit removed" ;;
     start | stop | restart | status) systemctl --user "$1" "$WORKER_UNIT" --no-pager ;;
     log) tail -n "${2:-40}" "$G/worker.log" ;;
-    *) die "usage: og worker run [--once] | key <api-base> < key | install | start | stop | restart | status | log [n]" ;;
+    *) die "usage: og worker run [--once] | key <api-base> < key | install | uninstall | start | stop | restart | status | log [n]" ;;
   esac
 }
 
@@ -619,8 +671,10 @@ og run <job> -- <command...>        every generation step goes through this
 og deliver <job> [package-dir] | close <job> <fighter-uuid> | purge <job> [--cancelled] | prune [days]
 og cat <job> <path> > file          read one file of a job (results are 600, service-only)
 og harden                           turn off the service codex's shell, file, browser and plugin features (the worker needs it)
-og worker key <api-base> < key | install | start | stop | restart | status | log [n] | run [--once]
+og worker key <api-base> < key | install | uninstall | start | stop | restart | status | log [n] | run [--once]
 og self-update                      (operator side) install this copy's files for the service user
+A community host's install runs the same commands through npm run host -- … (scripts/host.mjs); new, deliver, close
+and self-update are the official host's only.
 EOF
 }
 

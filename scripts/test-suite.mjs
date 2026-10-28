@@ -9,7 +9,9 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 
 const mode = process.argv[2];
 if (!['fast', 'heavy'].includes(mode)) { console.error('Usage: node scripts/test-suite.mjs fast|heavy'); process.exit(2); }
-const all = (await readdir(new URL('../test/', import.meta.url))).filter(name => name.endsWith('.test.mjs')).map(name => `test/${name}`).sort();
+// host/ keeps the generation host's tests beside its files (they travel with them to the generation PC).
+const all = (await Promise.all(['test', 'host'].map(async dir => (await readdir(new URL(`../${dir}/`, import.meta.url)))
+  .filter(name => name.endsWith('.test.mjs')).map(name => `${dir}/${name}`)))).flat().sort();
 const missing = HEAVY.filter(file => !all.includes(file));
 if (missing.length) { console.error(`Heavy suites not found (update scripts/test-suite.mjs): ${missing.join(', ')}`); process.exit(2); }
 const files = mode === 'heavy' ? HEAVY : all.filter(file => !HEAVY.includes(file));

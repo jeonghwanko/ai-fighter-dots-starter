@@ -1,16 +1,21 @@
 #!/usr/bin/env node
-// 호스팅 생성 워커 (P1, 2026-10-27). Runs as the generation service user (`og worker run`, a systemd user service from `og worker install`).
+// 호스팅 생성 워커 (P1, 2026-10-27). Runs as the generation service user (`og worker run`, a systemd user service from `og worker install`),
+// or on a community host's PC as his own account (2026-10-28, `npm run host:start`); the API tells it only the jobs meant for that host.
 // It reaches the API outward only: a heartbeat with the subscriptions' health every minute, a claim of one stage of one job at a time,
 // lease renewals while the stage runs, artifacts and the package through the worker routes, the stage's outcome. Stages:
-// generation-stages.mjs. Config: `<root>/worker.env` (ODDBOUT_GENERATION_API, ODDBOUT_GENERATION_WORKER_KEY), written by `og worker key`.
+// generation-stages.mjs. Config: `<root>/worker.env` (ODDBOUT_GENERATION_API, ODDBOUT_GENERATION_WORKER_KEY, optional
+// ODDBOUT_GENERATION_KEEP_DAYS), written by `og worker key`. Once a day it runs `og prune`: a finished job's request text and pictures go.
 import { spawn } from 'node:child_process';
 import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createStages, ogJobId } from './generation-stages.mjs';
 
-const ROOT = process.env.OG_ROOT || '/srv/oddbout-gen';
-export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, renewMs: 60_000, errorMs: 60_000 });
+// <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
+const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(import.meta.url)));
+export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, renewMs: 60_000, errorMs: 60_000, pruneMs: 86_400_000 });
+/** Days a closed job's folder stays (worker.env ODDBOUT_GENERATION_KEEP_DAYS, 1-90): the requester's words and pictures are his. */
+export const keepDays = value => { const days = Number(value ?? 7); return Number.isInteger(days) && days >= 1 && days <= 90 ? days : 7; };
 
 /** `KEY=value` lines (no quoting, no expansion). */
 export function parseEnv(text) {
@@ -77,17 +82,25 @@ export async function main({ once = false } = {}) {
   const workerLog = path.join(ROOT, 'worker.log');
   const say = line => appendFile(workerLog, `${new Date().toISOString()} ${line}\n`).catch(() => {});
 
-  let health = { ok: false, codex: false, grok: false, at: null }, checkedAt = 0, beatAt = 0;
+  let health = { ok: false, codex: false, grok: false, at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
+  const quiet = async (args, limitMs) => {
+    let output = '';
+    const child = spawn(og, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
+    child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { output += d; });
+    const limit = setTimeout(() => { try { process.kill(-child.pid, 'SIGTERM'); } catch {} }, limitMs);
+    await new Promise(resolve => child.on('close', resolve)); clearTimeout(limit);
+    return output;
+  };
   async function keepAlive() {
     if (Date.now() - checkedAt >= TIMING.healthMs) {
-      let output = '';
       // A health check waits for a codex slot like any run; past ten minutes it counts as not healthy.
-      const child = spawn(og, ['health'], { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
-      child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { output += d; });
-      const limit = setTimeout(() => { try { process.kill(-child.pid, 'SIGTERM'); } catch {} }, 600_000);
-      await new Promise(resolve => child.on('close', resolve)); clearTimeout(limit);
-      health = parseHealth(output); checkedAt = Date.now();
+      health = parseHealth(await quiet(['health'], 600_000)); checkedAt = Date.now();
       await say(`health codex=${health.codex} grok=${health.grok}`);
+    }
+    if (Date.now() - prunedAt >= TIMING.pruneMs) {
+      // Between jobs only (this loop runs no stage meanwhile); og prune keeps open jobs and recent closed ones.
+      prunedAt = Date.now();
+      await say(`prune ${(await quiet(['prune', String(keepDays(env.ODDBOUT_GENERATION_KEEP_DAYS))], 600_000)).trim().split('\n').at(-1) ?? ''}`);
     }
     if (Date.now() - beatAt >= TIMING.heartbeatMs) {
       const reply = await api.heartbeat(health).catch(error => ({ ok: false, code: error.message }));

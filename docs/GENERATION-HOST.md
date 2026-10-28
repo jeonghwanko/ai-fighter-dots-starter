@@ -1,0 +1,91 @@
+# 생성 호스트 되기
+
+ODDBOUT 제작자는 글과 그림으로 선수를 **신청**할 수 있다(호스팅 생성). 신청을 실제로 그리는 것은 생성 PC다.
+**생성 호스트**는 내 Linux PC와 내 구독으로 다른 제작자의 신청을 만든다. 신청자는 목록에서 나를 고르거나 "아무 호스트"를 고른다.
+
+- 신청 글의 안전 판정과 프로필 초안(브리프)은 늘 ODDBOUT이 한다. 호스트는 그 뒤의 외형·동작·제출을 맡는다.
+- 한 호스트가 처음 가져간 신청은 끝까지 그 호스트가 맡는다.
+- 지금은 **초대 호스트** 단계다. 운영자가 승인한 호스트만 일한다. 사이트의 호스트 화면과 보상(계정 금화, 선수의 "만든 호스트" 표시,
+  호스트 순위)은 다음 단계다.
+
+생성기 자체의 설명은 [host/README.md](../host/README.md)에 있다.
+
+## 필요한 것
+
+| 항목 | 기준 |
+| --- | --- |
+| PC | 늘 켜 둘 Linux PC(systemd). 메모리 12 GB 이상을 권한다. 8 GB면 `--slots 2 --memory 6G`로 설치한다. 디스크 여유 5 GB 이상 |
+| 프로그램 | Node 22, Git, Python 3.11 이상(venv·sqlite3), ffmpeg·ffprobe, img2webp(libwebp 도구), zip·unzip. `npm run host:setup`이 빠진 것을 알려 준다 |
+| 구독 | codex CLI로 로그인하는 ChatGPT 구독(그림·판정), grok CLI로 로그인하는 SuperGrok 구독(걷기·달리기 영상). 이 꾸러미는 지금 구독 로그인만 쓴다 |
+| 계정 | ODDBOUT 계정(Google 로그인) |
+
+Windows·macOS는 아직 지원하지 않는다.
+
+## 호스트 약속
+
+호스트 신청(`apply --accept-terms`)은 아래에 동의한다는 뜻이다.
+
+1. 내 구독(또는 API 키)으로 다른 사람의 선수를 만든다. 그 제공자의 약관이 이 사용을 허락하는지는 내가 확인한다. 책임은 나에게 있다.
+2. 신청 글과 그림은 그 선수를 만드는 데만 쓴다. 보관·공유·재사용하지 않는다. 생성기는 끝난 작업을 7일 뒤에 지운다.
+3. 생성 결과를 신청자의 등록 밖에서 쓰거나 올리지 않는다.
+4. 생성기의 안전 설정(codex 기능 끄기, 계정 고정, 메모리 상한, 정리)을 끄거나 돌아가지 않는다.
+5. ODDBOUT은 언제든 승인을 거두고 워커 열쇠를 끌 수 있다.
+
+## 시작하기
+
+```bash
+git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+cd ai-fighter-dots-starter && git checkout codex/creator-hosting && npm ci
+
+npm run host -- signin                       # ODDBOUT 로그인. 브라우저가 없는 PC는: npm run host -- signin --device
+npm run host -- apply --name "고양이 공방" --accept-terms   # 신청. 운영자 승인을 기다린다
+npm run host:setup                           # 생성기 설치(처음은 오래 걸린다)
+npm run host:login                           # codex·grok 로그인(장치 코드), 끝나면 두 구독에 아주 작은 호출로 확인
+npm run host:start                           # 승인된 뒤: 워커 열쇠를 받아 넣고 워커를 켠다
+npm run host -- status
+```
+
+- `host:setup`은 설치 폴더(기본 `~/.local/share/oddbout-host`, 바꾸려면 모든 명령에 `--root <폴더>`나 `ODDBOUT_HOST_ROOT`)를 만든다.
+  그 안에 생성기 파일, 고정된 키트(sprite-gen 엔진 포함), codex·grok CLI를 둔다. sudo는 쓰지 않는다.
+- `host:login`은 **설치 폴더 안에** 따로 로그인한다. 내 평소 `~/.codex`·`~/.grok` 로그인과 설정(MCP 서버, 플러그인)은 쓰지 않는다.
+  호스트로 쓸 구독 계정으로 로그인한다. 로그인한 계정은 고정된다. 바꿀 때만 `npm run host:login -- --replace`를 쓴다.
+- `host:start`의 워커 열쇠는 화면에 나오지 않는다. 바로 설치 폴더의 `worker.env`(나만 읽음)에 들어간다. 열쇠는 90일 간다.
+- 로그아웃해도 워커가 돌게 하려면 한 번 `sudo loginctl enable-linger $USER`를 한다. `host:start`가 필요하면 알려 준다.
+
+## 운영
+
+| 하고 싶은 것 | 명령 |
+| --- | --- |
+| 상태 보기(승인·켜짐·오늘 남은 수·온라인, 설치·워커) | `npm run host -- status` |
+| 새 신청 잠시 막기·다시 받기 | `npm run host -- pause` / `resume` |
+| "아무 호스트" 신청 받기 | `npm run host -- any on` / `off` |
+| 하루 한도(0~50) | `npm run host -- limit 5` |
+| 워커 로그 | `npm run host -- log 80` |
+| 워커 멈추기·다시 켜기 | `npm run host -- stop` / `restart` |
+| 키트·생성기 갱신(`git pull` 뒤) | `npm run host:setup`(진행 중인 작업이 있으면 바꾸지 않는다. `pause` 뒤 끝나기를 기다린다) |
+| 열쇠를 모두 끄기 | `npm run host -- revoke` |
+| 그만두기(워커·열쇠·설치 폴더 전부) | `npm run host -- remove --yes` |
+
+- 워커는 1분마다 서버에 살아 있음을 알린다. 3분 동안 소식이 없으면 목록에서 오프라인이 된다.
+- 한 시간마다 두 구독에 아주 작은 실제 호출을 한다. 하나라도 안 되면 새 작업을 가져가지 않는다.
+- 하루 한 번 끝난 작업 폴더를 지운다. 닫힌 지 7일 지난 작업과, 닫히지 않은 채 14일 동안 바뀐 파일이 없는 작업이다
+  (`worker.env`의 `ODDBOUT_GENERATION_KEEP_DAYS`, 1~90).
+
+## 보안 모델
+
+- 신청 글은 codex의 입력이 된다. 그래서 생성기는 설치 폴더의 codex에서 셸·파일·브라우저·컴퓨터·플러그인·하위 에이전트 기능을 끈다(`og harden`).
+  이 설정이 없으면 워커가 시작하지 않는다. 브리프와 판정은 그림 생성까지 끈 codex로 돈다.
+- codex·grok은 설치 폴더를 HOME으로 돈다. 내 평소 설정과 로그인은 쓰이지 않는다.
+- 사용자 설치는 내 유닉스 계정으로 돈다. 가능하면 이 꾸러미만 쓰는 별도 유닉스 계정을 만들어 그 계정에서 설치한다.
+  그러면 기능 끄기가 실패해도 codex가 내 파일에 닿지 못한다.
+- 열쇠·구독 로그인·신청 파일은 설치 폴더(700)에 있다. 그만둘 때는 `remove --yes`로 모두 지운다.
+
+## 문제가 생기면
+
+| 증상 | 할 것 |
+| --- | --- |
+| `host:setup`이 프로그램이 없다고 한다 | 알려 준 프로그램을 설치한다(예: Ubuntu `sudo apt install ffmpeg webp zip unzip python3-venv`) |
+| `user systemd … unreachable` | 데스크톱 로그인 세션에서 하거나 `sudo loginctl enable-linger $USER` 뒤 다시 로그인한다 |
+| `host:start`가 구독이 ok가 아니라고 한다 | `npm run host:login`으로 다시 로그인한다. 구독 한도가 찼으면 기다린다 |
+| 목록에 오프라인으로 나온다 | `npm run host -- log`, `npm run host -- status`. 워커는 승인·켜짐·건강이 모두 맞아야 일한다 |
+| 신청이 오지 않는다 | 지정 신청이 없고 `any off`이면 오지 않는다. 하루 한도가 0인지도 본다 |

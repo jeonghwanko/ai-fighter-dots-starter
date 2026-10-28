@@ -125,6 +125,7 @@ Bug reports, clearer setup instructions, and reproducible examples are welcome. 
 | [Gait review](docs/GAIT-REVIEW.md) | Walk/run quality and contact evidence |
 | [Execution environment](docs/EXECUTION-HOST.md) · [Preview delivery](docs/DELIVERY.md) | Account isolation, local execution, and actual media display |
 | [Hosting](docs/CREATOR-HOSTING.md) · [Security](SECURITY.md) | Deployment and security boundaries |
+| [Generation host (Korean)](docs/GENERATION-HOST.md) | Make other creators' hosted generation requests on your own Linux PC and subscriptions |
 
 Local development checks, after installing dependencies:
 
