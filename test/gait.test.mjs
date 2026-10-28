@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { alphaBounds, walkPlan, sequenceHash, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence, loopReview, requireLoopReview } from '../tools/ai-fighter/gait.mjs';
+import { alphaBounds, walkPlan, sequenceHash, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence, loopReview, requireLoopReview, scaleCheckArgs, unsettledFrames } from '../tools/ai-fighter/gait.mjs';
 import { preview } from '../scripts/gait.mjs';
 
 function frame(bottom = 70, mark = 0, height = 80) {
@@ -145,4 +145,40 @@ test('a loop review fails on an engine retake reason, unnamed feet, a failing ve
   assert.throws(() => requireLoopReview(judged, seq, 'walk'), /LOOP_REVIEW_REQUIRED/);
   const changed = { ...seq, durations: seq.durations.map((ms, i) => i ? ms : ms + 1) };
   assert.throws(() => requireLoopReview(pass, changed, 'walk'), /LOOP_REVIEW_STALE/);
+});
+test('a scale-checked request keeps a walk or run cycle at one scale and gives each fix only to its own state', async () => temporary(async dir => {
+  const value = frame(70);
+  await sharp(value.data, { raw: { width: value.width, height: value.height, channels: 4 } }).png().toFile(path.join(dir, 'rows.png'));
+  const cell = [{ x: 0, y: 0, w: value.width, h: value.height }];
+  await writeFile(path.join(dir, 'rows.json'), JSON.stringify({ sprite_sheet_alpha: 'rows.png',
+    frame_layout: { rows: { idle: cell, walk: cell, fall: cell } }, animation: { rows: Object.fromEntries(['idle', 'walk', 'fall'].map(s => [s, { durations_ms: [100] }])) } }));
+  const source = state => ({ file: 'rows.json', state });
+  const config = { reference: source('idle'), assets: ['idle', 'walk', 'fall'].map(state => ({ id: state, source: source(state) })),
+    scaleCheck: { fix: { walk: 1.02, 'walk/2': 1.1, 'fall/3': 0.97 } } };
+  const value2 = await commonGameRequest(config, dir, { scaleReport: 'game.scale-check.json' });
+  assert.deepEqual(value2.request.assets.map(a => a.scale_check), [
+    { report: 'game.scale-check.json', per: 'frame' },
+    { report: 'game.scale-check.json', per: 'state', fix: { walk: 1.02 } },
+    { report: 'game.scale-check.json', per: 'frame', fix: { 'fall/3': 0.97 } }]);
+  assert.ok((await commonGameRequest(config, dir)).request.assets.every(a => a.scale_check === undefined));
+}));
+test('scale-check arguments cover every state once and search lying states wide', () => {
+  const config = { reference: { file: 'pack/manifest.json', state: 'idle' }, assets: [
+    { id: 'idle', source: { file: 'pack/manifest.json', state: 'idle' } }, { id: 'fall', source: { file: 'pack/manifest.json', state: 'fall' } },
+    { id: 'walk', source: { file: 'walk/manifest.json', state: 'walk' } }] };
+  const args = scaleCheckArgs(config, '/kit', '/kit/game.scale-check.json', '/kit/game.scale-check.png');
+  const values = flag => args.flatMap((v, i) => v === flag ? [args[i + 1]] : []);
+  assert.equal(args[0], 'scale-check');
+  assert.deepEqual(values('--asset'), [path.resolve('/kit', 'pack/manifest.json'), path.resolve('/kit', 'walk/manifest.json')]);
+  assert.deepEqual(values('--state'), ['idle', 'fall', 'walk']);
+  assert.deepEqual(values('--wide-state'), ['fall']);
+  assert.deepEqual(values('--reference-frame'), ['0']);
+  assert.throws(() => scaleCheckArgs({ reference: config.reference, assets: [{ id: 'x', source: { file: 'a.png' } }] }, '/kit', 'o', 'b'), /manifest state/);
+});
+test('an unmeasured frame is settled only by a fix of its own kind', () => {
+  const report = { unresolved: ['fall/3', 'walk/5', 'combo/1'] };
+  assert.deepEqual(unsettledFrames(report, {}), ['fall/3', 'walk/5', 'combo/1']);
+  // a walk is packed at one scale: a frame key does not settle it, its state key does
+  assert.deepEqual(unsettledFrames(report, { scaleCheck: { fix: { 'fall/3': 1, 'walk/5': 1 } } }), ['walk/5', 'combo/1']);
+  assert.deepEqual(unsettledFrames(report, { scaleCheck: { fix: { 'fall/3': 1, walk: 1, 'combo/1': 1.05 } } }), []);
 });

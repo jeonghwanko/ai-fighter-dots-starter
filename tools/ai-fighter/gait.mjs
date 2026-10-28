@@ -248,9 +248,37 @@ export function requireLoopReview(review, sequence, motion) {
   return review;
 }
 
+const GAIT_STATE = /(^|[-_])(walk|walking|run|running)($|[-_])/;
+// States whose head turns past 45 degrees (a fall, a knock-down, lying): scale-check searches them to 90.
+const WIDE_STATE = /fall|ko|knock|lie|lying|down|flip/i;
+
+/** `sprite-gen scale-check` arguments for a common request: the neutral reference against every asset state. */
+export function scaleCheckArgs(config, base, out, board) {
+  if (!config.reference?.file || !Array.isArray(config.assets) || !config.assets.length || !config.assets.every(a => a.source?.file && a.source?.state))
+    throw Error('A common request needs a reference and nonempty assets, each a sprite-gen manifest state');
+  const files = [...new Set(config.assets.map(asset => path.resolve(base, asset.source.file)))];
+  const states = [...new Set(config.assets.map(asset => asset.source.state))];
+  const wide = config.scaleCheck?.wideStates ?? states.filter(state => WIDE_STATE.test(state));
+  return ['scale-check', '--reference', path.resolve(base, config.reference.file),
+    ...(config.reference.state ? ['--reference-state', config.reference.state] : []), '--reference-frame', String(config.reference.frame ?? 0),
+    ...files.flatMap(file => ['--asset', file]), ...states.flatMap(state => ['--state', state]),
+    ...wide.flatMap(state => ['--wide-state', state]), '--out', out, '--board', board];
+}
+
+/** Frames scale-check left for an eye check that `fix` does not settle (a gait state is settled by its state key). */
+export function unsettledFrames(report, config) {
+  const fix = config.scaleCheck?.fix ?? {};
+  return report.unresolved.filter(frame => {
+    const state = frame.slice(0, frame.lastIndexOf('/'));
+    return GAIT_STATE.test(state) ? !(state in fix) : !(frame in fix);
+  });
+}
+
 // Assets already share a calibrated coordinate space. Measure neutral reference height once;
 // do not reinterpret a crouch, fall or extended attack's bounding box as standing body height.
-export async function commonGameRequest(config, base) {
+// With `scaleReport` (a scale-check report path, as the game request names it) every frame is also drawn at the reference
+// figure's size: a gait state at its median correction, so its cycle keeps one scale; any other frame at its own.
+export async function commonGameRequest(config, base, { scaleReport } = {}) {
   if (!Array.isArray(config.assets) || !config.assets.length || new Set(config.assets.map(a => a.id)).size !== config.assets.length) throw Error('Unique nonempty assets required');
   const reference = await loadSequence(config.reference, base);
   const frame = reference.frames[config.reference.frame ?? 0], bounds = frame && alphaBounds(frame);
@@ -260,9 +288,17 @@ export async function commonGameRequest(config, base) {
     const sequence = await loadSequence(asset.source, base);
     if (sequence.frames.some(f => f.width !== frame.width || f.height !== frame.height)) throw Error('Coordinate space mismatch: ' + asset.id);
     if (!asset.source.state) throw Error('Common request expects a sprite-gen manifest state');
-    assets.push({ id: asset.id, source: asset.source.file, state: asset.source.state, source_body_height: bodyHeight,
-      display: { body_height: spec.input.bodyHeight }, resample: config.resample ?? 'lanczos' });
+    const entry = { id: asset.id, source: asset.source.file, state: asset.source.state, source_body_height: bodyHeight,
+      display: { body_height: spec.input.bodyHeight }, resample: config.resample ?? 'lanczos' };
+    if (scaleReport) {
+      const state = asset.source.state, per = GAIT_STATE.test(state) ? 'state' : 'frame';
+      const fix = Object.fromEntries(Object.entries(config.scaleCheck?.fix ?? {})
+        .filter(([key]) => per === 'state' ? key === state : key.startsWith(state + '/')));
+      entry.scale_check = { report: scaleReport, per, ...(Object.keys(fix).length ? { fix } : {}) };
+    }
+    assets.push(entry);
   }
   return { request: { version: 1, assets }, referenceBodyHeight: bodyHeight, referenceSequenceSha256: reference.sha256,
-    note: 'One measured neutral reference scale. Shared canvas is checked; anatomical scale still needs visual review.' };
+    note: scaleReport ? 'One measured neutral reference scale, and every frame brought to the reference figure size by scale-check (head-measured). Shared canvas is checked; anatomy still needs visual review.'
+      : 'One measured neutral reference scale. Shared canvas is checked; anatomical scale still needs visual review.' };
 }

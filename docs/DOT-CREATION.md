@@ -227,6 +227,8 @@ walk 16/run 12개 프레임과 최종 시퀀스 검수 후 `asset.json`을 만�
    모든 항목에 `"display": { "body_height": 400 }`을 쓴다. 출처에 `body_h`가 없으면 공통 좌표로 제작된
    **중립 자세의 실제 키를 한 번 측정해** 같은 `source_body_height`로 쓴다. 웅크림·누움마다 외곽 높이를 재서 400px로 확대하지 않는다.
    `fighter:gait game-request`가 공통 기준 측정과 요청 생성을 지원한다. 다른 캔버스는 거절하며 체형 일치는 실제 그림에서도 확인한다.
+   이 명령은 자세마다 달라진 몸 크기도 sprite-gen `scale-check`로 머리 기준 측정해 game-pack에서 되돌린다.
+   측정하지 못한 프레임은 보드(`game.scale-check.png`)를 보고 보정값을 정해야 요청이 만들어진다([보행 검수](GAIT-REVIEW.md)).
 
 ```sh
 npm run sprite -- game-pack --request game.json --out-dir pack

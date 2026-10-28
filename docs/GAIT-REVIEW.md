@@ -61,6 +61,28 @@ npm run fighter:gait -- game-request common-scale.json game.json
 npm run sprite -- game-pack --request game.json --out-dir pack
 ```
 
+GPT는 한 행의 자세를 각각 따로 그리기 때문에 같은 배율로 맞춘 행에서도 자세마다 몸이 2~20% 커지거나 작아지고,
+따로 맞춘 행끼리는 더 벌어진다(걷기 0.83배, 달리기 1.2배). 등록 파이터는 게임이 크기를 보정해 주지 않으므로 그대로 보인다.
+그래서 `game-request`는 먼저 sprite-gen [`scale-check`](../vendor/sprite-gen/docs/scale-check.md)로 모든 프레임의 몸 크기를
+기준 프레임과 **머리 크기로** 비교한다(웅크림·팔 뻗기는 크기로 읽지 않는다). 결과는 `game.scale-check.json`과 검토 보드
+`game.scale-check.png`이고, 요청의 각 항목에 `scale_check`가 붙어 game-pack이 프레임마다 발 기준점으로 크기를 되돌린다.
+걷기·달리기는 한 주기를 한 배율로 유지하도록 상태의 중앙값을 쓴다.
+
+머리를 확신 있게 찾지 못한 프레임이 있으면 요청을 만들지 않고 `SCALE_CHECK_EYE_CHECK`와 그 프레임 목록을 돌려준다.
+추측하지 않는다. 보드에서 그 프레임을 기준과 비교해 보정값을 정하고 설정에 적은 뒤 다시 실행한다.
+걷기·달리기는 프레임이 아니라 상태 이름으로 적는다. 측정 자체를 끄려면 `"scaleCheck": false`.
+넘어짐·누움처럼 머리가 45°를 넘게 도는 상태(이름에 fall·ko·lie·down 등)는 90°까지 찾는다. 다른 상태는 `wideStates`로 지정한다.
+
+```json
+{
+  "reference": { "file": "sprites/manifest.json", "state": "idle", "frame": 0 },
+  "assets": ["..."],
+  "scaleCheck": { "fix": { "combo/2": 1.0, "walk": 1.04 }, "wideStates": ["fall", "groggy"] }
+}
+```
+
+보정된 pack의 픽셀이 바뀌므로 보행 검수(`fighter:gait review`·`loop-review`)는 이 pack으로 다시 한다.
+
 ## 2. 생성 전에 보행 설계표 작성
 
 ### 관절 좌표를 전달하는 새 단일 포즈 경로
