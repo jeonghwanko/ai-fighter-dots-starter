@@ -13,6 +13,22 @@ test('the probe reads a PNG, JPEG and WebP header and nothing else', () => {
   assert.equal(probeImage(new TextEncoder().encode('not a picture at all, just words here')), null);
 });
 
+test('a request past the account limit is refused until the operator raises that account', async () => {
+  const { sql, owner, call, healthy } = await generation();
+  try {
+    await healthy();
+    const profile = { name: 'Profile character', description: 'Introduction', portrait: '/art/character-profiles/test-v1.webp', color: '#ffeebb' };
+    for (let i = 0; i < 3; i++) await sql.query('select public.af_register_character_profile($1,$2,$3,$4)', [owner, crypto.randomUUID(), profile, 'kkumssi']);
+    const ask = () => call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() });
+    assert.equal((await ask()).body.code, 'fighter-quota');
+    await sql.query('update public.af_creators set fighter_limit = 4 where owner_id = $1', [owner]);
+    const made = await ask();
+    assert.equal(made.status, 200); assert.equal(made.body.job.status, 'queued');
+    for (const fn of ['af_create_submission', 'af_generation_create', 'af_generation_register'])
+      assert.match((await sql.query(`select pg_get_functiondef(oid) as d from pg_proc where proname = $1`, [fn])).rows[0].d, /af_fighter_limit\(p_owner\) then raise exception 'fighter-quota'/);
+  } finally { await sql.close(); }
+});
+
 test('a request: off until the worker is healthy, pictures with rights, one hosted fighter per account, the same key the same job', async () => {
   const { sql, other, call, work, healthy } = await generation();
   try {
