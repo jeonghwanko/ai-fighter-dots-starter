@@ -94,7 +94,7 @@ At that stage, the saved environment draft named the tested front door. Preparin
 republishing still required the environment preparer. Later publication and fresh-task results follow below; an actual restart remains unverified.
 Direct installation in a running user's VM does not update the reusable saved image.
 
-## Current pinned runtime and launcher verification
+## Existing character runtime and launcher verification
 
 Runtime **52db965f7ad6f54b99e8920a6be2db14dc1e2756** installed successfully in the selected VM for
 /workspace/oddbout-gun-meme-cat. Creation readiness now verifies the immutable runtime marker, workspace
@@ -154,6 +154,22 @@ The saved Install script was subsequently aligned to front door 25ea88f and save
 That configuration-only republish is still pending: the environment editor reports starting/offline
 and exposes no supported restart/retry action. The successful publication above proves the prepared
 filesystem, not publication of that later draft.
+## Auth-storage-aware candidate integration
+
+Front e562e888153a5119a966f42cdc34382b6eacc8e2 selects runtime
+0ac4032d499b7d7b4e045e46b5dfcb7ebc86f5c6 (kit 0.5.5, same engine). In the existing clean
+verification VM, isolated tools/runtime/user directories completed one actual installer run,
+one new-user --install and one ordinary resume, each exit 0 with valid JSON. User installation
+reused dependencies with steps: []; both user invocations had no fetch/pull/clone or reinstall.
+The new release-specific template retained the old template52 binding. Existing env.sh, runtime52,
+template/workspace bindings and receipts kept the same hashes and mtimes.
+
+Both user invocations correctly returned auth.storage blocked / grok-auth-storage-not-writable,
+nextAction prepare-private-grok-auth-storage, dispatch false, with no login command. No login,
+generation, secret setup, publish or CI occurred in this isolated test. Evidence:
+/workspace/oddbout-published-image-evidence/auth-candidate-*. This confirms the new candidate installer
+and resume path, not saved-image publication of the candidate. The active character keeps runtime52.
+
 ## Actual private file transfer and display boundary
 
 A clearly labeled TEST PNG (not generated character artwork) completed official native file input,
@@ -222,9 +238,10 @@ The recovered full-body image, same-source face crop and raw original were saved
 private Page page_721df1d51e808191b01432f6dd03d078 and read back. The parent retrieved actual pixels
 through read_page_reference, but the user explicitly reported that these character images were not
 visible in this conversation. A browser subsequently opened the actual Page full-body preview successfully and preserved a screenshot.
-Character display in the parent conversation therefore remains unverified; the earlier TEST image
-confirmation does not certify this artifact. Appearance selection is pending and later motion groups
-are stopped. No video, all-eleven-motion package or complete creation acceptance is claimed.
+The user then explicitly confirmed seeing the Page preview and selected this appearance. This verifies
+the Page-preview review route; the earlier read_page_reference-only inline failure remains recorded.
+Locomotion was authorized next. Video playback, all eleven motions and full creation acceptance remain
+unverified until their own observed results.
 
 ## Related animation change
 
@@ -242,8 +259,8 @@ before a new immutable pin, without upgrading a character already in progress.
 
 The reviewed release remains a candidate. Prepared-image publication and fresh-task verification passed; an actual VM restart remains unverified;
 official Grok login and one actual still generation passed in the existing VM. Remaining gates are
-character display in the current conversation, video entitlement/playback, appearance selection, all
-remaining motion groups and final package. One generated appearance is not a completed fighter.
+video entitlement/playback, all remaining motion groups and final package. The user reviewed and
+selected the appearance through the actual Page preview. One generated appearance is not a completed fighter.
 
 ## Saved-VM acceptance checklist (remaining gates noted above)
 
