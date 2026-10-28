@@ -6,6 +6,7 @@ import { note as checkNote } from '../api/canon.mjs';
 import { registerFileInputProbe } from './file-input-probe.mjs';
 import { registerCreatorSources } from './creator-sources.mjs';
 import { Problem, UUID, bearerToken, readBody, sha256 } from '../api/http.mjs';
+import { GENERATION_LIMITS } from '../api/generations.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
 import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
@@ -116,9 +117,9 @@ export async function authenticateCloud(db, request, now = Date.now) {
   return { owner: c.sub, email: c.email ?? '', claims: c };
 }
 
-export function cloudServer({ db, identity, fetcher = fetch, arena = null, host = {} }) {
+export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {} }) {
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
-    instructions: 'Create and register AI Fighter characters using the user’s own generation account. Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. Call this cloud connector’s check_creation_readiness before first generation, after a workspace restart and before registration. It checks account access; generation and display still require actual host evidence. Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. Require the user’s final registration request and preserve motion review boundaries. Use host file attachments for fighter.json and WebP assets. When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. A VM direct-network denial does not establish failure of the native connector; use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
+    instructions: (hosted ? HOSTED_INSTRUCTIONS : '') + 'Create and register AI Fighter characters using the user’s own generation account. Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. Call this cloud connector’s check_creation_readiness before first generation, after a workspace restart and before registration. It checks account access; generation and display still require actual host evidence. Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. Require the user’s final registration request and preserve motion review boundaries. Use host file attachments for fighter.json and WebP assets. When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. A VM direct-network denial does not establish failure of the native connector; use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
   // The existing API runs in-process with an identity bound to this verified request. The shim cannot be
   // selected from tool inputs and never receives/returns a privileged credential or another user's identity.
   const scoped = identity ? new Proxy(db, { get(target, key) {
@@ -240,6 +241,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, host 
     registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller: host.caller ?? null });
     registerWorkshopTools({ register, arena, invoke });
   }
+  if (hosted) registerHostedTools({ register, db, identity, invoke, fetcher, hosted });
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
   registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
   return server;
@@ -440,7 +442,124 @@ function registerWorkshopTools({ register, arena, invoke }) {
       ...(nickname ? { nickname } : {}), ...(canon !== undefined ? { canon } : {}) }), { write: true, publish: true, openWorld: true });
 }
 
-export function createCloudHandler({ db, fetcher = fetch, arena = null }) {
+/**
+ * 호스팅 생성 도구 (2026-10-28): ODDBOUT's generation worker makes the fighter from the user's words (and up to two of his pictures) and
+ * the agent only carries his answers — which of two looks, one change at a time, the registration. Without them an agent drove every
+ * generation step itself (dozens of calls and long guides per fighter); Grok and ChatGPT could not make a fighter at all. The routes are the
+ * site's (`api/generations.mjs`); the state machine, quotas and the service switch are the database's. Listed only while the function is
+ * configured for them (`ODDBOUT_HOSTED_GENERATION_TOOLS`), so a release of this code alone does not change the published tool list.
+ */
+const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the fighter for him (no generation setup of his own), use request_hosted_fighter and follow each result\'s next. ';
+/** States the worker is on; an answer from the user is not awaited. */
+const HOSTED_WORKING = new Set(['queued', 'appearance', 'motions', 'submitting']);
+/** A submission still on its way to the registry (`af_submissions`). */
+const SUBMISSION_PENDING = new Set(['uploading', 'queued', 'validating']);
+/** The longest wait one get_hosted_fighter call holds: enter_cup's proven wait (CUP_WAIT_MS), inside the hosts' tool timeouts and the Edge limit. */
+export const HOSTED_WAIT_SECONDS = 25;
+const HOSTED_POLL_MS = 3000;
+const PROFILE_KEYS = ['name', 'description', 'names', 'lines', 'stats'];
+const hostedSettled = (status, submission) => !HOSTED_WORKING.has(status) && !(status === 'submitted' && SUBMISSION_PENDING.has(submission ?? 'queued'));
+
+/** What the agent does next with a job, from its state: the user's answer it asks for, or how long to wait. */
+export function hostedNext(job) {
+  const left = job.revisionsLeft ?? {}, error = job.error ? ` (${job.error})` : '';
+  switch (job.status) {
+    case 'queued': case 'appearance':
+      return job.delegate
+        ? 'ODDBOUT is writing the profile, painting two looks and picking one itself, then it makes the eleven motions (about 15 to 30 minutes in all). Tell the user, and check later with get_hosted_fighter.'
+        : 'ODDBOUT is writing the profile and painting two looks (a few minutes). Call get_hosted_fighter with waitSeconds to wait.';
+    case 'appearance_ready':
+      return `${job.delegate ? 'ODDBOUT could not pick a look by itself. ' : ''}Show the user both looks (candidates a and b) as images and ask which one. Then choose_hosted_look with his pick, or with one sentence to change both (${left.appearance ?? 0} changes left).`;
+    case 'motions':
+      return `ODDBOUT is making the eleven motions from ${job.delegate ? 'the look it picked' : 'the chosen look'} (about 15 to 30 minutes). Tell the user, and check later with get_hosted_fighter.`;
+    case 'motion_ready':
+      return `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images, and the profile draft. If he likes them, register_hosted_fighter (change only what he asks in the profile). To fix one motion, revise_hosted_motion (${left.motions ?? 0} changes left).`;
+    case 'submitting':
+      return 'ODDBOUT is packaging the fighter and submitting it under the user\'s account. Call get_hosted_fighter with waitSeconds.';
+    case 'submitted':
+      if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}. Tell the user; it now fights in ODDBOUT.`;
+      if (job.submission?.stage === 'rejected') return 'The server check refused the package. A person at ODDBOUT will look at it; the user\'s free fighter is free again.';
+      return 'The server is checking the package. Call get_hosted_fighter with waitSeconds.';
+    case 'needs_review': return 'A person at ODDBOUT is checking this step. Nothing to do now; check later.';
+    case 'rejected': return `ODDBOUT declined this request${error}. It does not use the user's free fighter; a different request may be made.`;
+    case 'failed': return `This request failed${error}. The user's free fighter is free again; he may ask once more.`;
+    default: return `This request is ${job.status}; it is over.`;
+  }
+}
+const withNext = result => result?.ok && result.job ? { ...result, next: hostedNext(result.job) } : result;
+
+function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }) {
+  const JOB = UUID_ARG();
+  const post = (path, body, headers = {}) => invoke(path, 'POST', JSON.stringify(body), { 'content-type': 'application/json', ...headers });
+  register('request_hosted_fighter', 'ODDBOUT에 선수 만들기 맡기기', 'ODDBOUT makes a fighter for the connected user on its own generation worker: two looks to choose from, then the eleven motions, then registration under his account. delegate: true when he leaves the choices to ODDBOUT ("알아서 해 줘", "just make it"): ODDBOUT picks the look itself (or asks him if neither suits) and he answers once, at the finished motions. Pass his words (what the fighter is and looks like) and, if he gave them, up to two of his own pictures with his confirmation that he has the rights to them. One hosted fighter per account is free. Requires the user\'s request. Returns the job; follow its next.',
+    { description: z.string().min(GENERATION_LIMITS.descriptionMin).max(GENERATION_LIMITS.description), language: z.enum(['ko', 'en']),
+      picture: FILE.optional(), secondPicture: FILE.optional(), rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional(), idempotencyKey: UUID_ARG() },
+    async ({ description, language, picture, secondPicture, rightsConfirmed, delegate, idempotencyKey }) => {
+      // Sent again with its key it is the same request: its pictures are not uploaded twice.
+      const { data: existing, error } = await db.from('af_generation_jobs').select('id').eq('owner_id', identity.owner).eq('idempotency_key', idempotencyKey).maybeSingle();
+      if (error) throw new Problem(503, 'database-unavailable');
+      if (existing) return withNext(await invoke(`generations/${existing.id}`));
+      // Off (the service switch, the worker away or unwell) before any picture is kept.
+      const { capabilities } = await invoke('generations/capabilities');
+      if (!capabilities?.hosted) return { ok: false, code: 'generation-unavailable', reason: capabilities?.reason ?? null };
+      const pictures = [picture, secondPicture].filter(Boolean);
+      if (pictures.length && rightsConfirmed !== true) return { ok: false, code: 'rights-required' };
+      const refs = [];
+      for (const file of pictures) {
+        const uploaded = await invoke('generations/uploads', 'POST', await downloadHostFile(file, GENERATION_LIMITS.refBytes, fetcher),
+          { 'content-type': 'application/octet-stream' });
+        if (!uploaded.ok) return uploaded;
+        refs.push(uploaded.upload.id);
+      }
+      return withNext(await post('generations', { description, language, ...(refs.length ? { refs, rightsConfirmed: true } : {}), ...(delegate ? { delegate: true } : {}) },
+        { 'idempotency-key': idempotencyKey }));
+    }, { write: true, openWorld: true, files: ['picture', 'secondPicture'] });
+  register('get_hosted_fighter', 'ODDBOUT이 만드는 선수', `Read the connected user's hosted fighter: its state, the two looks or the motion previews as image URLs (ten minutes), the profile draft and next. No jobId: his latest requests and whether hosted generation is open. waitSeconds (up to ${HOSTED_WAIT_SECONDS}) waits here while ODDBOUT works, so one call returns the next thing to show.`,
+    { jobId: JOB.optional(), waitSeconds: z.number().int().min(0).max(HOSTED_WAIT_SECONDS).optional() }, async ({ jobId, waitSeconds = 0 }) => {
+      if (!jobId) {
+        const list = await invoke('generations');
+        return list.ok ? { ...list, jobs: list.jobs.map(job => ({ ...job, next: hostedNext(job) })) } : list;
+      }
+      // Wait on the state alone (no signed URLs per look), then read the job once.
+      const deadline = Date.now() + waitSeconds * 1000, pollMs = hosted.pollMs ?? HOSTED_POLL_MS;
+      while (Date.now() + pollMs <= deadline) {
+        const { data: row, error } = await db.from('af_generation_jobs').select('status,submission_id').eq('id', jobId).eq('owner_id', identity.owner).maybeSingle();
+        if (error || !row) break;
+        let stage = null;
+        if (row.status === 'submitted' && row.submission_id) {
+          const { data } = await db.from('af_submissions').select('status').eq('id', row.submission_id).maybeSingle();
+          stage = data?.status ?? null;
+        }
+        if (hostedSettled(row.status, stage)) break;
+        await new Promise(done => setTimeout(done, pollMs));
+      }
+      return withNext(await invoke(`generations/${jobId}`));
+    });
+  register('choose_hosted_look', '외형 고르기', 'Answer the two looks of the connected user\'s hosted fighter with his words: choose a or b (ODDBOUT then makes the motions), or revise with one sentence (both looks are painted again). Requires the user\'s answer.',
+    { jobId: JOB, choose: z.enum(['a', 'b']).optional(), revise: z.string().min(2).max(GENERATION_LIMITS.note).optional() },
+    ({ jobId, choose, revise }) => (choose === undefined) === (revise === undefined) ? { ok: false, code: 'invalid-answer' }
+      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(withNext), { write: true });
+  register('revise_hosted_motion', '동작 하나 고치기', 'Ask ODDBOUT to make one motion of the connected user\'s hosted fighter again with his sentence; the other motions stay. Requires the user\'s request.',
+    { jobId: JOB, clip: z.enum(Object.keys(spec.motions)), note: z.string().min(2).max(GENERATION_LIMITS.note) },
+    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(withNext), { write: true });
+  register('register_hosted_fighter', '맡긴 선수 등록', 'Register the connected user\'s hosted fighter once he approved its motions: ODDBOUT packages it and submits it under his account, through the same server check as any fighter. profile holds only what he changed in the draft (name, description, names, bout lines, stats summing to 9). Requires the user\'s registration request.',
+    { jobId: JOB, profile: z.object({ name: z.string().min(1).max(profileLimits.name), description: z.string().min(1).max(profileLimits.description),
+      names: z.record(z.string(), z.string()), lines: z.record(z.string(), z.string()),
+      stats: z.object({ power: z.number().int(), toughness: z.number().int(), speed: z.number().int() }).strict() }).partial().strict().optional() },
+    async ({ jobId, profile = {} }) => {
+      const read = await invoke(`generations/${jobId}`);
+      if (!read.ok) return read;
+      // The draft the worker wrote, with his changes over it; the API checks the result against the contract.
+      const draft = read.job.profile ?? {}, merged = { ...draft, ...profile };
+      for (const key of ['names', 'lines']) if (profile[key] && draft[key]) merged[key] = { ...draft[key], ...profile[key] };
+      const confirmed = Object.fromEntries(PROFILE_KEYS.filter(key => merged[key] != null).map(key => [key, merged[key]]));
+      return withNext(await post(`generations/${jobId}/register`, { profile: confirmed }));
+    }, { write: true, publish: true, openWorld: true });
+  register('cancel_hosted_fighter', '맡긴 선수 취소', 'Cancel the connected user\'s hosted fighter request; work in progress stops at its next step and his free fighter is free again. Only on his explicit request.',
+    { jobId: JOB }, async ({ jobId }) => withNext(await invoke(`generations/${jobId}`, 'DELETE')), { write: true, publish: true });
+}
+
+export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null }) {
   return async request => {
     const url = new URL(request.url);
     // The Edge gateway may strip /functions/v1 and replace the origin before forwarding.
@@ -478,7 +597,7 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null }) {
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
     // user's identity into another's call. Measured 2026-10-28: building it with all tools and answering tools/list
     // takes about 1.8 ms, small beside the network hop, so sharing a server is not worth that guarantee.
-    const server = cloudServer({ db, identity, fetcher, arena, host });
+    const server = cloudServer({ db, identity, fetcher, arena, hosted, host });
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
       await server.connect(transport);

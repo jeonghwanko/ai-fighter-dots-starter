@@ -1,62 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
-import { createHandler, sha256 } from '../api/handler.mjs';
+import { sha256 } from '../api/handler.mjs';
 import { probeImage } from '../api/image-probe.mjs';
-import { migratedDatabase } from './helpers/fighter-database.mjs';
-
-// Minimal headers the probe reads (the API never decodes a picture).
-const png = (w, h) => { const b = new Uint8Array(64); b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]); b.set(new TextEncoder().encode('IHDR'), 12);
-  new DataView(b.buffer).setUint32(16, w); new DataView(b.buffer).setUint32(20, h); return b; };
-const webp = (w, h) => { const b = new Uint8Array(64); b.set(new TextEncoder().encode('RIFF'), 0); b.set(new TextEncoder().encode('WEBPVP8X'), 8);
-  b.set([(w - 1) & 255, (w - 1) >> 8 & 255, (w - 1) >> 16, (h - 1) & 255, (h - 1) >> 8 & 255, (h - 1) >> 16], 24); return b; };
-
-// One database, a creator with a token, another creator, the generation worker's key and a validation worker's key; Storage in memory.
-async function generation() {
-  const sql = await migratedDatabase(), owner = crypto.randomUUID(), other = crypto.randomUUID();
-  for (const user of [owner, other]) {
-    await sql.query('insert into auth.users(id) values($1)', [user]);
-    await sql.query('insert into public.af_creators(owner_id) values($1) on conflict do nothing', [user]);
-  }
-  const workerToken = `afw_${'a'.repeat(64)}`, validatorToken = `afw_${'b'.repeat(64)}`;
-  await sql.query("insert into public.af_workers(token_hash,label,scope) values($1,'gen','generation'),($2,'val','validation')",
-    [await sha256(new TextEncoder().encode(workerToken)), await sha256(new TextEncoder().encode(validatorToken))]);
-  const rpc = async (name, args) => {
-    try { return { data: (await sql.query(`select to_jsonb(public.${name}(${Object.keys(args).map((key, i) => `${key} => $${i + 1}`).join(',')})) as value`, Object.values(args))).rows[0].value }; }
-    catch (error) { return { error: { message: error.message } }; }
-  };
-  const from = table => {
-    const filters = [], values = []; let order = '', limit = '', gt = [];
-    const run = async () => (await sql.query(`select to_jsonb(t) as value from public.${table} t${filters.length ? ' where ' + filters.join(' and ') : ''}${order}${limit}`, values)).rows.map(r => r.value);
-    const q = { select: () => q, eq: (key, val) => { values.push(val); filters.push(`${key}=$${values.length}`); return q; },
-      gt: (key, val) => { values.push(val); filters.push(`${key}>$${values.length}`); return q; },
-      in: (key, vals) => { values.push(vals); filters.push(`${key}=any($${values.length})`); return q; },
-      order: (key, o) => { order = ` order by ${key}${o?.ascending === false ? ' desc' : ''}`; return q; }, limit: n => { limit = ` limit ${n}`; return q; },
-      maybeSingle: async () => ({ data: (await run())[0] ?? null }), then: (ok, no) => run().then(data => ({ data })).then(ok, no) };
-    return q;
-  };
-  const objects = new Map();
-  const storage = { from: bucket => ({
-    upload: async (path, bytes, options) => { const key = `${bucket}/${path}`; if (objects.has(key) && !options?.upsert) return { error: { message: 'exists' } };
-      objects.set(key, { bytes, type: options?.contentType }); return { data: { path } }; },
-    remove: async paths => { for (const p of paths) objects.delete(`${bucket}/${p}`); return {}; },
-    download: async path => objects.has(`${bucket}/${path}`) ? { data: new Blob([objects.get(`${bucket}/${path}`).bytes]) } : { error: { message: 'missing' } },
-    createSignedUrls: async paths => ({ data: paths.map(path => ({ path, signedUrl: `https://storage.test/${bucket}/${path}?token=t` })) }) }) };
-  const users = { 'owner-token-0123456789': owner, 'other-token-0123456789': other };
-  const db = { rpc, from, storage, auth: { getUser: async token => ({ data: { user: users[token] ? { id: users[token] } : null } }) } };
-  const handle = createHandler({ db });
-  const call = async (method, path, body, token = 'owner-token-0123456789', headers = {}) => {
-    const raw = body instanceof Uint8Array || typeof body === 'string';
-    const response = await handle(new Request(`http://localhost/ai-fighter/${path}`, { method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
-      'content-type': raw ? (headers['content-type'] ?? 'application/octet-stream') : 'application/json', ...headers },
-      ...(body === undefined ? {} : { body: raw ? body : JSON.stringify(body) }) }));
-    return { status: response.status, body: await response.json() };
-  };
-  const work = (method, path, body, headers = {}) => call(method, `generation-worker/${path}`, body, workerToken, headers);
-  const healthy = async () => { await sql.query('update public.af_generation_settings set enabled = true');
-    return work('POST', 'heartbeat', { health: { ok: true, codex: true, grok: true } }); };
-  return { sql, owner, other, call, work, healthy, objects, validatorToken };
-}
+import { generation, png, webp } from './helpers/generation-database.mjs';
 
 test('the probe reads a PNG, JPEG and WebP header and nothing else', () => {
   assert.deepEqual(probeImage(png(640, 480)), { type: 'image/png', ext: 'png', width: 640, height: 480 });
@@ -240,3 +187,39 @@ test('retries count toward a stage\'s three leases and wait; progress is a heart
   } finally { await sql.close(); }
 });
 
+
+test('맡기기: the worker picks the look and the job goes on to the motions; with no pick, or a job not left to it, the creator is asked', async () => {
+  const { sql, call, work, healthy } = await generation();
+  try {
+    await healthy();
+    const ask = (body, token) => call('POST', 'generations', { description: '모자를 쓴 너구리 레슬러', language: 'ko', ...body }, token, { 'idempotency-key': crypto.randomUUID() });
+    assert.equal((await ask({ delegate: 'yes' })).body.code, 'invalid-body');
+    const job = (await ask({ delegate: true })).body.job;
+    assert.equal(job.delegate, true);
+    const finish = (c, result) => work('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome: 'ok', result });
+    let held = (await work('POST', 'claim', {})).body.job;
+    assert.equal(held.delegate, true);
+    await finish(held, { brief: { profile: { name: '너구리' } } });
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'], choice: 'c' })).body.code, 'invalid-result');
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'], choice: 'b' })).body.status, 'motions');
+    const read = (await call('GET', `generations/${job.id}`)).body.job;
+    assert.equal(read.status, 'motions'); assert.equal(read.choice, 'b'); assert.equal(read.candidates.length, 2);
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal(held.status, 'motions'); assert.equal(held.choice, 'b');
+    // The pick found none: he is asked as before.
+    await call('DELETE', `generations/${job.id}`);
+    const asked = (await ask({ delegate: true })).body.job;
+    held = (await work('POST', 'claim', {})).body.job; await finish(held, { brief: { profile: {} } });
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'] })).body.status, 'appearance_ready');
+    assert.equal((await call('GET', `generations/${asked.id}`)).body.job.choice, null);
+    // A job he did not leave to us takes no pick.
+    await call('DELETE', `generations/${asked.id}`);
+    const own = (await ask({})).body.job;
+    assert.equal(own.delegate, false);
+    held = (await work('POST', 'claim', {})).body.job; await finish(held, { brief: { profile: {} } });
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'], choice: 'a' })).body.code, 'invalid-result');
+  } finally { await sql.close(); }
+});

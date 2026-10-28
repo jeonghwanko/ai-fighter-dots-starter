@@ -92,7 +92,7 @@ export function createGenerationHandler({ db, authenticate, present }) {
       if (data) submission = { id: data.id, stage: data.status, fighterId: data.fighter_id ?? null };
     }
     return { id: row.id, status: row.status, progress: row.progress, error: row.error_code ?? null, description: row.description, language: row.language,
-      createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
+      delegate: row.delegate === true, createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
       revisionsLeft: { appearance: 2 - row.appearance_revisions, motions: 3 - row.motion_revisions },
       preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null })), submission };
@@ -141,13 +141,16 @@ export function createGenerationHandler({ db, authenticate, present }) {
     }
     if (method === 'POST' && route === 'generations') {
       const key = id(request.headers.get('idempotency-key'));
-      const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed']);
+      const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed', 'delegate']);
       if (!['ko', 'en'].includes(body.language)) throw new Problem(422, 'invalid-language');
+      if (body.delegate !== undefined && typeof body.delegate !== 'boolean') throw new Problem(422, 'invalid-body');
       if (body.refs !== undefined && (!Array.isArray(body.refs) || body.refs.length > GENERATION_LIMITS.refs)) throw new Problem(422, 'invalid-refs');
       const refs = (body.refs ?? []).map(id);
       const row = await call('af_generation_create', { p_owner: owner, p_key: key,
         p_description: text(body.description, GENERATION_LIMITS.description, '/description', { min: GENERATION_LIMITS.descriptionMin, lines: true, code: 'invalid-description' }),
-        p_language: body.language, p_refs: refs, p_rights: body.rightsConfirmed === true });
+        p_language: body.language, p_refs: refs, p_rights: body.rightsConfirmed === true,
+        // 맡기기 (2026-10-28): the worker picks the look and goes on to the motions; the creator answers once, at the end.
+        ...(body.delegate ? { p_delegate: true } : {}) });
       return { ok: true, job: await view(row) };
     }
     if (parts[0] === 'generations' && parts.length === 2 && method === 'GET') return { ok: true, job: await view(await ownJob(owner, parts[1])) };
@@ -216,7 +219,7 @@ export function createGenerationHandler({ db, authenticate, present }) {
       const candidates = candidatesOf(row);
       const urls = await signed([...(refs ?? []).map(ref => ref.path), ...candidates.map(name => artifactPath(row.id, name))]);
       return { ok: true, job: { id: row.id, status: row.status, leaseToken: row.lease_token, owner: row.owner_id, createdAt: row.created_at, description: row.description,
-        language: row.language, brief: row.brief ?? null, choice: row.choice ?? null, appearanceNote: row.appearance_note ?? null,
+        language: row.language, brief: row.brief ?? null, delegate: row.delegate === true, choice: row.choice ?? null, appearanceNote: row.appearance_note ?? null,
         appearanceRound: row.appearance_revisions, motionNote: row.motion_note ?? null, motionRound: row.motion_revisions, profile: row.profile ?? null,
         refs: (refs ?? []).map(ref => ({ id: ref.id, contentType: ref.content_type, width: ref.width, height: ref.height, url: urls.get(ref.path) ?? null })),
         candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', name, url: urls.get(artifactPath(row.id, name)) ?? null })),
@@ -235,6 +238,7 @@ export function createGenerationHandler({ db, authenticate, present }) {
       if (!isObject(result) || JSON.stringify(result).length > GENERATION_LIMITS.result) throw new Problem(422, 'invalid-result');
       if (result.candidates !== undefined && (!Array.isArray(result.candidates) || result.candidates.some(name => !ARTIFACT.test(name ?? ''))))
         throw new Problem(422, 'invalid-result');
+      if (result.choice !== undefined && !['a', 'b'].includes(result.choice)) throw new Problem(422, 'invalid-result');
       if (result.preview !== undefined && (!Array.isArray(result.preview)
         || result.preview.some(p => !isObject(p) || !MOTIONS.includes(p.clip) || !ARTIFACT.test(p.name ?? '')))) throw new Problem(422, 'invalid-result');
       const row = await call('af_generation_finish', { ...at, p_outcome: lease.outcome, p_result: result });
