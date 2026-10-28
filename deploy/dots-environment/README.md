@@ -16,8 +16,15 @@ with the exact missing list. OS packages follow the base image's security reposi
 Grok's npm lifecycle scripts are disabled: its official launcher supports in-package binary extraction
 when the home directory is unwritable. Executable extraction does not establish login storage. Do not change HOME/GROK_HOME during installation to route around authentication or
 host restrictions. Confirm the actual launched CLI version; no login or agent prompt is used by installation.
-The script never logs in or generates. Do not run it over a user's active environment.
-Only npm/pip download caches move to the workspace tools folder; env.sh retains those paths for later
+The recipe also installs the pinned engine's official RIFE tool and runs its real interpolation check
+before reporting preparation complete. Ordinary model/binary files use the supported
+SPRITE_GEN_DATA_DIR under /workspace/.oddbout-tools/sprite-gen-data/<runtime-commit>, exported by env.sh;
+authentication paths are unchanged. This preparation path targets Linux x86-64. An unsupported
+architecture or failed execution check stops preparation; file presence is not readiness. The kit's
+basic bootstrap still skips this optional source-development dependency, so the saved-image step must
+not be omitted. Do not substitute nearest-frame sampling to conceal an unavailable interpolation tool.
+The script never logs in or calls an image/video generation provider. Do not run it over a user's active environment.
+npm/pip download caches and ordinary RIFE data use the workspace tools folder; env.sh retains those paths for later
 kit installation. HOME and all authentication locations remain the official defaults.
 
 Publishing captures prepared files. Saving an Install script does not prove it ran: execute the recipe in
@@ -40,7 +47,7 @@ Allow the actual package/login/media endpoints in the environment's network sett
 
 | Purpose | Hosts |
 | --- | --- |
-| Git source and submodule | github.com (and the host's actual Git download endpoints) |
+| Git source, submodule and pinned RIFE release | github.com (and the actual Git/release download endpoints, including release-assets.githubusercontent.com when returned) |
 | Node and npm | nodejs.org, registry.npmjs.org |
 | Kit's pinned WebP binary fallback | storage.googleapis.com (needed only if the base image has no working WebP tools) |
 | Python dependencies | pypi.org, files.pythonhosted.org; any separately declared engine dependency host |
