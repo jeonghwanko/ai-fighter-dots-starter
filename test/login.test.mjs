@@ -235,6 +235,9 @@ test('device login keeps the secret here, prints only a public pairing link, and
   // The chat-facing output carries the link and pairing code, never the device secret.
   assert.ok(logs.some(line => line.includes('#device=BCDF-GHJK')) && !logs.some(line => line.includes(DEVICE)));
   assert.ok(logs.some(line => line.includes('본인이 시작하지 않은 요청이면 승인하지 마세요')));
+  // Where to go when the approval screen does not come up, and until when the link lives.
+  assert.ok(logs.some(line => line.includes('같은 링크를 다시 여세요')) && logs.some(line => /\d\d:\d\d까지/.test(line)));
+  assert.equal(logs.at(-1), '승인한 뒤에는 이 작업 공간에서 npm run login -- --device-wait 를 실행합니다.');
   const slow = Object.assign(new Error('slow-down'), { status: 429 }), slept = [], verified = [];
   const createAuthClient = () => ({ auth: { verifyOtp: async args => { verified.push(args);
     return { data: { session: { access_token: jwt({ sub: 'user-7', exp: 9999999999 }), refresh_token: 'refresh-user-7', user: { id: 'user-7', email: 'p@example.com' } } } }; } } });

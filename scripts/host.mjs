@@ -94,6 +94,15 @@ export function checkSystem({ find = which, run = works, platform = process.plat
 const flag = (args, name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
 const MESSAGES = {
   'client-sign-in-required': 'ODDBOUT 로그인이 필요하다: npm run host -- signin (브라우저가 없으면 --device)',
+  // The device sign-in's ends, in this command's words (the kit's own say npm run login).
+  'device-login-expired': '승인 링크가 10분 안에 승인되지 않아 만료됐다. npm run host -- signin --device 로 새 링크를 받는다.',
+  'device-login-pending': '아직 승인되지 않았다. 링크를 승인한 뒤 npm run host -- signin --device 를 다시 실행하면 이어서 마친다.',
+  'device-login-consumed': '이 승인 요청은 이미 쓰였다. npm run host -- signin --device 로 새 링크를 받는다.',
+  'device-login-not-found': '서버에 이 승인 요청이 없다. npm run host -- signin --device 로 새 링크를 받는다.',
+  'device-login-redeem-failed': '승인된 로그인을 마치지 못했다. npm run host -- signin --device 로 새 링크를 받는다.',
+  'device-login-redeem-retry': '승인은 받았지만 서버에 닿지 못했다. 연결을 확인하고 npm run host -- signin --device 를 다시 실행한다(다시 승인하지 않는다).',
+  'device-login-rate-limit': '승인 요청이 너무 많다. 몇 분 뒤 npm run host -- signin --device 를 다시 실행한다.',
+  'device-login-start-failed': '승인 링크를 만들지 못했다. 잠시 뒤 npm run host -- signin --device 를 다시 실행한다.',
   'host-terms-required': `호스트 약속에 동의해야 신청된다(${TERMS_DOC}).`,
   'host-not-approved': '아직 승인되지 않았다. 승인되면 다시 한다(npm run host -- status).',
   'host-key-limit': '살아 있는 워커 열쇠가 이미 둘이다. npm run host -- revoke 로 끄고 다시 한다.',
@@ -142,7 +151,12 @@ export async function runHost(argv, deps) {
         const project = await deps.project();
         if (!project) { out('deploy/creator-site.json 을 읽지 못했다 — 이 체크아웃을 확인한다.'); return 1; }
         const flags = ['--url', project.origin, '--key', project.publishableKey];
-        if (args.includes('--device')) { await deps.signin.startDevice(flags); await deps.signin.waitDevice(args.includes('--replace')); }
+        if (args.includes('--device')) {
+          // A link made before (this command stopped, the terminal closed) is waited on again, not replaced: it may be approved already.
+          try { await deps.signin.startDevice(flags); }
+          catch (error) { if (error.message !== 'device-login-already-pending') throw error; out('앞서 만든 승인 링크(10분 유효)를 이어서 기다린다.'); }
+          await deps.signin.waitDevice(args.includes('--replace'));
+        }
         else await deps.signin.browser([...flags, ...args.filter(a => a === '--replace')]);
         out('ODDBOUT에 로그인했다. 다음: npm run host -- apply --name <이름> --accept-terms');
         return 0;
@@ -287,6 +301,6 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     system: () => checkSystem(),
     linger: () => spawnSync('loginctl', ['show-user', userInfo().username, '--property=Linger', '--value'], { encoding: 'utf8' }).stdout?.trim() === 'yes',
     project: () => readProject(KIT),
-    signin: { browser: argv => login({ argv }), startDevice: argv => startDeviceLogin({ argv }), waitDevice: replace => waitDeviceLogin({ replace }) },
+    signin: { browser: argv => login({ argv }), startDevice: argv => startDeviceLogin({ argv, next: '승인하면 이 명령이 이어서 로그인을 마친다. 이 창을 닫지 않는다.' }), waitDevice: replace => waitDeviceLogin({ replace }) },
   }).then(code => { process.exitCode = code; });
 }

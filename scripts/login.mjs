@@ -210,7 +210,7 @@ const devicePost = (url, publishableKey, route, body) => apiRequest(url, publish
  * The secret device code stays in a 0600 file here; the printed link carries only the public pairing code.
  */
 export async function startDeviceLogin({ argv = [], log = console.error, post = devicePost, page = PUBLIC_CREATOR_PAGE,
-  sessionPath = defaultSessionPath() } = {}) {
+  sessionPath = defaultSessionPath(), next = '승인한 뒤에는 이 작업 공간에서 npm run login -- --device-wait 를 실행합니다.' } = {}) {
   if (argv.includes('--link')) throw new Error('device-link-unsupported');
   const pendingPath = pendingDeviceLoginPath(sessionPath);
   // A second start must not replace the only copy of a request that may already be approved.
@@ -239,9 +239,12 @@ export async function startDeviceLogin({ argv = [], log = console.error, post = 
   const verificationUrl = `${creatorPage(page).href}#device=${started.userCode}`;
   log('아래 링크를 휴대폰이나 PC 브라우저에서 열고, 홈페이지에서 쓸 Google 계정으로 로그인하세요.');
   log(verificationUrl);
-  log(`화면에 표시된 코드가 ${started.userCode} 와 같은지 확인한 뒤 승인하세요. 10분 안에 해야 합니다.`);
+  const until = new Date(started.expiresAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  log(`화면에 표시된 코드가 ${started.userCode} 와 같은지 확인한 뒤 승인하세요. 10분 안(${until}까지)에 해야 합니다.`);
+  // Signing in on the way could drop the code from the address on an older site (2026-10-28): the link itself brings the approval back.
+  log('Google 로그인 뒤 승인 화면이 보이지 않으면 같은 링크를 다시 여세요.');
   log('이 링크와 코드는 비밀번호가 아닙니다. 승인에는 본인의 Google 로그인이 필요합니다. 본인이 시작하지 않은 요청이면 승인하지 마세요.');
-  log('승인한 뒤에는 이 작업 공간에서 npm run login -- --device-wait 를 실행합니다.');
+  log(next);
   return { userCode: started.userCode, verificationUrl, expiresAt: started.expiresAt };
 }
 

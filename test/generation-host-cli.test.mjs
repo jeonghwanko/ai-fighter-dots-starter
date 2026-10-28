@@ -159,3 +159,16 @@ test('signin uses this kit\'s project (no URL or key to type): the browser login
   deps.project = async () => null;
   assert.equal(await runHost(['signin'], deps), 1);
 });
+
+test('signin --device waits again on a link made before, and says how to get a new one when it ran out', async () => {
+  const calls = [], lines = [];
+  const deps = { root: '/nonexistent', out: line => lines.push(line),
+    project: async () => ({ origin: 'https://example.supabase.co', publishableKey: 'sb_publishable_example' }),
+    signin: { startDevice: async () => { calls.push('start'); throw new Error('device-login-already-pending'); }, waitDevice: async () => { calls.push('wait'); } } };
+  assert.equal(await runHost(['signin', '--device'], deps), 0);
+  assert.deepEqual(calls, ['start', 'wait']);
+  assert.ok(lines.some(line => line.includes('이어서 기다린다')));
+  deps.signin.waitDevice = async () => { throw new Error('device-login-expired'); };
+  assert.equal(await runHost(['signin', '--device'], deps), 1);
+  assert.match(lines.at(-1), /만료됐다\. npm run host -- signin --device 로 새 링크를 받는다/);
+});
