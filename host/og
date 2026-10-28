@@ -119,6 +119,10 @@ SVC_ENV=(env -i HOME="$G" USER="$SVC_USER" LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM="${T
   PATH="$G/tools/node_modules/.bin:$NODE_BIN${TOOL_PATH:+:$TOOL_PATH}:/usr/local/bin:/usr/bin:/bin" AI_FIGHTER_ROOT="$KIT"
   SPRITE_GEN_CODEX_UNAVAILABLE=ask)
 [ -z "$BOOTSTRAP_PYTHON" ] || SVC_ENV+=(AI_FIGHTER_BOOTSTRAP_PYTHON="$BOOTSTRAP_PYTHON")
+# RIFE (the loop alignment's in-betweens) on PyTorch and CUDA instead of the ncnn binary (`og rife torch`, 2026-10-28): the binary starts
+# again for every frame — 1.2 to 1.7 s a call, nearly all of it its start — and one loop's alignment took 3 to 5 minutes.
+RIFE_FILE=$G/rife.backend
+[ "$(cat "$RIFE_FILE" 2>/dev/null)" != torch ] || SVC_ENV+=(SPRITE_GEN_RIFE_BACKEND=torch)
 svc_env() { "${SVC_ENV[@]}" "$@"; }
 
 ledger() { "$NODE" "$HERE/ledger-report.mjs" --append "$LEDGER" "$@" || echo "og: ledger write failed" >&2; }
@@ -278,6 +282,8 @@ cmd_setup() {
   git -C "$KIT" submodule update --init --recursive --quiet
   (cd "$KIT" && svc_env npm ci --ignore-scripts --no-fund --no-audit --loglevel=error)
   (cd "$KIT" && svc_env npm run --silent sprite:setup >/dev/null && svc_env npm run --silent sprite:status >/dev/null)
+  # A torch backend chosen before stays: a new venv gets PyTorch and the model again.
+  [ "$(cat "$RIFE_FILE" 2>/dev/null)" != torch ] || rife_torch_install
   mkdir -p "$UNIT_DIR"
   printf '[Unit]\nDescription=ODDBOUT hosted fighter generation (memory cap)\n\n[Slice]\nMemoryMax=%s\nMemorySwapMax=0\n' \
     "$SLICE_MEMORY" >"$UNIT_DIR/$SLICE"
@@ -561,6 +567,7 @@ cmd_status() {
   echo "codex   $(svc_env codex --version 2>/dev/null || echo missing)   pinned: $(pinned codex || true)"
   echo "grok    $(svc_env grok --version 2>/dev/null | head -1 || echo missing)   pinned: $(pinned grok || true)"
   echo "slice   $SLICE MemoryMax=$(systemctl --user show -p MemoryMax --value "$SLICE" 2>/dev/null || echo ?)"
+  cmd_rife status
   local r d s
   for r in "$KIT"/output/*/request.json; do
     [ -f "$r" ] || continue
@@ -571,6 +578,30 @@ cmd_status() {
 }
 
 cmd_report() { "$NODE" "$HERE/ledger-report.mjs" "$LEDGER" "$@"; }
+
+# og rife torch|ncnn|status — which RIFE the alignment runs. torch needs an NVIDIA GPU (CUDA) and about 3 GB for PyTorch in the engine's venv.
+ENGINE=$KIT/vendor/sprite-gen
+rife_torch_install() {
+  command -v nvidia-smi >/dev/null && nvidia-smi -L >/dev/null 2>&1 || die "no NVIDIA GPU here — keep the binary (og rife ncnn)"
+  svc_env "$ENGINE/.venv/bin/python" -I -c 'import torch' 2>/dev/null ||
+    svc_env "$ENGINE/.venv/bin/pip" install --quiet --progress-bar off 'torch>=2.13.0,<3' || die "PyTorch did not install"
+  svc_env "$ENGINE/.venv/bin/python" -I -c 'import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)' ||
+    die "PyTorch sees no CUDA device — keep the binary (og rife ncnn)"
+  (cd "$ENGINE" && svc_env SPRITE_GEN_RIFE_BACKEND=torch "$ENGINE/.venv/bin/sprite-gen" rife install --backend torch >/dev/null) ||
+    die "the torch model did not install"
+}
+cmd_rife() {
+  case ${1:-status} in
+    torch)
+      local open; open=$(open_jobs); [ -z "$open" ] || die "jobs still open — a loop half aligned one way would finish the other: $open"
+      rife_torch_install; echo torch >"$RIFE_FILE"; echo "og: RIFE runs on PyTorch (CUDA)" ;;
+    ncnn)
+      local open; open=$(open_jobs); [ -z "$open" ] || die "jobs still open: $open"
+      rm -f "$RIFE_FILE"; echo "og: RIFE runs the ncnn binary" ;;
+    status) echo "rife    $(cat "$RIFE_FILE" 2>/dev/null || echo ncnn)" ;;
+    *) die "usage: og rife torch|ncnn|status" ;;
+  esac
+}
 
 # Replace this tool's own files from a tar on stdin (the operator cannot write here directly).
 cmd_self_update() {
@@ -674,6 +705,7 @@ og run <job> -- <command...>        every generation step goes through this
 og deliver <job> [package-dir] | close <job> <fighter-uuid> | purge <job> [--cancelled] | prune [days]
 og cat <job> <path> > file          read one file of a job (results are 600, service-only)
 og harden                           turn off the service codex's shell, file, browser and plugin features (the worker needs it)
+og rife torch|ncnn|status           the loop alignment's RIFE: PyTorch on an NVIDIA GPU (fast) or the ncnn binary (default)
 og worker key <api-base> < key | install | uninstall | start | stop | restart | status | log [n] | run [--once]
 og self-update                      (operator side) install this copy's files for the service user
 A community host's install runs the same commands through npm run host -- … (scripts/host.mjs); new, deliver, close
@@ -682,7 +714,7 @@ EOF
 }
 
 case ${1:-} in
-  setup | login | logout | health | new | explain | run | deliver | close | purge | prune | cat | status | report | worker | harden) c=$1; shift; "cmd_$c" "$@" ;;
+  setup | login | logout | health | new | explain | run | deliver | close | purge | prune | cat | status | report | worker | harden | rife) c=$1; shift; "cmd_$c" "$@" ;;
   self-update) shift; cmd_self_update ;;
   *) usage; exit 2 ;;
 esac

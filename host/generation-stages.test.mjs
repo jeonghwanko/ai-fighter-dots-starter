@@ -183,11 +183,13 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     if (command === 'judge-request') { await mkdir(rest[1], { recursive: true }); await writeFile(path.join(rest[1], 'judge-prompt.txt'), 'judge it'); }
     if (command === 'stride') await writeFile(rest[2], '{"stridePixels":300}');
     if (command === 'preview') { await mkdir(rest[1], { recursive: true }); for (const clip of PREVIEW_CLIPS) await writeFile(path.join(rest[1], `${clip}.webp`), clip); }
+    if (command === 'drafts') { await mkdir(rest[1], { recursive: true }); for (const clip of ['combo', 'fightIdle']) await writeFile(path.join(rest[1], `${clip}.webp`), clip); }
+    if (command === 'strip-preview') await writeFile(rest[1], 'loop');
     return { code: 0 };
   };
   const api = { artifact: async (job, name) => { uploads.push(name); return { ok: true }; } };
-  const progress = [];
-  api.progress = async (j, value) => { progress.push(value); return { ok: true }; };
+  const progress = [], events = [];
+  api.progress = async (j, value, event) => { if (event) events.push(structuredClone(event)); else progress.push(value); return { ok: true }; };
   const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0 });
   const job = { id: '0123abcd-0000', language: 'ko', brief, choice: 'b', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 };
   const done = await stages.motions(job, dir);
@@ -196,7 +198,12 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.ok(most >= 3, `at most ${most} commands at once`);
   assert.deepEqual(progress.slice(0, 4), [5, 25, 45, 65]);
   assert.deepEqual(done.result.preview.map(p => p.clip), PREVIEW_CLIPS);
-  assert.deepEqual(uploads, PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-0`));
+  assert.deepEqual(uploads.filter(name => name.startsWith('motion-')), PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-0`));
+  // Drafts went up as the branches passed (the action clips, then each gait), before the package's previews.
+  assert.deepEqual(uploads.filter(name => name.startsWith('draft-')).sort(), ['draft-combo-0', 'draft-fightidle-0', 'draft-run-0', 'draft-walk-0']);
+  assert.ok(uploads.indexOf('draft-walk-0') < uploads.indexOf('motion-idle-0'));
+  assert.deepEqual(events.at(-1).clips.map(d => d.clip).sort(), ['combo', 'fightIdle', 'run', 'walk']);
+  assert.ok(events.every(e => e.kind === 'drafts'));
   const tools = calls.map(c => c.args);
   assert.ok(tools.some(a => a.includes('gen-set') && flag(a, '--concurrency') === '2' && flag(a, '--provider') === 'codex'));
   assert.ok(tools.find(a => a.includes('prepare')).includes(path.join(dir, 'looks', 'look-b-0.png')));
@@ -227,7 +234,8 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   uploads.length = 0; const atRound1 = calls.length;
   const slam = await stages.motions({ ...job, motionNote: { clip: 'slam', note: 'a much bigger punch' }, motionRound: 1 }, dir);
   assert.equal(slam.outcome, 'ok');
-  assert.deepEqual(uploads, PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-1`));
+  assert.deepEqual(uploads.filter(name => name.startsWith('motion-')), PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-1`));
+  assert.ok(uploads.includes('draft-combo-1'));
   const remade = py.find(a => a[0] === 'request' && a.length === 5);
   assert.deepEqual([remade[3], await readFile(remade[4], 'utf8')], ['slam-a', 'a much bigger punch']);
   const round1 = calls.slice(atRound1).map(c => c.args);

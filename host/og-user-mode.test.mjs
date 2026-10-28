@@ -22,7 +22,7 @@ async function hostInstall() {
   const idToken = `x.${Buffer.from(JSON.stringify({ email: 'Host@Example.com', 'https://api.openai.com/auth': { chatgpt_plan_type: 'plus', chatgpt_account_id: 'acct-123456' } })).toString('base64url')}.y`;
   const script = (file, body) => writeFile(file, `#!/bin/bash\n${body}\n`, { mode: 0o755 });
   // Each provider notes the HOME it ran with: the install's root, never the host's own home.
-  await script(path.join(providers, 'codex'), `echo "$HOME" > "${base}/codex-home"
+  await script(path.join(providers, 'codex'), `echo "$HOME" > "${base}/codex-home"; echo "$SPRITE_GEN_RIFE_BACKEND" > "${base}/codex-rife"
 case "$1" in
   login) mkdir -p "$HOME/.codex"; printf '{"tokens":{"id_token":"${idToken}"}}' > "$HOME/.codex/auth.json" ;;
   logout) rm -f "$HOME/.codex/auth.json" ;;
@@ -85,6 +85,37 @@ test('a host install runs og as its own account: providers signed in inside the 
     assert.ok(!existsSync(path.join(units, 'oddbout-host-worker.service')));
     assert.ok(!existsSync(path.join(units, 'oddbout-host.slice')), 'a host\'s slice goes with its install');
     assert.ok(!existsSync(path.join(base, 'sudo.log')));
+  } finally { await rm(base, { recursive: true, force: true }); }
+});
+
+// og rife torch (2026-10-28): RIFE on PyTorch only with an NVIDIA GPU that PyTorch sees; once chosen every provider run carries it.
+test('og rife torch needs a GPU, then every run carries SPRITE_GEN_RIFE_BACKEND=torch; og rife ncnn goes back', async () => {
+  const { base, root, og } = await hostInstall();
+  try {
+    assert.match(og(['rife', 'status']).stdout, /^rife +ncnn$/m);
+    const venv = path.join(root, 'kit', 'vendor', 'sprite-gen', '.venv', 'bin'), fakes = path.join(base, 'fakes');
+    await mkdir(venv, { recursive: true });
+    const script = (file, body) => writeFile(file, `#!/bin/bash\n${body}\n`, { mode: 0o755 });
+    await script(path.join(venv, 'python'), 'exit 0');
+    await script(path.join(venv, 'pip'), 'exit 0');
+    await script(path.join(venv, 'sprite-gen'), `echo "$SPRITE_GEN_RIFE_BACKEND $*" > "${base}/rife-install"`);
+    await script(path.join(fakes, 'nvidia-smi'), 'exit 9'); // a driver that answers nothing (the real one may sit later on PATH)
+    const noGpu = og(['rife', 'torch']);
+    assert.notEqual(noGpu.status, 0); assert.match(noGpu.stderr, /no NVIDIA GPU/);
+    await script(path.join(fakes, 'nvidia-smi'), 'echo "GPU 0: Test GPU"');
+    const chosen = og(['rife', 'torch']);
+    assert.equal(chosen.status, 0, chosen.stderr);
+    assert.equal((await readFile(path.join(base, 'rife-install'), 'utf8')).trim(), 'torch rife install --backend torch');
+    assert.match(og(['status']).stdout, /^rife +torch$/m);
+    // A provider run sees it (the fake codex notes its environment).
+    const job = '20261028-gen-0123abcd', dir = path.join(root, 'kit', 'output', job);
+    await mkdir(dir, { recursive: true }); await writeFile(path.join(dir, 'request.json'), '{}');
+    assert.equal(og(['login', 'codex']).status, 0); assert.equal(og(['harden']).status, 0);
+    const ran = og(['run', job, '--', 'codex', 'exec', 'hello']); assert.equal(ran.status, 0, ran.stderr);
+    assert.equal((await readFile(path.join(base, 'codex-rife'), 'utf8')).trim(), 'torch');
+    await writeFile(path.join(dir, '.closed'), '');
+    assert.equal(og(['rife', 'ncnn']).status, 0);
+    assert.match(og(['rife', 'status']).stdout, /^rife +ncnn$/m);
   } finally { await rm(base, { recursive: true, force: true }); }
 });
 

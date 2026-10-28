@@ -83,13 +83,23 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
     await finish(held, 'ok', { candidates: ['look-a-1', 'look-b-1'] });
     assert.equal((await call('POST', `generations/${job.id}/appearance`, { choose: 'b' })).body.job.status, 'motions');
     held = await step('motions'); assert.equal(held.choice, 'b'); assert.equal(held.candidates[1].name, 'look-b-1');
+    // Previews ahead of the package (2026-10-28): the worker's drafts show while the motions are made, this round's only.
+    const drafting0 = { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' };
+    for (const name of ['draft-combo-0', 'draft-walk-0']) assert.equal((await work('PUT', `jobs/${held.id}/artifacts/${name}`, webp(200, 200), drafting0)).status, 200);
+    assert.deepEqual((await call('GET', `generations/${job.id}`)).body.job.drafts, []);
+    await work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken, event: { kind: 'drafts',
+      clips: [{ clip: 'combo', name: 'draft-combo-0' }, { clip: 'walk', name: 'draft-walk-0' }, { clip: 'dance', name: 'draft-dance-0' }, { clip: 'run', name: 'motion-run-0' }] } });
+    const drafting = (await call('GET', `generations/${job.id}`)).body.job;
+    assert.deepEqual(drafting.drafts.map(d => d.clip), ['combo', 'walk']); assert.ok(drafting.drafts.every(d => typeof d.url === 'string'));
     const preview = ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip.toLowerCase()}-0` }));
     assert.equal((await finish(held, 'ok', { preview: [{ clip: 'dance', name: 'x' }] })).body.code, 'invalid-result');
     await finish(held, 'ok', { preview });
     read = (await call('GET', `generations/${job.id}`)).body.job;
     assert.equal(read.status, 'motion_ready'); assert.deepEqual(read.preview.map(p => p.clip), ['idle', 'walk', 'run']);
+    assert.deepEqual(read.drafts, []); // the package's previews replace them
     assert.equal((await call('POST', `generations/${job.id}/motions`, { revise: { clip: 'walk', note: '덜 통통 튀게'.repeat(25) } })).body.job.revisionsLeft.motions, 2);
     held = await step('motions'); assert.deepEqual(held.motionNote, { clip: 'walk', note: '덜 통통 튀게'.repeat(25) });
+    assert.deepEqual((await call('GET', `generations/${job.id}`)).body.job.drafts, []); // round 0's drafts are not this round's
     await finish(held, 'ok', { preview });
     // Registered: his confirmed profile, the package submitted under his account by the worker.
     assert.equal((await call('POST', `generations/${job.id}/register`, { profile: { name: '', description: 'x' } })).body.code, 'invalid-profile');

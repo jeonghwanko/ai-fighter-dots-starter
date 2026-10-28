@@ -603,6 +603,43 @@ def preview(package: Path, out: Path, scale=0.5, background=(236, 240, 246, 255)
     return written
 
 
+def _animated(frames, durations_ms, out: Path, scale=0.5, background=(236, 240, 246, 255)):
+    """An animated WebP of `frames` (feet on one line) at half size over the preview background."""
+    w, h = max(f.width for f in frames), max(f.height for f in frames)
+    size = (max(1, round(w * scale)), max(1, round(h * scale)))
+    images = []
+    for frame in frames:
+        base = Image.new("RGBA", (w, h), background)
+        base.alpha_composite(frame, ((w - frame.width) // 2, h - frame.height))
+        images.append(base.resize(size, Image.LANCZOS).convert("RGB"))
+    images[0].save(out, save_all=True, append_images=images[1:], duration=[max(20, round(d)) for d in durations_ms], loop=0, quality=80, method=6)
+
+
+def drafts(asm: Path, out: Path):
+    """The clips the assembly has now (the action rows'), as previews before the package (2026-10-28): the creator watches them while
+    the walk and run are still filming. The package's own previews replace them at the end."""
+    out.mkdir(parents=True, exist_ok=True)
+    written = []
+    for name in [n for n in _clips() if n != "fall-getup"]:
+        source = asm / "clips" / f"{name}.json"
+        if not source.exists():
+            continue
+        frames = json.loads(source.read_text())["frames"]
+        _animated([Image.open(asm / "clips" / f["file"]).convert("RGBA") for f in frames], [f["duration"] * 1000 for f in frames], out / f"{name}.webp")
+        written.append(name)
+    return written
+
+
+def strip_preview(strip: Path, out: Path):
+    """A walk or run loop (a `video-cycle-align` strip) as a preview, at the pace it was filmed (as `add_gait` plays it)."""
+    meta = json.loads(strip.read_text())
+    align = meta.get("cycle_align") or {}
+    seconds = align["from"] / align["fps"] if align.get("from") and align.get("fps") else meta["frames"] * meta["delay_ms"] / 1000
+    sheet = Image.open(strip.with_suffix(".png")).convert("RGBA")
+    w, h = meta["w"], meta["h"]
+    _animated([sheet.crop((i * w, 0, i * w + w, h)) for i in range(meta["frames"])], [seconds * 1000 / meta["frames"]] * meta["frames"], out)
+
+
 def main(argv):
     if not argv:
         print(__doc__); return 2
@@ -637,6 +674,10 @@ def main(argv):
         pack_plan(Path(rest[0]), json.loads(Path(rest[1]).read_text()), rest[2], *rest[3:])
     elif command == "preview" and len(rest) == 2:
         print(json.dumps(preview(Path(rest[0]), Path(rest[1]))))
+    elif command == "drafts" and len(rest) == 2:
+        print(json.dumps(drafts(Path(rest[0]), Path(rest[1]))))
+    elif command == "strip-preview" and len(rest) == 2:
+        strip_preview(Path(rest[0]), Path(rest[1]))
     else:
         print(__doc__); return 2
     return 0

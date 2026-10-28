@@ -122,6 +122,18 @@ test('setup writes host.env and the generator files (Unix line endings, og runna
     assert.equal(statSync(path.join(root, 'bin', 'motions.py')).mode & 0o777, 0o600);
     const env = readHostEnv(await readFile(path.join(root, 'host.env'), 'utf8'));
     assert.deepEqual([env.PYTHON, env.TOOL_PATH, env.SLOTS, env.MEMORY], ['/opt/py/bin/python3.12', '/opt/ffmpeg/bin', '2', '6G']);
+    // --rife torch puts the alignment's RIFE on PyTorch after the setup; a GPU without it gets the hint; anything else is refused.
+    ogCalls.length = 0; const lines = [];
+    const again = extra => runHost(['setup', ...extra], { root, out: line => lines.push(line), hostDir: from, linger: () => true,
+      system: () => ({ missing: [], warnings: [], python: '/opt/py/bin/python3.12', toolPath: '', gpu: true }),
+      og: async args => { ogCalls.push(args.join(' ')); return { code: 0, output: '' }; } });
+    const made = () => ogCalls.filter(call => call !== 'worker status'); // installed now: setup first asks whether its worker runs
+    assert.equal(await again(['--rife', 'torch']), 0);
+    assert.deepEqual(made(), ['setup', 'harden', 'rife torch']);
+    ogCalls.length = 0;
+    assert.equal(await again([]), 0);
+    assert.deepEqual(made(), ['setup', 'harden']); assert.ok(lines.some(line => line.includes('--rife torch')));
+    assert.equal(await again(['--rife', 'cuda']), 1);
     assert.equal(statSync(root).mode & 0o777, 0o700);
   } finally { await rm(root, { recursive: true, force: true }); }
 });

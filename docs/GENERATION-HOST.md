@@ -37,9 +37,12 @@ Windows·macOS는 아직 지원하지 않는다.
 ```bash
 git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter && git checkout codex/creator-hosting && npm ci
-npm run host:setup                           # 생성기 설치(처음은 오래 걸린다)
+npm run host:setup                           # 생성기 설치(처음은 오래 걸린다). NVIDIA GPU가 있으면: npm run host:setup -- --rife torch
 npm run host:login                           # codex·grok 로그인(장치 코드), 끝나면 두 구독에 아주 작은 호출로 확인
 ```
+
+- `--rife torch`는 걷기·달리기 고리 정렬(RIFE)을 PyTorch·CUDA로 돌린다. 같은 고리를 144초 → 76초에 같은 프레임으로 맞췄다(RTX 4060, 2026-10-28).
+  PyTorch 약 3 GB를 키트의 sprite-gen venv에 받는다. 되돌리기는 `--rife ncnn`.
 
 1. **붙이기 코드** — oddbout.com 내 선수의 "내 PC로 만들기"에서 호스트 이름을 적고 호스트 약속에 동의하면 명령 한 줄이 나온다.
    ```bash

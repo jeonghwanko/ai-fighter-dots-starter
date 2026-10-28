@@ -17,7 +17,7 @@ ODDBOUT 제작자 페이지·에이전트의 **호스팅 생성 신청**(글과 
 
 | 파일 | 하는 일 |
 | --- | --- |
-| `og` | 모든 제공자 호출의 관문: 계정 고정(`login`), codex 칸, 메모리 상한(systemd 슬라이스), 장부, codex 기능 끄기(`harden`), 워커 서비스(`worker key·install·uninstall·start·stop·log`), 정리(`prune`). 서비스 설치만: 운영자 수동 흐름(`new·deliver·close`)과 `self-update` |
+| `og` | 모든 제공자 호출의 관문: 계정 고정(`login`), codex 칸, 메모리 상한(systemd 슬라이스), 장부, codex 기능 끄기(`harden`), 워커 서비스(`worker key·install·uninstall·start·stop·log`), 정리(`prune`), 고리 정렬의 RIFE(`rife torch|ncnn` — NVIDIA GPU면 PyTorch로 약 2배). 서비스 설치만: 운영자 수동 흐름(`new·deliver·close`)과 `self-update` |
 | `generation-worker.mjs` | 워커: 1분마다 심장 박동, 1시간마다 `og health`, 하루 한 번 `og prune`, 한 번에 한 작업의 한 단계를 임대해 돌리고 결과를 올린다 |
 | `generation-stages.mjs` | 단계: 브리프·외형·동작·제출의 명령과 프롬프트, 결과 검사 |
 | `motions.py` | 동작 단계의 픽셀 일(키트 sprite-gen venv의 NumPy·Pillow) |
