@@ -107,11 +107,14 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
       clips: [{ clip: 'combo', name: 'draft-combo-0' }, { clip: 'walk', name: 'draft-walk-0' }, { clip: 'dance', name: 'draft-dance-0' }, { clip: 'run', name: 'motion-run-0' }] } });
     const drafting = (await call('GET', `generations/${job.id}`)).body.job;
     assert.deepEqual(drafting.drafts.map(d => d.clip), ['combo', 'walk']); assert.ok(drafting.drafts.every(d => typeof d.url === 'string'));
-    const preview = ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip.toLowerCase()}-0` }));
+    // The run made from the walk carries its note (2026-10-29); a note the API does not know is refused.
+    const preview = ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip.toLowerCase()}-0`, ...(clip === 'run' ? { note: 'run-from-walk' } : {}) }));
     assert.equal((await finish(held, 'ok', { preview: [{ clip: 'dance', name: 'x' }] })).body.code, 'invalid-result');
+    assert.equal((await finish(held, 'ok', { preview: preview.map(p => ({ ...p, note: 'made-up' })) })).body.code, 'invalid-result');
     await finish(held, 'ok', { preview });
     read = (await call('GET', `generations/${job.id}`)).body.job;
     assert.equal(read.status, 'motion_ready'); assert.deepEqual(read.preview.map(p => p.clip), ['idle', 'walk', 'run']);
+    assert.deepEqual(read.preview.map(p => p.note ?? null), [null, null, 'run-from-walk']);
     assert.deepEqual(read.drafts, []); // the package's previews replace them
     assert.equal((await call('POST', `generations/${job.id}/motions`, { revise: { clip: 'walk', note: '덜 통통 튀게'.repeat(25) } })).body.job.revisionsLeft.motions, 2);
     held = await step('motions'); assert.deepEqual(held.motionNote, { clip: 'walk', note: '덜 통통 튀게'.repeat(25) });

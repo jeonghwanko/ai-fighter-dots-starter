@@ -102,6 +102,10 @@ test('맡기기: the request leaves the look to ODDBOUT, and next says so at eve
     assert.equal(made.job.delegate, true); assert.match(made.next, /picking one itself/);
     assert.match(hostedNext({ ...made.job, status: 'motions' }), /the look it picked/);
     assert.match(hostedNext({ ...made.job, status: 'motion_ready', choice: 'b' }), /the look ODDBOUT picked \(candidate b\)/);
+    // A run made from the walk: the agent tells the user and how to film a real one (2026-10-29).
+    assert.match(hostedNext({ ...made.job, status: 'motion_ready', choice: 'b', preview: [{ clip: 'run', url: null, note: 'run-from-walk' }] }),
+      /^The run preview is the walk played faster.*revise_hosted_motion with clip run.*Show the user/);
+    assert.doesNotMatch(hostedNext({ ...made.job, status: 'motion_ready', choice: 'b' }), /walk played faster/);
     assert.match(hostedNext({ ...made.job, status: 'appearance_ready' }), /^ODDBOUT could not pick a look by itself\. Show the user both looks/);
   } finally { await g.sql.close(); }
 });
