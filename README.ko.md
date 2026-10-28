@@ -121,6 +121,7 @@ npm run sprite:status
 | [보행 검수](docs/GAIT-REVIEW.md) | 걷기·달리기 품질과 접지 근거 |
 | [실행 환경](docs/EXECUTION-HOST.md) · [미리보기 전달](docs/DELIVERY.md) | 계정 분리, 로컬 실행, 실제 결과 표시 |
 | [호스팅](docs/CREATOR-HOSTING.md) · [보안](SECURITY.md) | 배포와 보안 경계 |
+| [생성 호스트 되기](docs/GENERATION-HOST.md) | 내 Linux PC와 구독으로 다른 제작자의 호스팅 생성 신청을 만든다 |
 
 의존성 설치 후 로컬 개발 검사는 다음 명령으로 실행합니다.
 
