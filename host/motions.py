@@ -7,9 +7,12 @@ NumPy and Pillow only: it runs on the kit's sprite-gen venv (`<kit>/vendor/sprit
       The `sprite-gen prepare` request of the six GPT keypose rows (`gen-set --provider codex`). Pose 1 of every row is the look's
       own standing pose: the scale reference that puts every row at one size (GPT draws each row at its own scale). With a row and a
       note: that row alone, made again with the creator's change quoted.
+  request-show <brief.json> <out.json>
+      The request of the show row (2026-10-28): the entrance and the victory, drawn apart from the six rows — optional clips, so a show
+      row that fails leaves the fighter without them rather than stopping his motions.
   revise-rows <clip> <out.json>
       The rows and cells a change to that clip remakes (null: idle, walk, run — not a row).
-  assemble <rows-run> <look.png> <out-dir> [overrides.json]
+  assemble <rows-run> <look.png> <out-dir> [overrides.json [show-run]]
       The rows' extracted cells and the look at one scale (pose 1 = BODY px) on one ground line; every action clip as a
       `sprite-gen-asset` (the standard beats: holds and drawn jolts), `game-request.json` for `sprite-gen game-pack`, `clips.json`
       (contacts and landmarks in playback steps, for the pack plan).
@@ -56,6 +59,10 @@ ROWS = {
     "hurt-a": ["ref", "recoil", "stagger", "dizzyA", "dizzyB"],
     "ko-a": ["ref", "koSnap", "koFly", "koCrash", "koLie", "koRise"],
 }
+# The show row (2026-10-28 — 사용자: "이렇게 만들어진 캐릭터들의 움직임을 재미있게"): the optional entrance (READY → FIGHT!) and victory (under the
+# KO light) clips, drawn in a run of their own after the six (`request-show`). Its clips are left out when its cells are not there.
+SHOW_ROWS = {"show-a": ["ref", "entrance1", "entrance2", "victory1", "victory2"]}
+ALL_ROWS = {**ROWS, **SHOW_ROWS}
 
 TEMPER = {"heavy": "It moves heavily: planted feet, big shoulders, force behind every move.",
           "balanced": "It moves with balance: steady footing, neither slow nor springy.",
@@ -95,6 +102,12 @@ def _poses(row, brief):
             "Dizzy A: swaying backward on unsteady legs, dazed swirly eyes, the arms dangling (a cartoon daze).",
             "Dizzy B: swaying forward the other way, still dazed.",
         ],
+        "show-a": [
+            "Entrance: stepping into the ring with a confident flourish that shows its personality, chest out, one arm (or what it holds) raised in a showy greeting, facing RIGHT.",
+            "Entrance, ready: a bold signature taunt of its own toward the RIGHT (a beckoning gesture or a proud pose), both feet on the ground.",
+            "Victory: a triumphant celebration, one fist (or what it holds) thrust high into the air, a big happy grin, both feet on the ground.",
+            "Victory, a beat later: still celebrating, now BOTH arms (or what it holds) thrown high above the head in a V, bouncing up on its toes, grinning (the two poses loop).",
+        ],
         "ko-a": [
             "KO snap: hit hard, the head snapped back and the body folding backward toward the LEFT, the arms flung out, both feet still on the ground.",
             "KO fly: knocked off the feet and flying backward through the air toward the LEFT, the body tilted far back, the legs up.",
@@ -119,14 +132,14 @@ def quoted(note: str) -> str:
     return " ".join(note.split())[:200].replace("«", '"').replace("»", '"')
 
 
-def build_request(brief: dict, only: str | None = None, note: str | None = None) -> dict:
+def build_request(brief: dict, only: str | None = None, note: str | None = None, rows: dict | None = None) -> dict:
     """The prepare request: one state per row (or the one row `only`, made again with the creator's change `note`). The look brief is the
     character; the words are the house template (the creator's text reaches the image model only through the brief's checked fields and
     a change note quoted as a description of the motion)."""
     look, motion = brief["look"], brief["motion"]
     prop = look["prop"] if look["prop"].strip().lower() != "none" else ""
     states = {}
-    for row, names in ROWS.items():
+    for row, names in (rows or ROWS).items():
         if only and row != only:
             continue
         poses = _poses(row, brief)
@@ -196,6 +209,11 @@ def _clips():
         "fall": {"steps": fall, "loop": False, "hits": ["koCrash"], "lie": True},
         # The get-up shares fall's canvas and anchor (fighter:pack GET_UP_GEOMETRY): kneel, then the stance.
         "fall-getup": {"steps": [("koRise", 220), ("guard", 160)], "loop": False, "canvasOf": "fall"},
+        # The show row's (optional — `show`: left out without its cells). The entrance plays once while READY holds and ends on the stance;
+        # the victory loops under the KO light (kaito_web tools/art/fighter-gpt/template.py entrance·victory).
+        "entrance": {"steps": [("entrance1", 260), ("entrance1", 60, (0, -1.4)), ("entrance1", 120), ("entrance2", 380), ("entrance2", 60, (1.0, 0)),
+                               ("entrance2", 220), ("guard", 200)], "loop": False, "show": True},
+        "victory": {"steps": [("victory1", 320), ("victory2", 320)], "loop": True, "show": True},
     }
 
 
@@ -263,7 +281,7 @@ def _row_cells(run_dir: Path, row: str, take: list[str] | None = None):
     entry = next((r for r in manifest["rows"] if r["state"] == row and r.get("ok")), None)
     if entry is None:
         raise SystemExit(f"row not extracted: {row} in {run_dir}")
-    names, files = ROWS[row], entry["files"]
+    names, files = ALL_ROWS[row], entry["files"]
     if len(files) != len(names):
         raise SystemExit(f"{row}: {len(files)} frames, expected {len(names)}")
     images = [Image.open(run_dir / f).convert("RGBA") for f in files]
@@ -274,12 +292,21 @@ def _row_cells(run_dir: Path, row: str, take: list[str] | None = None):
     return cells, {"refHeight": ref[3] - ref[1], "scale": round(scale, 4)}
 
 
-def assemble(run_dir: Path, look_path: Path, out: Path, overrides: list | None = None):
-    """`overrides`: the creator's changes in order, each {run, row, cells} — a row made again whose named cells replace the first run's."""
-    cells, report = {}, {"rows": {}, "overrides": []}
+def assemble(run_dir: Path, look_path: Path, out: Path, overrides: list | None = None, show_dir: Path | None = None):
+    """`overrides`: the creator's changes in order, each {run, row, cells} — a row made again whose named cells replace the first run's.
+    `show_dir`: the show row's run (the entrance and victory); without it, or without its cells, those optional clips are left out."""
+    cells, report = {}, {"rows": {}, "overrides": [], "show": None}
     for row in ROWS:
         made, report["rows"][row] = _row_cells(run_dir, row)
         cells.update(made)
+    if show_dir is not None:
+        for row in SHOW_ROWS:
+            try:
+                made, report["rows"][row] = _row_cells(show_dir, row)
+            except (SystemExit, OSError, ValueError, KeyError) as error:
+                report["show"] = f"left out: {error}"
+                continue
+            cells.update(made)
     for change in overrides or []:
         made, measured = _row_cells(Path(change["run"]), change["row"], change["cells"])
         if set(made) != set(change["cells"]):
@@ -294,7 +321,8 @@ def assemble(run_dir: Path, look_path: Path, out: Path, overrides: list | None =
     cells["look"] = (_scaled(figure, scale), (fx * scale, figure.height * scale))
     report["look"] = {"height": figure.height, "scale": round(scale, 4)}
 
-    clips = _clips()
+    clips = {name: clip for name, clip in _clips().items() if not clip.get("show") or all(s[0] in cells for s in clip["steps"])}
+    report["showClips"] = sorted(name for name, clip in clips.items() if clip.get("show"))
     marks = clip_marks(clips)
     (out / "clips").mkdir(parents=True, exist_ok=True)
     jolt = BODY / TEMPLATE_BODY
@@ -569,6 +597,10 @@ def pack_plan(out: Path, brief: dict, local_id: str, package: str = "package"):
                "run": {"animation": "run", "loopReview": "loop/run/review.json"}}
     for name in ("fightIdle", "combo", "slam", "dash", "block", "hit", "groggy", "fall"):
         motions[name] = {"animation": name, **marks.get(name, {})}
+    # The show row's optional clips, when the assemble made them (`clips.json` names only the clips it assembled).
+    for name in ("entrance", "victory"):
+        if name in marks:
+            motions[name] = {"animation": name, **marks[name]}
     motions["fall"]["getUpAnimation"] = "fall-getup"
     plan = {"gamePack": "pack/game-pack.json", "out": package, "localId": local_id,
             "profile": {"name": p["name"], "description": p["description"], "names": p["names"], "concept": p["concept"],
@@ -650,9 +682,13 @@ def main(argv):
         if only is not None and only not in ROWS:
             raise SystemExit(f"unknown row: {only}")
         Path(rest[1]).write_text(json.dumps({"request": build_request(brief, only, note), "description": character_description(brief)}, indent=1) + "\n")
-    elif command == "assemble" and len(rest) in (3, 4):
-        overrides = json.loads(Path(rest[3]).read_text()) if len(rest) == 4 else None
-        print(json.dumps(assemble(Path(rest[0]), Path(rest[1]), Path(rest[2]), overrides), indent=1))
+    elif command == "request-show" and len(rest) == 2:
+        brief = json.loads(Path(rest[0]).read_text())
+        Path(rest[1]).write_text(json.dumps({"request": build_request(brief, rows=SHOW_ROWS), "description": character_description(brief)}, indent=1) + "\n")
+    elif command == "assemble" and len(rest) in (3, 4, 5):
+        overrides = json.loads(Path(rest[3]).read_text()) if len(rest) >= 4 else None
+        show = Path(rest[4]) if len(rest) == 5 and rest[4] else None
+        print(json.dumps(assemble(Path(rest[0]), Path(rest[1]), Path(rest[2]), overrides, show), indent=1))
     elif command == "revise-rows" and len(rest) == 2:
         Path(rest[1]).write_text(json.dumps(REVISE.get(rest[0])) + "\n")
     elif command == "add-gait" and len(rest) == 3:
