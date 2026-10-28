@@ -304,9 +304,10 @@ only by the added 19-byte infinite-loop extension. Original single-play GIFs, ga
 metadata are unchanged. Evidence is attacks/gif-display-diagnostic.json and
 attacks/review-loop-preservation.json in the character workspace. The new private Page references were
 read back, and the parent browser observed all three continuing to display different poses beyond one
-full cycle. The user then explicitly confirmed playback and selected the attack set. Defense has not
-started; its generation instruction was blocked by automatic approval review and separate group
-authorization was requested.
+full cycle. The user then explicitly confirmed playback and selected the attack set. Automatic approval
+review initially blocked the defense instruction. The user subsequently explicitly authorized the
+defense/reaction group, and that instruction was delivered to the existing VM. Completion and user
+selection of that group remain unverified.
 
 The existing foot-evidence v2 extension was also reviewed. Initial walk ROIs touched a horizontal edge,
 which the extension cannot waive. A whole-foot ROI correction removed those warnings, but both walk
@@ -323,8 +324,13 @@ upload receipt hashes: both use 60 ms per frame, walk 16/960 ms and run 12/720 m
 applies only to the intermediate canonical strips. Any final package must be measured on its own pixels
 and durations. Run contact/flight remains unverified because of overlapping feet and missing established
 ground evidence. Reports and source comparisons are preserved under locomotion/whole-foot-followup/,
-including completion-report.json. Official alignment of separate copies is still under evaluation;
-selected outputs are preserved and no new provider clip was requested. The original walk/run repair processes and logs are preserved under locomotion/rife-repair-attempt/; no completed candidate report is available at this checkpoint.
+including completion-report.json. The separate official ncnn auto alignment attempts both finished:
+walk exited 0 after about 31 minutes, retained 8 interpolated frames with 4 official retimings, and
+improved jolt from 0.469 to 0.079 with no retake flag. Run exited 0 after about 49 minutes, rejected
+9 interpolated frames and retained 2, but still reported jolt 0.568 and broken-beat / recut-or-retake.
+A successful process exit did not make run a successful repair. Neither candidate is a contact/v2
+pass or a user-selected replacement. Original files and selected GIFs remain intact; no provider clip
+was regenerated. Actual results and comparison-report.json/.md are in locomotion/rife-repair-attempt/.
 
 ## RIFE preparation in the saved-image recipe
 
