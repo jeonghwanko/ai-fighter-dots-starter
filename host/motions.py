@@ -39,6 +39,7 @@ jolt offsets drawn as shifted copies of the cell (the v1 package has no runtime 
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import sys
 from pathlib import Path
@@ -385,9 +386,11 @@ SCALE_EDGE = 4                       # pixels kept past the scaled figure (the r
 
 
 def scale_policy(record, per_state):
-    """A clip's corrections as hosted generation takes them (approved 2026-10-28): a measured frame its own; a frame scale-check left
-    for an eye check (`check`) the median of the clip's measured frames, 1 when none was measured — nobody looks at a hosted board.
-    A gait takes its state's median for every frame. Returns (factors, fix for game-pack, the guessed frames' labels)."""
+    """A clip's corrections as hosted generation takes them (approved 2026-10-28): a measured frame (`head`, `agree`) its own; a frame
+    scale-check left for an eye check (`check`, a size on the edge of the range too) the median of the clip's measured frames, 1 when
+    none was measured — nobody looks at a hosted board. A gait takes its state's median for every frame. These are corrections against
+    the reference in source pixels, the terms game-pack's `fix` takes; game-pack multiplies a whole asset by one display ratio, so a
+    median of corrections is the median of what it packs. Returns (corrections, fix for game-pack, the guessed frames' labels)."""
     frames = record["frames"]
     measured = [f["correction"] for f in frames if f["correction"] is not None and f["how"] != "empty"]
     median = round(float(np.median(measured)), 4) if measured else 1.0
@@ -399,13 +402,17 @@ def scale_policy(record, per_state):
     return [f["correction"] if f["correction"] is not None else median for f in frames], {k: median for k in guessed}, guessed
 
 
-def _scale_records(reports):
-    """Each measured clip's (report, record), by its descriptor's resolved path (the report's source identity)."""
-    records = {}
-    for report_file in reports:
-        for record in json.loads(report_file.read_text())["assets"]:
-            records[Path(record["identity"]["source"]).resolve()] = (report_file, record)
-    return records
+def _sha256(image: Image.Image) -> str:
+    """A frame's decoded RGBA pixels, as sprite-gen's scale-check binds a report record (`qa.scale_check.frame_sha256`)."""
+    rgba = image.convert("RGBA")
+    return hashlib.sha256(f"{rgba.width}x{rgba.height}:".encode() + rgba.tobytes()).hexdigest()
+
+
+def _display_scale(asset, size):
+    """game-pack's displayed pixels per source pixel for an asset this file writes (`display.body_height` over `source_body_height`)."""
+    scale = asset["display"]["body_height"] / asset["source_body_height"]
+    w, h = size
+    return (max(1, round(w * scale)) / w + max(1, round(h * scale)) / h) / 2
 
 
 def _room(alpha, anchor, factor):
@@ -421,23 +428,34 @@ def _room(alpha, anchor, factor):
 def scale_fit(out: Path, summary: Path, reports: list[Path]):
     clips = _clips()
     request = json.loads((out / "game-request.json").read_text())
-    records = _scale_records(reports)
-    plans, rooms = {}, {}
+    # game-pack finds a clip's record by its state (none here) and its frames' pixels, and the reference among the request's assets the
+    # same way: a correction is a size against the reference, and only the reference's own display says how big that is in the pack.
+    records = [(report_file, json.loads(report_file.read_text())) for report_file in reports]
+    clips_in = {}
     for asset in request["assets"]:
-        source = (out / asset["source"]).resolve()
-        if source not in records:
-            raise SystemExit(f"{asset['id']}: no scale-check report measured {source.name}")
-        report_file, record = records[source]
-        descriptor = json.loads(source.read_text())
-        factors, fix, guessed = scale_policy(record, asset["id"] in SCALE_PER_STATE)
-        if len(factors) != len(descriptor["frames"]):
-            raise SystemExit(f"{asset['id']}: the report measured {len(factors)} frames, the clip has {len(descriptor['frames'])}")
-        plans[asset["id"]] = (asset, report_file, factors, fix, guessed)
+        descriptor = json.loads((out / asset["source"]).read_text())
+        images = {f["file"]: Image.open(out / "clips" / f["file"]).convert("RGBA") for f in descriptor["frames"]}
+        shas = {name: _sha256(image) for name, image in images.items()}
+        size = next(iter(images.values())).size
+        clips_in[asset["id"]] = (asset, descriptor, images, [shas[f["file"]] for f in descriptor["frames"]], _display_scale(asset, size))
+    plans, rooms = {}, {}
+    for name, (asset, descriptor, images, shas, scale) in clips_in.items():
+        found = next(((file, report, r) for file, report in records for r in report["assets"]
+                      if r["identity"].get("state") is None and [f["sha256"] for f in r["frames"]] == shas), None)
+        if found is None:
+            raise SystemExit(f"{name}: no scale-check report measured these frames")
+        report_file, report, record = found
+        reference = next((c[4] for c in clips_in.values() if report["reference"]["sha256"] in c[3]), None)
+        if reference is None:
+            raise SystemExit(f"{name}: the reference frame of {Path(report_file).name} is in no clip of the request")
+        corrections, fix, guessed = scale_policy(record, name in SCALE_PER_STATE)
+        # What game-pack scales the frame by on its cell: the correction times the reference's display scale over this clip's.
+        applied = [round(c * reference / scale, 4) for c in corrections]
+        plans[name] = (asset, report_file, applied, fix, guessed)
         room = [0, 0, 0, 0]
-        for frame, factor in {(f["file"], factor) for f, factor in zip(descriptor["frames"], factors)}:
-            alpha = np.asarray(Image.open(out / "clips" / frame).getchannel("A"))
-            room = [max(a, b) for a, b in zip(room, _room(alpha, descriptor["anchor"], factor))]
-        rooms[asset["id"]] = room
+        for file, factor in {(f["file"], factor) for f, factor in zip(descriptor["frames"], applied)}:
+            room = [max(a, b) for a, b in zip(room, _room(np.asarray(images[file].getchannel("A")), descriptor["anchor"], factor))]
+        rooms[name] = room
     # A clip that shares another's canvas (fall and its get-up) grows with it: fighter:pack checks they keep one geometry.
     for name, clip in clips.items():
         if clip.get("canvasOf") in rooms and name in rooms:
@@ -445,25 +463,24 @@ def scale_fit(out: Path, summary: Path, reports: list[Path]):
             rooms[name] = rooms[clip["canvasOf"]] = shared
     grown = {name: room for name, room in rooms.items() if any(room)}
     for name, (left, top, right, bottom) in grown.items():
-        source = out / plans[name][0]["source"]
-        descriptor = json.loads(source.read_text())
-        for frame in {f["file"] for f in descriptor["frames"]}:
-            image = Image.open(out / "clips" / frame).convert("RGBA")
+        asset, descriptor, images, *_ = clips_in[name]
+        for file, image in images.items():
             canvas = Image.new("RGBA", (image.width + left + right, image.height + top + bottom), (0, 0, 0, 0))
             canvas.alpha_composite(image, (left, top))
-            canvas.save(out / "clips" / frame)
+            canvas.save(out / "clips" / file)
         descriptor["anchor"] = [descriptor["anchor"][0] + left, descriptor["anchor"][1] + top]
-        source.write_text(json.dumps(descriptor, indent=1) + "\n")
+        (out / asset["source"]).write_text(json.dumps(descriptor, indent=1) + "\n")
     if grown:
         result = {"grown": grown}
     else:
-        for name, (asset, report_file, factors, fix, guessed) in plans.items():
+        for name, (asset, report_file, applied, fix, guessed) in plans.items():
             per = "state" if name in SCALE_PER_STATE else "frame"
             asset["scale_check"] = {"report": Path(report_file).resolve().relative_to(out.resolve()).as_posix(), "per": per,
                                     **({"fix": fix} if fix else {})}
         (out / "game-request.json").write_text(json.dumps(request, indent=1) + "\n")
         # A guessed frame by its clip and playback step (the report names a descriptor's frames `-/<step>`).
         guessed = [f"{name}/{label.rsplit('/', 1)[1]}" for name, plan in plans.items() for label in plan[4]]
+        # min and max are the factors game-pack will pack (its frame_scale), not the corrections.
         result = {"grown": {}, "frames": sum(len(p[2]) for p in plans.values()),
                   "corrected": sum(1 for p in plans.values() for v in p[2] if v != 1),
                   "guessed": guessed,

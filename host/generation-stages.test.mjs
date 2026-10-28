@@ -338,50 +338,79 @@ test('the motions stop for an operator when scale-check refuses or a canvas keep
 });
 
 const kitPython = path.join(import.meta.dirname, '..', 'vendor/sprite-gen/.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
-test('scale-fit: a guessed frame takes its clip median, a gait one scale, and a shared canvas grows with its clip', { skip: !existsSync(kitPython) }, async () => {
+test('scale-fit: a guessed frame takes its clip median, a gait one scale in its own body_h, and a shared canvas grows with its clip', { skip: !existsSync(kitPython) }, async () => {
   const { execFile } = await import('node:child_process');
   const sharp = (await import('sharp')).default;
   const asm = await mkdtemp(path.join(tmpdir(), 'gen-scale-fit-'));
   await mkdir(path.join(asm, 'clips'), { recursive: true });
-  // Each clip: 40x60 frames, the figure a 36x58 block standing on the anchor (20, 60) — a tight canvas.
-  const block = await sharp({ create: { width: 40, height: 60, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
-    .composite([{ input: { create: { width: 36, height: 58, channels: 4, background: { r: 200, g: 50, b: 50, alpha: 1 } } }, left: 2, top: 2 }]).png().toBuffer();
-  const clips = { idle: 1, combo: 3, fall: 2, 'fall-getup': 2, walk: 4 }, reports = { check: [], 'check-wide': [] };
-  const corrections = { idle: [1], combo: [1.1, null, 0.9], fall: [1, 1], 'fall-getup': [1, 1.05], walk: [1.2, 1.2, null, 1.18] };
-  for (const [id, count] of Object.entries(clips)) {
+  // Each clip: 40x60 frames, the figure a 36x58 block standing on the anchor (20, 60) — a tight canvas. A colour per clip, so no two
+  // clips share pixels (a report record is found by them).
+  const clips = { idle: 1, combo: 3, fall: 2, 'fall-getup': 2, walk: 4 };
+  for (const [n, [id, count]] of Object.entries(clips).entries()) {
+    const block = await sharp({ create: { width: 40, height: 60, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+      .composite([{ input: { create: { width: 36, height: 58, channels: 4, background: { r: 200, g: 40 * n, b: 50, alpha: 1 } } }, left: 2, top: 2 }]).png().toBuffer();
     await mkdir(path.join(asm, 'clips', id));
     for (let i = 0; i < count; i++) await writeFile(path.join(asm, 'clips', id, `${i}.png`), block);
     await writeFile(path.join(asm, 'clips', `${id}.json`), JSON.stringify({ kind: 'sprite-gen-asset', version: 1, anchor: [20, 60], loop: false,
       frames: Array.from({ length: count }, (_, i) => ({ file: `${id}/${i}.png`, duration: 0.1 })) }));
-    const frames = corrections[id].map((correction, i) => ({ frame: `-/${i}`, sha256: 'x', score: correction ? 0.95 : 0.4, size: correction && 1 / correction,
-      how: correction ? 'head' : 'check', correction }));
-    const measured = corrections[id].filter(c => c !== null).sort();
-    reports[SCALE_WIDE.includes(id) ? 'check-wide' : 'check'].push({ identity: { source: path.join(asm, 'clips', `${id}.json`), state: null }, frames,
-      state_correction: frames.some(f => f.how === 'check') ? null : measured[Math.floor(measured.length / 2)] });
   }
+  // The walk strip is sized by its own body_h (320 against the look's 400): game-pack draws it 1.25 times its source pixels already, so
+  // its 1.2 correction against the look packs at 1.2 / 1.25 = 0.96 and needs no room.
+  await writeFile(path.join(asm, 'game-request.json'), JSON.stringify({ version: 1, assets: Object.keys(clips).map(id => ({ id, source: `clips/${id}.json`,
+    display: { body_height: 400 }, source_body_height: id === 'walk' ? 320 : 400, resample: 'lanczos' })) }));
+  const frame = { head: c => ({ score: 0.95, how: 'head', correction: c }), agree: c => ({ score: 0.7, how: 'agree', correction: c }),
+    check: () => ({ score: 0.4, how: 'check', correction: null }), edge: () => ({ score: 0.9, how: 'check', edge: true, correction: null }) };
+  const measured = { idle: [['head', 1]], combo: [['head', 1.1], ['edge'], ['agree', 0.9]], fall: [['head', 1], ['head', 1]],
+    'fall-getup': [['head', 1], ['head', 1.05]], walk: [['head', 1.2], ['head', 1.2], ['check'], ['head', 1.18]] };
+  // scale-check's own binding: each frame's decoded RGBA pixels (sprite_gen.qa.scale_check.frame_sha256).
+  const sha = async file => {
+    const { data, info } = await sharp(file).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+    return createHash('sha256').update(`${info.width}x${info.height}:`).update(data).digest('hex');
+  };
+  // Measured again on whatever pixels the clips have now, as the stage does each round.
+  const measure = async reference => {
+    const reports = { check: [], 'check-wide': [] };
+    for (const [id, steps] of Object.entries(measured)) {
+      const frames = await Promise.all(steps.map(async ([how, c], i) => ({ frame: `-/${i}`, sha256: await sha(path.join(asm, 'clips', id, `${i}.png`)),
+        size: c && 1 / c, edge: false, ...frame[how](c) })));
+      const known = frames.filter(f => f.correction !== null).map(f => f.correction).sort();
+      reports[SCALE_WIDE.includes(id) ? 'check-wide' : 'check'].push({ identity: { source: `clips/${id}.json`, state: null }, frames,
+        state_correction: frames.some(f => f.how === 'check') ? null : known[Math.floor(known.length / 2)] });
+    }
+    const ref = { frame: 0, sha256: reference ?? await sha(path.join(asm, 'clips', 'idle', '0.png')) };
+    for (const [name, assets] of Object.entries(reports))
+      await writeFile(path.join(asm, 'scale', `${name}.json`), JSON.stringify({ kind: 'sprite-gen-scale-check', version: 1, reference: ref, assets }));
+  };
   await mkdir(path.join(asm, 'scale'));
-  for (const [name, assets] of Object.entries(reports))
-    await writeFile(path.join(asm, 'scale', `${name}.json`), JSON.stringify({ kind: 'sprite-gen-scale-check', version: 1, assets }));
-  await writeFile(path.join(asm, 'game-request.json'), JSON.stringify({ version: 1, assets: Object.keys(clips).map(id => ({ id, source: `clips/${id}.json` })) }));
   const fit = () => new Promise((resolve, reject) => execFile(kitPython, ['-I', path.join(import.meta.dirname, 'motions.py'), 'scale-fit', asm,
     path.join(asm, 'scale', 'fit.json'), path.join(asm, 'scale', 'check.json'), path.join(asm, 'scale', 'check-wide.json')],
     { env: { ...process.env, PYTHONUTF8: '1' } }, (error, stdout, stderr) => error ? reject(Error(stderr)) : resolve(JSON.parse(stdout))));
   const clip = async id => JSON.parse(await readFile(path.join(asm, 'clips', `${id}.json`), 'utf8'));
-  // A correction above 1 on a tight canvas grows it (about the feet: up and to both sides); the get-up's 1.05 grows the fall's too.
+  // game-pack sizes every correction by the reference's display: a reference in no clip of the request is refused before anything grows.
+  await measure('0'.repeat(64));
+  await assert.rejects(fit(), /reference frame of check\.json is in no clip/);
+  // A packed factor above 1 on a tight canvas grows it (about the feet: up and to both sides); the get-up's 1.05 grows the fall's too.
+  await measure();
   const first = await fit();
-  assert.deepEqual(Object.keys(first.grown).sort(), ['combo', 'fall', 'fall-getup', 'walk']);
+  assert.deepEqual(Object.keys(first.grown).sort(), ['combo', 'fall', 'fall-getup']);
   assert.deepEqual(first.grown.fall, first.grown['fall-getup']);
-  assert.ok(first.grown.walk[1] > first.grown.combo[1] && first.grown.walk[0] === first.grown.walk[2]);
+  assert.ok(first.grown.combo[1] > first.grown.fall[1] && first.grown.combo[0] === first.grown.combo[2]);
   assert.deepEqual((await clip('fall')).anchor, (await clip('fall-getup')).anchor);
-  assert.equal((await sharp(path.join(asm, 'clips', 'walk', '0.png')).metadata()).height, 60 + first.grown.walk[1] + first.grown.walk[3]);
+  assert.equal((await sharp(path.join(asm, 'clips', 'combo', '0.png')).metadata()).height, 60 + first.grown.combo[1] + first.grown.combo[3]);
   assert.equal(JSON.parse(await readFile(path.join(asm, 'game-request.json'), 'utf8')).assets[0].scale_check, undefined);
+  // The grown pixels are not the measured ones: the old reports no longer find them.
+  await assert.rejects(fit(), /combo: no scale-check report measured these frames/);
   // Measured again on the grown pixels (the same corrections here): nothing grows, and the request carries the corrections.
+  await measure();
   const second = await fit();
   assert.deepEqual(second.grown, {});
+  // A size on the edge of the range is a check like any other; an agreed one is measured.
   assert.deepEqual(second.guessed, ['combo/1', 'walk/2']);
   const assets = Object.fromEntries(JSON.parse(await readFile(path.join(asm, 'game-request.json'), 'utf8')).assets.map(a => [a.id, a.scale_check]));
   assert.deepEqual(assets.combo, { report: 'scale/check.json', per: 'frame', fix: { '-/1': 1 } });
+  // The fix is in the report's terms (a correction against the look); the summary says what game-pack packs.
   assert.deepEqual(assets.walk, { report: 'scale/check.json', per: 'state', fix: { '-': 1.2 } });
+  assert.deepEqual([second.clips.walk.min, second.clips.walk.max], [0.96, 0.96]);
+  assert.deepEqual([second.clips.combo.min, second.clips.combo.max], [0.9, 1.1]);
   assert.deepEqual(assets.fall, { report: 'scale/check-wide.json', per: 'frame' });
-  assert.deepEqual([second.clips.walk.min, second.clips.walk.max], [1.2, 1.2]);
 });
