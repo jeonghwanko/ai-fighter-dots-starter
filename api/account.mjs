@@ -20,7 +20,8 @@ export function createAccountHandler({ db, creatorLink = null }) {
     }
     if (!data || typeof data !== 'object' || typeof data.invited !== 'boolean') throw new Problem(503, 'account-unavailable');
     return { invited: data.invited, expiresAt: data.invited ? data.expiresAt ?? null : null, request: data.request ?? null,
-      ...(data.accessMode === 'open' ? { accessMode: 'open', canSubmit: data.canSubmit === true } : {}) };
+      ...(data.accessMode === 'open' ? { accessMode: 'open', canSubmit: data.canSubmit === true } : {}),
+      ...(Number.isInteger(data.fighterLimit) && data.fighterLimit > 0 ? { fighterLimit: data.fighterLimit } : {}) };
   }
   return async (request, parts) => {
     try {
