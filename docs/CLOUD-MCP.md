@@ -9,7 +9,11 @@ Dots의 플러그인에서 ODDBOUT을 연결하고 Google 로그인과 연결 �
 기존 개발 연결의 Supabase 함수 URL도 호환용으로 유지한다. 공개 심사에 제출한 주소는
 위 ODDBOUT 도메인이며, 현재 심사 중이다.
 
-개인 연결: ChatGPT → 플러그인 → 추가(+) → 사용자 지정 MCP 서버 추가.
+ODDBOUT 플러그인 0.6.0 이상을 쓰면 이 연결이 플러그인 안에 있다(`plugins/ai-fighter/mcp.json`, [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md)).
+Google로 한 번 로그인하면 끝이다. 아래 사용자 지정 MCP 서버를 함께 더하면 플러그인 목록에 ODDBOUT이 둘 보이니 더하지 않는다.
+사이트의 내 에이전트(Codex 카드)도 이 순서로 안내한다.
+
+플러그인 없이 연결: ChatGPT → 플러그인 → 추가(+) → 사용자 지정 MCP 서버 추가.
 이름 `ODDBOUT`, 위 서버 URL, 인증 `OAuth`를 선택한다. 클라이언트 ID/Secret은
 직접 넣지 않는다. 서버가 동적 클라이언트 등록과 PKCE를 지원한다.
 Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른다.
