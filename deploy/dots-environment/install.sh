@@ -66,13 +66,23 @@ grok_version="$(grok --version)"
 printf '%s\n' "$grok_version"
 ffmpeg -version >/dev/null
 ffprobe -version >/dev/null
+release_commit="$(node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!/^[a-f0-9]{40}$/.test(r.commit))process.exit(1); process.stdout.write(r.commit)' "$repo/deploy/dots-release.json")"
+# Keep ordinary post-processing tools out of the read-only home and personal auth storage.
+export SPRITE_GEN_DATA_DIR="$tools_dir/sprite-gen-data/$release_commit"
 printf 'export PATH=%q:$PATH\n' "$node_dir/bin:$tools_dir/grok/node_modules/.bin" > "$tools_dir/env.sh"
 printf 'export ODDBOUT_RUNTIME_HOME=%q\nexport AI_FIGHTER_ROOT=%q\n' "$runtime_home" "$workspace" >> "$tools_dir/env.sh"
 printf 'export npm_config_cache=%q\nexport PIP_CACHE_DIR=%q\n' "$npm_config_cache" "$PIP_CACHE_DIR" >> "$tools_dir/env.sh"
+printf 'export SPRITE_GEN_DATA_DIR=%q\n' "$SPRITE_GEN_DATA_DIR" >> "$tools_dir/env.sh"
 cd "$repo"
 # Install the immutable release into the saved workspace. The kit installs pinned WebP if the OS copy lacks -exact. No login or generation.
-release_commit="$(node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!/^[a-f0-9]{40}$/.test(r.commit))process.exit(1); process.stdout.write(r.commit)' "$repo/deploy/dots-release.json")"
 # Each release gets its own preparation receipt. Never rewrite an older binding.
 template_workspace="/workspace/.oddbout-template-workspaces/$release_commit"
 node dots.mjs --install --runtime-home "$runtime_home" --workspace "$template_workspace"
+# Dots bootstrap deliberately skips this optional source-development dependency. The saved
+# production image prepares it explicitly: official pinned download plus actual check frame.
+# A missing/broken execution device must fail preparation, never silently select nearest frames.
+(
+  cd "$runtime_home/$release_commit"
+  node scripts/sprite-gen.mjs rife install
+)
 printf '%s\n' 'Tools prepared. Review docs/DOTS-START.md, publish without user data, then connect the user in the running VM.'
