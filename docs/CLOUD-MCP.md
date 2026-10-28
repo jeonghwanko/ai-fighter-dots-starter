@@ -19,7 +19,11 @@ Google로 한 번 로그인하면 끝이다. 아래 사용자 지정 MCP 서버�
 Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른다.
 공개 플러그인 디렉터리 등록은 별도의 OpenAI 심사 절차이며 서버 배포와 다르다.
 
-Grok 연결(2026-10-27): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. 서버 URL은 위 주소, 인증은 OAuth다.
+Grok 연결(2026-10-27, 주소 2026-10-28): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. 서버 URL은
+**로그인 먼저 주소** `https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin`이다(`SIGN_IN_RESOURCE`). Grok의 커스텀 커넥터에는
+인증을 고르는 칸이 없고, 첫 요청의 답으로 로그인이 필요한지 정한다. 위 공개 주소는 공개 도구를 로그인 없이 답하므로 Grok이 계정 없이 붙어 버렸다(2026-10-28 실제 시도).
+로그인 먼저 주소는 같은 서버이고 모든 요청에 401과 `WWW-Authenticate`(`…/signin/.well-known/oauth-protected-resource`)로 로그인을 먼저 요구한다.
+이미 공개 주소로 추가했다면 지우고 이 주소로 다시 추가한다. 연결하면 oddbout.com 동의 화면에서 Google로 로그인해 승인한다.
 동의 화면(`web/cloud-connect/connect.mjs`의 `agentOf`)은 에이전트가 돌아갈 주소로 요청한 쪽을 가린다. ChatGPT(Dots)는 두 호스트 어디로든,
 Grok은 `https://grok.com/connectors-oauth-exchange-code/`, Cursor의 Grok Bot(웹)은 `https://www.cursor.com/agents/mcp/oauth/callback`·
 `https://www.cursor.com/bot/mcp/oauth/callback`로만 돌아간다. 데스크톱 클라이언트의 loopback·앱 스킴 주소는 받지 않는다. 화면의 문구와
