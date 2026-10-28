@@ -97,8 +97,11 @@ sessions remain at the login helper's usual `~/.ai-fighter/client.json`. The lau
 network install, login, generation or upload. Host execution permissions still apply.
 
 For testing, set `AI_FIGHTER_CREATOR_HOME` to a new absolute directory. `AI_FIGHTER_ROOT` can name
-an explicit existing project workspace. `node launcher.mjs --status` initializes the bundled runtime
-and reports its paths without starting MCP. The runtime is trusted local software, not an OS sandbox;
+an explicit existing project workspace. In the new Dots bootstrap contract, `node launcher.mjs --status`
+only verifies and reports paths. `node launcher.mjs --install --manifest-sha256 <reviewed-runtime-manifest-sha256>`
+explicitly initializes the writable runtime without starting MCP. See [DOTS-QUICKSTART.md](DOTS-QUICKSTART.md)
+for provenance, dependency installation and resume. Older released launchers retain their original contract.
+The runtime is trusted local software, not an OS sandbox;
 do not run unreviewed commands or recipes from someone else's project.
 
 The build report and checksum describe only that build. The ZIP must be rebuilt after source changes.

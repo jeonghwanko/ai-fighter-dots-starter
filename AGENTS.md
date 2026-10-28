@@ -3,6 +3,19 @@
 This repository lets each user create their own fighter through Dot. Read
 `docs/DOT-CREATION.md`, `docs/AUTHORING.md`, and the live AI Fighter spec before creating a package.
 
+- For Dots setup/resume read `docs/DOTS-QUICKSTART.md` and `docs/DOTS-START.md` first. Use the offline
+  `scripts/dots-workspace.mjs doctor` before opt-in probes; `bootstrap --install` is a separate action.
+  Inspect existing sessions/jobs before installing. Never run the generation readiness tool as a
+  supposedly read-only doctor: its kit path may fetch/fast-forward. Keep source and reviewed bundle
+  layouts distinct; launcher `--status` is read-only and `--install` requires the reviewed manifest hash.
+  Block unaudited Codex image-output paths, including an actual Codex still redraw inside video-set.
+  Explicit Grok image/video commands retain their own engine checks; video-resume retrieves an existing request.
+  Do not infer Codex use merely from a video command or require Codex readiness for a Grok route.
+  Never read/delete protected sessions, relocate CODEX_HOME, or claim an invented stdout/file adapter.
+  Keep the initial official exec wait at 30000 ms, then recover the same session/cell until completion;
+  an unknown outcome must not cause another dispatch. Explicit creation requests authorize routine
+  preparation within scope, while a Git URL or research request alone does not authorize generation.
+
 - Read `docs/CREATION-UX.md` for intent, text/image intake, account choices and the process evaluation rubric.
   Process design/review requests and forwarded example characters are not authorization to generate a character.
   Follow the latest direct user intent; stop dependent generation when that intent changes.

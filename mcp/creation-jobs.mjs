@@ -6,9 +6,11 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { atomicJson, digest, fail, localPath, readJson, unchanged } from './creation-store.mjs';
 import { reviewCreationProgress } from './creation-context.mjs';
+import { guardDotsExecution } from '../scripts/dots-provider.mjs';
 
-const generating = new Set(['gen', 'gen-set', 'video', 'video-set', 'video-resume']);
-const spriteCommands = new Set([...generating, 'workflow', 'prepare', 'extract', 'compose-atlas', 'compose-gif',
+const generating = new Set(['gen', 'gen-set', 'video', 'video-set']);
+const recovering = new Set(['video-resume']);
+const spriteCommands = new Set([...generating, ...recovering, 'workflow', 'prepare', 'extract', 'compose-atlas', 'compose-gif',
   'game-pack', 'video-canvas', 'video-prompt', 'video-frames', 'video-loop', 'video-cycle-align', 'inspect-motion']);
 const args = z.array(z.string().max(16000).refine(s => !s.includes('\0'))).min(1).max(128);
 export const jobPlanSchema = z.object({
@@ -43,9 +45,8 @@ export function createJobStore(store) {
   function validatePlan(plan) {
     if (plan.engine === 'sprite') {
       if (!spriteCommands.has(plan.args[0])) fail('unsupported-sprite-command');
-      if (generating.has(plan.args[0])) {
+      if (generating.has(plan.args[0]) || recovering.has(plan.args[0])) {
         if (!plan.workflowArgs || plan.workflowArgs[0] !== 'workflow' || plan.workflowArgs.includes('--stage')) fail('generation-needs-workflow-preflight');
-        if (['gen', 'gen-set'].includes(plan.args[0]) && !plan.args.includes('--provider')) fail('explicit-provider-required');
         const option = (argv, key) => {
           const matches = argv.flatMap((value, index) => value === key || value.startsWith(`${key}=`) ? [index] : []);
           if (matches.length > 1) fail('duplicate-provider-option');
@@ -54,10 +55,15 @@ export function createJobStore(store) {
           return argv[index].includes('=') ? argv[index].slice(key.length + 1) : argv[index + 1];
         };
         const kind = option(plan.workflowArgs, '--kind');
+        const provider = option(plan.args, '--provider');
+        if (['gen', 'gen-set'].includes(plan.args[0]) && !provider) fail('explicit-provider-required');
         if (!['image', 'sprite'].includes(kind)) fail('workflow-kind-required');
         if (plan.args[0] === 'gen' && option(plan.args, '--provider') !== option(plan.workflowArgs, '--image-provider')) fail('provider-preflight-mismatch');
-        if (plan.args[0] === 'gen-set' && (kind !== 'sprite' || option(plan.args, '--provider') !== 'codex' ||
-            option(plan.workflowArgs, '--motion-method') !== 'gpt-rows')) fail('provider-preflight-mismatch');
+        if (plan.args[0] === 'gen-set') {
+          const matched = provider === 'codex' ? kind === 'sprite' && option(plan.workflowArgs, '--motion-method') === 'gpt-rows'
+            : provider === 'grok' && kind === 'image' && option(plan.workflowArgs, '--image-provider') === 'grok';
+          if (!matched) fail('provider-preflight-mismatch');
+        }
         if (['video', 'video-set', 'video-resume'].includes(plan.args[0]) &&
             (kind !== 'sprite' || option(plan.workflowArgs, '--motion-method') !== 'grok-video')) fail('provider-preflight-mismatch');
       }
@@ -66,6 +72,7 @@ export function createJobStore(store) {
   }
   async function gate(state, plan) {
     validatePlan(jobPlanSchema.parse(plan));
+    if (plan.engine === 'sprite') await guardDotsExecution(fileURLToPath(new URL('../', import.meta.url)), store.root, plan.args);
     if (state.mode !== 'creation') fail('dialogue-only-no-execution');
     const context = await store.latestContext();
     if (context.revision !== state.contextRevision) fail('context-changed');
@@ -244,7 +251,7 @@ export async function runCreationJob(store, id, jobId, { execute = executeEngine
     if (job.status === 'running') {
       stage = 'execute'; result = await execute(store.root, job.plan.engine, job.plan.args, options);
       job.status = result.notStarted ? 'failed' : result.code === 75 ? 'needs-input'
-        : result.code === 0 ? 'succeeded' : generating.has(job.plan.args[0]) ? 'unknown' : 'failed';
+        : result.code === 0 ? 'succeeded' : generating.has(job.plan.args[0]) || recovering.has(job.plan.args[0]) ? 'unknown' : 'failed';
       if (job.status === 'succeeded') {
         try { job.outputs = await store.snapshots(job.plan.outputs); }
         catch { job.status = 'unknown'; job.reason = 'declared-output-missing'; }

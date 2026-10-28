@@ -17,8 +17,8 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   const init=await (await handle(request('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}}))).json();
   assert.equal(init.result.serverInfo.name,'oddbout-cloud');
   const list=await (await handle(request('tools/list'))).json();
-  assert.equal(list.result.tools.length,12);
-  for(const name of ['prepare_fighter_registration','upload_fighter_asset']) {
+  assert.equal(list.result.tools.length,15);
+  for(const name of ['prepare_fighter_registration','upload_fighter_asset','store_creator_source']) {
     const t=list.result.tools.find(t=>t.name===name), f=t.inputSchema.properties[t._meta['openai/fileParams'][0]];
     assert.deepEqual(new Set(f.required),new Set(['download_url','file_id']));
     assert.deepEqual(Object.keys(f.properties).sort(),['download_url','file_id','file_name','mime_type']);

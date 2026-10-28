@@ -21,6 +21,13 @@ In this kit, "sprite-gen" means the sprite-gen engine and CLI pinned at `vendor/
 
 ## Register from Dots without a PC
 
+For **creation in a saved Dots VM**, use [the Dots VM entry point](docs/DOTS-START.md).
+The intended flow is one repository URL plus your creation request, using your own Grok subscription.
+The environment preparer runs [the install recipe](deploy/dots-environment/README.md) once; Dots then runs
+`node dots.mjs --install` once and `node dots.mjs` to resume the same pinned workspace. The source and
+preview-delivery checks remain distinct from login. This **0.5.5 candidate** still requires actual saved-VM
+creation acceptance; unit tests or a parent-container run do not certify it.
+
 Connect the hosted **ODDBOUT** MCP in ChatGPT Plugins, sign in with Google, then select
 `@ODDBOUT` in your Dots conversation. The cloud connector handles account checks,
 file transfer and registration; no local MCP installation, API key or callback copying is needed.
@@ -34,7 +41,7 @@ Use the **ODDBOUT** plugin for creation, review and registration from a PC or a 
 The same connected ODDBOUT account registers the result in either environment. A second AI Fighter Creator
 plugin is no longer required. See [the unified plugin and migration guide](docs/ODDBOUT-PLUGIN.md).
 
-Send the [start link](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md) to a new chat with an assistant that can run local commands and access files, such as a supported Dot, Codex, or Claude setup. Add an idea or a reference image. For example:
+Send the [repository URL](https://github.com/jeonghwanko/ai-fighter-dots-starter) to your assistant in the prepared workspace. Add an idea or a reference image. For example:
 
 > Make a cat boxer in blue armor for ODDBOUT using this kit.
 > Show me the concept first so we can get the appearance right.
@@ -68,6 +75,14 @@ Your assistant shows you actual previews and waits for your feedback after each 
 See the [full creation workflow](docs/DOT-CREATION.md) for generation, revision, and packaging.
 
 ## Set up the kit yourself
+
+For a Dots VM, start with [Dots bootstrap, doctor and resume](docs/DOTS-QUICKSTART.md) and the
+[saved-environment Start instructions](docs/DOTS-START.md). The offline entry point is
+`node scripts/dots-workspace.mjs doctor --workspace <absolute-workspace>`; installation is explicit
+with `bootstrap --install`. A Git URL alone does not authorize generation. Use the service branch below,
+record its actual commit, and do not mistake an older main checkout for the current creator kit.
+The Dots workflow reports unsupported image-output contracts as blocked; it does not read protected
+Codex sessions or claim that login/installation proves image generation or parent delivery.
 
 Use the **codex/creator-hosting** branch, which contains the public service configuration. For a new installation:
 

@@ -11,6 +11,9 @@ install AI Fighter Creator as a second plugin or choose between two product name
 For registered-fighter lookup or status, use the connected ODDBOUT tools directly; no workspace setup is needed.
 For creation, read [workspace routing](references/workspace.md). Use the same project tools through
 `creation:tool` in the user's PC or the Dots workspace. Do not move work to a PC when the user chose Dots.
+For Dots initialization/resume, also follow the kit's `docs/DOTS-START.md`: offline doctor, recovery inventory,
+then explicit bootstrap if this is a new workspace. Keep unsupported output contracts blocked; never read
+protected Codex sessions or start a second generation because the original exec is still waiting.
 Workspace generation uses the installed creator kit's sprite-gen and the user's account.
 For supported direct conversation appearance generation/display, check that route first under `docs/DELIVERY.md`;
 do not require a PC or leave the user's chosen VM scope. Packaging still uses the creator kit.

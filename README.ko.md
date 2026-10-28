@@ -1,5 +1,16 @@
 # ODDBOUT
 
+**Dots 저장 VM 제작 경로 (0.5.5 후보)**: 환경 준비자는 [설치 절차](deploy/dots-environment/README.md)를
+한 번 실행하고, 이후 사용자는 Git 주소와 제작 요청을 전달합니다. Dots가 `node dots.mjs --install`로
+고정 버전을 준비한 뒤 `node dots.mjs`로 같은 작업을 재개합니다. 생성은 본인의 Grok 구독을 사용합니다.
+[시작 지침](docs/DOTS-START.md)과 [비공개 원본 전달](docs/DOTS-PRIVATE-SOURCES.md)을 따릅니다.
+아직 실제 저장 VM의 생성·미리보기 전달까지 승인된 릴리스는 아닙니다. 설치·단위 테스트 통과와 구분합니다.
+
+Dots VM 준비는 [bootstrap·doctor·resume 안내](docs/DOTS-QUICKSTART.md)와
+[저장된 환경 Start 지침](docs/DOTS-START.md)을 따른다. 기본 doctor는 무네트워크·무설치 검사이고,
+설치는 `bootstrap --install`로 분리된다. 일반 Git URL의 main과 `codex/creator-hosting`의 실제 버전을
+구분한다. Git 링크만 받은 것은 생성 승인이 아니며, 보호 Codex 세션을 요구하는 이미지 경로는 차단한다.
+
 **ODDBOUT 플러그인 하나로 제작·검토·등록을 진행합니다.** 사용자 PC 또는 지원되는 Dots 작업 공간에서
 제작하고 같은 연결 계정으로 등록합니다. 별도 AI Fighter Creator 플러그인은 필요하지 않습니다.
 [통합 플러그인 설치·전환 안내](docs/ODDBOUT-PLUGIN.md)를 참고하세요.

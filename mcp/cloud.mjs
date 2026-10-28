@@ -4,6 +4,7 @@ import { z } from 'zod';
 import { createHandler } from '../api/handler.mjs';
 import { note as checkNote } from '../api/canon.mjs';
 import { registerFileInputProbe } from './file-input-probe.mjs';
+import { registerCreatorSources } from './creator-sources.mjs';
 import { Problem, UUID, bearerToken, readBody, sha256 } from '../api/http.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
@@ -240,6 +241,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, host 
     registerWorkshopTools({ register, arena, invoke });
   }
   registerFileInputProbe({ register, fileSchema: FILE, identity, downloadFile: downloadHostFile, fetcher });
+  registerCreatorSources({ register, fileSchema: FILE, identity, db, downloadFile: downloadHostFile, fetcher });
   return server;
 }
 

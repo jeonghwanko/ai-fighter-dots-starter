@@ -5,6 +5,7 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { access, chmod, constants, mkdir, mkdtemp, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { runtimeFetch } from '../api/runtime-fetch.mjs';
 
 // Official libwebp release binaries (storage.googleapis.com/downloads.webmproject.org/releases/webp), SHA-256 measured
 // on the downloaded archives 2026-10-26. Statically linked; only bin/img2webp and README.md are kept.
@@ -153,7 +154,7 @@ else:
  * Put the pinned libwebp img2webp into the kit venv's script folder. The hash is checked before anything is unpacked;
  * files are written beside their final names and renamed in, so an interrupted install leaves nothing half-written.
  */
-export async function installImg2webp({ spriteRoot, python, platform = process.platform, arch = process.arch, archivePath, download = fetch, log = console.error } = {}) {
+export async function installImg2webp({ spriteRoot, python, platform = process.platform, arch = process.arch, archivePath, download = runtimeFetch, log = console.error } = {}) {
   const entry = LIBWEBP.archives[platformKey(platform, arch)];
   if (!entry) throw Error(`No pinned libwebp build for ${platformKey(platform, arch)}: ${img2webpInstall(platform, arch).command}`);
   const [name, expected] = entry, top = name.replace(/\.(tar\.gz|zip)$/, '');
@@ -165,7 +166,13 @@ export async function installImg2webp({ spriteRoot, python, platform = process.p
     if (archivePath) await writeFile(archive, await readFile(archivePath));
     else {
       log(`img2webp: downloading ${LIBWEBP.url(name)}`);
-      const response = await download(LIBWEBP.url(name));
+      let response;
+      try { response = await download(LIBWEBP.url(name)); }
+      catch (error) {
+        const reason = ['network-connect-forbidden', 'network-timeout', 'network-dns-failed', 'api-unreachable'].includes(error.code)
+          ? error.code : 'api-unreachable';
+        throw Error(`img2webp: network ${reason} host=storage.googleapis.com`);
+      }
       if (!response.ok) throw Error(`img2webp: download failed (HTTP ${response.status}) ${LIBWEBP.url(name)}`);
       await writeFile(archive, Buffer.from(await response.arrayBuffer()));
     }
