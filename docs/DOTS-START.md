@@ -27,6 +27,15 @@ and persistent jobs. Complete and show one authorized review group, then wait fo
 An installation report never means that a character has been made. Registration uses the connected
 ODDBOUT account and remains separate from the generation subscription.
 
+Before a Grok video request, inspect the actual video-canvas input and run the official canvas/cutout
+steps locally with the intended key. In the pinned engine, feeding a transparent RGBA cutout into a
+canvas path that converts directly to RGB can turn its transparent background black, breaking a later
+white-key extraction after the provider has already returned videos. Prefer the corresponding untouched
+RGB source frame when one exists, verify its correspondence and the resulting character/background,
+and preserve the RGBA original. Do not assume dropping alpha composites onto the intended key color.
+A local canvas/cutout check must pass before dispatch; it requires no generation request. If a job has
+already returned clips, preserve and inspect their request records and originals before any revision.
+
 The following low-level commands remain available for diagnosis and supported bundle installations:
 
 Read AGENTS.md and DOTS-QUICKSTART.md. Identify the actual runtime, workspace, kit version and commit or
