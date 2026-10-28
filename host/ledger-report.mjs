@@ -37,6 +37,7 @@ export function parse(text) {
 export function outcome(exit) {
   if (exit === 0) return 'ok';
   if (exit === 2 || exit === 75) return 'needsInput';   // sprite-gen asked a question; nothing generated
+  if (exit === 3) return 'notStarted';   // sprite-gen failed before any provider request: nothing generated, nothing billed
   if (exit === 124 || exit === 137) return 'timeout';
   if (exit === 129 || exit === 130 || exit === 143) return 'interrupted';
   return 'failed';
@@ -64,12 +65,12 @@ export function summarize(entries, onlyJob) {
     if (e.kind !== 'run') continue;
     if (e.phase === 'start') { started.set(e.run, e); continue; }
     ended.add(e.run);
-    const p = job.providers[e.provider] ??= { runs: 0, ok: 0, failed: 0, needsInput: 0, timeout: 0, interrupted: 0, ms: 0 };
+    const p = job.providers[e.provider] ??= { runs: 0, ok: 0, failed: 0, notStarted: 0, needsInput: 0, timeout: 0, interrupted: 0, ms: 0 };
     p.runs += 1; p[outcome(e.exit)] += 1; p.ms += e.ms ?? 0;
     if (e.account === 'personal') job.personalRuns += 1;   // the operator's own subscription, allowed explicitly
     job.activeMs += e.ms ?? 0; job.waitMs += e.waitMs ?? 0; job.codexSessions += e.codexSessions ?? 0;
     if (e.provider !== 'codex' && (e.codexSessions ?? 0) > 0) warnings.push(`${e.job}: '${e.tool}' (${e.provider}) started ${e.codexSessions} codex session(s)`);
-    if (e.provider !== 'local' && outcome(e.exit) !== 'needsInput') (durations.get(e.provider) ?? durations.set(e.provider, []).get(e.provider)).push(e.ms ?? 0);
+    if (e.provider !== 'local' && !['needsInput', 'notStarted'].includes(outcome(e.exit))) (durations.get(e.provider) ?? durations.set(e.provider, []).get(e.provider)).push(e.ms ?? 0);
   }
   for (const [run, e] of started) if (!ended.has(run) && jobs.has(e.job)) jobs.get(e.job).unfinished += 1;
   const perProvider = Object.fromEntries([...durations].map(([p, list]) => {
@@ -86,7 +87,7 @@ export function render(summary, skipped = 0) {
   const lines = [];
   for (const j of summary.jobs) {
     const parts = Object.entries(j.providers).filter(([p]) => p !== 'local').map(([p, v]) =>
-      `${p} 실행 ${v.runs}회(실패 ${v.failed}·시간초과 ${v.timeout}·중단 ${v.interrupted}·질문 ${v.needsInput})`);
+      `${p} 실행 ${v.runs}회(실패 ${v.failed}·요청 전 실패 ${v.notStarted ?? 0}·시간초과 ${v.timeout}·중단 ${v.interrupted}·질문 ${v.needsInput})`);
     const span = j.first && j.last ? Date.parse(j.last) - Date.parse(j.first) : 0;
     const sessions = j.codexSessionsExact ?? `약 ${j.codexSessions}(실행 합 — 겹친 실행은 중복)`;
     lines.push(`${j.job}  ${STATE[j.state]}  codex 세션 ${sessions}  작업 ${fmt(j.activeMs)}  칸 대기 ${fmt(j.waitMs)}  ` +

@@ -21,7 +21,7 @@ ODDBOUT 제작자 페이지·에이전트의 **호스팅 생성 신청**(글과 
 | `generation-worker.mjs` | 워커: 1분마다 심장 박동, 1시간마다 `og health`, 하루 한 번 `og prune`, 한 번에 한 작업의 한 단계를 임대해 돌리고 결과를 올린다 |
 | `generation-stages.mjs` | 단계: 브리프·외형·동작·제출의 명령과 프롬프트, 결과 검사 |
 | `motions.py` | 동작 단계의 픽셀 일(키트 sprite-gen venv의 NumPy·Pillow) |
-| `ledger-report.mjs` | 장부 한 줄 쓰기와 요약. 신청 글·프롬프트·경로는 남기지 않는다 |
+| `ledger-report.mjs` | 장부 한 줄 쓰기와 요약. 신청 글·프롬프트·경로는 남기지 않는다. 종료 3은 `notStarted`(sprite-gen이 provider 요청 전에 실패: 만든 것도 과금도 없음), 2·75는 `needsInput`, 129·130·143은 `interrupted` |
 | `install-service-user.sh` | 서비스 설치의 처음 한 번(root) |
 | `*.test.mjs` | `node --test host/*.test.mjs` |
 
@@ -53,6 +53,7 @@ GPT는 자세마다 몸을 따로 그려 외형보다 2~20% 커지거나 작아�
 ## 지켜야 할 것
 
 - `og run` 밖에서 `sprite-gen`·`codex`·`grok`을 부르지 않는다. 그러면 고정한 계정·칸·장부를 거치지 않는다.
+- 생성 단계가 실패하면 워커는 그 실행이 쓴 sprite-gen 리포트(`--report`, gen-set·video-set의 `set.report.json`)를 읽는다. 리포트가 같은 명령으로 다시 될 수 있다고 할 때만(`retryable`), 또는 리포트가 아예 없을 때(og가 sprite-gen 전에 멈춤)만 다시 시도한다. `outcome-unknown`, xAI가 받은 영상 요청(`*-unfinished`, `requestIds` — `video-resume`으로 받는다), 종료 3(`*-not-started`), 고쳐야 할 오류는 운영자 검토로 간다. og 장부는 종료 코드만 읽는다: 리포트 경로를 아는 쪽은 워커다.
 - 워커는 `og harden` 없이는 시작하지 않는다. 신청자의 글이 codex 입력이 되기 때문이다.
 - `og setup`(사용자 설치는 `npm run host:setup`)은 열린 작업이 있으면 아무것도 바꾸지 않는다. 키트·CLI 판은 `og` 맨 위에 고정한다.
 - 끝난 작업 폴더(신청 글·참조 그림·생성 그림)는 워커가 하루 한 번 지운다: 닫힌 지 7일(`ODDBOUT_GENERATION_KEEP_DAYS`, 1~90),

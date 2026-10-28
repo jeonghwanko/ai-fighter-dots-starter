@@ -1,5 +1,6 @@
 import { access, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inspectTools, inspectRife, installImg2webp, toolEnv, toolsItem } from './sprite-tools.mjs';
@@ -40,14 +41,29 @@ export async function spriteStatus({ tools = true } = {}) {
 
 // Setup steps that can hang on a network or proxy get a bound; generation commands keep none (a video run takes minutes).
 const SETUP_TIMEOUT_MS = { git: 10 * 60_000, venv: 5 * 60_000, pip: 20 * 60_000, check: 60_000 };
+// A stop (SIGTERM, SIGHUP) reaches sprite-gen, which writes its report and exits 128 + the signal; until then this wrapper
+// waits for it instead of dying first, so whoever stopped the run reads a finished report (vendor/sprite-gen docs/gen.md
+// "Outcome"). A stop sent to this process alone is passed on; one sent to the process group reaches sprite-gen itself, and
+// it acts on the first only. Ctrl-C (SIGINT) reaches the whole terminal group and is not passed on.
+const FORWARDED = ['SIGTERM', 'SIGHUP'];
+const WAITED = [...FORWARDED, 'SIGINT'];
 export function run(command, args, { cwd = kitRoot, timeout = 0 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, stdio: 'inherit', shell: false, windowsHide: true, timeout,
       env: { ...toolEnv(spriteRoot), PYTHONUTF8: '1', SPRITE_GEN_ROOT: spriteRoot } });
-    child.once('error', reject);
+    // Setup steps keep their bound and the default stop; a generation command (no timeout) is waited for.
+    const handlers = timeout ? [] : WAITED.filter(name => process.platform !== 'win32' || name !== 'SIGHUP').map(name => {
+      const handler = () => { if (FORWARDED.includes(name)) { try { child.kill(name); } catch {} } };
+      process.on(name, handler);
+      return [name, handler];
+    });
+    const done = () => { for (const [name, handler] of handlers) process.off(name, handler); };
+    child.once('error', error => { done(); reject(error); });
     child.once('exit', (code, signal) => {
+      done();
       if (signal && timeout) console.error(`${path.basename(command)} was interrupted; inspect the original install before retrying.`);
-      resolve(signal && timeout ? INSTALL_OUTCOME_UNKNOWN : signal ? 1 : code ?? 1);
+      // A child the signal itself ended exits 128 + its number, as a shell reports it (og's ledger reads 143 as interrupted).
+      resolve(signal && timeout ? INSTALL_OUTCOME_UNKNOWN : signal ? 128 + (os.constants.signals[signal] ?? 0) : code ?? 1);
     });
   });
 }
