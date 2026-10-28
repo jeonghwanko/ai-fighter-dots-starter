@@ -163,6 +163,30 @@ test('a gait whose cuts never align stops for an operator without filming anothe
   assert.ok(!calls.some(a => a.includes('gen')));
 });
 
+test('a failed look is tried again only when its report says so; otherwise an operator looks', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-look-fail-'));
+  let answer = null;   // what the failing `gen` leaves at --report; null: no report (og stopped it before sprite-gen ran)
+  const og = async args => {
+    const report = args[args.indexOf('--report') + 1];
+    if (answer) await writeFile(report, JSON.stringify({ ok: false, ...answer.report }));
+    return { code: answer?.code ?? 1 };
+  };
+  const stages = createStages({ og, api: { artifact: async () => ({ ok: true }) }, fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
+  const job = { id: 'j', brief, refs: [], candidates: [], appearanceRound: 0, appearanceNote: null };
+  const error = (code, retryable, extra = {}) => ({ state: null, code, retryable, message: code, ...extra });
+  assert.deepEqual(await stages.appearance(job, dir), { outcome: 'retry', result: { code: 'look-exit-1' } });
+  answer = { code: 1, report: { provider_submitted: true, errors: [error('provider-rate-limited', true)] } };
+  assert.deepEqual(await stages.appearance(job, dir), { outcome: 'retry', result: { code: 'look-exit-1' } });
+  answer = { code: 1, report: { provider_submitted: true, errors: [error('outcome-unknown', false)] } };
+  assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-outcome-unknown' } });
+  answer = { code: 1, report: { provider_submitted: true, errors: [error('provider-refused', false)] } };
+  assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-provider-refused' } });
+  answer = { code: 3, report: { provider_submitted: false, errors: [error('preflight', false)] } };
+  assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-not-started' } });
+  answer = { code: 143, report: { provider_submitted: true, request_id: 'req-1', errors: [error('interrupted', false, { request_id: 'req-1' })] } };
+  assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-unfinished', requestIds: ['req-1'] } });
+});
+
 test('the worker reads its env file and og health', () => {
   assert.deepEqual(parseEnv('# c\nODDBOUT_GENERATION_API=https://x/y\nODDBOUT_GENERATION_WORKER_KEY=afw_1\nbad line\n'),
     { ODDBOUT_GENERATION_API: 'https://x/y', ODDBOUT_GENERATION_WORKER_KEY: 'afw_1' });

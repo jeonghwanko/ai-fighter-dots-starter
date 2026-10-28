@@ -18,6 +18,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
+import { judgeOutcome, readOutcome } from '../mcp/sprite-outcome.mjs';
 
 /** The text model for the brief and the image model for the looks (the subscription's; `gpt-6.1-sol` is refused on a ChatGPT login). */
 export const MODELS = Object.freeze({ text: 'gpt-6-sol', image: 'gpt-6-sol' });
@@ -286,6 +287,21 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
   // an 8 GB card out of memory (2026-10-28).
   let aligning = Promise.resolve();
   const align = command => { const run = aligning.then(() => og(command)); aligning = run.catch(() => {}); return run; };
+  /**
+   * A generating run that failed: tried again later only when its own report (written by this run, after `since`) says the
+   * same command may succeed, or when there is no report at all (og stopped it before sprite-gen ran, as before). A report
+   * that says the request's outcome cannot be told, names a video request xAI took (resume it, never film again), asks the
+   * codex question, or names an error the same command will meet again goes to an operator instead (host/README.md).
+   */
+  async function failedRun(prefix, code, report, since) {
+    const verdict = judgeOutcome({ code, report: await readOutcome(report, { since }) });
+    if (verdict.next === 'retry' || (verdict.charge === 'unknown' && code !== 75)) return { retry: `${prefix}-exit-${code}` };
+    const review = { answer: 'provider-asks', resume: `${prefix}-unfinished`, inspect: `${prefix}-outcome-unknown` }[verdict.next]
+      ?? (code === 3 ? `${prefix}-not-started` : `${prefix}-${verdict.codes[0] ?? `exit-${code}`}`);
+    return { review, ...(verdict.requestIds.length ? { requestIds: verdict.requestIds } : {}) };
+  }
+  const asOutcome = r => r.retry ? { outcome: 'retry', result: { code: r.retry } }
+    : { outcome: 'review', result: { code: r.review, ...(r.requestIds ? { requestIds: r.requestIds } : {}) } };
   async function brief(job, dir) {
     const refs = [];
     for (const [i, ref] of job.refs.entries()) {
@@ -325,14 +341,16 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
     await mkdir(path.dirname(promptFile), { recursive: true });
     await writeFile(promptFile, appearancePrompt(job.brief, note));
     // Both looks at once (one codex slot each; og waits for a free one, and the engine finds each run's picture by its own session).
+    const since = Date.now();
     const made = await Promise.all(names.map(async name => {
-      const png = path.join(dir, 'looks', `${name}.png`);
-      const { code } = await og(appearanceCommand({ promptFile, out: png, report: path.join(dir, 'looks', `${name}.report.json`), refs }));
-      return { name, png, code };
+      const png = path.join(dir, 'looks', `${name}.png`), report = path.join(dir, 'looks', `${name}.report.json`);
+      const { code } = await og(appearanceCommand({ promptFile, out: png, report, refs }));
+      return { name, png, report, code };
     }));
     if (made.some(look => look.code === 75)) return { outcome: 'review', result: { code: 'provider-asks' } };
     const failed = made.find(look => look.code !== 0 || !existsSync(look.png));
-    if (failed) return { outcome: 'retry', result: { code: `look-exit-${failed.code}` } };
+    if (failed) return failed.code === 0 ? { outcome: 'retry', result: { code: 'look-exit-0' } }
+      : asOutcome(await failedRun('look', failed.code, failed.report, since));
     for (const { name, png } of made) {
       const webp = png.replace(/\.png$/, '.webp');
       await toWebp(png, webp);
@@ -412,11 +430,14 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       if (input.retry || input.review) return input;
       const motion = ['--motion', `${gait}=${words}`];
       // A finished clip is kept (no --force): a stage run again reuses it.
+      const since = Date.now();
       const { code } = await og(sprite('video-set', '--base', `side@right=${input.still}`, '--facing', 'right', '--states', gait, '--key', input.key,
         '--out-dir', clip, '--character', character, '--concurrency', '1', ...motion));
       if (code === 75) return { review: 'provider-asks' };
-      // No clip at all (a limit, an outage): try the stage later rather than film again with other words.
-      if (code !== 0 && !existsSync(path.join(item, 'frames', 'keyed')) && !existsSync(path.join(item, 'loop'))) return { retry: `video-exit-${code}` };
+      // No clip at all (a limit, an outage): try the stage later rather than film again with other words, unless the set report
+      // says a request xAI took is unfinished (resume it), its outcome cannot be told, or the same run would fail again.
+      if (code !== 0 && !existsSync(path.join(item, 'frames', 'keyed')) && !existsSync(path.join(item, 'loop')))
+        return failedRun('video', code, path.join(clip, 'set.report.json'), since);
       const cuts = [];
       if (existsSync(path.join(item, 'loop', `side-${gait}.strip.json`))) cuts.push(path.join(item, 'loop'));
       if (existsSync(path.join(item, 'frames', 'keyed'))) {
@@ -487,9 +508,10 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
           '--request', `${requestFile}.prepare.json`));
         if (code !== 0) return { retry: `prepare-exit-${code}` };
       }
+      const since = Date.now();
       const { code } = await og(sprite('gen-set', '--run-dir', run, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '1'));
       if (code === 75) return { review: 'provider-asks' };
-      if (code !== 0) return { retry: `rows-exit-${code}` };
+      if (code !== 0) return failedRun('rows', code, path.join(run, 'reports', 'gen-set', 'set.report.json'), since);
       if ((await og(sprite('extract', '--run-dir', run))).code !== 0) return { review: 'rows-extract' };
       overrides.push({ run, row, cells });
     }
@@ -593,9 +615,10 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
           '--request', path.join(m, 'prepare-request.json')));
         if (code !== 0) return { retry: `prepare-exit-${code}` };
       }
+      const since = Date.now();
       const { code } = await og(sprite('gen-set', '--run-dir', rows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '2'));
       if (code === 75) return { review: 'provider-asks' };
-      if (code !== 0) return { retry: `rows-exit-${code}` };
+      if (code !== 0) return failedRun('rows', code, path.join(rows, 'reports', 'gen-set', 'set.report.json'), since);
       if ((await og(sprite('extract', '--run-dir', rows))).code !== 0) return { review: 'rows-extract' };
       // The creator's changes to action clips, in order: each remade row's named cells replace the first run's.
       const overrides = [];
@@ -626,9 +649,11 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       if (!existsSync(relaxedLook)) {
         const promptFile = path.join(m, 'gait-still-prompt.txt');
         await writeFile(promptFile, gaitStillPrompt(job.brief));
-        const { code } = await og(appearanceCommand({ promptFile, out: relaxedLook, report: path.join(m, 'gait-still-look.report.json'), refs: [look] }));
+        const since = Date.now(), report = path.join(m, 'gait-still-look.report.json');
+        const { code } = await og(appearanceCommand({ promptFile, out: relaxedLook, report, refs: [look] }));
         if (code === 75) return { review: 'provider-asks' };
-        if (code !== 0 || !existsSync(relaxedLook)) return { retry: `gait-still-exit-${code}` };
+        if (code !== 0) return failedRun('gait-still', code, report, since);
+        if (!existsSync(relaxedLook)) return { retry: 'gait-still-exit-0' };
       }
       if ((await motionsPy(['video-still', relaxedLook, relaxed])).code !== 0) return { retry: 'gait-still' };
       const { key } = await readJson(relaxed.replace(/\.png$/, '.json')).catch(() => ({ key: 'magenta' }));
@@ -668,7 +693,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       if (made) { run = made; await gaitDraft('run', made.strip); }
     }
     const branches = [actions, walk, run], stopped = branches.find(b => b.review) ?? branches.find(b => b.retry);
-    if (stopped) return stopped.review ? { outcome: 'review', result: { code: stopped.review } } : { outcome: 'retry', result: { code: stopped.retry } };
+    if (stopped) return stopped.review ? { outcome: 'review', result: { code: stopped.review, ...(stopped.requestIds ? { requestIds: stopped.requestIds } : {}) } } : { outcome: 'retry', result: { code: stopped.retry } };
     const loops = { walk, run };
     for (const gait of ['walk', 'run']) {
       const pace = loops[gait].note === RUN_FROM_WALK ? [String(RUN_FROM_WALK_PACE)] : [];
