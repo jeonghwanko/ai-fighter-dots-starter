@@ -97,10 +97,21 @@ export function createGenerationHandler({ db, authenticate, present }) {
     return new Map((data ?? []).map(h => [h.id, { id: h.id, name: h.name, official: h.official === true }]));
   }
   // A job as its creator reads it: no lease, no prompt, no brief beyond its profile draft; pictures as signed URLs.
+  // While the motions are made: the previews the worker put up as its branches passed (its latest `drafts` event, this round's).
+  async function draftsOf(row) {
+    if (row.status !== 'motions') return [];
+    const { data, error } = await db.from('af_generation_events').select('data').eq('job_id', row.id).eq('kind', 'drafts')
+      .order('at', { ascending: false }).limit(1).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    const round = `-${row.motion_revisions}`;
+    return (Array.isArray(data?.data?.clips) ? data.data.clips : []).filter(d => isObject(d) && MOTIONS.includes(d.clip)
+      && ARTIFACT.test(d.name ?? '') && d.name.startsWith('draft-') && d.name.endsWith(round)).slice(0, MOTIONS.length);
+  }
   async function view(row) {
-    const candidates = candidatesOf(row), preview = previewOf(row);
+    const candidates = candidatesOf(row), preview = previewOf(row), drafts = await draftsOf(row);
     const hosts = await hostsOf([row.requested_host, row.assigned_host]);
-    const urls = await signed([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name))]);
+    const urls = await signed([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name)),
+      ...drafts.map(d => artifactPath(row.id, d.name))]);
     let submission = null;
     if (row.submission_id) {
       const { data, error } = await db.from('af_submissions').select('id,status,fighter_id').eq('id', row.submission_id).maybeSingle();
@@ -112,6 +123,7 @@ export function createGenerationHandler({ db, authenticate, present }) {
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
       revisionsLeft: { appearance: 2 - row.appearance_revisions, motions: 3 - row.motion_revisions },
       preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null })), submission,
+      drafts: drafts.map(d => ({ clip: d.clip, url: urls.get(artifactPath(row.id, d.name)) ?? null })),
       host: { choice: row.host_choice ?? 'oddbout', requested: hosts.get(row.requested_host) ?? null, assigned: hosts.get(row.assigned_host) ?? null } };
   }
   async function ownJob(owner, jobId) {

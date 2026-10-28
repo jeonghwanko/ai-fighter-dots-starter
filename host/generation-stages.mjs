@@ -424,6 +424,20 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       await writeFile(changesFile, JSON.stringify(changes));
     }
     const report = progress => Promise.resolve(api.progress?.(job, progress)).catch(() => {});
+    // Previews as the branches pass (2026-10-28): the creator watches the action clips while the walk and run still film (the stage
+    // took about 20 minutes). Each goes up as an artifact and the list as a progress event; the package's previews replace them at the end.
+    // A preview is a courtesy: one that fails never stops the stage.
+    const drafted = [], draftDir = path.join(m, `drafts-${job.motionRound}`);
+    async function draft(files) {
+      try {
+        for (const file of files) {
+          const clip = path.basename(file, '.webp'), name = `draft-${clip.toLowerCase()}-${job.motionRound}`;
+          await api.artifact(job, name, await readFile(file));
+          drafted.splice(0, drafted.length, ...drafted.filter(d => d.clip !== clip), { clip, name });
+        }
+        if (files.length) await Promise.resolve(api.progress?.(job, undefined, { kind: 'drafts', clips: drafted })).catch(() => {});
+      } catch { /* the stage goes on */ }
+    }
     /** 1. The six keypose rows (GPT), extracted and assembled at one scale: `{}`, or `{ retry }`·`{ review }` with a code. */
     async function actionRows() {
       if (!existsSync(path.join(rows, 'sprite-request.json'))) {
@@ -450,6 +464,8 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       await writeFile(overridesFile, JSON.stringify(overrides));
       await rm(asm, { recursive: true, force: true });
       if ((await motionsPy(['assemble', rows, look, asm, overridesFile])).code !== 0) return { review: 'rows-assemble' };
+      if ((await motionsPy(['drafts', asm, draftDir])).code === 0)
+        await draft((await readdir(draftDir).catch(() => [])).filter(f => f.endsWith('.webp')).map(f => path.join(draftDir, f)));
       return {};
     }
     // 2. Walk and run (Grok): a clean cut the judge passed, or an operator. Both film from one still.
@@ -462,7 +478,13 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       const input = await stillReady;
       if (input.retry) return input;
       if (delayMs) await new Promise(done => setTimeout(done, delayMs));
-      return gaitLoop(gait, look, still, input.key, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null);
+      const loop = await gaitLoop(gait, look, still, input.key, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null);
+      if (loop.strip && !loop.retry && !loop.review) {
+        const file = path.join(draftDir, `${gait}.webp`);
+        await mkdir(draftDir, { recursive: true });
+        if ((await motionsPy(['strip-preview', loop.strip, file])).code === 0) await draft([file]);
+      }
+      return loop;
     };
     // The rows, the walk and the run need nothing of each other, so they run at once (2026-10-28 — one after another the stage took
     // about 8 to 15 minutes). The run films a few seconds after the walk (the xAI quota counts starts per second). The stage waits for
