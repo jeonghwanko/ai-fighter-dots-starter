@@ -92,6 +92,19 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
   } finally { await g.sql.close(); }
 });
 
+test('맡기기: the request leaves the look to ODDBOUT, and next says so at every step', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { call } = await connector(g, {});
+    const made = await call('request_hosted_fighter', { description: '모자를 쓴 너구리 레슬러, 꼬리가 굵다', language: 'ko', delegate: true, idempotencyKey: crypto.randomUUID() });
+    assert.equal(made.job.delegate, true); assert.match(made.next, /picking one itself/);
+    assert.match(hostedNext({ ...made.job, status: 'motions' }), /the look it picked/);
+    assert.match(hostedNext({ ...made.job, status: 'motion_ready', choice: 'b' }), /the look ODDBOUT picked \(candidate b\)/);
+    assert.match(hostedNext({ ...made.job, status: 'appearance_ready' }), /^ODDBOUT could not pick a look by itself\. Show the user both looks/);
+  } finally { await g.sql.close(); }
+});
+
 test('next names what the user is asked or how long ODDBOUT works', () => {
   assert.match(hostedNext({ status: 'motions' }), /15 to 30 minutes/);
   assert.match(hostedNext({ status: 'submitted', submission: { stage: 'registered', fighterId: 'f-1' } }), /Registered: fighter f-1/);

@@ -187,3 +187,39 @@ test('retries count toward a stage\'s three leases and wait; progress is a heart
   } finally { await sql.close(); }
 });
 
+
+test('맡기기: the worker picks the look and the job goes on to the motions; with no pick, or a job not left to it, the creator is asked', async () => {
+  const { sql, call, work, healthy } = await generation();
+  try {
+    await healthy();
+    const ask = (body, token) => call('POST', 'generations', { description: '모자를 쓴 너구리 레슬러', language: 'ko', ...body }, token, { 'idempotency-key': crypto.randomUUID() });
+    assert.equal((await ask({ delegate: 'yes' })).body.code, 'invalid-body');
+    const job = (await ask({ delegate: true })).body.job;
+    assert.equal(job.delegate, true);
+    const finish = (c, result) => work('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome: 'ok', result });
+    let held = (await work('POST', 'claim', {})).body.job;
+    assert.equal(held.delegate, true);
+    await finish(held, { brief: { profile: { name: '너구리' } } });
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'], choice: 'c' })).body.code, 'invalid-result');
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'], choice: 'b' })).body.status, 'motions');
+    const read = (await call('GET', `generations/${job.id}`)).body.job;
+    assert.equal(read.status, 'motions'); assert.equal(read.choice, 'b'); assert.equal(read.candidates.length, 2);
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal(held.status, 'motions'); assert.equal(held.choice, 'b');
+    // The pick found none: he is asked as before.
+    await call('DELETE', `generations/${job.id}`);
+    const asked = (await ask({ delegate: true })).body.job;
+    held = (await work('POST', 'claim', {})).body.job; await finish(held, { brief: { profile: {} } });
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'] })).body.status, 'appearance_ready');
+    assert.equal((await call('GET', `generations/${asked.id}`)).body.job.choice, null);
+    // A job he did not leave to us takes no pick.
+    await call('DELETE', `generations/${asked.id}`);
+    const own = (await ask({})).body.job;
+    assert.equal(own.delegate, false);
+    held = (await work('POST', 'claim', {})).body.job; await finish(held, { brief: { profile: {} } });
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'], choice: 'a' })).body.code, 'invalid-result');
+  } finally { await sql.close(); }
+});
