@@ -140,11 +140,12 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'look-b-0.png'), 'look');
   const flag = (args, name) => args[args.indexOf(name) + 1];
-  let live = 0, most = 0;
+  let live = 0, most = 0, failShow = false;
   const og = async (args, { stdin } = {}) => {
     calls.push({ args, stdin });
     most = Math.max(most, ++live); await new Promise(done => setTimeout(done, 5)); live -= 1;
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
+    if (failShow && tool === 'gen-set' && flag(args, '--run-dir').endsWith('show-rows')) return { code: 1 };
     if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), '{}'); }
     if (tool === 'video-set') {
       const gait = flag(args, '--states'), item = path.join(flag(args, '--out-dir'), `side-${gait}`);
@@ -176,7 +177,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const motionsPy = async args => {
     py.push(args);
     const [command, ...rest] = args;
-    if (command === 'request') await writeFile(rest[1], JSON.stringify({ request: { states: {} }, description: 'a cat' }));
+    if (command === 'request' || command === 'request-show') await writeFile(rest[1], JSON.stringify({ request: { states: {} }, description: 'a cat' }));
     if (command === 'revise-rows') await writeFile(rest[1], JSON.stringify(rest[0] === 'slam' ? { 'slam-a': ['sWind', 'sApex', 'sImpact', 'sRecover'] } : null));
     if (command === 'assemble') await mkdir(rest[2], { recursive: true });
     if (command === 'video-still') await writeFile(rest[1].replace(/\.png$/, '.json'), '{"key":"green"}');
@@ -207,6 +208,9 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const tools = calls.map(c => c.args);
   assert.ok(tools.some(a => a.includes('gen-set') && flag(a, '--concurrency') === '2' && flag(a, '--provider') === 'codex'));
   assert.ok(tools.find(a => a.includes('prepare')).includes(path.join(dir, 'looks', 'look-b-0.png')));
+  // The show row (the optional entrance and victory, 2026-10-28): its own run, one image at a time, handed to the assemble.
+  assert.ok(tools.some(a => a.includes('gen-set') && flag(a, '--run-dir').endsWith('show-rows') && flag(a, '--concurrency') === '1'));
+  assert.equal(py.find(a => a[0] === 'assemble')[5], path.join(dir, 'motion', 'show-rows'));
   // The walk: one clip, its plain cut refused for the engine's reason, the motion-auto cut taken. The run: filmed again with new words.
   const videos = tools.filter(a => a.includes('video-set'));
   assert.deepEqual(videos.map(a => flag(a, '--states')), ['walk', 'run', 'run']);
@@ -254,4 +258,11 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.equal(checkedVerdict({ identity: 'pass', anatomy: 'maybe', loop: 'pass', notes: 'x' }), null);
   assert.equal(namedFeet({ cycle_align: { foot: { feet: ['left', 'right'] } } }), true);
   assert.equal(namedFeet({ cycle_align: { foot: { feet: [null, null] } } }), false);
+  // A show row that fails never stops the stage: the fighter is assembled without the entrance and victory.
+  await rm(path.join(dir, 'motion', 'show-rows'), { recursive: true, force: true });
+  await rm(path.join(dir, 'package'), { recursive: true, force: true });
+  failShow = true;
+  const withoutShow = await stages.motions(job, dir);
+  assert.equal(withoutShow.outcome, 'ok', JSON.stringify(withoutShow));
+  assert.equal(py.findLast(a => a[0] === 'assemble')[5], '');
 });

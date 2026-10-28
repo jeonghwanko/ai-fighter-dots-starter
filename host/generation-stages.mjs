@@ -10,6 +10,7 @@
 //   and run (video-set → the engine's cut and cycle alignment, its retake reasons and a vision judge as the gate), the three at once, packed with
 //   reviewPolicy engine-loop, one preview per clip. A creator's change to one clip remakes that clip only: an action clip's rows drawn
 //   again with his words (its cells alone replace the first run's), a walk or run filmed again with them; idle is the look (an operator's).
+//   A seventh, optional row (2026-10-28) draws the entrance and the victory beside the six; when it fails the fighter goes without them.
 // submitting: the package the motions stage left in the job folder, with the profile the creator confirmed, submitted under his account.
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
@@ -413,7 +414,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
   }
 
   async function motions(job, dir) {
-    const m = path.join(dir, 'motion'), rows = path.join(m, 'rows'), asm = path.join(m, 'assembled');
+    const m = path.join(dir, 'motion'), rows = path.join(m, 'rows'), asm = path.join(m, 'assembled'), showRows = path.join(m, 'show-rows');
     await mkdir(m, { recursive: true });
     const look = await chosenLook(job, dir);
     if (!look || !job.brief?.look) return { outcome: 'review', result: { code: 'look-missing' } };
@@ -444,8 +445,34 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
         if (files.length) await Promise.resolve(api.progress?.(job, undefined, { kind: 'drafts', clips: drafted })).catch(() => {});
       } catch { /* the stage goes on */ }
     }
-    /** 1. The six keypose rows (GPT), extracted and assembled at one scale: `{}`, or `{ retry }`·`{ review }` with a code. */
+    /**
+     * 1b. The show row (2026-10-28): the optional entrance and victory, one GPT row of its own drawn beside the six (one image at a time).
+     * Never a stop — a show row that fails leaves the fighter without those clips. Drawn once: a stage tried again keeps its cells.
+     */
+    async function showRow() {
+      try {
+        if (!existsSync(path.join(showRows, 'sprite-request.json'))) {
+          const requestFile = path.join(m, 'show-request.json');
+          if ((await motionsPy(['request-show', brief, requestFile])).code !== 0) return null;
+          const { request, description } = await readJson(requestFile);
+          await writeFile(path.join(m, 'show-prepare-request.json'), JSON.stringify(request));
+          if ((await og(sprite('prepare', '--out-dir', showRows, '--character-id', 'fighter', '--base-image', look, '--description', description,
+            '--request', path.join(m, 'show-prepare-request.json')))).code !== 0) return null;
+        }
+        if (!existsSync(path.join(showRows, 'frames', 'frames-manifest.json'))) {
+          if ((await og(sprite('gen-set', '--run-dir', showRows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '1'))).code !== 0) return null;
+          if ((await og(sprite('extract', '--run-dir', showRows))).code !== 0) return null;
+        }
+        return showRows;
+      } catch { return null; }
+    }
+    /** 1. The six keypose rows (GPT), extracted and assembled at one scale (with the show row's, if drawn): `{}`, or `{ retry }`·`{ review }`. */
     async function actionRows() {
+      // The show row draws meanwhile; the branch waits for it either way (no folder left being written).
+      const showing = showRow();
+      try { return await keyposeRows(showing); } finally { await showing; }
+    }
+    async function keyposeRows(showing) {
       if (!existsSync(path.join(rows, 'sprite-request.json'))) {
         const requestFile = path.join(m, 'rows-request.json');
         if ((await motionsPy(['request', brief, requestFile])).code !== 0) return { retry: 'motion-request' };
@@ -469,7 +496,8 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       const overridesFile = path.join(m, 'overrides.json');
       await writeFile(overridesFile, JSON.stringify(overrides));
       await rm(asm, { recursive: true, force: true });
-      if ((await motionsPy(['assemble', rows, look, asm, overridesFile])).code !== 0) return { review: 'rows-assemble' };
+      const show = await showing;
+      if ((await motionsPy(['assemble', rows, look, asm, overridesFile, show ?? ''])).code !== 0) return { review: 'rows-assemble' };
       if ((await motionsPy(['drafts', asm, draftDir])).code === 0)
         await draft((await readdir(draftDir).catch(() => [])).filter(f => f.endsWith('.webp')).map(f => path.join(draftDir, f)));
       return {};
