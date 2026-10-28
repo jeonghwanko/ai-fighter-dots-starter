@@ -5,7 +5,9 @@ import { readFile, readdir } from 'node:fs/promises';
 const directory = new URL('../supabase/migrations/', import.meta.url);
 const migrations = (await readdir(directory)).filter(name => name.endsWith('.sql')).sort();
 // Applied before this rule (2026-10-27). They stay as written; production already ran them.
-const STRING_PATCHED = ['20261024022222_ai_fighter_profile_edits.sql', '20261024104406_ai_fighter_owner_deletion.sql'];
+// 20261028180000 broke the rule and ran in production the same day; 20261028181000 restates its three functions whole.
+const STRING_PATCHED = ['20261024022222_ai_fighter_profile_edits.sql', '20261024104406_ai_fighter_owner_deletion.sql',
+  '20261028180000_oddbout_account_fighter_limit.sql'];
 
 test('a migration restates a changed function instead of string-patching its live definition', async () => {
   // replace() over pg_get_functiondef hides the resulting body: reading it needs every earlier migration replayed
