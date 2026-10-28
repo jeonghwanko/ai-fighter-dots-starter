@@ -7,8 +7,8 @@
 // appearance: the look brief → two candidate stills at once (sprite-gen `gen`, GPT image, side view facing right, transparent), as WebP.
 //   맡기기 (a job its creator left to us): a look judge (codex, tools off) picks one, and the job goes on to the motions without him.
 // motions (P2, 2026-10-28): the chosen look → six GPT keypose rows (prepare → gen-set → extract, assembled by motions.py) and a Grok walk
-//   and run (video-set → the engine's cut and cycle alignment, its retake reasons and a vision judge as the gate), the three at once, packed with
-//   reviewPolicy engine-loop, one preview per clip. A creator's change to one clip remakes that clip only: an action clip's rows drawn
+//   and run (video-set → the engine's cut and cycle alignment, its retake reasons and a vision judge as the gate), the three at once, every
+//   frame brought to the look's size (sprite-gen scale-check, measured by the head), packed with reviewPolicy engine-loop, one preview per clip. A creator's change to one clip remakes that clip only: an action clip's rows drawn
 //   again with his words (its cells alone replace the first run's), a walk or run filmed again with them; idle is the look (an operator's).
 // submitting: the package the motions stage left in the job folder, with the profile the creator confirmed, submitted under his account.
 import { createHash } from 'node:crypto';
@@ -207,6 +207,16 @@ export function gaitChangeMotion(gait, note, take) {
   const words = note.split(/\s+/).join(' ').slice(0, 200).replace(/[«»]/g, '"');
   return `${base} Change from the previous version as the player described it (their words, quoted, about the motion only): «${words}».`;
 }
+
+/**
+ * Scale check (2026-10-28): GPT draws every pose as its own figure (2-20 % off the look) and a gait comes out at its own size (a walk
+ * at 0.83, a run at 1.2); the game corrects only its built-in fighters. sprite-gen `scale-check` measures every clip's frames against
+ * the look by the head and game-pack draws them at its size. The fall and its get-up turn the head past 45°: searched to 90°, in a
+ * report of their own (their clips name no state for `--wide-state`). A clip whose correction would leave its canvas is grown and
+ * measured again, at most SCALE_ROUNDS times.
+ */
+export const SCALE_WIDE = Object.freeze(['fall', 'fall-getup']);
+export const SCALE_ROUNDS = 3;
 
 /** The judge's verdicts (motions.py JUDGE_SCHEMA; the kit's LOOP_VISUAL). Alternation is the engine's foot naming (`namedFeet`). */
 export const LOOP_VISUAL = Object.freeze(['identity', 'anatomy', 'loop']);
@@ -412,6 +422,34 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
     return { overrides };
   }
 
+  /**
+   * Every clip of the assembly measured against the look (idle) and fitted: `{ fit }` once no canvas had to grow (the request's
+   * assets then carry `scale_check`), or `{ review }`. A frame scale-check left for an eye check takes its clip's median (motions.py
+   * scale_policy); `fit.guessed` names them.
+   */
+  async function scaleChecked(asm) {
+    const ids = (await readJson(path.join(asm, 'game-request.json'))).assets.map(asset => asset.id);
+    const clip = id => path.join(asm, 'clips', `${id}.json`), folder = path.join(asm, 'scale'), fitFile = path.join(folder, 'fit.json');
+    const groups = [['check', ids.filter(id => !SCALE_WIDE.includes(id)), []], ['check-wide', ids.filter(id => SCALE_WIDE.includes(id)), ['--angle', '90']]];
+    await mkdir(folder, { recursive: true });
+    for (let round = 0; round < SCALE_ROUNDS; round++) {
+      const reports = [];
+      for (const [name, group, extra] of groups.filter(([, group]) => group.length)) {
+        const out = path.join(folder, `${name}.json`);
+        await rm(out, { force: true });   // an earlier round's report must never stand in for this one
+        const { code } = await og(sprite('scale-check', '--reference', clip('idle'), ...group.flatMap(id => ['--asset', clip(id)]), ...extra,
+          '--out', out, '--board', path.join(folder, `${name}.png`)));
+        // 1 with a report: measured, some frames left for an eye check (the policy takes them); anything else: the engine refused.
+        if (![0, 1].includes(code) || !existsSync(out)) return { review: 'scale-check' };
+        reports.push(out);
+      }
+      if ((await motionsPy(['scale-fit', asm, fitFile, ...reports])).code !== 0) return { review: 'scale-fit' };
+      const fit = await readJson(fitFile);
+      if (!Object.keys(fit.grown).length) return { fit };
+    }
+    return { review: 'scale-fit' };
+  }
+
   async function motions(job, dir) {
     const m = path.join(dir, 'motion'), rows = path.join(m, 'rows'), asm = path.join(m, 'assembled');
     await mkdir(m, { recursive: true });
@@ -506,8 +544,14 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
     const loops = { walk, run };
     for (const gait of ['walk', 'run'])
       if ((await motionsPy(['add-gait', asm, gait, loops[gait].strip])).code !== 0) return { outcome: 'review', result: { code: `${gait}-add` } };
-    // 3. The game pack, the loop reviews bound to its frames, the package, the previews.
+    // 3. Every frame at the look's size, the game pack, the loop reviews bound to its (corrected) frames, the package, the previews.
     await report(80);
+    const scaled = await scaleChecked(asm);
+    if (scaled.review) return { outcome: 'review', result: { code: scaled.review } };
+    // The frames the policy guessed are kept where an operator reads them (the job's events; the motions result keeps only its preview).
+    const scaleCheck = { corrected: scaled.fit.corrected, frames: scaled.fit.frames, guessed: scaled.fit.guessed.slice(0, 60),
+      ...(scaled.fit.guessed.length > 60 ? { more: scaled.fit.guessed.length - 60 } : {}) };
+    await Promise.resolve(api.progress?.(job, undefined, { kind: 'scale-check', ...scaleCheck })).catch(() => {});
     if ((await og(sprite('game-pack', '--request', path.join(asm, 'game-request.json'), '--out-dir', path.join(asm, 'pack')))).code !== 0)
       return { outcome: 'review', result: { code: 'game-pack' } };
     const strideFile = path.join(asm, 'walk-stride.json');
@@ -540,7 +584,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       await api.artifact(job, name, await readFile(file));
       preview.push({ clip, name });
     }
-    return { outcome: 'ok', result: { preview } };
+    return { outcome: 'ok', result: { preview, scaleCheck } };
   }
 
   async function submitting(job, dir) {

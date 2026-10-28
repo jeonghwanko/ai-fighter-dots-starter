@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { BRIEF_SCHEMA, CODEX_TOOLS_OFF, PREVIEW_CLIPS, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
+import { BRIEF_SCHEMA, CODEX_TOOLS_OFF, PREVIEW_CLIPS, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
   submissionOutcome, withProfile } from './generation-stages.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 
@@ -168,6 +168,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
       const firstRun = flag(args, '-o').includes('video-run-0');
       await writeFile(flag(args, '-o'), JSON.stringify({ identity: 'pass', anatomy: firstRun ? 'fail' : 'pass', loop: 'pass', notes: 'Frames 3-4: legs.' }));
     }
+    if (tool === 'scale-check') await writeFile(flag(args, '--out'), '{}');
     if (tool === 'game-pack') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'game-pack.json'), '{}'); }
     if (tool === 'fighter:gait') await writeFile(args.at(-1), '{"status":"pass"}');
     if (tool === 'fighter:pack') { await mkdir(path.join(dir, 'package'), { recursive: true }); await writeFile(path.join(dir, 'package', 'fighter.json'), '{}'); }
@@ -178,7 +179,9 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     const [command, ...rest] = args;
     if (command === 'request') await writeFile(rest[1], JSON.stringify({ request: { states: {} }, description: 'a cat' }));
     if (command === 'revise-rows') await writeFile(rest[1], JSON.stringify(rest[0] === 'slam' ? { 'slam-a': ['sWind', 'sApex', 'sImpact', 'sRecover'] } : null));
-    if (command === 'assemble') await mkdir(rest[2], { recursive: true });
+    if (command === 'assemble') { await mkdir(rest[2], { recursive: true });
+      await writeFile(path.join(rest[2], 'game-request.json'), JSON.stringify({ version: 1, assets: ['idle', 'combo', 'fall', 'fall-getup'].map(id => ({ id })) })); }
+    if (command === 'scale-fit') await writeFile(rest[1], JSON.stringify({ grown: {}, frames: 40, corrected: 12, guessed: [] }));
     if (command === 'video-still') await writeFile(rest[1].replace(/\.png$/, '.json'), '{"key":"green"}');
     if (command === 'judge-request') { await mkdir(rest[1], { recursive: true }); await writeFile(path.join(rest[1], 'judge-prompt.txt'), 'judge it'); }
     if (command === 'stride') await writeFile(rest[2], '{"stridePixels":300}');
@@ -202,8 +205,9 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   // Drafts went up as the branches passed (the action clips, then each gait), before the package's previews.
   assert.deepEqual(uploads.filter(name => name.startsWith('draft-')).sort(), ['draft-combo-0', 'draft-fightidle-0', 'draft-run-0', 'draft-walk-0']);
   assert.ok(uploads.indexOf('draft-walk-0') < uploads.indexOf('motion-idle-0'));
-  assert.deepEqual(events.at(-1).clips.map(d => d.clip).sort(), ['combo', 'fightIdle', 'run', 'walk']);
-  assert.ok(events.every(e => e.kind === 'drafts'));
+  const drafts = events.filter(e => e.kind === 'drafts');
+  assert.deepEqual(drafts.at(-1).clips.map(d => d.clip).sort(), ['combo', 'fightIdle', 'run', 'walk']);
+  assert.deepEqual(events.filter(e => e.kind !== 'drafts'), [{ kind: 'scale-check', corrected: 12, frames: 40, guessed: [] }]);
   const tools = calls.map(c => c.args);
   assert.ok(tools.some(a => a.includes('gen-set') && flag(a, '--concurrency') === '2' && flag(a, '--provider') === 'codex'));
   assert.ok(tools.find(a => a.includes('prepare')).includes(path.join(dir, 'looks', 'look-b-0.png')));
@@ -222,7 +226,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const walkConfig = JSON.parse(await readFile(reviews[0].at(-2), 'utf8'));
   assert.ok(walkConfig.strip.includes('cut-auto-16') && walkConfig.stridePixels === 300);
   assert.equal(characterPhrase(brief), 'A small blue armoured cat boxer with big red gloves, a long scarf and a scar over one eye');
-  assert.ok(py.some(a => a[0] === 'pack-plan' && a[4] === '../../package'));
+  assert.ok(py.some(a => a[0] === 'pack-plan' && a[4] === path.join('..', '..', 'package')));
   assert.equal((await stages.motions({ ...job, choice: 'a' }, dir)).result.code, 'look-missing');
   assert.deepEqual(retakeReasons({ retake: { reason: 'part-pop' }, cycle_align: { retake: { reasons: ['broken-beat', 'same-foot'] } } }), ['part-pop', 'broken-beat', 'same-foot']);
   // Run again (a later step failed): the aligned cuts and the verdicts are kept — no alignment, no judge, no clip again.
@@ -254,4 +258,130 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.equal(checkedVerdict({ identity: 'pass', anatomy: 'maybe', loop: 'pass', notes: 'x' }), null);
   assert.equal(namedFeet({ cycle_align: { foot: { feet: ['left', 'right'] } } }), true);
   assert.equal(namedFeet({ cycle_align: { foot: { feet: [null, null] } } }), false);
+});
+
+/** The motions stage with every provider step passing at once, `scaleCheck(args)` and `scaleFit(round)` standing in for the engine. */
+async function scaleStage({ scaleCheck = () => 0, scaleFit }) {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-scale-')), calls = [], events = [];
+  await mkdir(path.join(dir, 'looks'), { recursive: true });
+  await writeFile(path.join(dir, 'looks', 'look-a-0.png'), 'look');
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const og = async args => {
+    calls.push(args);
+    const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
+    if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), '{}'); }
+    if (tool === 'video-set') { const gait = flag(args, '--states'), loop = path.join(flag(args, '--out-dir'), `side-${gait}`, 'loop');
+      await mkdir(loop, { recursive: true }); await writeFile(path.join(loop, `side-${gait}.strip.json`), '{}'); }
+    if (tool === 'video-cycle-align') { const to = flag(args, '--length');
+      await writeFile(path.join(flag(args, '--loop-dir'), `side-${flag(args, '--loop-dir').includes('walk') ? 'walk' : 'run'}.strip.json`),
+        JSON.stringify({ frames: Number(to), cycle_align: { to: Number(to), foot: { feet: ['left', 'right'] } } })); }
+    if (tool === 'codex') await writeFile(flag(args, '-o'), JSON.stringify({ identity: 'pass', anatomy: 'pass', loop: 'pass', notes: 'A clean loop.' }));
+    if (tool === 'scale-check') { const code = scaleCheck(args); if (code !== 2) await writeFile(flag(args, '--out'), '{}'); return { code }; }
+    if (tool === 'game-pack') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'game-pack.json'), '{}'); }
+    if (tool === 'fighter:gait') await writeFile(args.at(-1), '{"status":"pass"}');
+    if (tool === 'fighter:pack') { await mkdir(path.join(dir, 'package'), { recursive: true }); await writeFile(path.join(dir, 'package', 'fighter.json'), '{}'); }
+    return { code: 0 };
+  };
+  let fits = 0;
+  const motionsPy = async ([command, ...rest]) => {
+    calls.push(['motions.py', command, ...rest]);
+    if (command === 'request') await writeFile(rest[1], JSON.stringify({ request: { states: {} }, description: 'a cat' }));
+    if (command === 'assemble') { await mkdir(rest[2], { recursive: true });
+      await writeFile(path.join(rest[2], 'game-request.json'), JSON.stringify({ version: 1,
+        assets: ['idle', 'fightIdle', 'combo', 'fall', 'fall-getup', 'walk', 'run'].map(id => ({ id, source: `clips/${id}.json` })) })); }
+    if (command === 'video-still') await writeFile(rest[1].replace(/\.png$/, '.json'), '{"key":"green"}');
+    if (command === 'judge-request') { await mkdir(rest[1], { recursive: true }); await writeFile(path.join(rest[1], 'judge-prompt.txt'), 'judge it'); }
+    if (command === 'scale-fit') await writeFile(rest[1], JSON.stringify(scaleFit(fits++)));
+    if (command === 'stride') await writeFile(rest[2], '{"stridePixels":300}');
+    if (command === 'preview') { await mkdir(rest[1], { recursive: true }); for (const clip of PREVIEW_CLIPS) await writeFile(path.join(rest[1], `${clip}.webp`), clip); }
+    return { code: 0 };
+  };
+  const api = { artifact: async () => ({ ok: true }), progress: async (j, value, event) => { if (event) events.push(event); return { ok: true }; } };
+  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0 });
+  const done = await stages.motions({ id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 }, dir);
+  return { done, calls, events, dir };
+}
+
+test('the motions scale-check every clip against the look before the game pack, growing a canvas and measuring it again', async () => {
+  const fitted = { grown: {}, frames: 120, corrected: 70, guessed: ['combo/4', 'walk/3'] };
+  const { done, calls, events, dir } = await scaleStage({ scaleFit: round => round === 0 ? { grown: { combo: [0, 18, 6, 0] } } : fitted });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  const asm = path.join(dir, 'motion', 'assembled'), flag = (args, name) => args[args.indexOf(name) + 1];
+  const values = (args, name) => args.flatMap((a, i) => args[i - 1] === name ? [a] : []);
+  const checks = calls.filter(a => a.includes('scale-check'));
+  // Two rounds (the first grew the combo's canvas), each the clips against the look and the fall and its get-up searched to 90°.
+  assert.equal(checks.length, 4);
+  for (const args of checks) assert.equal(flag(args, '--reference'), path.join(asm, 'clips', 'idle.json'));
+  assert.deepEqual(values(checks[0], '--asset').map(f => path.basename(f, '.json')), ['idle', 'fightIdle', 'combo', 'walk', 'run']);
+  assert.deepEqual(values(checks[1], '--asset').map(f => path.basename(f, '.json')), SCALE_WIDE);
+  assert.ok(!checks[0].includes('--angle') && flag(checks[1], '--angle') === '90');
+  const fits = calls.filter(a => a[1] === 'scale-fit');
+  assert.deepEqual(fits[0].slice(2), [asm, path.join(asm, 'scale', 'fit.json'), path.join(asm, 'scale', 'check.json'), path.join(asm, 'scale', 'check-wide.json')]);
+  // The pack comes after the last fit, the stride and loop reviews after the pack (they bind its corrected pixels).
+  const order = name => calls.findIndex(a => a.includes(name));
+  assert.ok(calls.lastIndexOf(fits[1]) < order('game-pack') && order('game-pack') < calls.findIndex(a => a[1] === 'stride')
+    && calls.findIndex(a => a[1] === 'stride') < order('loop-review'));
+  // The frames the policy guessed: in the result and, kept, in the job's events.
+  assert.deepEqual(done.result.scaleCheck, { corrected: 70, frames: 120, guessed: ['combo/4', 'walk/3'] });
+  assert.deepEqual(events.find(e => e.kind === 'scale-check'), { kind: 'scale-check', ...done.result.scaleCheck });
+});
+
+test('the motions stop for an operator when scale-check refuses or a canvas keeps growing', async () => {
+  const refused = await scaleStage({ scaleCheck: () => 2, scaleFit: () => ({ grown: {} }) });
+  assert.deepEqual(refused.done, { outcome: 'review', result: { code: 'scale-check' } });
+  assert.ok(!refused.calls.some(a => a.includes('game-pack')));
+  // 1 is a report with frames awaiting an eye check: the policy takes them, the stage goes on.
+  assert.equal((await scaleStage({ scaleCheck: () => 1, scaleFit: () => ({ grown: {}, frames: 1, corrected: 0, guessed: ['fall/2'] }) })).done.outcome, 'ok');
+  const growing = await scaleStage({ scaleFit: () => ({ grown: { walk: [4, 4, 4, 0] } }) });
+  assert.deepEqual(growing.done, { outcome: 'review', result: { code: 'scale-fit' } });
+  assert.equal(growing.calls.filter(a => a[1] === 'scale-fit').length, SCALE_ROUNDS);
+});
+
+const kitPython = path.join(import.meta.dirname, '..', 'vendor/sprite-gen/.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+test('scale-fit: a guessed frame takes its clip median, a gait one scale, and a shared canvas grows with its clip', { skip: !existsSync(kitPython) }, async () => {
+  const { execFile } = await import('node:child_process');
+  const sharp = (await import('sharp')).default;
+  const asm = await mkdtemp(path.join(tmpdir(), 'gen-scale-fit-'));
+  await mkdir(path.join(asm, 'clips'), { recursive: true });
+  // Each clip: 40x60 frames, the figure a 36x58 block standing on the anchor (20, 60) — a tight canvas.
+  const block = await sharp({ create: { width: 40, height: 60, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: { create: { width: 36, height: 58, channels: 4, background: { r: 200, g: 50, b: 50, alpha: 1 } } }, left: 2, top: 2 }]).png().toBuffer();
+  const clips = { idle: 1, combo: 3, fall: 2, 'fall-getup': 2, walk: 4 }, reports = { check: [], 'check-wide': [] };
+  const corrections = { idle: [1], combo: [1.1, null, 0.9], fall: [1, 1], 'fall-getup': [1, 1.05], walk: [1.2, 1.2, null, 1.18] };
+  for (const [id, count] of Object.entries(clips)) {
+    await mkdir(path.join(asm, 'clips', id));
+    for (let i = 0; i < count; i++) await writeFile(path.join(asm, 'clips', id, `${i}.png`), block);
+    await writeFile(path.join(asm, 'clips', `${id}.json`), JSON.stringify({ kind: 'sprite-gen-asset', version: 1, anchor: [20, 60], loop: false,
+      frames: Array.from({ length: count }, (_, i) => ({ file: `${id}/${i}.png`, duration: 0.1 })) }));
+    const frames = corrections[id].map((correction, i) => ({ frame: `-/${i}`, sha256: 'x', score: correction ? 0.95 : 0.4, size: correction && 1 / correction,
+      how: correction ? 'head' : 'check', correction }));
+    const measured = corrections[id].filter(c => c !== null).sort();
+    reports[SCALE_WIDE.includes(id) ? 'check-wide' : 'check'].push({ identity: { source: path.join(asm, 'clips', `${id}.json`), state: null }, frames,
+      state_correction: frames.some(f => f.how === 'check') ? null : measured[Math.floor(measured.length / 2)] });
+  }
+  await mkdir(path.join(asm, 'scale'));
+  for (const [name, assets] of Object.entries(reports))
+    await writeFile(path.join(asm, 'scale', `${name}.json`), JSON.stringify({ kind: 'sprite-gen-scale-check', version: 1, assets }));
+  await writeFile(path.join(asm, 'game-request.json'), JSON.stringify({ version: 1, assets: Object.keys(clips).map(id => ({ id, source: `clips/${id}.json` })) }));
+  const fit = () => new Promise((resolve, reject) => execFile(kitPython, ['-I', path.join(import.meta.dirname, 'motions.py'), 'scale-fit', asm,
+    path.join(asm, 'scale', 'fit.json'), path.join(asm, 'scale', 'check.json'), path.join(asm, 'scale', 'check-wide.json')],
+    { env: { ...process.env, PYTHONUTF8: '1' } }, (error, stdout, stderr) => error ? reject(Error(stderr)) : resolve(JSON.parse(stdout))));
+  const clip = async id => JSON.parse(await readFile(path.join(asm, 'clips', `${id}.json`), 'utf8'));
+  // A correction above 1 on a tight canvas grows it (about the feet: up and to both sides); the get-up's 1.05 grows the fall's too.
+  const first = await fit();
+  assert.deepEqual(Object.keys(first.grown).sort(), ['combo', 'fall', 'fall-getup', 'walk']);
+  assert.deepEqual(first.grown.fall, first.grown['fall-getup']);
+  assert.ok(first.grown.walk[1] > first.grown.combo[1] && first.grown.walk[0] === first.grown.walk[2]);
+  assert.deepEqual((await clip('fall')).anchor, (await clip('fall-getup')).anchor);
+  assert.equal((await sharp(path.join(asm, 'clips', 'walk', '0.png')).metadata()).height, 60 + first.grown.walk[1] + first.grown.walk[3]);
+  assert.equal(JSON.parse(await readFile(path.join(asm, 'game-request.json'), 'utf8')).assets[0].scale_check, undefined);
+  // Measured again on the grown pixels (the same corrections here): nothing grows, and the request carries the corrections.
+  const second = await fit();
+  assert.deepEqual(second.grown, {});
+  assert.deepEqual(second.guessed, ['combo/1', 'walk/2']);
+  const assets = Object.fromEntries(JSON.parse(await readFile(path.join(asm, 'game-request.json'), 'utf8')).assets.map(a => [a.id, a.scale_check]));
+  assert.deepEqual(assets.combo, { report: 'scale/check.json', per: 'frame', fix: { '-/1': 1 } });
+  assert.deepEqual(assets.walk, { report: 'scale/check.json', per: 'state', fix: { '-': 1.2 } });
+  assert.deepEqual(assets.fall, { report: 'scale/check-wide.json', per: 'frame' });
+  assert.deepEqual([second.clips.walk.min, second.clips.walk.max], [1.2, 1.2]);
 });
