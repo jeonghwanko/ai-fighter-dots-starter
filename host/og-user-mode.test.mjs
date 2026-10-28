@@ -80,8 +80,10 @@ test('a host install runs og as its own account: providers signed in inside the 
     const unit = await readFile(path.join(units, 'oddbout-host-worker.service'), 'utf8');
     assert.match(unit, new RegExp(`^ExecStart=${root}/bin/og worker run$`, 'm')); assert.match(unit, /^Slice=oddbout-host\.slice$/m);
     assert.match(await readFile(path.join(base, 'systemctl.log'), 'utf8'), /--user enable --now oddbout-host-worker\.service/);
+    await mkdir(units, { recursive: true }); await writeFile(path.join(units, 'oddbout-host.slice'), '[Slice]\n');
     assert.equal(og(['worker', 'uninstall']).status, 0);
     assert.ok(!existsSync(path.join(units, 'oddbout-host-worker.service')));
+    assert.ok(!existsSync(path.join(units, 'oddbout-host.slice')), 'a host\'s slice goes with its install');
     assert.ok(!existsSync(path.join(base, 'sudo.log')));
   } finally { await rm(base, { recursive: true, force: true }); }
 });

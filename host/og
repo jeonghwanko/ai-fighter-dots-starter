@@ -654,7 +654,10 @@ UNIT
       systemctl --user daemon-reload && systemctl --user enable --now "$WORKER_UNIT" && echo "og: worker installed and started" ;;
     uninstall)
       systemctl --user disable --now "$WORKER_UNIT" 2>/dev/null || true
-      rm -f "$unit_dir/$WORKER_UNIT"; systemctl --user daemon-reload 2>/dev/null || true
+      rm -f "$unit_dir/$WORKER_UNIT"
+      # A host's memory slice is this install's alone; the official host's also caps the operator's manual runs.
+      [ $MODE = service ] || rm -f "$unit_dir/$SLICE"
+      systemctl --user daemon-reload 2>/dev/null || true
       echo "og: worker stopped and its unit removed" ;;
     start | stop | restart | status) systemctl --user "$1" "$WORKER_UNIT" --no-pager ;;
     log) tail -n "${2:-40}" "$G/worker.log" ;;
