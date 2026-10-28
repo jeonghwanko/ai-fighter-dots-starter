@@ -84,6 +84,7 @@ npm run host -- status
 
 | 증상 | 할 것 |
 | --- | --- |
+| `signin --device` 링크가 만료됐다 | `npm run host -- signin --device`로 새 링크를 받는다. Google 로그인 뒤 승인 화면이 보이지 않으면 같은 링크를 다시 연다. 명령을 끊었다가 다시 실행하면 앞의 링크를 이어서 기다린다 |
 | `host:setup`이 프로그램이 없다고 한다 | 알려 준 프로그램을 설치한다(예: Ubuntu `sudo apt install ffmpeg webp zip unzip python3-venv`) |
 | `user systemd … unreachable` | 데스크톱 로그인 세션에서 하거나 `sudo loginctl enable-linger $USER` 뒤 다시 로그인한다 |
 | `host:start`가 구독이 ok가 아니라고 한다 | `npm run host:login`으로 다시 로그인한다. 구독 한도가 찼으면 기다린다 |
