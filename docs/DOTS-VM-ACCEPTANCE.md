@@ -196,8 +196,12 @@ The follow-up startup patch checks directory metadata and write/search access be
 credential probe or a login recommendation. A blocked/unknown directory returns
 prepare-private-grok-auth-storage. The image guard also checks custom GROK_HOME and rejects a known
 per-user account store. It never reads authentication contents. Relevant Windows tests:
-37 passed, 0 failed, 5 platform skips (42 total). This patch's Linux and fresh-image verification are
-still pending; the existing character remains bound to runtime 52db965.
+37 passed, 0 failed, 5 platform skips (42 total). On the prepared-image verification VM, a separate
+clean checkout of 52717e69f787dc497a921f212a524784f231efa3 passed all 12 auth-storage/image-cleanliness
+Linux tests with no failures or skips. The actual default home returned grok-auth-storage-not-writable.
+The original runtime/vendor/receipt/FETCH_HEAD and workspace/template binding hashes and mtimes stayed
+unchanged. Evidence: /workspace/oddbout-published-image-evidence/auth-storage-*. This is isolated code
+verification, not publication of a new saved image. The existing character remains bound to runtime 52db965.
 
 ## Actual requested appearance generation
 
@@ -217,7 +221,8 @@ without another provider call. Edge cleanup is still required before game packag
 The recovered full-body image, same-source face crop and raw original were saved to the existing
 private Page page_721df1d51e808191b01432f6dd03d078 and read back. The parent retrieved actual pixels
 through read_page_reference, but the user explicitly reported that these character images were not
-visible in this conversation. Character delivery therefore remains unverified; the earlier TEST image
+visible in this conversation. A browser subsequently opened the actual Page full-body preview successfully and preserved a screenshot.
+Character display in the parent conversation therefore remains unverified; the earlier TEST image
 confirmation does not certify this artifact. Appearance selection is pending and later motion groups
 are stopped. No video, all-eleven-motion package or complete creation acceptance is claimed.
 

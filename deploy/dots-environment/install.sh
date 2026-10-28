@@ -71,5 +71,8 @@ printf 'export ODDBOUT_RUNTIME_HOME=%q\nexport AI_FIGHTER_ROOT=%q\n' "$runtime_h
 printf 'export npm_config_cache=%q\nexport PIP_CACHE_DIR=%q\n' "$npm_config_cache" "$PIP_CACHE_DIR" >> "$tools_dir/env.sh"
 cd "$repo"
 # Install the immutable release into the saved workspace. The kit installs pinned WebP if the OS copy lacks -exact. No login or generation.
-node dots.mjs --install --runtime-home "$runtime_home" --workspace /workspace/.oddbout-template-workspace
+release_commit="$(node -e 'const fs=require("node:fs"); const r=JSON.parse(fs.readFileSync(process.argv[1],"utf8")); if(!/^[a-f0-9]{40}$/.test(r.commit))process.exit(1); process.stdout.write(r.commit)' "$repo/deploy/dots-release.json")"
+# Each release gets its own preparation receipt. Never rewrite an older binding.
+template_workspace="/workspace/.oddbout-template-workspaces/$release_commit"
+node dots.mjs --install --runtime-home "$runtime_home" --workspace "$template_workspace"
 printf '%s\n' 'Tools prepared. Review docs/DOTS-START.md, publish without user data, then connect the user in the running VM.'

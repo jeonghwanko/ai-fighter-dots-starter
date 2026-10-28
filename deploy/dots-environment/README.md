@@ -27,7 +27,9 @@ the same files and versions in a new task explicitly selecting this saved enviro
 Set the Start skill to [DOTS-START.md](../../docs/DOTS-START.md), and save the repository front-door path.
 Every task sources `/workspace/.oddbout-tools/env.sh` before its first command. The runtime cache
 is `/workspace/.oddbout/runtimes`; the new user's persistent workspace is `/workspace/oddbout-workspace`.
-The template-workspace has only setup receipts and must not be reused as a user's character workspace.
+The release-specific /workspace/.oddbout-template-workspaces/<runtime-commit> has only setup receipts
+and must not be reused as a user's character workspace. Preparation retains older template bindings;
+changing the release must prepare a new template rather than silently reusing an old runtime.
 No service keys, `.grok` login, ODDBOUT sessions, private source files, or character jobs belong in the image.
 The presence-only guard allows an empty `.grok` directory or only its official `bin` cache: launching
 `grok --version` may create that cache before login. Authentication, unknown/hidden entries, symlinked
