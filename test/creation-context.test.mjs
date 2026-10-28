@@ -106,3 +106,24 @@ test('optional groups hold only optional clips and sit before final; required gr
     await assert.rejects(fetchCreationContext({ request: async () => new Response(JSON.stringify(wrong)) }), code, label);
   }
 });
+
+test('the default creation-context request honors the VM proxy and redacts transport failures', async t => {
+  const keys = ['http_proxy', 'HTTP_PROXY', 'https_proxy', 'HTTPS_PROXY', 'no_proxy', 'NO_PROXY'];
+  const saved = Object.fromEntries(keys.map(key => [key, process.env[key]]));
+  t.after(() => { for (const key of keys) saved[key] === undefined ? delete process.env[key] : process.env[key] = saved[key]; });
+  for (const key of keys) process.env[key] = key.toLowerCase() === 'no_proxy' ? '' : 'http://127.0.0.1:9';
+  let calls = 0;
+  const mock = t.mock.method(globalThis, 'fetch', async (url, options) => {
+    calls++;
+    assert.ok(options.dispatcher, 'Node 22 must use the inherited proxy transport');
+    assert.equal(options.redirect, 'error'); assert.equal(options.cache, 'no-store');
+    return new Response(JSON.stringify(gameContext));
+  });
+  assert.equal((await fetchCreationContext()).revision, gameContext.revision);
+  mock.mock.mockImplementation(async () => { calls++; throw Error('proxy CONNECT 403 synthetic-secret'); });
+  await assert.rejects(fetchCreationContext(), error => {
+    assert.equal(error.message, 'network-connect-forbidden');
+    assert.equal(error.message.includes('synthetic-secret'), false); return true;
+  });
+  assert.equal(calls, 2, 'a proxy error must not cause a direct-network retry');
+});

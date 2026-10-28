@@ -1,3 +1,4 @@
+import { runtimeFetch } from '../api/runtime-fetch.mjs';
 import source from '../deploy/creation-context-source.json' with { type: 'json' };
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
@@ -23,7 +24,7 @@ export function validateCreationContext(data) {
   return data;
 }
 
-export async function fetchCreationContext({ request = fetch, group } = {}) {
+export async function fetchCreationContext({ request = runtimeFetch, group } = {}) {
   const response = await request(source.url, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(15000) });
   if (!response.ok) throw new Error('creation-context-unavailable');
   const reader = response.body.getReader(); let size = 0; const chunks = [];
