@@ -7,7 +7,8 @@
 // appearance: the look brief → two candidate stills at once (sprite-gen `gen`, GPT image, side view facing right, transparent), as WebP.
 //   맡기기 (a job its creator left to us): a look judge (codex, tools off) picks one, and the job goes on to the motions without him.
 // motions (P2, 2026-10-28): the chosen look → six GPT keypose rows (prepare → gen-set → extract, assembled by motions.py) and a Grok walk
-//   and run (video-set → the engine's cut and cycle alignment, its retake reasons and a vision judge as the gate), the three at once, packed with
+//   and run (video-set → the engine's cut and cycle alignment, its retake reasons and a vision judge as the gate; a retake films from a relaxed,
+//   depth-shaded still of the look, and one alignment runs at a time on the GPU), the three at once, packed with
 //   reviewPolicy engine-loop, one preview per clip. A creator's change to one clip remakes that clip only: an action clip's rows drawn
 //   again with his words (its cells alone replace the first run's), a walk or run filmed again with them; idle is the look (an operator's).
 //   A seventh, optional row (2026-10-28) draws the entrance and the victory beside the six; when it fails the fighter goes without them.
@@ -209,6 +210,24 @@ export function gaitChangeMotion(gait, note, take) {
   return `${base} Change from the previous version as the player described it (their words, quoted, about the motion only): «${words}».`;
 }
 
+/**
+ * The still a retake films from (2026-10-28). The first take films the chosen look as it is; a fighter's look holds its guard (gloves up, a
+ * weapon drawn), which pulls the clip toward strikes, and legs of one colour leave the engine no shade to name a foot by: the 냥잽 cat's three
+ * runs punched, broke their beat or left both feet unnamed. The retakes film the same character drawn again by the look's image model in a
+ * relaxed travel pose, arms low, with side-view depth shading (the far arm and leg darker than the near ones).
+ */
+export function gaitStillPrompt(brief) {
+  return [
+    `Image 1 is a 2D fighting-game character seen from the side, facing right. Draw this exact character again: ${characterPhrase(brief)}.`,
+    'Keep the face, colours, markings, outfit, props and body proportions exactly as in image 1, at the same size, seen from the side facing right.',
+    'Pose: standing upright, relaxed and neutral, ready to walk or run: both feet on the ground a short step apart, both arms lowered and loose',
+    'by the hips (hands, gloves or anything held kept low; nothing raised, aimed or ready to strike).',
+    'Depth: shade the far arm and the far leg clearly darker than the near arm and the near leg, as side-view game sprites do, so the two',
+    'legs never look alike.',
+    'No background, no ground shadow, no text, no frame.',
+  ].join('\n');
+}
+
 /** The judge's verdicts (motions.py JUDGE_SCHEMA; the kit's LOOP_VISUAL). Alternation is the engine's foot naming (`namedFeet`). */
 export const LOOP_VISUAL = Object.freeze(['identity', 'anatomy', 'loop']);
 /** Every clip the creator checks, in the contract's order, and the walk/run loops' retake reasons as the engine recorded them. */
@@ -241,6 +260,10 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * on the kit's sprite-gen venv (pixels only, no provider) and resolves `{ code }`. Calls may overlap: `og` waits for a free codex slot.
  */
 export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS }) {
+  // One loop alignment at a time on this worker: RIFE on the GPU takes about 4 GB, and a walk and a run aligning at once (or two jobs) ran
+  // an 8 GB card out of memory (2026-10-28).
+  let aligning = Promise.resolve();
+  const align = command => { const run = aligning.then(() => og(command)); aligning = run.catch(() => {}); return run; };
   async function brief(job, dir) {
     const refs = [];
     for (const [i, ref] of job.refs.entries()) {
@@ -327,14 +350,18 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
 
   /** One loop (walk or run) the engine cut without a retake reason and the judge passed, or the reason none was. */
   /** `change`: the creator's latest change to this gait ({ round, note }) — its takes film the change, quoted, and nothing else is tried. */
-  async function gaitLoop(gait, look, still, key, character, m, change = null) {
+  async function gaitLoop(gait, look, stills, character, m, change = null) {
     const tried = [];
     for (let take = 0; take <= GAIT_RETAKES; take++) {
-      const clip = path.join(m, change ? `video-${gait}-r${change.round}-${take}` : `video-${gait}-${take}`), item = path.join(clip, `side-${gait}`);
+      // A retake films from the relaxed still: its folder says so (`-s<take>`), so a clip filmed from the look before is never reused for it.
+      const base = change ? `video-${gait}-r${change.round}` : `video-${gait}`;
+      const clip = path.join(m, take ? `${base}-s${take}` : `${base}-0`), item = path.join(clip, `side-${gait}`);
+      const input = await stills(take);
+      if (input.retry || input.review) return input;
       const words = change ? gaitChangeMotion(gait, change.note, take) : GAIT_MOTION[gait][take];
       const motion = ['--motion', `${gait}=${words}`];
       // A finished clip is kept (no --force): a stage run again reuses it.
-      const { code } = await og(sprite('video-set', '--base', `side@right=${still}`, '--facing', 'right', '--states', gait, '--key', key,
+      const { code } = await og(sprite('video-set', '--base', `side@right=${input.still}`, '--facing', 'right', '--states', gait, '--key', input.key,
         '--out-dir', clip, '--character', character, '--concurrency', '1', ...motion));
       if (code === 75) return { review: 'provider-asks' };
       // No clip at all (a limit, an outage): try the stage later rather than film again with other words.
@@ -350,6 +377,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
         }
         if (existsSync(path.join(auto, `side-${gait}.strip.json`))) cuts.push(auto);
       }
+      let unaligned = 0;
       for (const cut of cuts) {
         // The contract's frame count, starting as a foot lands; a cut the engine reads as two cycles is aligned as it is (the judge sees it).
         // A cut aligned by an earlier run of this stage is kept (the cut never changes: its clip and frames are kept too).
@@ -357,10 +385,12 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
         if ((await readJson(strip).catch(() => null))?.cycle_align?.to !== GAIT_FRAMES[gait]) {
           await rm(aligned, { recursive: true, force: true });
           await cp(cut, aligned, { recursive: true });
-          const align = ['video-cycle-align', '--loop-dir', aligned, '--length', String(GAIT_FRAMES[gait]), '--view', 'side@right', '--start-foot', 'left'];
-          if ((await og(sprite(...align))).code !== 0) await og(sprite(...align, '--multi-cycle', 'warn'));
+          const args = ['video-cycle-align', '--loop-dir', aligned, '--length', String(GAIT_FRAMES[gait]), '--view', 'side@right', '--start-foot', 'left'];
+          if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
         }
         const meta = await readJson(strip).catch(() => null);
+        // No alignment at all (the engine stopped: out of memory, a crash) says nothing about the clip.
+        if (meta && !meta.cycle_align) { unaligned += 1; tried.push({ take, cut: path.basename(cut), reasons: ['not-aligned'] }); continue; }
         const reasons = meta ? retakeReasons(meta) : ['unreadable'];
         if (meta && meta.frames !== GAIT_FRAMES[gait]) reasons.push(`frames-${meta.frames}`);
         if (meta && !namedFeet(meta)) reasons.push('feet-unnamed');
@@ -382,6 +412,8 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
         tried.push({ take, cut: path.basename(cut), judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass') });
         break;   // the judge saw this take: another cut of it would show the same motion
       }
+      // Not one cut of this clip aligned: stop rather than film another take (the stopped stage keeps its clips for an operator's retry).
+      if (cuts.length && unaligned === cuts.length) return { review: `${gait}-align`, tried };
     }
     return { review: `${gait}-not-clean`, tried };
   }
@@ -508,11 +540,31 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       if ((await motionsPy(['video-still', look, still])).code !== 0) return { retry: 'video-still' };
       return readJson(still.replace(/\.png$/, '.json')).catch(() => ({ key: 'magenta' }));
     })();
+    // The retakes' relaxed still: drawn once for the walk and the run, kept for a stage run again.
+    const relaxed = path.join(m, 'gait-still.png'), relaxedLook = path.join(m, 'gait-still-look.png');
+    let relaxedReady = null;
+    const relaxedStill = () => relaxedReady ??= (async () => {
+      if (!existsSync(relaxedLook)) {
+        const promptFile = path.join(m, 'gait-still-prompt.txt');
+        await writeFile(promptFile, gaitStillPrompt(job.brief));
+        const { code } = await og(appearanceCommand({ promptFile, out: relaxedLook, report: path.join(m, 'gait-still-look.report.json'), refs: [look] }));
+        if (code === 75) return { review: 'provider-asks' };
+        if (code !== 0 || !existsSync(relaxedLook)) return { retry: `gait-still-exit-${code}` };
+      }
+      if ((await motionsPy(['video-still', relaxedLook, relaxed])).code !== 0) return { retry: 'gait-still' };
+      const { key } = await readJson(relaxed.replace(/\.png$/, '.json')).catch(() => ({ key: 'magenta' }));
+      return { still: relaxed, key };
+    })();
+    const stills = async take => {
+      if (take) return relaxedStill();
+      const input = await stillReady;
+      return input.retry ? input : { still, key: input.key };
+    };
     const gaitBranch = (gait, delayMs) => async () => {
       const input = await stillReady;
       if (input.retry) return input;
       if (delayMs) await new Promise(done => setTimeout(done, delayMs));
-      const loop = await gaitLoop(gait, look, still, input.key, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null);
+      const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null);
       if (loop.strip && !loop.retry && !loop.review) {
         const file = path.join(draftDir, `${gait}.webp`);
         await mkdir(draftDir, { recursive: true });

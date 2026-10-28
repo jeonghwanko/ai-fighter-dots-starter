@@ -128,6 +128,41 @@ test('the stages run their commands through og, upload what they made and report
   assert.deepEqual(sent.assets, []);
 });
 
+test('a gait whose cuts never align stops for an operator without filming another take', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-unaligned-')), calls = [];
+  await mkdir(path.join(dir, 'looks'), { recursive: true });
+  await writeFile(path.join(dir, 'looks', 'look-b-0.png'), 'look');
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const og = async args => {
+    calls.push(args);
+    const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
+    if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), '{}'); }
+    if (tool === 'video-set') {
+      const gait = flag(args, '--states'), item = path.join(flag(args, '--out-dir'), `side-${gait}`);
+      await mkdir(path.join(item, 'loop'), { recursive: true });
+      await writeFile(path.join(item, 'loop', `side-${gait}.strip.json`), JSON.stringify({ frames: 24 }));
+    }
+    // The engine stops (out of memory): the cut copied for alignment stays as it was, with no alignment.
+    if (tool === 'video-cycle-align') return { code: 1 };
+    return { code: 0 };
+  };
+  const motionsPy = async ([command, ...rest]) => {
+    if (command === 'request' || command === 'request-show') await writeFile(rest[1], JSON.stringify({ request: { states: {} }, description: 'a cat' }));
+    if (command === 'assemble') await mkdir(rest[2], { recursive: true });
+    if (command === 'video-still') await writeFile(rest[1].replace(/\.png$/, '.json'), '{"key":"green"}');
+    return { code: 0 };
+  };
+  const stages = createStages({ og, api: { artifact: async () => ({ ok: true }), progress: async () => ({ ok: true }) }, motionsPy,
+    fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0 });
+  const job = { id: '0123abcd-0001', language: 'ko', brief, choice: 'b', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 };
+  const done = await stages.motions(job, dir);
+  assert.equal(done.outcome, 'review');
+  assert.match(done.result.code, /^(walk|run)-align$/);
+  // One clip per gait, no retake filmed and no relaxed still drawn.
+  assert.deepEqual(calls.filter(a => a.includes('video-set')).map(a => path.basename(flag(a, '--out-dir'))).sort(), ['video-run-0', 'video-walk-0']);
+  assert.ok(!calls.some(a => a.includes('gen')));
+});
+
 test('the worker reads its env file and og health', () => {
   assert.deepEqual(parseEnv('# c\nODDBOUT_GENERATION_API=https://x/y\nODDBOUT_GENERATION_WORKER_KEY=afw_1\nbad line\n'),
     { ODDBOUT_GENERATION_API: 'https://x/y', ODDBOUT_GENERATION_WORKER_KEY: 'afw_1' });
@@ -140,11 +175,14 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'look-b-0.png'), 'look');
   const flag = (args, name) => args[args.indexOf(name) + 1];
-  let live = 0, most = 0, failShow = false;
+  let live = 0, most = 0, failShow = false, aligning = 0, mostAligning = 0;
   const og = async (args, { stdin } = {}) => {
     calls.push({ args, stdin });
-    most = Math.max(most, ++live); await new Promise(done => setTimeout(done, 5)); live -= 1;
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
+    if (tool === 'video-cycle-align') mostAligning = Math.max(mostAligning, ++aligning);
+    most = Math.max(most, ++live); await new Promise(done => setTimeout(done, 5)); live -= 1;
+    if (tool === 'video-cycle-align') aligning -= 1;
+    if (tool === 'gen') await writeFile(flag(args, '--out'), 'relaxed');
     if (failShow && tool === 'gen-set' && flag(args, '--run-dir').endsWith('show-rows')) return { code: 1 };
     if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), '{}'); }
     if (tool === 'video-set') {
@@ -218,6 +256,18 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.ok(flag(videos[1], '--motion').startsWith('run=It runs naturally in place') && flag(videos[2], '--motion').startsWith('run=It runs in place with long'));
   assert.ok(videos.every(a => flag(a, '--motion').includes('It throws no punches, kicks or strikes')));
   assert.ok(videos.every(a => flag(a, '--key') === 'green'));
+  // The first take films the look; the run's retake films the relaxed, depth-shaded still, drawn once from the look, in its own folder.
+  const m = path.join(dir, 'motion');
+  assert.deepEqual(videos.map(a => [path.basename(flag(a, '--out-dir')), flag(a, '--base')]), [
+    ['video-walk-0', `side@right=${path.join(m, 'video-still.png')}`], ['video-run-0', `side@right=${path.join(m, 'video-still.png')}`],
+    ['video-run-s1', `side@right=${path.join(m, 'gait-still.png')}`]]);
+  const drawn = tools.filter(a => a.includes('gen'));
+  assert.equal(drawn.length, 1);
+  assert.equal(flag(drawn[0], '--ref'), path.join(dir, 'looks', 'look-b-0.png'));
+  assert.match(await readFile(flag(drawn[0], '--prompt-file'), 'utf8'), /arms lowered.*\n.*\nDepth: shade the far arm and the far leg clearly darker/s);
+  assert.ok(py.some(a => a[0] === 'video-still' && a[2] === path.join(m, 'gait-still.png')));
+  // One alignment at a time (RIFE on the GPU), though the walk and the run run at once.
+  assert.equal(mostAligning, 1);
   const judges = calls.filter(c => c.args[0] === 'codex');
   assert.equal(judges.length, 3);
   assert.ok(judges.every(c => c.args.includes('read-only') && c.args.filter(a => a === '-i').length === 2 && c.stdin === 'judge it'));
