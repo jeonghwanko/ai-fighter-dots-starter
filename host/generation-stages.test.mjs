@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { BRIEF_SCHEMA, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
+import { BRIEF_SCHEMA, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
   submissionOutcome, withProfile } from './generation-stages.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 
@@ -326,7 +326,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
 });
 
 /** The motions stage with every provider step passing at once, `scaleCheck(args)` and `scaleFit(round)` standing in for the engine. */
-async function scaleStage({ scaleCheck = () => 0, scaleFit }) {
+async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false }) {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-scale-')), calls = [], events = [];
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'look-a-0.png'), 'look');
@@ -335,11 +335,14 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit }) {
     calls.push(args);
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
     if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), '{}'); }
+    if (tool === 'gen') await writeFile(flag(args, '--out'), 'relaxed');
     if (tool === 'video-set') { const gait = flag(args, '--states'), loop = path.join(flag(args, '--out-dir'), `side-${gait}`, 'loop');
       await mkdir(loop, { recursive: true }); await writeFile(path.join(loop, `side-${gait}.strip.json`), '{}'); }
-    if (tool === 'video-cycle-align') { const to = flag(args, '--length');
-      await writeFile(path.join(flag(args, '--loop-dir'), `side-${flag(args, '--loop-dir').includes('walk') ? 'walk' : 'run'}.strip.json`),
-        JSON.stringify({ frames: Number(to), cycle_align: { to: Number(to), foot: { feet: ['left', 'right'] } } })); }
+    if (tool === 'video-cycle-align') { const to = flag(args, '--length'), dirOf = flag(args, '--loop-dir');
+      // brokenRun: every filmed run breaks its beat (the walk, and a run made from its cut, align clean).
+      const retake = brokenRun && dirOf.includes('video-run') ? { reason: 'broken-beat', reasons: ['broken-beat'] } : undefined;
+      await writeFile(path.join(dirOf, `side-${dirOf.includes('walk') ? 'walk' : 'run'}.strip.json`),
+        JSON.stringify({ frames: Number(to), cycle_align: { to: Number(to), foot: { feet: ['left', 'right'] }, ...(retake ? { retake } : {}) } })); }
     if (tool === 'codex') await writeFile(flag(args, '-o'), JSON.stringify({ identity: 'pass', anatomy: 'pass', loop: 'pass', notes: 'A clean loop.' }));
     if (tool === 'scale-check') { const code = scaleCheck(args); if (code !== 2) await writeFile(flag(args, '--out'), '{}'); return { code }; }
     if (tool === 'game-pack') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'game-pack.json'), '{}'); }
@@ -366,6 +369,26 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit }) {
   const done = await stages.motions({ id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 }, dir);
   return { done, calls, events, dir };
 }
+
+test('a run the gate refuses is made from the walk that passed, played faster, and its preview says so', async () => {
+  const { done, calls, dir } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), brokenRun: true });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  assert.deepEqual(done.result.preview.filter(p => p.note).map(p => [p.clip, p.note]), [['run', RUN_FROM_WALK]]);
+  // Every run take was filmed and refused; then the walk's cut, copied, was aligned to the run's twelve frames and judged as a run.
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  assert.equal(calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'run').length, 3);
+  const derived = calls.find(a => a.includes('video-cycle-align') && path.basename(flag(a, '--loop-dir')).startsWith('run-from-walk-'));
+  assert.equal(flag(derived, '--length'), '12');
+  assert.ok(existsSync(path.join(flag(derived, '--loop-dir'), 'judge', 'judge-prompt.txt')));
+  assert.ok(calls.some(a => a[0] === 'motions.py' && a[1] === 'judge-request' && a[2] === 'run' && a[3].startsWith(flag(derived, '--loop-dir'))));
+  // The run plays RUN_FROM_WALK_PACE times the walk's filmed length; the walk as filmed. The run's loop review names where it came from.
+  const added = gait => calls.find(a => a[0] === 'motions.py' && a[1] === 'add-gait' && a[3] === gait);
+  assert.deepEqual([added('run')[5], added('walk')[5]], [String(RUN_FROM_WALK_PACE), undefined]);
+  assert.ok(added('run')[4].startsWith(flag(derived, '--loop-dir')));
+  const config = JSON.parse(await readFile(calls.find(a => a.includes('loop-review') && a.some(x => String(x).includes(`${path.sep}run${path.sep}`))).at(-2), 'utf8'));
+  assert.match(config.judge, /the run is the walk's cut aligned to its frames/);
+  assert.ok(dir);
+});
 
 test('the motions scale-check every clip against the look before the game pack, growing a canvas and measuring it again', async () => {
   const fitted = { grown: {}, frames: 120, corrected: 70, guessed: ['combo/4', 'walk/3'] };

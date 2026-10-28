@@ -461,6 +461,8 @@ const PROFILE_KEYS = ['name', 'description', 'names', 'lines', 'stats'];
 const hostedSettled = (status, submission) => !HOSTED_WORKING.has(status) && !(status === 'submitted' && SUBMISSION_PENDING.has(submission ?? 'queued'));
 
 /** What the agent does next with a job, from its state: the user's answer it asks for, or how long to wait. */
+// A run the gate refused, made from the walk (the worker's `run-from-walk` preview note, 2026-10-29): the creator hears it and may film it again.
+const RUN_FROM_WALK_NEXT = 'The run preview is the walk played faster: no filmed run passed the checks. Tell the user so; if he wants a real run, revise_hosted_motion with clip run and his words. ';
 export function hostedNext(job) {
   const left = job.revisionsLeft ?? {}, error = job.error ? ` (${job.error})` : '';
   switch (job.status) {
@@ -475,7 +477,7 @@ export function hostedNext(job) {
     case 'motions':
       return `ODDBOUT is making the eleven motions from ${job.delegate ? 'the look it picked' : 'the chosen look'} (about 15 to 30 minutes). Tell the user, and check later with get_hosted_fighter.`;
     case 'motion_ready':
-      return `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images, and the profile draft. If he likes them, register_hosted_fighter (change only what he asks in the profile). To fix one motion, revise_hosted_motion (${left.motions ?? 0} changes left).`;
+      return `${job.preview?.some(p => p.note === 'run-from-walk') ? RUN_FROM_WALK_NEXT : ''}Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images, and the profile draft. If he likes them, register_hosted_fighter (change only what he asks in the profile). To fix one motion, revise_hosted_motion (${left.motions ?? 0} changes left).`;
     case 'submitting':
       return 'ODDBOUT is packaging the fighter and submitting it under the user\'s account. Call get_hosted_fighter with waitSeconds.';
     case 'submitted':

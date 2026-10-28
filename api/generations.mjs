@@ -15,6 +15,8 @@ export const GENERATION_LIMITS = Object.freeze({ descriptionMin: 10, description
   note: 200, artifactBytes: 8_000_000, result: 12_000, signedSeconds: 600 });
 const ARTIFACT = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const MOTIONS = Object.keys(spec.motions);
+/** What the worker may say about one preview clip: `run-from-walk`, a run the gate refused made from the walk (2026-10-29). */
+export const PREVIEW_NOTES = Object.freeze(['run-from-walk']);
 const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
 // A join code (내 PC 붙이기): made by the site for a signed-in host, copied into his PC's terminal once; 160 bits, so nobody guesses one.
 export const JOIN_CODE = /^ohj_[a-f0-9]{40}$/;
@@ -122,7 +124,8 @@ export function createGenerationHandler({ db, authenticate, present }) {
       delegate: row.delegate === true, createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
       revisionsLeft: { appearance: 2 - row.appearance_revisions, motions: 3 - row.motion_revisions },
-      preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null })), submission,
+      preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null, ...(PREVIEW_NOTES.includes(p.note) ? { note: p.note } : {}) })),
+      submission,
       drafts: drafts.map(d => ({ clip: d.clip, url: urls.get(artifactPath(row.id, d.name)) ?? null })),
       host: { choice: row.host_choice ?? 'oddbout', requested: hosts.get(row.requested_host) ?? null, assigned: hosts.get(row.assigned_host) ?? null } };
   }
@@ -357,7 +360,8 @@ export function createGenerationHandler({ db, authenticate, present }) {
         throw new Problem(422, 'invalid-result');
       if (result.choice !== undefined && !['a', 'b'].includes(result.choice)) throw new Problem(422, 'invalid-result');
       if (result.preview !== undefined && (!Array.isArray(result.preview)
-        || result.preview.some(p => !isObject(p) || !MOTIONS.includes(p.clip) || !ARTIFACT.test(p.name ?? '')))) throw new Problem(422, 'invalid-result');
+        || result.preview.some(p => !isObject(p) || !MOTIONS.includes(p.clip) || !ARTIFACT.test(p.name ?? '')
+          || (p.note !== undefined && !PREVIEW_NOTES.includes(p.note))))) throw new Problem(422, 'invalid-result');
       const row = await call('af_generation_finish', { ...at, p_outcome: lease.outcome, p_result: result });
       return { ok: true, status: row.status };
     }
