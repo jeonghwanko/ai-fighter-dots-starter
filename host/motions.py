@@ -19,7 +19,7 @@ NumPy and Pillow only: it runs on the kit's sprite-gen venv (`<kit>/vendor/sprit
   video-still <look.png> <out.png>
       The look as the walk and run clips' first frame: on a flat key (magenta or green, whichever is farther from its colours) with room
       around it (`video-set --base side@right=…`); the key goes beside it (<out>.json, `video-set --key`).
-  add-gait <assemble-dir> <walk|run> <aligned strip.json>
+  add-gait <assemble-dir> <walk|run> <aligned strip.json> [pace]
       Add a walk or run loop (cells padded) to the game-pack request, at the pace it was filmed, and its strikes.
   scale-fit <assemble-dir> <out.json> <scale-check report>...
       Each clip's frames at the look's figure size (sprite-gen `scale-check`, measured by the head): the corrections the hosted policy
@@ -379,12 +379,14 @@ def assemble(run_dir: Path, look_path: Path, out: Path, overrides: list | None =
 GAIT_PAD = 16              # transparent pixels added around a loop's cells: a foot on the cell's edge reads as clipped (CLIPPED_EDGE)
 
 
-def add_gait(out: Path, motion: str, strip: Path):
+def add_gait(out: Path, motion: str, strip: Path, pace: float = 1.0):
     """Add a walk or run loop (a `video-cycle-align` strip) to the game-pack request at the look's body height, its cells padded, played at
-    the pace it was filmed: the alignment resamples the cut to the contract's frame count but keeps the clip's frame rate."""
+    the pace it was filmed: the alignment resamples the cut to the contract's frame count but keeps the clip's frame rate. `pace` scales
+    the cycle's length (a run made from the walk plays faster than the walk was filmed)."""
     meta = json.loads(strip.read_text())
     align = meta.get("cycle_align") or {}
     seconds = align["from"] / align["fps"] if align.get("from") and align.get("fps") else meta["frames"] * meta["delay_ms"] / 1000
+    seconds *= pace
     sheet = Image.open(strip.with_suffix(".png")).convert("RGBA")
     w, h, pad = meta["w"], meta["h"], GAIT_PAD
     folder = out / "clips" / motion
@@ -808,8 +810,8 @@ def main(argv):
         print(json.dumps(assemble(Path(rest[0]), Path(rest[1]), Path(rest[2]), overrides, show), indent=1))
     elif command == "revise-rows" and len(rest) == 2:
         Path(rest[1]).write_text(json.dumps(REVISE.get(rest[0])) + "\n")
-    elif command == "add-gait" and len(rest) == 3:
-        add_gait(Path(rest[0]), rest[1], Path(rest[2]))
+    elif command == "add-gait" and len(rest) in (3, 4):
+        add_gait(Path(rest[0]), rest[1], Path(rest[2]), float(rest[3]) if len(rest) == 4 else 1.0)
     elif command == "scale-fit" and len(rest) >= 3:
         print(json.dumps(scale_fit(Path(rest[0]), Path(rest[1]), [Path(r) for r in rest[2:]])))
     elif command == "video-still" and len(rest) == 2:
