@@ -1,5 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { generation } from './helpers/generation-database.mjs';
 
 // 커뮤니티 호스트 (2026-10-28): a creator applies to host, the operator approves him, his own worker key takes the requests that name him
@@ -147,5 +150,39 @@ test('fighters made on his own PC leave the one free hosted fighter alone; one o
     assert.equal((await call('GET', 'generations', undefined, theirs)).body.used, true); // the free one
     await sql.query("update public.af_generation_jobs set status = 'cancelled' where id = $1", [free.id]);
     assert.equal((await call('GET', 'generations', undefined, theirs)).body.used, false); // his own PC's fighter does not count
+  } finally { await sql.close(); }
+});
+
+// A job cancelled or expired while it waited for its requester never comes back to the worker; the worker asks, and closes its folder.
+test('the worker learns which of its own jobs ended, and finds the folders it has not closed', async () => {
+  const { sql, call, work, healthy } = await generation();
+  const theirs = 'other-token-0123456789';
+  try {
+    await healthy();
+    await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true }, theirs);
+    const key = (await call('POST', 'generations/host/keys', {}, theirs)).body.key;
+    const host = (path, body) => call('POST', `generation-worker/${path}`, body, key);
+    await host('heartbeat', { health: { ok: true } });
+    const mine = (await call('POST', 'generations', { description: '파란 망토를 두른 고양이 검객', language: 'ko', host: 'mine' }, theirs,
+      { 'idempotency-key': crypto.randomUUID() })).body.job;
+    let held = (await work('POST', 'claim', {})).body.job;
+    await work('POST', 'finish', { jobId: held.id, leaseToken: held.leaseToken, outcome: 'ok', result: { brief: { profile: {} } } });
+    held = (await host('claim', {})).body.job;
+    await host('finish', { jobId: held.id, leaseToken: held.leaseToken, outcome: 'ok', result: { candidates: ['look-a-0', 'look-b-0'] } });
+    assert.deepEqual((await host('ended', { jobs: [mine.id] })).body.ended, []); // waiting for him: not over
+    await call('DELETE', `generations/${mine.id}`, undefined, theirs);
+    assert.deepEqual((await host('ended', { jobs: [mine.id] })).body.ended, [mine.id]);
+    // Not his: the official worker does not learn it, nor does it reach another host's job.
+    assert.deepEqual((await work('POST', 'ended', { jobs: [mine.id] })).body.ended, []);
+    assert.equal((await host('ended', { jobs: Array(51).fill(mine.id) })).status, 422);
+
+    const { unclosedJobs } = await import('../host/generation-worker.mjs');
+    const output = await mkdtemp(path.join(os.tmpdir(), 'gen-out-'));
+    try {
+      const open = `20261028-gen-${mine.id.replaceAll('-', '')}`, closed = `20261027-gen-${'b'.repeat(32)}`;
+      for (const name of [open, closed, '20261026-red-cat']) await mkdir(path.join(output, name));
+      await writeFile(path.join(output, closed, '.closed'), '');
+      assert.deepEqual([...(await unclosedJobs(output)).entries()], [[open, mine.id]]);
+    } finally { await rm(output, { recursive: true, force: true }); }
   } finally { await sql.close(); }
 });
