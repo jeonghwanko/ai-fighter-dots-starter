@@ -87,9 +87,11 @@ export function checkSystem({ find = which, run = works, platform = process.plat
   if (tools.systemctl && !run(tools.systemctl, ['--user', 'show-environment']))
     warnings.push('systemd 사용자 관리자에 닿지 못했다. 워커는 메모리 상한(systemd 슬라이스) 없이는 돌지 않는다. 로그인 세션에서 다시 하거나 loginctl enable-linger를 켠다.');
   if (memory < 12 * 2 ** 30) warnings.push(`메모리가 ${Math.round(memory / 2 ** 30)} GB다. --slots 2 --memory 6G 로 설치하기를 권한다.`);
+  // An NVIDIA GPU runs the loop alignment's RIFE on PyTorch (`--rife torch`): about twice as fast, the same frames (2026-10-28).
+  const gpu = Boolean(find('nvidia-smi')) && run(find('nvidia-smi'), ['-L']);
   const toolPath = [...new Set(['ffmpeg', 'ffprobe', 'img2webp', 'zip', 'unzip', 'git'].map(name => tools[name]).filter(Boolean).map(p => path.dirname(p))
     .filter(d => !SYSTEM_DIRS.has(d) && d !== path.dirname(process.execPath)))].join(':');
-  return { missing, warnings, python, toolPath };
+  return { missing, warnings, python, toolPath, gpu };
 }
 
 const flag = (args, name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
@@ -121,7 +123,7 @@ export const USAGE = `npm run host -- <명령>   (커뮤니티 생성 호스트,
   signin [--device] [--replace]   ODDBOUT 로그인(브라우저가 없는 PC는 --device: 다른 기기에서 코드 승인)
   apply --name <이름> [--billing subscription|api-key] --accept-terms   호스트 신청(이름·과금 바꾸기도 같다)
   status                          신청·승인·켜짐·오늘 남은 수·열쇠와 이 PC의 설치·워커
-  setup [--slots 2|3] [--memory <n>G]   이 PC에 생성기 설치·갱신            (npm run host:setup)
+  setup [--slots 2|3] [--memory <n>G] [--rife torch|ncnn]   이 PC에 생성기 설치·갱신 (npm run host:setup). torch: NVIDIA GPU로 고리 정렬 약 2배
   login [codex|grok] [--replace]  설치 폴더 안의 구독 로그인                 (npm run host:login)
   health                          두 구독에 아주 작은 실제 호출
   join <코드>                     사이트(내 선수 → 내 PC로 만들기)의 붙이기 코드로 이 PC를 붙이고 워커를 켠다. 로그인 없이
@@ -203,6 +205,8 @@ export async function runHost(argv, deps) {
       case 'setup': case 'update': {
         const previous = installed(root) ? readHostEnv(await readFile(path.join(root, 'host.env'), 'utf8')) : {};
         const slots = Number(flag(args, '--slots') ?? previous.SLOTS ?? 3), memory = flag(args, '--memory') ?? previous.MEMORY ?? '8G';
+        const rife = flag(args, '--rife');
+        if (rife !== undefined && !['torch', 'ncnn'].includes(rife)) { out('--rife torch|ncnn'); return 1; }
         const open = openJobs(root);
         if (open.length) { out(`진행 중인 작업이 있어 바꾸지 않는다: ${open.join(', ')}. npm run host -- pause 로 새 신청을 막고 끝나기를 기다린다.`); return 1; }
         const system = deps.system();
@@ -217,8 +221,11 @@ export async function runHost(argv, deps) {
         out(`생성기 파일을 ${path.join(root, 'bin')} 에 두었다. 키트·codex·grok·sprite-gen 을 준비한다(처음은 오래 걸린다).`);
         if ((await og(['setup'])).code !== 0) return 1;
         if ((await og(['harden'])).code !== 0) return 1;
+        // PyTorch is about 3 GB: only when asked. A GPU without it gets the hint.
+        if (rife && (await og(['rife', rife])).code !== 0) return 1;
+        if (!rife && system.gpu) out('참고: NVIDIA GPU가 있다. npm run host:setup -- --rife torch 로 고리 정렬이 약 2배 빨라진다(PyTorch 약 3 GB).');
         if (wasRunning) await og(['worker', 'start']);
-        out('다음: npm run host:login (codex·grok 로그인) → 승인되면 npm run host:start');
+        out('다음: npm run host:login (codex·grok 로그인) → 사이트의 붙이기 코드로 npm run host -- join <코드>');
         return 0;
       }
       case 'login': {
