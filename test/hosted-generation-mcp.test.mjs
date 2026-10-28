@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { createCloudHandler, hostedNext, CLOUD_ISSUER, CLOUD_RESOURCE } from '../mcp/cloud.mjs';
 import { generation, png, webp } from './helpers/generation-database.mjs';
 
-const HOSTED = ['request_hosted_fighter', 'get_hosted_fighter', 'choose_hosted_look', 'revise_hosted_motion', 'register_hosted_fighter', 'cancel_hosted_fighter'];
+const HOSTED = ['request_hosted_fighter', 'get_hosted_fighter', 'choose_hosted_look', 'revise_hosted_motion', 'register_hosted_fighter', 'cancel_hosted_fighter',
+  'list_generation_hosts'];
 
 // The cloud MCP over the hosted generation API on a real (PGlite) database: the agent carries the user's words and answers, the worker the rest.
 async function connector(g, hosted) {
@@ -102,6 +103,22 @@ test('맡기기: the request leaves the look to ODDBOUT, and next says so at eve
     assert.match(hostedNext({ ...made.job, status: 'motions' }), /the look it picked/);
     assert.match(hostedNext({ ...made.job, status: 'motion_ready', choice: 'b' }), /the look ODDBOUT picked \(candidate b\)/);
     assert.match(hostedNext({ ...made.job, status: 'appearance_ready' }), /^ODDBOUT could not pick a look by itself\. Show the user both looks/);
+  } finally { await g.sql.close(); }
+});
+
+test('커뮤니티 호스트: the hosts are listed to anyone, and a request names one only with the user\'s consent', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { call } = await connector(g, {});
+    const hosts = await call('list_generation_hosts', {});
+    assert.deepEqual(hosts.hosts.map(h => [h.name, h.official, h.online]), [['ODDBOUT', true, true]]);
+    const ask = extra => call('request_hosted_fighter', { description: '모자를 쓴 너구리 레슬러, 꼬리가 굵다', language: 'ko', idempotencyKey: crypto.randomUUID(), ...extra });
+    assert.equal((await ask({ host: 'any' })).code, 'host-consent-required');
+    const made = await ask({ host: 'any', hostConsent: true });
+    assert.equal(made.job.host.choice, 'any');
+    assert.match(hostedNext({ ...made.job, status: 'appearance' }), /^Waiting for a host to take it/);
+    assert.match(hostedNext({ ...made.job, status: 'appearance', host: { choice: 'host', requested: { name: '고양이 공방' }, assigned: null } }), /the host 고양이 공방/);
   } finally { await g.sql.close(); }
 });
 

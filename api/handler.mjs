@@ -77,10 +77,11 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
     if (worker) {
       if (!/^afw_[a-f0-9]{64}$/.test(token)) throw new Problem(403, 'worker-required');
       const hash = await sha256(new TextEncoder().encode(token));
-      const { data, error } = await db.from('af_workers').select('token_hash').eq('token_hash', hash).eq('enabled', true).eq('scope', worker)
+      const { data, error } = await db.from('af_workers').select('token_hash,host_id').eq('token_hash', hash).eq('enabled', true).eq('scope', worker)
         .gt('expires_at', new Date().toISOString()).maybeSingle();
       check(error); if (!data) throw new Problem(403, 'worker-required');
-      return null;
+      // A generation key names its host (커뮤니티 호스트, 2026-10-28); one without is the official host's.
+      return worker === 'generation' ? data.host_id ?? null : null;
     }
     const owner = await verifiedUserId(db, request);
     if (!owner) throw new Problem(401, 'authentication-required');

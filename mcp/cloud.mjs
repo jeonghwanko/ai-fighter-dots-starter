@@ -29,7 +29,7 @@ export const ARENA_URL = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/
  * while the arena key is configured (`ODDBOUT_ARENA_AGENT_KEY`), so a release of this code alone does not change the published tool list.
  */
 export const PUBLIC_TOOLS = new Set(['get_fighter_spec', 'get_style_guide', 'list_fighters', 'get_rankings', 'get_fighter_record', 'get_cup', 'read_bout',
-  'get_fighter_story', 'get_world']);
+  'get_fighter_story', 'get_world', 'list_generation_hosts']);
 /** Public tools that spend an arena budget: a signed-in caller's call counts on his owner (MCP 점검, 2026-10-27). */
 export const OWNER_BUDGET_TOOLS = new Set(['read_bout']);
 /**
@@ -465,6 +465,8 @@ export function hostedNext(job) {
   const left = job.revisionsLeft ?? {}, error = job.error ? ` (${job.error})` : '';
   switch (job.status) {
     case 'queued': case 'appearance':
+      if (job.status === 'appearance' && job.host?.choice !== 'oddbout' && job.host && !job.host.assigned)
+        return `Waiting for ${job.host.choice === 'host' ? `the host ${job.host.requested?.name ?? ''}` : 'a host'} to take it. Tell the user, and check later with get_hosted_fighter.`;
       return job.delegate
         ? 'ODDBOUT is writing the profile, painting two looks and picking one itself, then it makes the eleven motions (about 15 to 30 minutes in all). Tell the user, and check later with get_hosted_fighter.'
         : 'ODDBOUT is writing the profile and painting two looks (a few minutes). Call get_hosted_fighter with waitSeconds to wait.';
@@ -491,10 +493,11 @@ const withNext = result => result?.ok && result.job ? { ...result, next: hostedN
 function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }) {
   const JOB = UUID_ARG();
   const post = (path, body, headers = {}) => invoke(path, 'POST', JSON.stringify(body), { 'content-type': 'application/json', ...headers });
-  register('request_hosted_fighter', 'ODDBOUT에 선수 만들기 맡기기', 'ODDBOUT makes a fighter for the connected user on its own generation worker: two looks to choose from, then the eleven motions, then registration under his account. delegate: true when he leaves the choices to ODDBOUT ("알아서 해 줘", "just make it"): ODDBOUT picks the look itself (or asks him if neither suits) and he answers once, at the finished motions. Pass his words (what the fighter is and looks like) and, if he gave them, up to two of his own pictures with his confirmation that he has the rights to them. One hosted fighter per account is free. Requires the user\'s request. Returns the job; follow its next.',
+  register('request_hosted_fighter', 'ODDBOUT에 선수 만들기 맡기기', 'ODDBOUT makes a fighter for the connected user on its own generation worker: two looks to choose from, then the eleven motions, then registration under his account. delegate: true when he leaves the choices to ODDBOUT ("알아서 해 줘", "just make it"): ODDBOUT picks the look itself (or asks him if neither suits) and he answers once, at the finished motions. host: oddbout (default, ODDBOUT\'s own worker), any (any approved community host) or a host id from list_generation_hosts; any or a named host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: true. Pass his words (what the fighter is and looks like) and, if he gave them, up to two of his own pictures with his confirmation that he has the rights to them. One hosted fighter per account is free. Requires the user\'s request. Returns the job; follow its next.',
     { description: z.string().min(GENERATION_LIMITS.descriptionMin).max(GENERATION_LIMITS.description), language: z.enum(['ko', 'en']),
-      picture: FILE.optional(), secondPicture: FILE.optional(), rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional(), idempotencyKey: UUID_ARG() },
-    async ({ description, language, picture, secondPicture, rightsConfirmed, delegate, idempotencyKey }) => {
+      picture: FILE.optional(), secondPicture: FILE.optional(), rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional(),
+      host: z.union([z.enum(['oddbout', 'any']), UUID_ARG()]).optional(), hostConsent: z.boolean().optional(), idempotencyKey: UUID_ARG() },
+    async ({ description, language, picture, secondPicture, rightsConfirmed, delegate, host, hostConsent, idempotencyKey }) => {
       // Sent again with its key it is the same request: its pictures are not uploaded twice.
       const { data: existing, error } = await db.from('af_generation_jobs').select('id').eq('owner_id', identity.owner).eq('idempotency_key', idempotencyKey).maybeSingle();
       if (error) throw new Problem(503, 'database-unavailable');
@@ -511,9 +514,11 @@ function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }
         if (!uploaded.ok) return uploaded;
         refs.push(uploaded.upload.id);
       }
-      return withNext(await post('generations', { description, language, ...(refs.length ? { refs, rightsConfirmed: true } : {}), ...(delegate ? { delegate: true } : {}) },
-        { 'idempotency-key': idempotencyKey }));
+      return withNext(await post('generations', { description, language, ...(refs.length ? { refs, rightsConfirmed: true } : {}), ...(delegate ? { delegate: true } : {}),
+        ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}) }, { 'idempotency-key': idempotencyKey }));
     }, { write: true, openWorld: true, files: ['picture', 'secondPicture'] });
+  register('list_generation_hosts', '선수 만드는 호스트', 'List who can make a fighter: ODDBOUT itself and the community hosts the operator approved (creators who run the generation worker on their own PC and subscription). For each: id, name, whether it is on now, whether it takes requests that name no host, and how many it can still take today. Pass an id as request_hosted_fighter\'s host.',
+    {}, () => invoke('generations/hosts'), { publicTool: true });
   register('get_hosted_fighter', 'ODDBOUT이 만드는 선수', `Read the connected user's hosted fighter: its state, the two looks or the motion previews as image URLs (ten minutes), the profile draft and next. No jobId: his latest requests and whether hosted generation is open. waitSeconds (up to ${HOSTED_WAIT_SECONDS}) waits here while ODDBOUT works, so one call returns the next thing to show.`,
     { jobId: JOB.optional(), waitSeconds: z.number().int().min(0).max(HOSTED_WAIT_SECONDS).optional() }, async ({ jobId, waitSeconds = 0 }) => {
       if (!jobId) {

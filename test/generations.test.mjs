@@ -42,7 +42,7 @@ test('a request: off until the worker is healthy, pictures with rights, one host
     const claim = (await work('POST', 'claim', {})).body.job;
     assert.equal((await work('POST', 'finish', { jobId: claim.id, leaseToken: claim.leaseToken, outcome: 'rejected', result: { code: 'real-person' } })).body.status, 'rejected');
     assert.equal((await call('GET', 'generations')).body.used, false);
-    await sql.query('update public.af_generation_settings set daily_limit = 1');
+    await sql.query('update public.af_generation_hosts set daily_limit = 1 where official');
     await sql.query("insert into public.af_generation_jobs(owner_id,idempotency_key,description,language) values($1,$2,'남이 이미 신청한 선수 하나','ko')", [other, crypto.randomUUID()]);
     assert.equal((await ask(crypto.randomUUID())).body.code, 'generation-capacity');
   } finally { await sql.close(); }
@@ -164,7 +164,7 @@ test('retries count toward a stage\'s three leases and wait; progress is a heart
     // Progress keeps the worker on the books while a long stage runs.
     const second = (await ask()).body.job, held = (await work('POST', 'claim', {})).body.job;
     assert.match(held.createdAt, /^\d{4}-\d{2}-\d{2}/);
-    await sql.query("update public.af_generation_settings set worker_seen_at = now() - interval '10 minutes'");
+    await sql.query("update public.af_generation_hosts set worker_seen_at = now() - interval '10 minutes' where official");
     assert.equal((await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.hosted, false);
     await work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken, progress: 50 });
     assert.equal((await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.hosted, true);
