@@ -32,7 +32,7 @@ the desktop Plugins Directory. Open a new chat. Restart the desktop app if it ha
 `$create-fighter`, or describe the fighter you want to make.
 
 The generated marketplace is under `output/ai-fighter-marketplace/`. It contains `plugin.json`, the
-existing cloud `.app.json` mapping, the skill and a local marketplace catalog. `kit-location.json` points to
+hosted ODDBOUT MCP (`mcp.json`, Google sign-in), the skill and a local marketplace catalog. `kit-location.json` points to
 **this user's existing checkout and workspace**. Keep the checkout in place. Rebuild on each computer; do not
 publish the generated directory as a standalone distributable. The builder does not change host settings.
 

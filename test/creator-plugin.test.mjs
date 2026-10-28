@@ -401,8 +401,11 @@ test('one ODDBOUT plugin resolves the existing workspace without a local MCP or 
   const manifest = JSON.parse(await readFile(path.join(built.plugin, 'plugin.json'), 'utf8'));
   assert.equal(manifest.name, 'oddbout');
   assert.notEqual(manifest.extensions['com.openai'].requires_local_executor, true);
-  assert.equal(manifest.extensions['com.openai'].apps, './.app.json');
-  await assert.rejects(readFile(path.join(built.plugin, 'mcp.json')), { code: 'ENOENT' });
+  // One plugin: the hosted MCP inside (no separately added connector), never a local command.
+  assert.equal(manifest.extensions['com.openai'].apps, undefined);
+  await assert.rejects(readFile(path.join(built.plugin, '.app.json')), { code: 'ENOENT' });
+  const servers = JSON.parse(await readFile(path.join(built.plugin, 'mcp.json'), 'utf8')).mcpServers;
+  assert.deepEqual([servers.oddbout.type, servers.oddbout.url, servers.oddbout.command], ['streamable-http', 'https://mcp.oddbout.com/mcp', undefined]);
   const { initialize } = await import(pathToFileURL(path.join(built.plugin, 'launcher.mjs')).href);
   const location = await initialize({ base: path.join(scratch, 'user-data'), workspace: scratch });
   assert.equal(location.runtime, await realpath(kitRoot));

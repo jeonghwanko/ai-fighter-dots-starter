@@ -27,6 +27,8 @@ pictures with his confirmation of rights), then follow each result's `next`: sho
 one change, show the motion previews and pass his approval or one motion change, register on his request.
 If he leaves the choices to ODDBOUT ("just make it"), pass `delegate: true`: ODDBOUT picks the look and he answers once, at the motions.
 Wait with `get_hosted_fighter` `waitSeconds` rather than repeated reads. Do not generate locally for a hosted job.
+If he runs a generation host on his own PC (`npm run host -- join` from the site), pass `host: mine`: his own subscription makes it, with no
+consent to give and without using his one free hosted fighter. Another person's host (`list_generation_hosts`) needs his consent first.
 
 ## Start or resume
 
