@@ -15,6 +15,15 @@ Workspace generation uses the installed creator kit's sprite-gen and the user's 
 For supported direct conversation appearance generation/display, check that route first under `docs/DELIVERY.md`;
 do not require a PC or leave the user's chosen VM scope. Packaging still uses the creator kit.
 
+## Hosted route
+
+When the connected ODDBOUT tools list `request_hosted_fighter`, ODDBOUT can make the fighter on its own worker:
+no workspace, kit or generation account of the user's is needed. Offer it first when the user wants ODDBOUT to make
+the fighter or has no generation setup; the workspace route below stays his choice. Pass his words (and his own
+pictures with his confirmation of rights), then follow each result's `next`: show both looks and pass his pick or
+one change, show the motion previews and pass his approval or one motion change, register on his request.
+Wait with `get_hosted_fighter` `waitSeconds` rather than repeated reads. Do not generate locally for a hosted job.
+
 ## Start or resume
 
 1. Read the connected ODDBOUT `get_fighter_spec` sections `overview` and `creation` using its actual schema.
