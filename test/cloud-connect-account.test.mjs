@@ -86,9 +86,15 @@ test('each agent comes back only to its own callback addresses', () => {
   assert.equal(agentOf('https://grok.com/connectors-oauth-exchange-code/?code=x&state=y'), 'grok');
   assert.equal(agentOf('https://www.cursor.com/agents/mcp/oauth/callback'), 'grok');
   assert.equal(agentOf('https://www.cursor.com/bot/mcp/oauth/callback?code=x'), 'grok');
+  // Claude's custom connectors (2026-10-28): Anthropic's MCP callback on claude.ai and claude.com, nothing else there.
+  assert.equal(agentOf('https://claude.ai/api/mcp/auth_callback?code=x&state=y'), 'claude');
+  assert.equal(agentOf('https://claude.com/api/mcp/auth_callback'), 'claude');
   for (const refused of ['https://grok.com/', 'https://grok.com/connectors-oauth-exchange-code-evil', 'http://grok.com/connectors-oauth-exchange-code/',
     'https://www.cursor.com/settings', 'https://cursor.com/agents/mcp/oauth/callback', 'https://grok.com:8443/connectors-oauth-exchange-code/',
-    'https://user@grok.com/connectors-oauth-exchange-code/', 'http://localhost:8787/callback', 'cursor://anysphere.cursor-mcp/oauth/callback', 'not a url'])
+    'https://user@grok.com/connectors-oauth-exchange-code/', 'http://localhost:8787/callback', 'cursor://anysphere.cursor-mcp/oauth/callback', 'not a url',
+    'https://claude.ai/', 'https://claude.ai/settings/connectors', 'https://claude.ai/api/mcp/auth_callback-evil', 'http://claude.ai/api/mcp/auth_callback',
+    'https://www.claude.ai/api/mcp/auth_callback', 'https://claude.ai.evil.example/api/mcp/auth_callback', 'http://localhost:33418/callback',
+    'https://claude.ai/api/mcp/auth_callback/x', 'https://claude.ai/api/mcp/auth_callback/..%2f..%2fx', 'https://claude.com/api/mcp/auth_callback/'])
     assert.equal(agentOf(refused), null, refused);
 });
 
@@ -96,6 +102,8 @@ test('the copy names the agent with the particles its sound takes', () => {
   assert.equal(fillAgent(copy.ko.consentTitle, agentWords.ko.grok), 'Grok에 연결할까요?');
   assert.equal(fillAgent(copy.ko.returnDots, agentWords.ko.grok), 'Grok으로 돌아가기');
   assert.equal(fillAgent(copy.ko.returnDots, agentWords.ko.dots), 'Dots로 돌아가기');
+  assert.equal(fillAgent(copy.ko.consentTitle, agentWords.ko.claude), 'Claude에 연결할까요?');
+  assert.equal(fillAgent(copy.ko.returnDots, agentWords.ko.claude), 'Claude로 돌아가기');
   assert.equal(fillAgent(copy.en.consentTitle, agentWords.en.any), 'Connect to your agent?');
   for (const language of ['ko', 'en']) for (const text of Object.values(copy[language])) {
     for (const words of Object.values(agentWords[language])) assert.doesNotMatch(fillAgent(text, words), /[{}]/);
