@@ -170,11 +170,15 @@ test('the worker learns which of its own jobs ended, and finds the folders it ha
     held = (await host('claim', {})).body.job;
     await host('finish', { jobId: held.id, leaseToken: held.leaseToken, outcome: 'ok', result: { candidates: ['look-a-0', 'look-b-0'] } });
     assert.deepEqual((await host('ended', { jobs: [mine.id] })).body.ended, []); // waiting for him: not over
+    // The official host wrote its brief; another host took it, so the brief's folder on the office PC is done with.
+    assert.deepEqual((await work('POST', 'ended', { jobs: [mine.id] })).body.ended, [mine.id]);
     await call('DELETE', `generations/${mine.id}`, undefined, theirs);
     assert.deepEqual((await host('ended', { jobs: [mine.id] })).body.ended, [mine.id]);
-    // Not his: the official worker does not learn it, nor does it reach another host's job.
-    assert.deepEqual((await work('POST', 'ended', { jobs: [mine.id] })).body.ended, []);
     assert.equal((await host('ended', { jobs: Array(51).fill(mine.id) })).status, 422);
+    // A job still with the official host (its brief not written) is not over for it; a community host never hears of another's job.
+    const queued = (await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() })).body.job;
+    assert.deepEqual((await work('POST', 'ended', { jobs: [queued.id] })).body.ended, []);
+    assert.deepEqual((await host('ended', { jobs: [queued.id] })).body.ended, []);
 
     const { unclosedJobs } = await import('../host/generation-worker.mjs');
     const output = await mkdtemp(path.join(os.tmpdir(), 'gen-out-'));
