@@ -31,7 +31,17 @@ Claude 연결(2026-10-28): claude.ai → 설정 → 커넥터(`https://claude.ai
 `https://claude.com/api/mcp/auth_callback`으로만 돌아간다. Claude 웹·데스크톱·모바일과 Claude Code는 이 커넥터 하나를 함께 쓴다.
 Claude Code의 직접 연결(`claude mcp add`)은 loopback 콜백이라 받지 않는다. 그림을 받는 도구(`prepare_fighter_registration`의 파일,
 `upload_fighter_asset`, `request_hosted_fighter`의 그림)는 OpenAI 파일 호스트만 받으므로 Claude에서는 글로만 만든다.
-Anthropic도 이 콜백을 이 서버에 맞춰 확인한 기록이 아직 없다. 실제 Claude 연결로 한 번 확인한다. MCP 함수의 Origin 허용 목록에 `claude.ai`·`claude.com`이 있다.
+MCP 함수의 Origin 허용 목록에 `claude.ai`·`claude.com`이 있다. 2026-10-28 실제 연결로 확인했다: Claude가 이름 `Claude`, 돌아갈 주소
+`https://claude.ai/api/mcp/auth_callback`으로 클라이언트를 자동 등록했다. 그때 겪은 것:
+
+- 팀·엔터프라이즈 조직에서는 소유자만 커스텀 커넥터를 추가한다(조직 설정 → 커넥터, `https://claude.ai/admin-settings/connectors`). 구성원 화면의
+  "커스텀 커넥터 추가"는 회색이다. 소유자가 추가하면 구성원은 자기 커넥터 목록에서 연결을 누른다.
+- 인증은 **지금 로그인**을 고른다. 이 서버는 공개 도구를 로그인 없이 답하므로 Claude가 "로그인 없음"으로 자동 감지한다. 그대로 두면 계정이 필요한
+  도구(선수 만들기·등록·내 선수)를 쓸 수 없다. 인증 방식은 추가한 뒤 바꿀 수 없으니 지우고 다시 추가한다.
+- OAuth 클라이언트는 **자동으로 등록**(DCR)을 고른다. 추천으로 표시되는 "Claude의 게시된 ID"(CIMD)는 Supabase Auth가 지원하지 않는다.
+  클라이언트 ID·시크릿은 비워 둔다.
+- 추가할 때 "서버를 확인할 수 없습니다"가 나오면 `mcp.oddbout.com`의 Render 무료 서버가 잠들어 있던 것일 수 있다. 잠시 뒤 다시 시도한다
+  (운영자 PC가 14분마다 깨운다).
 
 사이트에서 보기(2026-10-28): oddbout.com 제작자 페이지의 My agents(`creator.html#view=agents`)가 Codex(ChatGPT·Dots)·Grok·Claude 카드에 연결을 보이고,
 연결을 끊는다(Supabase Auth의 `auth.oauth.listGrants`·`revokeGrant`). 카드 목록은 `af_account_agents`가 계정에 둔다.
