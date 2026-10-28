@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { BRIEF_SCHEMA, CODEX_TOOLS_OFF, PREVIEW_CLIPS, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
+import { BRIEF_SCHEMA, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
   submissionOutcome, withProfile } from './generation-stages.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 
@@ -258,9 +258,13 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.ok(videos.every(a => flag(a, '--key') === 'green'));
   // The first take films the look; the run's retake films the relaxed, depth-shaded still, drawn once from the look, in its own folder.
   const m = path.join(dir, 'motion');
-  assert.deepEqual(videos.map(a => [path.basename(flag(a, '--out-dir')), flag(a, '--base')]), [
+  assert.deepEqual(videos.map(a => [path.basename(flag(a, '--out-dir')).replace(/-[0-9a-f]{8}$/, '-<words>'), flag(a, '--base')]), [
     ['video-walk-0', `side@right=${path.join(m, 'video-still.png')}`], ['video-run-0', `side@right=${path.join(m, 'video-still.png')}`],
-    ['video-run-s1', `side@right=${path.join(m, 'gait-still.png')}`]]);
+    ['video-run-s1-<words>', `side@right=${path.join(m, 'gait-still.png')}`]]);
+  // The retake also asks for an even beat, and its folder names its words (other words would film again; the same words reuse the clip).
+  assert.ok(!flag(videos[1], '--motion').includes(EVEN_BEAT.trim()) && flag(videos[2], '--motion').endsWith(EVEN_BEAT));
+  assert.equal(path.basename(flag(videos[2], '--out-dir')),
+    `video-run-s1-${createHash('sha256').update(flag(videos[2], '--motion').slice('run='.length)).digest('hex').slice(0, 8)}`);
   const drawn = tools.filter(a => a.includes('gen'));
   assert.equal(drawn.length, 1);
   assert.equal(flag(drawn[0], '--ref'), path.join(dir, 'looks', 'look-b-0.png'));

@@ -203,6 +203,9 @@ export const GAIT_MOTION = Object.freeze(Object.fromEntries(Object.entries({
     'It runs in place with long, powerful strides: each foot lands flat ahead of the body, stays planted flat on the ground while it slides straight back under the body, then pushes off, and both feet leave the ground briefly between steps.',
     'It runs in place at an even pace: the legs clearly take turns, the knees lift high, the arms pump, and the body keeps the same size and height through the cycle.'],
 }).map(([gait, takes]) => [gait, Object.freeze(takes.map(words => words + NO_STRIKES))])));
+// A retake asks for an even beat as well (2026-10-28): the 냥잽 cat's best run, filmed from the relaxed still, broke its beat once, snapping
+// from its long stride into the gathered pose (jolt 0.39 against the engine's 0.25).
+export const EVEN_BEAT = ' The motion flows at one steady speed through the whole stride: no pause, hitch or sudden snap between steps, each leg swinging through as smoothly as the last.';
 /** A walk or run filmed again for a creator's change: the house sentence of the take with his words quoted as a description of the motion. */
 export function gaitChangeMotion(gait, note, take) {
   const base = GAIT_MOTION[gait][take];
@@ -353,12 +356,14 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
   async function gaitLoop(gait, look, stills, character, m, change = null) {
     const tried = [];
     for (let take = 0; take <= GAIT_RETAKES; take++) {
-      // A retake films from the relaxed still: its folder says so (`-s<take>`), so a clip filmed from the look before is never reused for it.
+      // A retake films from the relaxed still and asks for an even beat. Its folder names its input (`-s<take>-<words' hash>`): a clip filmed
+      // from other words or the look is never reused for it, and a stage run again with the same words reuses its clip.
+      const words = (change ? gaitChangeMotion(gait, change.note, take) : GAIT_MOTION[gait][take]) + (take ? EVEN_BEAT : '');
       const base = change ? `video-${gait}-r${change.round}` : `video-${gait}`;
-      const clip = path.join(m, take ? `${base}-s${take}` : `${base}-0`), item = path.join(clip, `side-${gait}`);
+      const folder = take ? `${base}-s${take}-${createHash('sha256').update(words).digest('hex').slice(0, 8)}` : `${base}-0`;
+      const clip = path.join(m, folder), item = path.join(clip, `side-${gait}`);
       const input = await stills(take);
       if (input.retry || input.review) return input;
-      const words = change ? gaitChangeMotion(gait, change.note, take) : GAIT_MOTION[gait][take];
       const motion = ['--motion', `${gait}=${words}`];
       // A finished clip is kept (no --force): a stage run again reuses it.
       const { code } = await og(sprite('video-set', '--base', `side@right=${input.still}`, '--facing', 'right', '--states', gait, '--key', input.key,
