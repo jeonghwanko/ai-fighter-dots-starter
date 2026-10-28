@@ -19,12 +19,13 @@ async function hostInstall() {
   await writeFile(path.join(root, 'host.env'), hostEnv({ nodeBin: path.dirname(process.execPath), slots: 2, memory: '4G' }));
   const providers = path.join(root, 'tools', 'node_modules', '.bin');
   await mkdir(providers, { recursive: true });
-  const idToken = `x.${Buffer.from(JSON.stringify({ email: 'Host@Example.com', 'https://api.openai.com/auth': { chatgpt_plan_type: 'plus', chatgpt_account_id: 'acct-123456' } })).toString('base64url')}.y`;
+  const token = plan => `x.${Buffer.from(JSON.stringify({ email: 'Host@Example.com', 'https://api.openai.com/auth': { chatgpt_plan_type: plan, chatgpt_account_id: 'acct-123456' } })).toString('base64url')}.y`;
+  const idToken = token('plus'), freeToken = token('free');
   const script = (file, body) => writeFile(file, `#!/bin/bash\n${body}\n`, { mode: 0o755 });
   // Each provider notes the HOME it ran with: the install's root, never the host's own home.
   await script(path.join(providers, 'codex'), `echo "$HOME" > "${base}/codex-home"; echo "$SPRITE_GEN_RIFE_BACKEND" > "${base}/codex-rife"
 case "$1" in
-  login) mkdir -p "$HOME/.codex"; printf '{"tokens":{"id_token":"${idToken}"}}' > "$HOME/.codex/auth.json" ;;
+  login) mkdir -p "$HOME/.codex"; if [ -f "${base}/free-plan" ]; then t='${freeToken}'; else t='${idToken}'; fi; printf '{"tokens":{"id_token":"%s"}}' "$t" > "$HOME/.codex/auth.json" ;;
   logout) rm -f "$HOME/.codex/auth.json" ;;
   --version) echo "codex-cli 0.157.1" ;;
   *) echo ok ;;
@@ -51,8 +52,12 @@ test('a host install runs og as its own account: providers signed in inside the 
       const r = og(args, 'a request');
       assert.notEqual(r.status, 0); assert.match(r.stderr, /official host|npm run host -- update/);
     }
-    // Signing in pins the host's own account; health calls both through the install's HOME.
-    assert.equal(og(['login', 'codex']).status, 0);
+    // A ChatGPT account on the free plan is named at once; signing in pins the host's own account; health calls both through the install's HOME.
+    await writeFile(path.join(base, 'free-plan'), '');
+    assert.match(og(['login', 'codex']).stderr, /free plan — hosting needs a paid plan/);
+    await rm(path.join(base, 'free-plan'));
+    const paid = og(['login', 'codex', '--replace']);
+    assert.equal(paid.status, 0); assert.doesNotMatch(paid.stderr, /free plan/);
     const pinned = og(['login', 'grok']);
     assert.equal(pinned.status, 0); assert.match(pinned.stdout, /this host's own subscription/);
     assert.deepEqual(JSON.parse(await readFile(path.join(root, 'accounts.json'), 'utf8')), { codex: 'host@example.com', grok: 'host@example.com', personal: {} });

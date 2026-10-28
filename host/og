@@ -321,6 +321,11 @@ cmd_login() {
     pins.personal ??= {};
     if (allow) pins.personal[p] = { email, allowedAt: new Date().toISOString() }; else delete pins.personal[p];
     fs.writeFileSync(file, JSON.stringify(pins, null, 2) + "\n", { mode: 0o600 });' "$PINS" "$p" "$cur" "$allow"
+  # A ChatGPT login on the free plan signs in but cannot make the pictures: say so at once, not at the first job (2026-10-28 — the first
+  # test host's own account had no subscription and only found out by asking).
+  if [ "$p" = codex ] && emails_of "$NODE" "$G/.$p/auth.json" --describe | grep -q '(plan free'; then
+    echo "og: WARNING this ChatGPT account is on the free plan — hosting needs a paid plan (Plus, Pro, Team): og login codex --replace" >&2
+  fi
   if [ $MODE = user ]; then
     echo "og: $p pinned: $(emails_of "$NODE" "$G/.$p/auth.json" --describe) — this host's own subscription; og health next"
   elif [ -n "$allow" ]; then

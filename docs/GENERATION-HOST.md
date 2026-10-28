@@ -34,26 +34,24 @@ Windows·macOS는 아직 지원하지 않는다.
 
 ## 시작하기
 
+oddbout.com 내 선수의 "내 PC로 만들기"에서 호스트 이름을 적고 호스트 약속에 동의한 뒤 "PC 연결 명령 받기"를 누른다. 나온 명령을 PC의 터미널에 붙여 넣는다.
+
 ```bash
 git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter && git checkout codex/creator-hosting && npm ci
-npm run host:setup                           # 생성기 설치(처음은 오래 걸린다). NVIDIA GPU가 있으면: npm run host:setup -- --rife torch
-npm run host:login                           # codex·grok 로그인(장치 코드), 끝나면 두 구독에 아주 작은 호출로 확인
+npm run host -- join ohj_…                   # 붙이기 코드(30분 안에 한 번): 설치 → codex·grok 로그인(없으면) → 워커
 ```
 
+- `join`은 코드를 먼저 쓰고(설치가 30분보다 오래 걸려도 된다) 설치·구독 로그인을 이어서 한다. 설치 옵션도 붙일 수 있다:
+  `npm run host -- join ohj_… --slots 2 --memory 6G --rife torch`.
+- PC에는 ODDBOUT 로그인이 남지 않는다. 그 호스트의 워커 열쇠만 남는다.
+- 사이트에서 선수를 신청할 때 호스트로 **내 PC**를 고른다. 승인 전에도 된다. 다른 사람의 신청도 받고 싶으면 운영자 승인을 기다린다.
+  승인되면 워커를 다시 켤 필요 없이 그 신청도 가져간다.
+- 설치만 따로: `npm run host:setup`(NVIDIA GPU가 있으면 `-- --rife torch`), 로그인만 따로: `npm run host:login`.
+  사이트 대신 터미널만으로도 된다: `npm run host -- signin`(브라우저가 없는 PC는 `--device`) → `npm run host -- apply --name "고양이 공방" --accept-terms`
+  → `npm run host:start`. `npm run host -- status`가 상태를 보인다.
 - `--rife torch`는 걷기·달리기 고리 정렬(RIFE)을 PyTorch·CUDA로 돌린다. 같은 고리를 144초 → 76초에 같은 프레임으로 맞췄다(RTX 4060, 2026-10-28).
   PyTorch 약 3 GB를 키트의 sprite-gen venv에 받는다. 되돌리기는 `--rife ncnn`.
-
-1. **붙이기 코드** — oddbout.com 내 선수의 "내 PC로 만들기"에서 호스트 이름을 적고 호스트 약속에 동의하면 명령 한 줄이 나온다.
-   ```bash
-   npm run host -- join ohj_…                 # 이 PC를 내 호스트에 붙이고 워커를 켠다(30분 안에 한 번)
-   ```
-   PC에는 ODDBOUT 로그인이 남지 않는다. 그 호스트의 워커 열쇠만 남는다.
-2. 사이트에서 선수를 신청할 때 호스트로 **내 PC**를 고른다. 승인 전에도 된다.
-3. 다른 사람의 신청도 받고 싶으면 운영자 승인을 기다린다. 승인되면 워커를 다시 켤 필요 없이 그 신청도 가져간다.
-
-사이트 대신 터미널만으로도 된다: `npm run host -- signin`(브라우저가 없는 PC는 `--device`) → `npm run host -- apply --name "고양이 공방" --accept-terms`
-→ `npm run host:start`. `npm run host -- status`가 상태를 보인다.
 
 - `host:setup`은 설치 폴더(기본 `~/.local/share/oddbout-host`, 바꾸려면 모든 명령에 `--root <폴더>`나 `ODDBOUT_HOST_ROOT`)를 만든다.
   그 안에 생성기 파일, 고정된 키트(sprite-gen 엔진 포함), codex·grok CLI를 둔다. sudo는 쓰지 않는다.

@@ -184,27 +184,48 @@ test('signin --device waits again on a link made before, and says how to get a n
 // 내 PC 붙이기 (2026-10-28): a join code from the site, no sign-in on the PC; the key goes into og's stdin only, then the worker starts.
 test('join puts the site\'s code to work: the key into og only, then health and the worker, no session and no approval needed', async () => {
   const lines = [], ogCalls = [], code = `ohj_${'a'.repeat(40)}`, key = `afw_${'b'.repeat(64)}`;
-  const deps = { root: path.join(os.tmpdir(), 'og-join-none'), out: line => lines.push(line), linger: () => true,
+  const root = await mkdtemp(path.join(os.tmpdir(), 'og-join-')), from = path.join(root, 'from'), install = path.join(root, 'install');
+  let healthOutput = 'og: codex ok (h@x)\nog: grok ok (h@x)\n';
+  const deps = { root: install, out: line => lines.push(line), linger: () => true, hostDir: from,
+    system: () => ({ missing: [], warnings: [], python: '/usr/bin/python3', toolPath: '' }),
     request: async () => { throw new Error('client-sign-in-required'); },
     join: async given => { assert.equal(given, code); return { key, host: 'h1', name: '고양이 공방', approved: false, apiBase: 'https://example.supabase.co/functions/v1/ai-fighter' }; },
     og: async (args, options = {}) => { ogCalls.push([args.join(' '), options.stdin]);
-      return { code: 0, output: args[0] === 'health' ? 'og: codex ok (h@x)\nog: grok ok (h@x)\n' : '' }; } };
-  assert.equal(await runHost(['join', 'ohj_short'], deps), 1);
-  assert.match(lines.at(-1), /붙이기 코드 모양이 아니다/);
-  assert.equal(await runHost(['join', code], deps), 1); // not installed yet
-  assert.match(lines.at(-1), /설치가 끝나면 같은 코드로 다시 한다/);
-  const root = await mkdtemp(path.join(os.tmpdir(), 'og-join-'));
+      if (args[0] === 'login') healthOutput = 'og: codex ok (h@x)\nog: grok ok (h@x)\n';
+      return { code: 0, output: args[0] === 'health' ? healthOutput : '' }; } };
   try {
-    await mkdir(path.join(root, 'bin'), { recursive: true }); await writeFile(path.join(root, 'host.env'), ''); await writeFile(path.join(root, 'bin', 'og'), '');
-    deps.root = root; lines.length = 0;
-    assert.equal(await runHost(['join', code], deps), 0);
-    assert.deepEqual(ogCalls.map(([args]) => args), ['worker key https://example.supabase.co/functions/v1/ai-fighter', 'health', 'worker install']);
-    assert.equal(ogCalls[0][1], `${key}\n`);
+    await mkdir(from);
+    for (const name of ['og', 'generation-worker.mjs', 'generation-stages.mjs', 'ledger-report.mjs', 'motions.py']) await writeFile(path.join(from, name), 'x\n');
+    assert.equal(await runHost(['join', 'ohj_short'], deps), 1);
+    assert.match(lines.at(-1), /붙이기 코드 모양이 아니다/);
+    // One command on a new PC: the code first, then the install, the key, the sign-in it lacks (grok here), the worker.
+    healthOutput = 'og: codex ok (h@x)\nog: grok not signed in\n';
+    assert.equal(await runHost(['join', code, '--slots', '2'], deps), 0);
+    assert.deepEqual(ogCalls.map(([args]) => args), ['setup', 'harden', 'worker key https://example.supabase.co/functions/v1/ai-fighter', 'health',
+      'login grok', 'health', 'health', 'worker install']);
+    assert.equal(ogCalls[2][1], `${key}\n`);
     assert.ok(!lines.some(line => line.includes(key)), 'the key never reaches the screen');
     assert.ok(lines.some(line => line.includes('승인 전에는 내 신청만 이 PC로 만든다')));
+    assert.equal(readHostEnv(await readFile(path.join(install, 'host.env'), 'utf8')).SLOTS, '2');
+    // Installed and signed in: the key and the worker only.
+    ogCalls.length = 0;
+    assert.equal(await runHost(['join', code], deps), 0);
+    assert.deepEqual(ogCalls.map(([args]) => args), ['worker key https://example.supabase.co/functions/v1/ai-fighter', 'health', 'health', 'worker install']);
     // A used or late code says how to get a new one.
     deps.join = async () => { throw new Error('join-code-invalid'); };
     assert.equal(await runHost(['join', code], deps), 1);
     assert.match(lines.at(-1), /새 코드를 받는다/);
+  } finally { await rm(root, { recursive: true, force: true }); }
+});
+
+// An account with no subscription signs in and then fails health: login says what to do now (2026-10-28).
+test('login names a missing subscription right away', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'og-login-')), lines = [];
+  try {
+    await mkdir(path.join(root, 'bin'), { recursive: true }); await writeFile(path.join(root, 'host.env'), ''); await writeFile(path.join(root, 'bin', 'og'), '');
+    const deps = { root, out: line => lines.push(line),
+      og: async args => ({ code: 0, output: args[0] === 'health' ? 'og: codex ok (h@x)\nog: grok unhealthy (no subscription)\n' : '' }) };
+    assert.equal(await runHost(['login', 'grok'], deps), 1);
+    assert.match(lines.at(-1), /유료 구독\(ChatGPT Plus·Pro, SuperGrok\) 계정으로 다시 로그인한다/);
   } finally { await rm(root, { recursive: true, force: true }); }
 });
