@@ -284,6 +284,33 @@ Original videos, request evidence, failed loop reports and previews remain in
 The next attacks group was authorized after the user's locomotion selection. Defense, all eleven
 validated motions, final packaging and registration are not established by this partial result.
 
+## Actual attacks and review-only GIF repair
+
+The same user VM completed combo v1 and slam v1 with one provider request each. Dash v1 was rejected
+because the character left the video frame; that original and failure report remain intact. A separately
+recorded dash v2 request with more forward canvas space passed edge/return checks. The review GIFs are
+combo 33 frames / 2970 ms, slam 44 / 2640 ms and dash 26 / 2860 ms, with a common 400 px standing-height
+reference. Three strikes/recoveries, one slam and one dash were observed; final game contact indices and
+timing are still a packaging gate. This does not complete all eleven motions.
+
+Actual Page review found that the first single-play combo and slam GIFs appeared briefly and then
+disappeared. Every decoded frame, including the last, retained nonempty alpha. All three files had no
+loop extension and disposal 2; a host end-of-animation clearing interaction is the likely explanation,
+not a confirmed browser implementation diagnosis. No provider request was repeated for this issue.
+
+The official compose-gif exporter created separate repeating review GIFs with loop-count 0 and the
+original alpha threshold 128. Frame RGBA, order, dimensions and durations all match; each binary differs
+only by the added 19-byte infinite-loop extension. Original single-play GIFs, game strips and once-return
+metadata are unchanged. Evidence is attacks/gif-display-diagnostic.json and
+attacks/review-loop-preservation.json in the character workspace. The new private Page references were
+read back, and the parent browser observed all three continuing to display different poses beyond one
+full cycle. User attack playback confirmation/selection is pending; defense has not started.
+
+The existing foot-evidence v2 extension was also reviewed. Current walk ROIs touch a horizontal edge,
+which the extension cannot waive. Complete anatomical-foot observations are still needed before a
+legitimate corrected measurement; run lacks that evidence as well. These results are not proof that
+the artwork itself fails, nor permission to weaken the gait gate or search for passing coordinates.
+
 ## Related animation change
 
 [PR #38](https://github.com/jeonghwanko/ai-fighter-dots-starter/pull/38) is in this creator-kit repository,

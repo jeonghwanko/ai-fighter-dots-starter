@@ -54,6 +54,14 @@ bridge if available. This does not expose originals through a public bucket or s
 5. For appearance review, upload the unchanged full-body image and an actual crop of that same version.
    A TEST fixture may establish transport only. It never establishes generation or character quality.
 
+6. For a single-play attack/reaction preview, preserve the game strip and once-return metadata. If the
+   host clears a transparent GIF after playback ends, inspect every decoded frame, last-frame alpha,
+   loop and disposal before changing anything. The official compose-gif exporter can create a separate
+   repeating review GIF with loop-count 0 from the same final frames. Preserve frame order, RGBA, size,
+   durations and alpha threshold; verify the export against the original and label it review-only.
+   This repaired the observed attack Page previews without another provider call. It is not permission
+   to change game playback or silently re-time frames.
+
 The PNG route was exercised on the selected saved VM: 3,589 unchanged bytes, owner-only Page, native
 file reference, full Page image visibly loaded in the browser, and image content recovered in the
 parent conversation. The requested character's native reference emission then failed to display for the
