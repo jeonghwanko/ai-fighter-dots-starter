@@ -278,3 +278,45 @@ test('his host shows his subscriptions, and he removes it once no request for hi
     assert.equal(joined.host, applied.id);
   } finally { await sql.close(); }
 });
+
+// Removal, the other paths: an approved host loses approval and leaves the operator's list; a job he took (an open request) keeps him; his
+// own request naming the removed host by id, a code redeemed after removal and a claim for the removed host are refused.
+test('a removed host is refused everywhere: approval, the operator list, a job he took, a request by id, a join code, a claim', async () => {
+  const { sql, owner, call, work, healthy } = await generation();
+  const theirs = 'other-token-0123456789';
+  try {
+    await healthy();
+    await sql.query('insert into public.af_admins(owner_id) values($1)', [owner]);
+    const applied = (await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true }, theirs)).body.host;
+    await sql.query('update public.af_generation_hosts set approved = true where id = $1', [applied.id]);
+    const key = (await call('POST', 'generations/host/keys', {}, theirs)).body.key;
+    const host = (method, path, body) => call(method, `generation-worker/${path}`, body, key);
+    await host('POST', 'heartbeat', { health: { ok: true, codex: true, grok: true } });
+    // Another creator's open request after the official brief: the approved host takes it, so it is his until it ends.
+    const job = (await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', host: 'any', hostConsent: true },
+      undefined, { 'idempotency-key': crypto.randomUUID() })).body.job;
+    const brief = (await work('POST', 'claim', {})).body.job;
+    await work('POST', 'finish', { jobId: brief.id, leaseToken: brief.leaseToken, outcome: 'ok', result: { brief: { profile: {} } } });
+    assert.equal((await host('POST', 'claim', {})).body.job.id, job.id);
+    assert.equal((await call('DELETE', 'generations/host', undefined, theirs)).body.code, 'host-busy');
+    await sql.query("update public.af_generation_jobs set status = 'cancelled' where id = $1", [job.id]);
+    // A code minted before removal, then the host marked removed without its codes deleted (a code redeemed during removal).
+    const code = (await call('POST', 'generations/host/join-codes', {}, theirs)).body.code;
+    assert.equal((await call('DELETE', 'generations/host', undefined, theirs)).status, 200);
+    const [row] = (await sql.query('select approved, enabled from public.af_generation_hosts where id = $1', [applied.id])).rows;
+    assert.deepEqual(row, { approved: false, enabled: false });
+    assert.deepEqual((await call('GET', 'admin/generation-hosts')).body.hosts.map(h => h.name), ['ODDBOUT']);
+    assert.equal((await call('POST', `admin/generation-hosts/${applied.id}/approval`, { approved: true })).status, 404);
+    assert.equal((await call('POST', 'generations/host/join', { code }, null)).body.code, 'join-code-invalid'); // removal deleted it
+    const late = `ohj_${'c'.repeat(40)}`;
+    await sql.query("insert into public.af_generation_host_joins(code_hash, host_id, expires_at) values ($1, $2, now() + interval '30 minutes')",
+      [await (await import('../api/handler.mjs')).sha256(new TextEncoder().encode(late)), applied.id]);
+    assert.equal((await call('POST', 'generations/host/join', { code: late }, null)).body.code, 'join-code-invalid');
+    assert.equal((await sql.query('select count(*)::int as n from public.af_workers where host_id = $1 and enabled', [applied.id])).rows[0].n, 0);
+    assert.equal((await call('POST', 'generations', { description: '파란 망토를 두른 고양이 검객', language: 'ko', host: applied.id }, theirs,
+      { 'idempotency-key': crypto.randomUUID() })).body.code, 'invalid-host');
+    // Even switched on by hand, a removed host claims nothing.
+    await sql.query('update public.af_generation_hosts set enabled = true where id = $1', [applied.id]);
+    assert.equal((await sql.query('select (public.af_generation_claim_for($1)).id as id', [applied.id])).rows[0].id, null);
+  } finally { await sql.close(); }
+});

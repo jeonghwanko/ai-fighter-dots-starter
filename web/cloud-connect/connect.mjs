@@ -2,25 +2,26 @@
  * The agents that may ask for a connection, by where they come back after consent (an approval hands its code only there), and the page
  * each one's "return" link opens. Dots/ChatGPT may come back anywhere on its two hosts. Grok (grok.com custom connectors) and Grok Bot
  * (Cursor's web connector) come back only on their published callback paths (2026-10-27; xAI does not document them — taken from their
- * registrations). Claude's custom connectors (claude.ai, and claude.com) come back on Anthropic's MCP callback; Claude's web, desktop and
- * mobile apps and Claude Code share that one connector (2026-10-28, the site's My agents). A desktop client's loopback or app-scheme callback
- * is not accepted.
+ * registrations). Claude's custom connectors (claude.ai, and claude.com) come back on Anthropic's MCP callback, that exact path only (`exact`);
+ * Claude's web, desktop and mobile apps and Claude Code share that one connector (2026-10-28, the site's My agents). A desktop client's
+ * loopback or app-scheme callback is not accepted.
  */
 const AGENTS = {
   dots: { hosts: { 'chatgpt.com': null, 'chat.openai.com': null }, home: 'https://chatgpt.com/dots/home' },
   grok: { hosts: { 'grok.com': ['/connectors-oauth-exchange-code'], 'www.cursor.com': ['/agents/mcp/oauth/callback', '/bot/mcp/oauth/callback'] },
     home: 'https://grok.com/connectors' },
-  claude: { hosts: { 'claude.ai': ['/api/mcp/auth_callback'], 'claude.com': ['/api/mcp/auth_callback'] }, home: 'https://claude.ai/settings/connectors' },
+  claude: { hosts: { 'claude.ai': ['/api/mcp/auth_callback'], 'claude.com': ['/api/mcp/auth_callback'] }, exact: true,
+    home: 'https://claude.ai/settings/connectors' },
 };
 /** Which agent a callback address belongs to (`dots`, `grok`, `claude`), or null for an address no agent may use. */
 export function agentOf(value) {
   try {
     const u = new URL(value);
     if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
-    for (const [agent, { hosts }] of Object.entries(AGENTS)) {
+    for (const [agent, { hosts, exact }] of Object.entries(AGENTS)) {
       if (!Object.hasOwn(hosts, u.hostname)) continue;
       const paths = hosts[u.hostname];
-      if (paths === null || paths.some(path => u.pathname === path || u.pathname.startsWith(path + '/'))) return agent;
+      if (paths === null || paths.some(path => u.pathname === path || (!exact && u.pathname.startsWith(path + '/')))) return agent;
     }
     return null;
   } catch { return null; }

@@ -93,7 +93,8 @@ test('each agent comes back only to its own callback addresses', () => {
     'https://www.cursor.com/settings', 'https://cursor.com/agents/mcp/oauth/callback', 'https://grok.com:8443/connectors-oauth-exchange-code/',
     'https://user@grok.com/connectors-oauth-exchange-code/', 'http://localhost:8787/callback', 'cursor://anysphere.cursor-mcp/oauth/callback', 'not a url',
     'https://claude.ai/', 'https://claude.ai/settings/connectors', 'https://claude.ai/api/mcp/auth_callback-evil', 'http://claude.ai/api/mcp/auth_callback',
-    'https://www.claude.ai/api/mcp/auth_callback', 'https://claude.ai.evil.example/api/mcp/auth_callback', 'http://localhost:33418/callback'])
+    'https://www.claude.ai/api/mcp/auth_callback', 'https://claude.ai.evil.example/api/mcp/auth_callback', 'http://localhost:33418/callback',
+    'https://claude.ai/api/mcp/auth_callback/x', 'https://claude.ai/api/mcp/auth_callback/..%2f..%2fx', 'https://claude.com/api/mcp/auth_callback/'])
     assert.equal(agentOf(refused), null, refused);
 });
 
