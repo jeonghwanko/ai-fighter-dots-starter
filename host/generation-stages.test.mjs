@@ -210,7 +210,9 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   // The walk: one clip, its plain cut refused for the engine's reason, the motion-auto cut taken. The run: filmed again with new words.
   const videos = tools.filter(a => a.includes('video-set'));
   assert.deepEqual(videos.map(a => flag(a, '--states')), ['walk', 'run', 'run']);
-  assert.ok(!videos[1].includes('--motion') && flag(videos[2], '--motion').startsWith('run=It runs in place with long'));
+  // Every take says what the arms do and that nothing strikes (a boxer's run that punched never repeated, 2026-10-28); a retake changes the words.
+  assert.ok(flag(videos[1], '--motion').startsWith('run=It runs naturally in place') && flag(videos[2], '--motion').startsWith('run=It runs in place with long'));
+  assert.ok(videos.every(a => flag(a, '--motion').includes('It throws no punches, kicks or strikes')));
   assert.ok(videos.every(a => flag(a, '--key') === 'green'));
   const judges = calls.filter(c => c.args[0] === 'codex');
   assert.equal(judges.length, 3);
@@ -246,7 +248,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const walk = await stages.motions({ ...job, motionNote: { clip: 'walk', note: 'shorter steps' }, motionRound: 2 }, dir);
   assert.equal(walk.outcome, 'ok');
   const refilm = calls.map(c => c.args).find(a => a.includes('video-set') && flag(a, '--out-dir').endsWith('video-walk-r2-0'));
-  assert.match(flag(refilm, '--motion'), /^walk=It walks in place, its legs clearly taking turns\. .*«shorter steps»\.$/);
+  assert.match(flag(refilm, '--motion'), /^walk=It walks naturally in place.*It throws no punches.* «shorter steps»\.$/);
   assert.equal(JSON.parse(await readFile(py.findLast(a => a[0] === 'assemble')[4], 'utf8')).length, 1);
   assert.equal((await stages.motions({ ...job, motionNote: { clip: 'idle', note: 'smile' }, motionRound: 3 }, dir)).result.code, 'motion-revision-idle');
   assert.equal(checkedVerdict({ identity: 'pass', anatomy: 'maybe', loop: 'pass', notes: 'x' }), null);
