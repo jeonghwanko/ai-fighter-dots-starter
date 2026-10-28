@@ -106,8 +106,13 @@ def inspect_archive(archive_path):
         for name in names:
             parts = name.split("/")
             require(all(names.get("/".join(parts[:i]), True) for i in range(1, len(parts))), "archive-file-directory-conflict")
-        require({"plugin.json", ".app.json", "launcher.mjs", "runtime-manifest.json"} <= regular.keys(), "missing-plugin-files")
-        require("kit-location.json" not in regular and "mcp.json" not in regular, "nonportable-plugin")
+        require({"plugin.json", "mcp.json", "launcher.mjs", "runtime-manifest.json"} <= regular.keys(), "missing-plugin-files")
+        # One plugin (0.6.0): the hosted MCP is inside it. Portable means no local paths and no local command server.
+        require("kit-location.json" not in regular, "nonportable-plugin")
+        mcp = parse_json(archive.read("mcp.json")) if regular["mcp.json"].file_size <= MAX_MANIFEST else None
+        servers = mcp.get("mcpServers") if isinstance(mcp, dict) else None
+        require(isinstance(servers, dict) and servers and all(isinstance(v, dict) and v.get("type") == "streamable-http"
+                and str(v.get("url", "")).startswith("https://") and "command" not in v for v in servers.values()), "nonportable-plugin")
         require(regular["runtime-manifest.json"].file_size <= 2_000_000 and
                 regular["plugin.json"].file_size <= MAX_MANIFEST, "metadata-size-limit")
         metadata = parse_json(archive.read("plugin.json"))

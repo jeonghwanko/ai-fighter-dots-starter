@@ -20,11 +20,12 @@ class KitTests(unittest.TestCase):
         self.addCleanup(self.scratch.cleanup)
         self.root = pathlib.Path(self.scratch.name).resolve()
 
-    def archive(self, *, extra=None, changed_runtime=False):
+    def archive(self, *, extra=None, changed_runtime=False, mcp=None):
         files = {"runtime/" + name: b"fixture" for name in kit.REQUIRED_RUNTIME}
         hashes = {name.removeprefix("runtime/"): kit.digest(data) for name, data in files.items()}
         files.update({"plugin.json": kit.json_bytes({"name": "oddbout", "version": "0.4.0"}),
-                      ".app.json": b"{}", "launcher.mjs": b"// fixture, never execute\n",
+                      "mcp.json": kit.json_bytes(mcp or {"mcpServers": {"oddbout": {"type": "streamable-http", "url": "https://mcp.oddbout.com/mcp"}}}),
+                      "launcher.mjs": b"// fixture, never execute\n",
                       "runtime-manifest.json": kit.json_bytes({"schemaVersion": 1, "distribution": "source",
                           "platform": "any", "arch": "any", "files": hashes})})
         if changed_runtime:
@@ -102,6 +103,13 @@ class KitTests(unittest.TestCase):
         with self.assertRaisesRegex(kit.KitError, "archive-integrity-failed"):
             kit.install(manifest_hash=kit.digest(data), destination=self.root / "bad-zip", manifest_file=manifest, archive_file=archive)
         self.assertFalse((self.root / "bad-zip/plugin").exists())
+
+    def test_a_plugin_whose_mcp_runs_a_local_command_is_not_portable(self):
+        # One plugin (0.6.0): the hosted MCP inside it is fine; a local command server or a plain-HTTP one is not.
+        for servers in ({"oddbout": {"type": "stdio", "command": "node", "args": ["mcp/stdio.mjs"]}},
+                        {"oddbout": {"type": "streamable-http", "url": "http://mcp.oddbout.com/mcp"}}, {}):
+            with self.assertRaisesRegex(kit.KitError, "nonportable-plugin"):
+                kit.inspect_archive(self.archive(mcp={"mcpServers": servers}))
 
     def test_inventory_and_runtime_hash_mismatches_are_rejected(self):
         with self.assertRaisesRegex(kit.KitError, "runtime-integrity-failed"):

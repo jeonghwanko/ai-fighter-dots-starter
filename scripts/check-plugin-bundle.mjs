@@ -18,9 +18,12 @@ try {
   const metadata = JSON.parse(await readFile(path.join(plugin, 'plugin.json'), 'utf8'));
   assert.equal(metadata.name, 'oddbout');
   assert.notEqual(metadata.extensions['com.openai'].requires_local_executor, true);
-  await assert.rejects(readFile(path.join(plugin, 'mcp.json')), { code: 'ENOENT' });
-  const apps = JSON.parse(await readFile(path.join(plugin, '.app.json'), 'utf8'));
-  assert.match(apps.apps.oddbout.id, /^(?:connector|asdk_app)_[a-zA-Z0-9_-]+$/);
+  // One plugin (0.6.0): the hosted MCP is inside it (streamable HTTP, Google sign-in), not a separately added connector; nothing runs locally.
+  await assert.rejects(readFile(path.join(plugin, '.app.json')), { code: 'ENOENT' });
+  const servers = JSON.parse(await readFile(path.join(plugin, 'mcp.json'), 'utf8')).mcpServers;
+  assert.deepEqual(Object.keys(servers), ['oddbout']);
+  assert.equal(servers.oddbout.type, 'streamable-http'); assert.equal(servers.oddbout.url, 'https://mcp.oddbout.com/mcp');
+  assert.equal(servers.oddbout.command, undefined);
   const { initialize } = await import(pathToFileURL(path.join(plugin, 'launcher.mjs')).href);
   const location = await initialize({ base: path.join(temporary, 'data'), workspace });
   assert.equal(location.distribution, 'source');
