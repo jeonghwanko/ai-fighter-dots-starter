@@ -25,7 +25,7 @@ const STATUS = { 'generation-unavailable': 409, 'generation-quota': 409, 'genera
   'invalid-result': 422, 'not-found': 404, 'account-disabled': 403, 'invite-required': 403,
   // 커뮤니티 호스트 (2026-10-28).
   'invalid-host': 422, 'host-consent-required': 422, 'host-offline': 409, 'host-capacity': 409, 'host-terms-required': 422,
-  'host-not-approved': 403, 'host-key-limit': 409, 'host-not-found': 404, 'join-code-invalid': 410, 'invalid-join-code': 400,
+  'host-not-approved': 403, 'host-key-limit': 409, 'host-not-found': 404, 'join-code-invalid': 410, 'invalid-join-code': 400, 'host-busy': 409,
   // The submission path's own refusals (`af_create_submission`, `af_submit`), as the creator's routes name them.
   'submission-quota': 409, 'open-submission-exists': 409, 'idempotency-conflict': 409, 'upload-closed': 409, 'assets-incomplete': 409,
   'submissions-paused': 503, 'storage-budget-full': 503, 'beta-capacity': 503 };
@@ -145,11 +145,14 @@ export function createGenerationHandler({ db, authenticate, present }) {
     return data;
   }
 
-  /** A creator's own host (커뮤니티 호스트): his settings, whether he is on now, today's jobs and live keys. */
+  /**
+   * A creator's own host (커뮤니티 호스트): his settings, whether he is on now, today's jobs and live keys, and his subscriptions as his worker
+   * last checked them (`health` — the site's My agents shows them on his Codex and Grok cards). A removed host is none.
+   */
   async function ownHost(owner) {
     const { data, error } = await db.from('af_generation_hosts').select('*').eq('owner_id', owner).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
-    if (!data) return null;
+    if (!data || data.removed_at) return null;
     const { data: keys, error: keyError } = await db.from('af_workers').select('expires_at,enabled').eq('host_id', data.id);
     if (keyError) throw new Problem(503, 'database-unavailable');
     // On now, approved or not (not approved, he makes his own requests: 내 선수는 내 PC로).
@@ -157,6 +160,8 @@ export function createGenerationHandler({ db, authenticate, present }) {
     const today = await call('af_generation_host_today', { p_host: data.id });
     return { id: data.id, name: data.name, approved: data.approved, enabled: data.enabled, acceptsAny: data.accepts_any, billing: data.billing,
       dailyLimit: data.daily_limit, online: live, todayLeft: Math.max(data.daily_limit - (Number(today) || 0), 0), lastSeenAt: data.worker_seen_at ?? null,
+      health: { codex: data.worker_health?.codex === true, grok: data.worker_health?.grok === true,
+        checkedAt: typeof data.worker_health?.at === 'string' ? data.worker_health.at : null },
       keys: (keys ?? []).filter(k => k.enabled && Date.parse(k.expires_at) > Date.now()).map(k => ({ expiresAt: k.expires_at })) };
   }
   const hostView = row => ({ id: row.id, name: row.name, approved: row.approved, enabled: row.enabled, acceptsAny: row.accepts_any,
@@ -178,6 +183,11 @@ export function createGenerationHandler({ db, authenticate, present }) {
         if (body.dailyLimit !== undefined && !Number.isInteger(body.dailyLimit)) throw new Problem(422, 'invalid-host');
         return { ok: true, host: hostView(await call('af_generation_host_update', { p_owner: owner, p_enabled: body.enabled ?? null,
           p_accepts_any: body.acceptsAny ?? null, p_daily_limit: body.dailyLimit ?? null })) };
+      }
+      // 삭제 (My agents, 2026-10-28): off every list and claim, keys off; refused while a request for him is not over.
+      if (method === 'DELETE') {
+        const removed = await call('af_generation_host_remove', { p_owner: owner });
+        return { ok: true, removed: true, revoked: Number(removed?.revoked) || 0 };
       }
     }
     if (route === 'generations/host/keys') {
@@ -229,9 +239,9 @@ export function createGenerationHandler({ db, authenticate, present }) {
       // approved or not, with no consent to give (내 선수는 내 PC로, 2026-10-28).
       let host = body.host ?? 'oddbout';
       if (host === 'mine') {
-        const { data: own, error: ownError } = await db.from('af_generation_hosts').select('id').eq('owner_id', owner).maybeSingle();
+        const { data: own, error: ownError } = await db.from('af_generation_hosts').select('id,removed_at').eq('owner_id', owner).maybeSingle();
         if (ownError) throw new Problem(503, 'database-unavailable');
-        if (!own) throw new Problem(404, 'host-not-found');
+        if (!own || own.removed_at) throw new Problem(404, 'host-not-found');
         host = own.id;
       }
       if (!['oddbout', 'any'].includes(host) && !UUID.test(host)) throw new Problem(422, 'invalid-host');

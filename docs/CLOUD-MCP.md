@@ -22,6 +22,16 @@ Grok은 `https://grok.com/connectors-oauth-exchange-code/`, Cursor의 Grok Bot(�
 "돌아가기" 링크도 그 에이전트를 따른다. xAI는 이 콜백을 문서로 내지 않아 사용자 보고에서 가져왔다. 실제 Grok 연결로 한 번 확인한다.
 MCP 함수의 브라우저 Origin 허용 목록에도 `grok.com`·`www.grok.com`·`cursor.com`·`www.cursor.com`이 있다.
 
+Claude 연결(2026-10-28): claude.ai → 설정 → 커넥터(`https://claude.ai/settings/connectors`) → 커스텀 커넥터 추가. 이름 `ODDBOUT`, 서버 URL은 위 주소다.
+추가한 뒤 연결을 누르고 Google로 로그인해 승인한다. 동의 화면은 Anthropic의 MCP 콜백 `https://claude.ai/api/mcp/auth_callback`·
+`https://claude.com/api/mcp/auth_callback`으로만 돌아간다. Claude 웹·데스크톱·모바일과 Claude Code는 이 커넥터 하나를 함께 쓴다.
+Claude Code의 직접 연결(`claude mcp add`)은 loopback 콜백이라 받지 않는다. 그림을 받는 도구(`prepare_fighter_registration`의 파일,
+`upload_fighter_asset`, `request_hosted_fighter`의 그림)는 OpenAI 파일 호스트만 받으므로 Claude에서는 글로만 만든다.
+Anthropic도 이 콜백을 이 서버에 맞춰 확인한 기록이 아직 없다. 실제 Claude 연결로 한 번 확인한다. MCP 함수의 Origin 허용 목록에 `claude.ai`·`claude.com`이 있다.
+
+사이트에서 보기(2026-10-28): oddbout.com 제작자 페이지의 My agents(`creator.html#view=agents`)가 Codex(ChatGPT·Dots)·Grok·Claude 카드에 연결을 보이고,
+연결을 끊는다(Supabase Auth의 `auth.oauth.listGrants`·`revokeGrant`). 카드 목록은 `af_account_agents`가 계정에 둔다.
+
 연결 후 대화 입력창에서 `@ODDBOUT`을 입력하고 **플러그인 항목을 선택**한다.
 일반 텍스트로 이름만 입력한 것과 실제 플러그인 선택은 다르다.
 기존 도구 목록이 남아 있으면 설정 → 플러그인 → ODDBOUT → `도구 새로 고침`을 누른다.

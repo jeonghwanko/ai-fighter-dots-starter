@@ -2,14 +2,17 @@
  * The agents that may ask for a connection, by where they come back after consent (an approval hands its code only there), and the page
  * each one's "return" link opens. Dots/ChatGPT may come back anywhere on its two hosts. Grok (grok.com custom connectors) and Grok Bot
  * (Cursor's web connector) come back only on their published callback paths (2026-10-27; xAI does not document them — taken from their
- * registrations). A desktop client's loopback or app-scheme callback is not accepted.
+ * registrations). Claude's custom connectors (claude.ai, and claude.com) come back on Anthropic's MCP callback; Claude's web, desktop and
+ * mobile apps and Claude Code share that one connector (2026-10-28, the site's My agents). A desktop client's loopback or app-scheme callback
+ * is not accepted.
  */
 const AGENTS = {
   dots: { hosts: { 'chatgpt.com': null, 'chat.openai.com': null }, home: 'https://chatgpt.com/dots/home' },
   grok: { hosts: { 'grok.com': ['/connectors-oauth-exchange-code'], 'www.cursor.com': ['/agents/mcp/oauth/callback', '/bot/mcp/oauth/callback'] },
     home: 'https://grok.com/connectors' },
+  claude: { hosts: { 'claude.ai': ['/api/mcp/auth_callback'], 'claude.com': ['/api/mcp/auth_callback'] }, home: 'https://claude.ai/settings/connectors' },
 };
-/** Which agent a callback address belongs to (`dots`, `grok`), or null for an address no agent may use. */
+/** Which agent a callback address belongs to (`dots`, `grok`, `claude`), or null for an address no agent may use. */
 export function agentOf(value) {
   try {
     const u = new URL(value);
@@ -26,8 +29,9 @@ export function safeClientRedirect(value) { return agentOf(value) !== null; }
 /** The agent's name in each language, with the Korean particles its sound takes; `any` before the request says who asked. */
 export const agentWords = {
   ko: { dots: { name: 'Dots', to: 'Dots로', at: 'Dots에서', on: 'Dots에' }, grok: { name: 'Grok', to: 'Grok으로', at: 'Grok에서', on: 'Grok에' },
+    claude: { name: 'Claude', to: 'Claude로', at: 'Claude에서', on: 'Claude에' },
     any: { name: '에이전트', to: '에이전트로', at: '에이전트에서', on: '에이전트에' } },
-  en: { dots: { name: 'Dots' }, grok: { name: 'Grok' }, any: { name: 'your agent' } },
+  en: { dots: { name: 'Dots' }, grok: { name: 'Grok' }, claude: { name: 'Claude' }, any: { name: 'your agent' } },
 };
 export function fillAgent(text, words) {
   return text.replace(/\{(name|to|at|on)\}/g, (_, key) => words[key] ?? words.name);

@@ -34,7 +34,8 @@ Windows·macOS는 아직 지원하지 않는다.
 
 ## 시작하기
 
-oddbout.com 내 선수의 "내 PC로 만들기"에서 호스트 이름을 적고 호스트 약속에 동의한 뒤 "PC 연결 명령 받기"를 누른다. 나온 명령을 PC의 터미널에 붙여 넣는다.
+oddbout.com 제작자 페이지의 My agents(`creator.html#view=agents`) → **내 PC**에서 호스트 이름을 적고 호스트 약속에 동의한 뒤 "PC 연결 명령 받기"를
+누른다. 나온 명령을 PC의 터미널에 붙여 넣는다.
 
 ```bash
 git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
@@ -74,6 +75,11 @@ npm run host -- join ohj_…                   # 붙이기 코드(30분 안에 �
 | 키트·생성기 갱신(`git pull` 뒤) | `npm run host:setup`(진행 중인 작업이 있으면 바꾸지 않는다. `pause` 뒤 끝나기를 기다린다) |
 | 열쇠를 모두 끄기 | `npm run host -- revoke` |
 | 그만두기(워커·열쇠·설치 폴더 전부) | `npm run host -- remove --yes` |
+
+사이트의 My agents → 내 PC에서도 한다(2026-10-28): 켜짐·오늘 남은 수·두 구독의 마지막 확인(Codex·Grok 카드에도 나온다), 잠시 멈추기·다시 켜기,
+**PC 연결 끊기**(열쇠를 모두 끈다 — `revoke`와 같다, 호스트는 남는다), **호스트 지우기**(`DELETE generations/host` — 모든 목록·뽑기에서 빠지고 열쇠·붙이기 코드가
+꺼진다. 나를 지정했거나 내가 맡은 신청이 끝나지 않았으면 거절한다. 신청 기록은 그 호스트를 그대로 가리킨다). 지운 뒤 다시 신청하면 같은 호스트가 승인 없이 되살아난다.
+PC의 설치 폴더는 PC에서 `npm run host -- remove --yes`로 지운다.
 
 - 워커는 1분마다 서버에 살아 있음을 알린다. 3분 동안 소식이 없으면 목록에서 오프라인이 된다.
 - 한 시간마다 두 구독에 아주 작은 실제 호출을 한다. 하나라도 안 되면 새 작업을 가져가지 않는다.
