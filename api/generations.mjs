@@ -7,7 +7,7 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 import { text } from './canon.mjs';
 import { probeImage } from './image-probe.mjs';
-import { Problem, UUID, jsonResponse, readBody } from './http.mjs';
+import { Problem, UUID, jsonResponse, readBody, sha256 } from './http.mjs';
 import { checkedManifest, storeAsset } from './submissions.mjs';
 
 export const GENERATION_BUCKET = 'af-generation';
@@ -15,10 +15,13 @@ export const GENERATION_LIMITS = Object.freeze({ descriptionMin: 10, description
   note: 200, artifactBytes: 8_000_000, result: 12_000, signedSeconds: 600 });
 const ARTIFACT = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const MOTIONS = Object.keys(spec.motions);
-const CORS = { methods: 'GET, POST, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
+const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
 const STATUS = { 'generation-unavailable': 409, 'generation-quota': 409, 'generation-capacity': 409, 'generation-state': 409, 'revision-limit': 409,
   'fighter-quota': 409, 'lease-lost': 409, 'rate-limit': 429, 'invalid-refs': 422, 'rights-required': 422, 'invalid-answer': 422,
   'invalid-result': 422, 'not-found': 404, 'account-disabled': 403, 'invite-required': 403,
+  // 커뮤니티 호스트 (2026-10-28).
+  'invalid-host': 422, 'host-consent-required': 422, 'host-offline': 409, 'host-capacity': 409, 'host-terms-required': 422,
+  'host-not-approved': 403, 'host-key-limit': 409,
   // The submission path's own refusals (`af_create_submission`, `af_submit`), as the creator's routes name them.
   'submission-quota': 409, 'open-submission-exists': 409, 'idempotency-conflict': 409, 'upload-closed': 409, 'assets-incomplete': 409,
   'submissions-paused': 503, 'storage-budget-full': 503, 'beta-capacity': 503 };
@@ -81,9 +84,18 @@ export function createGenerationHandler({ db, authenticate, present }) {
   }
   const candidatesOf = row => Array.isArray(row.candidates) ? row.candidates.filter(name => ARTIFACT.test(name ?? '')) : [];
   const previewOf = row => Array.isArray(row.preview) ? row.preview.filter(p => isObject(p) && MOTIONS.includes(p.clip) && ARTIFACT.test(p.name ?? '')) : [];
+  /** The hosts a job names, by id: their names (and whether official) for its creator. */
+  async function hostsOf(ids) {
+    const wanted = [...new Set(ids.filter(Boolean))];
+    if (!wanted.length) return new Map();
+    const { data, error } = await db.from('af_generation_hosts').select('id,name,official').in('id', wanted);
+    if (error) throw new Problem(503, 'database-unavailable');
+    return new Map((data ?? []).map(h => [h.id, { id: h.id, name: h.name, official: h.official === true }]));
+  }
   // A job as its creator reads it: no lease, no prompt, no brief beyond its profile draft; pictures as signed URLs.
   async function view(row) {
     const candidates = candidatesOf(row), preview = previewOf(row);
+    const hosts = await hostsOf([row.requested_host, row.assigned_host]);
     const urls = await signed([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name))]);
     let submission = null;
     if (row.submission_id) {
@@ -95,7 +107,8 @@ export function createGenerationHandler({ db, authenticate, present }) {
       delegate: row.delegate === true, createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
       revisionsLeft: { appearance: 2 - row.appearance_revisions, motions: 3 - row.motion_revisions },
-      preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null })), submission };
+      preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null })), submission,
+      host: { choice: row.host_choice ?? 'oddbout', requested: hosts.get(row.requested_host) ?? null, assigned: hosts.get(row.assigned_host) ?? null } };
   }
   async function ownJob(owner, jobId) {
     const { data, error } = await db.from('af_generation_jobs').select('*').eq('id', id(jobId)).eq('owner_id', owner).maybeSingle();
@@ -116,8 +129,49 @@ export function createGenerationHandler({ db, authenticate, present }) {
     return data;
   }
 
+  /** A creator's own host (커뮤니티 호스트): his settings, whether he is on now, today's jobs and live keys. */
+  async function ownHost(owner) {
+    const { data, error } = await db.from('af_generation_hosts').select('*').eq('owner_id', owner).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    if (!data) return null;
+    const { data: keys, error: keyError } = await db.from('af_workers').select('expires_at,enabled').eq('host_id', data.id);
+    if (keyError) throw new Problem(503, 'database-unavailable');
+    const listed = (await call('af_generation_hosts_public', {})).find(h => h.id === data.id);
+    return { id: data.id, name: data.name, approved: data.approved, enabled: data.enabled, acceptsAny: data.accepts_any, billing: data.billing,
+      dailyLimit: data.daily_limit, online: listed?.online ?? false, todayLeft: listed?.todayLeft ?? null, lastSeenAt: data.worker_seen_at ?? null,
+      keys: (keys ?? []).filter(k => k.enabled && Date.parse(k.expires_at) > Date.now()).map(k => ({ expiresAt: k.expires_at })) };
+  }
+  const hostView = row => ({ id: row.id, name: row.name, approved: row.approved, enabled: row.enabled, acceptsAny: row.accepts_any,
+    billing: row.billing, dailyLimit: row.daily_limit });
+
   async function creator(request, parts, owner) {
     const method = request.method, route = parts.join('/');
+    if (route === 'generations/host') {
+      if (method === 'GET') return { ok: true, host: await ownHost(owner) };
+      if (method === 'POST') {
+        // Applying (or renaming): his name for requesters, how he pays the providers, and his acceptance of the host terms.
+        const body = fields(await readJson(request, 2000), ['name', 'billing', 'termsAccepted']);
+        return { ok: true, host: hostView(await call('af_generation_host_apply', { p_owner: owner, p_name: typeof body.name === 'string' ? body.name : null,
+          p_billing: body.billing ?? null, p_terms: body.termsAccepted === true })) };
+      }
+      if (method === 'PATCH') {
+        const body = fields(await readJson(request, 2000), ['enabled', 'acceptsAny', 'dailyLimit']);
+        for (const key of ['enabled', 'acceptsAny']) if (body[key] !== undefined && typeof body[key] !== 'boolean') throw new Problem(422, 'invalid-host');
+        if (body.dailyLimit !== undefined && !Number.isInteger(body.dailyLimit)) throw new Problem(422, 'invalid-host');
+        return { ok: true, host: hostView(await call('af_generation_host_update', { p_owner: owner, p_enabled: body.enabled ?? null,
+          p_accepts_any: body.acceptsAny ?? null, p_daily_limit: body.dailyLimit ?? null })) };
+      }
+    }
+    if (route === 'generations/host/keys') {
+      if (method === 'POST') {
+        // The key is shown once, here; the database keeps its hash.
+        const token = `afw_${Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('')}`;
+        const issued = await call('af_generation_host_key', { p_owner: owner, p_hash: await sha256(new TextEncoder().encode(token)),
+          p_label: `host-${new Date().toISOString().slice(0, 10)}` });
+        return { ok: true, key: token, host: issued.host, expiresAt: issued.expiresAt };
+      }
+      if (method === 'DELETE') return { ok: true, revoked: await call('af_generation_host_revoke', { p_owner: owner }) };
+    }
     if (method === 'GET' && route === 'generations') {
       const { data, error } = await db.from('af_generation_jobs').select('*').eq('owner_id', owner).order('created_at', { ascending: false }).limit(5);
       if (error) throw new Problem(503, 'database-unavailable');
@@ -141,16 +195,21 @@ export function createGenerationHandler({ db, authenticate, present }) {
     }
     if (method === 'POST' && route === 'generations') {
       const key = id(request.headers.get('idempotency-key'));
-      const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed', 'delegate']);
+      const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed', 'delegate', 'host', 'hostConsent']);
       if (!['ko', 'en'].includes(body.language)) throw new Problem(422, 'invalid-language');
       if (body.delegate !== undefined && typeof body.delegate !== 'boolean') throw new Problem(422, 'invalid-body');
+      // Where it goes (커뮤니티 호스트): ODDBOUT's own worker by default, any approved host, or one host by id.
+      const host = body.host ?? 'oddbout';
+      if (!['oddbout', 'any'].includes(host) && !UUID.test(host)) throw new Problem(422, 'invalid-host');
+      const target = host === 'oddbout' ? {} : { p_host_choice: UUID.test(host) ? 'host' : 'any', ...(UUID.test(host) ? { p_host: host.toLowerCase() } : {}),
+        p_host_consent: body.hostConsent === true };
       if (body.refs !== undefined && (!Array.isArray(body.refs) || body.refs.length > GENERATION_LIMITS.refs)) throw new Problem(422, 'invalid-refs');
       const refs = (body.refs ?? []).map(id);
       const row = await call('af_generation_create', { p_owner: owner, p_key: key,
         p_description: text(body.description, GENERATION_LIMITS.description, '/description', { min: GENERATION_LIMITS.descriptionMin, lines: true, code: 'invalid-description' }),
         p_language: body.language, p_refs: refs, p_rights: body.rightsConfirmed === true,
         // 맡기기 (2026-10-28): the worker picks the look and goes on to the motions; the creator answers once, at the end.
-        ...(body.delegate ? { p_delegate: true } : {}) });
+        ...(body.delegate ? { p_delegate: true } : {}), ...target });
       return { ok: true, job: await view(row) };
     }
     if (parts[0] === 'generations' && parts.length === 2 && method === 'GET') return { ok: true, job: await view(await ownJob(owner, parts[1])) };
@@ -179,7 +238,7 @@ export function createGenerationHandler({ db, authenticate, present }) {
     throw new Problem(404, 'route-not-found');
   }
 
-  async function worker(request, parts) {
+  async function worker(request, parts, host) {
     const method = request.method, route = parts.join('/');
     if (method === 'PUT' && parts[1] === 'jobs' && parts[3] === 'artifacts' && parts.length === 5) {
       const row = await call('af_generation_held', { p_id: id(parts[2]), p_token: id(request.headers.get('x-generation-lease')) });
@@ -209,10 +268,10 @@ export function createGenerationHandler({ db, authenticate, present }) {
     if (route === 'generation-worker/heartbeat') {
       const health = fields(body, ['health']).health;
       if (!isObject(health) || JSON.stringify(health).length > 2000) throw new Problem(422, 'invalid-health');
-      return { ok: true, capabilities: await call('af_generation_heartbeat', { p_health: health }) };
+      return { ok: true, capabilities: await call('af_generation_host_heartbeat', { p_host: host, p_health: health }) };
     }
     if (route === 'generation-worker/claim') {
-      const row = await call('af_generation_claim', {});
+      const row = await call('af_generation_claim_for', { p_host: host });
       if (!row?.id) return { ok: true, stage: 'idle' };
       const { data: refs, error } = await db.from('af_generation_uploads').select('id,path,content_type,width,height').eq('job_id', row.id);
       if (error) throw new Problem(503, 'database-unavailable');
@@ -254,7 +313,10 @@ export function createGenerationHandler({ db, authenticate, present }) {
       if (request.method === 'OPTIONS' && !isWorker) return json({ ok: true });
       if (!isWorker && request.method === 'GET' && parts.join('/') === 'generations/capabilities')
         return json({ ok: true, capabilities: await call('af_generation_capabilities', {}) });
-      if (isWorker) { await authenticate(request, 'generation'); return json(await worker(request, parts)); }
+      if (!isWorker && request.method === 'GET' && parts.join('/') === 'generations/hosts')
+        return json({ ok: true, hosts: await call('af_generation_hosts_public', {}) });
+      // The key names the worker's host; the stages it may take are his (the official host's when the key names none).
+      if (isWorker) return json(await worker(request, parts, await authenticate(request, 'generation')));
       return json(await creator(request, parts, await authenticate(request, false)));
     } catch (error) {
       if (error instanceof Problem) return json({ ok: false, stage: 'generation', code: error.message, ...(error.errors ? { errors: error.errors } : {}) }, error.status);
