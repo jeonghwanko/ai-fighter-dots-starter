@@ -170,6 +170,25 @@ generation, secret setup, publish or CI occurred in this isolated test. Evidence
 /workspace/oddbout-published-image-evidence/auth-candidate-*. This confirms the new candidate installer
 and resume path, not saved-image publication of the candidate. The active character keeps runtime52.
 
+## Default creation-context proxy transport
+
+Actual generation on Node 22 had required a process-level proxy helper for creation jobs: the store
+used a default global fetch for its public game-context request. Runtime
+f8eb6b5ca7ed14ce77c0a06e9ab5e513bf918346 changes that default to the existing runtimeFetch transport.
+It follows the inherited proxy/CA rules, redacts transport errors and never retries with direct access.
+Windows creation-context/creator-plugin/bundle tests passed 40/40. A separate clean Linux checkout
+passed all 8 creation-context tests and one real default fetchCreationContext() call without a
+NODE_OPTIONS helper. The validated response was contextVersion 1, revision
+6e78a912c3f0500e9030ee444f82fbd98f2763997edfb69d2bb05503e0100203. Existing runtime52/runtime0ac
+and binding/receipt hashes and mtimes remained unchanged. Evidence:
+/workspace/oddbout-published-image-evidence/auth-candidate-context-*.
+
+The new front-door candidate selects f8eb6b5 for new workspaces. The preceding 0ac full installer
+evidence and this focused transport verification remain separate; no new saved image or character
+upgrade is claimed. The environment editor currently rejects saving its changed Install script and
+Start instructions without identifying a bad field. The prepared edits are retained for recovery,
+and publication remains pending.
+
 ## Actual private file transfer and display boundary
 
 A clearly labeled TEST PNG (not generated character artwork) completed official native file input,

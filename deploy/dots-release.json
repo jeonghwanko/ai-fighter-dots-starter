@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/jeonghwanko/ai-fighter-dots-starter.git",
-  "commit": "0ac4032d499b7d7b4e045e46b5dfcb7ebc86f5c6",
+  "commit": "f8eb6b5ca7ed14ce77c0a06e9ab5e513bf918346",
   "version": "0.5.5",
   "provider": "grok",
   "channel": "candidate",
