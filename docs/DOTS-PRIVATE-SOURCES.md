@@ -46,13 +46,26 @@ bridge if available. This does not expose originals through a public bucket or s
 3. Insert only the returned native image Markdown using the Page's fresh edit guards, then read it
    back. An uncertain upload must be reconciled using its receipt/existing reference before retrying.
 4. Use the returned Page/reference with the host's read_page_reference in the target conversation and
-   emit its image content. Inspect the actual target UI. Page rendering, a returned image block and
-   current-conversation rendering are separate observations; record each honestly.
+   emit its image content when supported. If that output is not visible to the user, open the existing
+   private Page through the host's supported Page panel or browser viewer. Observe the actual preview
+   and ask for review only after the user can see it. A screenshot can show a still preview, but cannot
+   prove animation playback. Record native inline display, Page display and user confirmation separately.
+   Reuse the saved file and Page; do not regenerate or invent a different file ID to repair display.
 5. For appearance review, upload the unchanged full-body image and an actual crop of that same version.
    A TEST fixture may establish transport only. It never establishes generation or character quality.
 
 The PNG route was exercised on the selected saved VM: 3,589 unchanged bytes, owner-only Page, native
 file reference, full Page image visibly loaded in the browser, and image content recovered in the
-parent conversation. A queued panel is not display evidence. Animation formats/playback still need
-verification when that review group is reached. Missing Pages capability is a delivery blocker, not
-permission for public storage, credential extraction or repeated generation.
+parent conversation. The requested character's native reference emission then failed to display for the
+user, while opening the same private Page preview succeeded. Later, fightIdle/walk/run GIFs were stored
+and the user confirmed actual playback and selected the poses. These observations establish those
+specific routes and outputs, not every format, user or future group. A queued panel is not display
+evidence. Verify each group's actual playback before review; a static screenshot does not replace it.
+Missing Pages capability is a delivery blocker, not permission for public storage, credential extraction
+or repeated generation.
+
+During generation, report observed job stages and completed outputs, keeping the original job/request
+identity across interruptions. Show an already selected reference only with that label; do not imply it
+is an intermediate generated result. If the provider supplies no numeric progress, leave the percentage
+unknown and use stage text. Native image-generation progress cards are host UI, not a capability this
+repository can assume for a Grok CLI job.
