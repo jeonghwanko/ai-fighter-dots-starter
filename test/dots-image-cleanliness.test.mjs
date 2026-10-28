@@ -15,6 +15,7 @@ async function fixture(t) {
   t.after(() => rm(home, { recursive: true, force: true }));
   // This is an empty synthetic test home, never a real login or credential copy.
   const env = { ...process.env, HOME: home, XAI_API_KEY: '', OPENAI_API_KEY: '', SUPABASE_SERVICE_ROLE_KEY: '' };
+  delete env.GROK_HOME; delete env.AI_FIGHTER_ROOT;
   return { home, run: extra => exec(bash, [guard], { env: { ...env, ...extra } }) };
 }
 async function denied(run, code = 'snapshot-has-personal-auth') {
@@ -49,4 +50,16 @@ test('image guard rejects symlinked Grok directories and binary caches', { skip:
   const grok = path.join(f.home, '.grok');
   await symlink(target, grok); await denied(f.run); await rm(grok);
   await mkdir(grok); await symlink(target, path.join(grok, 'bin')); await denied(f.run);
+});
+test('image guard rejects custom account credentials and a user workspace account directory', async t => {
+  const f = await fixture(t); if (!f) return;
+  const custom = path.join(f.home, 'custom-grok'); await mkdir(custom);
+  const shellPath = value => value.replaceAll('\\', '/').replace(/^([A-Za-z]):/, (_, drive) => `/${drive.toLowerCase()}`);
+  await f.run({ GROK_HOME: shellPath(custom) });
+  await writeFile(path.join(custom, 'auth.json'), 'synthetic-secret');
+  await denied(() => f.run({ GROK_HOME: shellPath(custom) }));
+  const work = path.join(f.home, 'work');
+  await mkdir(path.join(work, '.oddbout-private/grok-account'), { recursive: true });
+  await denied(() => f.run({ AI_FIGHTER_ROOT: shellPath(work) }));
+  await denied(() => f.run({ GROK_HOME: '' }));
 });

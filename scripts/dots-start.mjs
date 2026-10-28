@@ -16,6 +16,9 @@ export function nextAction(report) {
     action: 'repair-installation', reason: installation[0], dispatch: false };
   if (report.auth?.reason === 'xai-api-key-environment') return { actor: 'environment-preparer',
     action: 'remove-api-key-from-vm-environment', reason: 'grok-subscription-only', dispatch: false };
+  if (report.auth?.storage && report.auth.storage.status !== 'permission-available')
+    return { actor: 'environment-preparer', action: 'prepare-private-grok-auth-storage',
+      reason: report.auth.storage.reason, dispatch: false };
   if (report.auth?.status !== 'signed-in') return { actor: report.auth?.status === 'api-billing-blocked' ? 'user' : 'agent-and-user',
     action: 'connect-grok-subscription', reason: report.auth?.status ?? 'unknown', command: ['grok', 'login', '--device-auth'], dispatch: false };
   if (recovery?.sessions.length) return { actor: 'agent', action: 'resume-creation-session', sessionId: recovery.sessions[0].sessionId,

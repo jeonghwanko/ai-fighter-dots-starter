@@ -51,3 +51,31 @@ An explicit creation request authorizes its routine preparation and requested st
 
 Publish/Republish affects new tasks. Continue existing characters in their original task; a new task does
 not inherit another task's files or login. Do not put personal auth or service keys into the shared setup.
+
+## Private Grok account storage in a running user VM
+
+Check the authentication storage directory before asking the user to approve device login. A successful
+`grok --version` does not prove the CLI can save a login. Dots may provide a read-only default home;
+a real trial returned `Failed to save credentials: Read-only file system` after browser approval.
+The startup inspection now checks directory metadata/access without reading or modifying credentials,
+and returns `prepare-private-grok-auth-storage` instead of another login request when storage is blocked
+or unknown. Permission availability alone is not proof of successful credential persistence.
+
+Grok officially supports an explicit `GROK_HOME` ([settings](https://docs.x.ai/build/settings)). If the
+host permits a writable private user workspace, an explicitly approved, newly initialized account
+store may use `<user-workspace>/.oddbout-private/grok-account` with directory mode 0700. This path is a
+kit convention, not an xAI-required path. Do not relocate HOME/CODEX_HOME, copy an old credential,
+follow a symlink, or change a read-only mount. Preserve unknown existing files and resolve them first.
+A non-secret, user-local `.oddbout-private/account-env.sh` may hold only the GROK_HOME selector; source
+it consistently for the official CLI, engine access checks and prepared creation jobs. Never put token
+values in that selector, shell commands, evidence, Git, a Page, or a reusable environment image.
+
+Before actual login, a newly created empty store can be checked with a non-secret create/rename/delete
+probe; remove only that probe. The official CLI owns login creation/refresh. After user approval,
+check the original process result, credential file presence/mode and the pinned engine's sanitized
+status, not token contents. Do not start a new device flow after a failed or lost result without first
+inspecting that attempt. Do not certify image/video entitlement from login alone.
+
+The account store belongs only to the running user's task. Environment preparation contains no login
+or per-user account directory; another task does not inherit this task's credentials. A custom
+GROK_HOME must also pass the clean-image guard before any preparation is published.

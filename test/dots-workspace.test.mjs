@@ -284,3 +284,26 @@ test('a known WebP network failure identifies the preparer without leaking child
   assert.deepEqual(result.diagnostic, { actor: 'environment-preparer', reason: 'network-connect-forbidden', host: 'storage.googleapis.com' });
   assert.equal(result.automaticRetry, false); assert.doesNotMatch(JSON.stringify(result), /SECRET|never-report/);
 });
+
+test('Grok auth storage is checked before probing, keeps its selector, and never certifies media access', async t => {
+  const f = await fixture(t);
+  const target = path.join(f.base, 'private-grok'); await mkdir(target, { mode: 0o700 });
+  const env = { GROK_HOME: target }, calls = [];
+  const deps = { ...f.deps, env, run: async (command, args, opts) => {
+    if (command === 'git') return f.run(command, args, opts);
+    calls.push({ command, args, env: opts.env });
+    return { code: 0, text: JSON.stringify({ login: 'ready', billing: 'subscription' }) };
+  } };
+  const options = { ...f.options, provider: 'grok', checkAuth: true };
+  const report = await doctor(options, deps);
+  assert.equal(calls.length, 1); assert.equal(calls[0].env.GROK_HOME, target);
+  assert.equal(report.auth.status, 'signed-in');
+  assert.equal(report.auth.storage.status, 'permission-available');
+  assert.equal(report.auth.storage.loginSaveVerified, false);
+  assert.equal(report.auth.imageAccess, 'unknown'); assert.equal(report.auth.videoAccess, 'unknown');
+  assert.deepEqual(await readdir(target), []);
+  calls.length = 0;
+  const blocked = await doctor(options, { ...deps, env: { GROK_HOME: 'relative' } });
+  assert.equal(calls.length, 0); assert.equal(blocked.auth.status, 'unknown');
+  assert.equal(blocked.auth.storage.reason, 'grok-auth-storage-path-invalid');
+});

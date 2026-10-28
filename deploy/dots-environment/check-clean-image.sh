@@ -19,6 +19,14 @@ if [[ -e "$HOME/.grok" || -L "$HOME/.grok" ]]; then
   # Unknown entries, hidden files and symlinks still require a fresh image.
   if ! binary_cache_only "$HOME/.grok"; then reject_auth; fi
 fi
+if [[ "${GROK_HOME+x}" ]]; then
+  [[ -n "$GROK_HOME" && "$GROK_HOME" = /* ]] || reject_auth
+  if [[ -e "$GROK_HOME" || -L "$GROK_HOME" ]]; then
+    if ! binary_cache_only "$GROK_HOME"; then reject_auth; fi
+  fi
+fi
+user_account="${AI_FIGHTER_ROOT:-/workspace/oddbout-workspace}/.oddbout-private/grok-account"
+if [[ -e "$user_account" || -L "$user_account" ]]; then reject_auth; fi
 if [[ -n "${XAI_API_KEY:-}${OPENAI_API_KEY:-}${SUPABASE_SERVICE_ROLE_KEY:-}" ]]; then
   echo 'snapshot-has-service-keys: remove injected secrets before preparing the image' >&2
   exit 1

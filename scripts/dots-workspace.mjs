@@ -7,6 +7,7 @@ import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { INSTALL_OUTCOME_UNKNOWN, directoryEntries, fail, fingerprint, readRecord, safePath, sha256, writableDirectory } from './dots-safety.mjs';
 import { inspectProvider } from './dots-provider.mjs';
+import { inspectGrokAuthStorage } from './dots-auth-storage.mjs';
 
 export const defaultRuntime = fileURLToPath(new URL('../', import.meta.url));
 const identifier = /^[a-z][a-z0-9-]{0,63}$/;
@@ -210,11 +211,14 @@ export async function doctor(options, { run = runCommand, find = findBinary, now
       // The pinned engine's shared reader is authoritative for image/video credential precedence.
       // No file contents, account claims, raw errors or token strings leave this subprocess.
       const python = path.join(venvDir, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
-      const probe = await run(python, ['-c', 'import json; from sprite_gen.workflow.access import probe_access; s=probe_access("grok"); print(json.dumps({k:s[k] for k in ("login","billing")}))'], { cwd: workspace, env: toolEnv });
+      const storage = await inspectGrokAuthStorage({ env: toolEnv });
+      const probe = storage.status !== 'permission-available' ? { code: 1, text: '' } : await run(python, ['-c', 'import json; from sprite_gen.workflow.access import probe_access; s=probe_access("grok"); print(json.dumps({k:s[k] for k in ("login","billing")}))'], { cwd: workspace, env: toolEnv });
       let state; try { state = JSON.parse(probe.text); } catch { /* redacted unknown */ }
       report.auth = { status: env.XAI_API_KEY?.trim() || state?.billing === 'api-credit' ? 'api-billing-blocked' : probe.code ? 'unknown' : state?.login === 'ready' ? 'signed-in' : state?.login === 'unavailable' ? 'sign-in-required' : 'unknown',
         ...(env.XAI_API_KEY?.trim() ? { reason: 'xai-api-key-environment' } : {}),
-        scope: 'pinned-engine-credential-probe', accountIdentity: 'unknown', imageAccess: 'unknown', videoAccess: 'unknown' };
+        scope: storage.status === 'permission-available' ? 'pinned-engine-credential-probe' : 'directory-metadata-only',
+        accountIdentity: 'unknown', imageAccess: 'unknown', videoAccess: 'unknown',
+        storage };
     }
     else if ((options.provider ?? 'codex') !== 'codex') report.auth = { status: 'unknown', reason: 'official-status-adapter-unavailable' };
     else {
