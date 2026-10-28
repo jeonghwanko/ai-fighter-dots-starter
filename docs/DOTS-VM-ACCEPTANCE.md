@@ -304,12 +304,53 @@ only by the added 19-byte infinite-loop extension. Original single-play GIFs, ga
 metadata are unchanged. Evidence is attacks/gif-display-diagnostic.json and
 attacks/review-loop-preservation.json in the character workspace. The new private Page references were
 read back, and the parent browser observed all three continuing to display different poses beyond one
-full cycle. User attack playback confirmation/selection is pending; defense has not started.
+full cycle. The user then explicitly confirmed playback and selected the attack set. Defense has not
+started; its generation instruction was blocked by automatic approval review and separate group
+authorization was requested.
 
-The existing foot-evidence v2 extension was also reviewed. Current walk ROIs touch a horizontal edge,
-which the extension cannot waive. Complete anatomical-foot observations are still needed before a
-legitimate corrected measurement; run lacks that evidence as well. These results are not proof that
-the artwork itself fails, nor permission to weaken the gait gate or search for passing coordinates.
+The existing foot-evidence v2 extension was also reviewed. Initial walk ROIs touched a horizontal edge,
+which the extension cannot waive. A whole-foot ROI correction removed those warnings, but both walk
+feet still failed speed consistency. Walk 3-4 and run 2/8/9 include overlapping feet that limit complete
+anatomical-foot identification. No v2 pass is claimed, and these results do not establish that the
+artwork itself fails or justify weakening the gait gate.
+
+Source correspondence found zero alpha pixels below the official crop in walk 8-9: touching the final
+bottom boundary does not by itself prove lost sole pixels. The intermediate canonical strips select
+source frames at alternating one/two-frame intervals but retain one uniform delay. Diagnostic visible
+sole-edge tracks became more consistent when evaluated at the corresponding source times; they are not
+certified anatomical contact points. A follow-up verified the actual selected Page GIFs against their
+upload receipt hashes: both use 60 ms per frame, walk 16/960 ms and run 12/720 ms. The 41.67 ms analysis
+applies only to the intermediate canonical strips. Any final package must be measured on its own pixels
+and durations. Run contact/flight remains unverified because of overlapping feet and missing established
+ground evidence. Reports and source comparisons are preserved under locomotion/whole-foot-followup/,
+including completion-report.json. Official alignment of separate copies is still under evaluation;
+selected outputs are preserved and no new provider clip was requested. The original walk/run repair processes and logs are preserved under locomotion/rife-repair-attempt/; no completed candidate report is available at this checkpoint.
+
+## RIFE preparation in the saved-image recipe
+
+Front cdd0034013a99bf364c2a3e981ca394d37f9e757 keeps runtime
+f8eb6b5ca7ed14ce77c0a06e9ab5e513bf918346 and prepares its official RIFE 20221029 release after the
+basic bootstrap. It exports SPRITE_GEN_DATA_DIR in env.sh to a release-specific ordinary tools folder,
+then requires the pinned download and actual interpolation check to succeed before preparation ends.
+This closes the observed omission: basic Dots bootstrap uses --skip-rife, so successful installation did
+not previously establish that video frame alignment could run in the saved VM.
+
+The separate clean verification VM ran the full updated recipe once, exit 0. In a new shell, the
+exported data path, official Python check (disc centre x=48.0), and sprite tools report all passed;
+RIFE was ok with no tool warnings. New user install and ordinary resume both exited 0 with valid JSON,
+reused installation steps [], and no subsequent download/fetch. Existing runtime52, tools, templates,
+workspaces, bindings and receipts retained their recorded hashes/mtime. Auth presence checks passed and
+recovery sessions were empty. There was no login, character generation, CI or publication. One attempted
+unsupported rife check CLI invocation returned exit 2; the supported Python check passed without
+repeating installation. Evidence is /workspace/oddbout-published-image-evidence/rife-preparation-*.
+
+In the character VM, the official default backend also passed installation and its check. Absence of
+familiar Vulkan driver paths was not evidence of execution failure. An earlier alternative-preparation
+instruction installed torch 2.13.0+cpu, but no torch inference or backend switch occurred; the original
+ncnn alignment process continued. Model/code settings and selected originals remained unchanged.
+Installation/check success does not certify the candidate animation's quality or a finished fighter.
+The saved-environment editor was checked again and remains starting/offline, desired running,
+failureReason null. Latest recipe publication and a fresh task from that new publication remain pending.
 
 ## Related animation change
 
