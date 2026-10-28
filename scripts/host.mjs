@@ -126,7 +126,7 @@ export const USAGE = `npm run host -- <명령>   (커뮤니티 생성 호스트,
   setup [--slots 2|3] [--memory <n>G] [--rife torch|ncnn]   이 PC에 생성기 설치·갱신 (npm run host:setup). torch: NVIDIA GPU로 고리 정렬 약 2배
   login [codex|grok] [--replace]  설치 폴더 안의 구독 로그인                 (npm run host:login)
   health                          두 구독에 아주 작은 실제 호출
-  join <코드>                     사이트(내 선수 → 내 PC로 만들기)의 붙이기 코드로 이 PC를 붙이고 워커를 켠다. 로그인 없이
+  join <코드> [setup 옵션]        사이트(내 선수 → 내 PC로 만들기)의 코드 하나로: 설치·구독 로그인(없으면)·워커. ODDBOUT 로그인 없이
   start                           열쇠가 없으면 로그인한 계정으로 받아 넣고 워커를 켠다 (npm run host:start)
   stop | restart | log [n]        워커
   pause | resume                  새 신청 받기 끄기·켜기(서버 스위치)
@@ -235,18 +235,33 @@ export async function runHost(argv, deps) {
           out(`${p} 로그인 — 아래 주소를 브라우저에서 열고 코드를 넣는다. 이 호스트가 쓸 구독 계정으로 로그인한다.`);
           if ((await og(['login', p, ...args.filter(a => a === '--replace')])).code !== 0) return 1;
         }
-        return (await og(['health'])).code;
+        const health = await og(['health'], { capture: true });
+        out(health.output.trim());
+        // An account with no subscription signs in but cannot make anything: say what to do now, not at the first job.
+        if (!healthy(health.output)) { out('두 구독이 모두 ok여야 일한다. 유료 구독(ChatGPT Plus·Pro, SuperGrok) 계정으로 다시 로그인한다: npm run host:login -- --replace'); return 1; }
+        return 0;
       }
       case 'health': return needInstall() ? (await og(['health'])).code : 1;
       case 'join': {
         // 내 PC 붙이기 (2026-10-28): the code from the site becomes this PC's worker key; the PC keeps no account session.
+        // One command from the site (2026-10-28): the code first — it lives thirty minutes and setup can take longer — then this PC's
+        // install and the subscriptions' sign-ins when they are missing, then the worker. The key waits in this process, never on disk or
+        // screen, until og takes it; a setup that fails needs a new code (a third key retires the oldest).
         const code = args[0] ?? '';
         if (!JOIN_CODE.test(code)) { out(MESSAGES['invalid-join-code']); return 1; }
-        if (!needInstall()) { out(`설치가 끝나면 같은 코드로 다시 한다(30분 유효): npm run host -- join ${code.slice(0, 8)}…`); return 1; }
         const joined = await deps.join(code);
+        out(`호스트 ${joined.name}의 코드를 받았다.`);
+        if (!installed(root)) {
+          out('이 PC에 생성기를 설치한다(처음은 오래 걸린다).');
+          if (await runHost(['setup', ...args.slice(1)], deps) !== 0) { out('설치가 끝나지 않았다. 알려 준 것을 고친 뒤 사이트에서 새 코드를 받아 다시 한다.'); return 1; }
+        }
         // The key goes straight from the API reply into og's worker.env (stdin, mode 600): never on screen, in argv or a log.
         const wrote = await og(['worker', 'key', joined.apiBase], { stdin: `${joined.key}\n`, capture: true });
         if (wrote.code !== 0) { out(wrote.output.trim()); return 1; }
+        // The subscriptions this install has not signed in to (or that do not answer): signed in now, one device code each.
+        const before = await og(['health'], { capture: true });
+        for (const provider of ['codex', 'grok'].filter(p => !new RegExp(`^og: ${p} ok\\b`, 'm').test(before.output)))
+          if (await runHost(['login', provider], deps) !== 0) { out('구독 로그인이 끝나지 않았다: npm run host:login 뒤 npm run host:start'); return 1; }
         out(`이 PC를 호스트 ${joined.name}에 붙였다(워커 열쇠는 화면에 보이지 않는다, 90일). ${joined.approved
           ? '승인된 호스트라 다른 사람의 신청도 받는다.' : '승인 전에는 내 신청만 이 PC로 만든다.'}`);
         return startWorker();

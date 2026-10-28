@@ -4,6 +4,14 @@ const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-T
 const reply = (body, status = 200) => jsonResponse(body, status, CORS);
 const statuses = { 'admin-required': 403, 'not-found': 404, 'review-conflict': 409, 'beta-capacity': 409,
   'invalid-query': 400, 'invalid-review': 400, 'validation-incomplete': 409, 'registration-open': 410 };
+// A small JSON body with only the named keys.
+async function smallBody(request, keys) {
+  let body;
+  try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 1000))); }
+  catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
+  if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !keys.includes(key))) throw new Problem(400, 'invalid-review');
+  return body;
+}
 export function createAdminHandler({ db }) {
   async function rpc(name, args) {
     const { data, error } = await db.rpc(name, args);
@@ -53,6 +61,24 @@ export function createAdminHandler({ db }) {
         const reason = (body.reason ?? '').trim();
         if (reason.length>500 || reason.includes('\0') || !reason.isWellFormed()) throw new Problem(400, 'invalid-review');
         return reply({ ok: true, review: await rpc('af_admin_review', { p_actor: actor, p_owner: parts[2], p_version: body.version, p_decision: body.decision, p_reason: reason }) });
+      }
+      // 생성 호스트와 확인을 기다리는 신청 (2026-10-28): approve or withdraw a host; run a stopped stage again or cancel a request.
+      if (parts.length === 2 && parts[1] === 'generation-hosts' && request.method === 'GET')
+        return reply({ ok: true, hosts: await rpc('af_admin_generation_hosts', { p_actor: actor }) });
+      if (parts.length === 4 && parts[1] === 'generation-hosts' && parts[3] === 'approval' && request.method === 'POST') {
+        if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');
+        const body = await smallBody(request, ['approved']);
+        if (typeof body.approved !== 'boolean') throw new Problem(400, 'invalid-review');
+        return reply({ ok: true, host: await rpc('af_admin_generation_host_approval', { p_actor: actor, p_host: parts[2], p_approved: body.approved }) });
+      }
+      if (parts.length === 2 && parts[1] === 'generations' && request.method === 'GET') {
+        const status = new URL(request.url).searchParams.get('status') ?? 'needs_review';
+        if (!['needs_review', 'open'].includes(status)) throw new Problem(400, 'invalid-query');
+        return reply({ ok: true, jobs: await rpc('af_admin_generations', { p_actor: actor, p_status: status }) });
+      }
+      if (parts.length === 4 && parts[1] === 'generations' && ['retry', 'cancel'].includes(parts[3]) && request.method === 'POST') {
+        if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');
+        return reply({ ok: true, job: await rpc(parts[3] === 'retry' ? 'af_admin_generation_retry' : 'af_admin_generation_cancel', { p_actor: actor, p_id: parts[2] }) });
       }
       return reply({ ok: false, code: 'not-found' }, 404);
     } catch (error) {

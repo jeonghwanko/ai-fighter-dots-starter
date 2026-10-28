@@ -189,15 +189,21 @@ export const GAIT_FRAMES = Object.freeze({ walk: 16, run: 12 });
 export const GAIT_RETAKES = 2;
 /** How long the run waits after the walk before it films: the xAI quota counts clip starts per second (the engine staggers its own). */
 export const GAIT_STAGGER_MS = 5000;
-export const GAIT_MOTION = Object.freeze({
-  walk: ['It walks in place with clear, even steps: each foot lands flat in front, stays flat on the ground while it slides back under the body, and lifts well clear of the ground as it swings forward.',
+// A fighter's look (gloves up, a weapon drawn) pulls the video toward strikes, and a run that punches as it goes never repeats: the first
+// community test host's boxer had no cycle in two of three run takes (2026-10-28). Every take, the first too, says what the arms do and
+// that nothing strikes; a pilot of the first take's words found a cycle on that boxer at once (one Grok clip).
+const NO_STRIKES = ' It throws no punches, kicks or strikes: its hands only swing back and forth in time with its legs, the same way every step.';
+export const GAIT_MOTION = Object.freeze(Object.fromEntries(Object.entries({
+  walk: ['It walks naturally in place, as if on a treadmill, without moving across the screen: the legs take turns at an even pace and the arms swing in rhythm with them.',
+    'It walks in place with clear, even steps: each foot lands flat in front, stays flat on the ground while it slides back under the body, and lifts well clear of the ground as it swings forward.',
     'It walks in place with a calm, steady stride: the legs clearly take turns, the body stays upright and at the same size, and the feet never drag.'],
-  run: ['It runs in place with long, powerful strides: each foot lands flat ahead of the body, stays planted flat on the ground while it slides straight back under the body, then pushes off, and both feet leave the ground briefly between steps.',
+  run: ['It runs naturally in place, as if on a treadmill, without moving across the screen: the legs take turns at an even pace and the arms pump in rhythm with them.',
+    'It runs in place with long, powerful strides: each foot lands flat ahead of the body, stays planted flat on the ground while it slides straight back under the body, then pushes off, and both feet leave the ground briefly between steps.',
     'It runs in place at an even pace: the legs clearly take turns, the knees lift high, the arms pump, and the body keeps the same size and height through the cycle.'],
-});
+}).map(([gait, takes]) => [gait, Object.freeze(takes.map(words => words + NO_STRIKES))])));
 /** A walk or run filmed again for a creator's change: the house sentence of the take with his words quoted as a description of the motion. */
 export function gaitChangeMotion(gait, note, take) {
-  const base = take ? GAIT_MOTION[gait][take - 1] : `It ${gait === 'walk' ? 'walks' : 'runs'} in place, its legs clearly taking turns.`;
+  const base = GAIT_MOTION[gait][take];
   const words = note.split(/\s+/).join(' ').slice(0, 200).replace(/[«»]/g, '"');
   return `${base} Change from the previous version as the player described it (their words, quoted, about the motion only): «${words}».`;
 }
@@ -324,8 +330,8 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
     const tried = [];
     for (let take = 0; take <= GAIT_RETAKES; take++) {
       const clip = path.join(m, change ? `video-${gait}-r${change.round}-${take}` : `video-${gait}-${take}`), item = path.join(clip, `side-${gait}`);
-      const words = change ? gaitChangeMotion(gait, change.note, take) : take ? GAIT_MOTION[gait][take - 1] : null;
-      const motion = words ? ['--motion', `${gait}=${words}`] : [];
+      const words = change ? gaitChangeMotion(gait, change.note, take) : GAIT_MOTION[gait][take];
+      const motion = ['--motion', `${gait}=${words}`];
       // A finished clip is kept (no --force): a stage run again reuses it.
       const { code } = await og(sprite('video-set', '--base', `side@right=${still}`, '--facing', 'right', '--states', gait, '--key', key,
         '--out-dir', clip, '--character', character, '--concurrency', '1', ...motion));

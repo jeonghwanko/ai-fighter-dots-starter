@@ -190,3 +190,41 @@ test('the worker learns which of its own jobs ended, and finds the folders it ha
     } finally { await rm(output, { recursive: true, force: true }); }
   } finally { await sql.close(); }
 });
+
+// 운영자 화면 (2026-10-28): the hosts (approve, withdraw) and the requests a stage left for the operator (run it again, or cancel).
+test('the admin approves and withdraws hosts, and runs a stopped stage again or cancels the request', async () => {
+  const { sql, owner, call, work, healthy } = await generation();
+  const theirs = 'other-token-0123456789';
+  try {
+    await healthy();
+    assert.equal((await call('GET', 'admin/generation-hosts')).status, 403); // not an admin yet
+    await sql.query('insert into public.af_admins(owner_id) values($1)', [owner]);
+    const applied = (await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true }, theirs)).body.host;
+    let hosts = (await call('GET', 'admin/generation-hosts')).body.hosts;
+    assert.deepEqual(hosts.map(h => [h.name, h.official, h.approved]), [['ODDBOUT', true, true], ['고양이 공방', false, false]]);
+    assert.equal((await call('POST', `admin/generation-hosts/${applied.id}/approval`, { approved: 'yes' })).status, 400);
+    assert.equal((await call('POST', `admin/generation-hosts/${applied.id}/approval`, { approved: true })).body.host.approved, true);
+    assert.equal((await call('POST', `admin/generation-hosts/${hosts[0].id}/approval`, { approved: false })).status, 404); // the official host stays
+    hosts = (await call('GET', 'admin/generation-hosts')).body.hosts;
+    assert.equal(hosts[1].approved, true);
+    assert.equal((await call('POST', `admin/generation-hosts/${applied.id}/approval`, { approved: false })).body.host.approved, false);
+
+    // A request whose looks the worker left for the operator: listed, run again from the looks, then cancelled.
+    const job = (await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() })).body.job;
+    const finish = (c, outcome, result) => work('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome, result });
+    let held = (await work('POST', 'claim', {})).body.job; await finish(held, 'ok', { brief: { profile: {} } });
+    held = (await work('POST', 'claim', {})).body.job; assert.equal(held.status, 'appearance');
+    await finish(held, 'review', { code: 'look-unclear' });
+    const waiting = (await call('GET', 'admin/generations?status=needs_review')).body.jobs;
+    assert.deepEqual(waiting.map(j => [j.id, j.status, j.errorCode, j.official]), [[job.id, 'needs_review', 'look-unclear', true]]);
+    assert.equal((await call('GET', 'admin/generations?status=everything')).status, 400);
+    assert.equal((await call('POST', `admin/generations/${job.id}/retry`, {})).body.job.status, 'appearance');
+    assert.equal((await call('POST', `admin/generations/${job.id}/retry`, {})).status, 409); // not waiting any more
+    assert.equal((await work('POST', 'claim', {})).body.job.status, 'appearance'); // the worker takes it again
+    assert.equal((await call('GET', 'admin/generations?status=open')).body.jobs.length, 1);
+    assert.equal((await call('POST', `admin/generations/${job.id}/cancel`, {})).body.job.status, 'cancelled');
+    assert.equal((await call('POST', `admin/generations/${job.id}/cancel`, {})).status, 409);
+    assert.equal((await call('GET', `generations/${job.id}`)).body.job.status, 'cancelled');
+    assert.equal((await call('GET', 'admin/generation-hosts', undefined, theirs)).status, 403);
+  } finally { await sql.close(); }
+});
