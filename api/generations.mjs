@@ -189,8 +189,11 @@ export function createGenerationHandler({ db, authenticate, present }) {
       if (error) throw new Problem(503, 'database-unavailable');
       const jobs = await Promise.all((data ?? []).map(view));
       // His one hosted fighter is taken by a job that is not over — a submitted package that failed its check frees it, as the database does.
+      // A fighter made on his own PC (his subscription) does not use it up (내 선수는 내 PC로, 2026-10-28).
+      const { data: own, error: ownError } = await db.from('af_generation_hosts').select('id').eq('owner_id', owner).maybeSingle();
+      if (ownError) throw new Problem(503, 'database-unavailable');
       return { ok: true, jobs, used: jobs.some(job => !['rejected', 'failed', 'cancelled', 'expired'].includes(job.status)
-        && !(job.status === 'submitted' && job.submission?.stage === 'rejected')),
+        && !(job.status === 'submitted' && job.submission?.stage === 'rejected') && !(own && job.host?.requested?.id === own.id)),
         capabilities: await call('af_generation_capabilities', {}) };
     }
     if (method === 'POST' && route === 'generations/uploads') {

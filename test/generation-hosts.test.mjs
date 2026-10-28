@@ -126,3 +126,26 @@ test('a join code becomes a worker key once, on a PC with no account session; a 
     assert.equal((await join(late)).body.code, 'join-code-invalid');
   } finally { await sql.close(); }
 });
+
+// His own PC pays for his own fighters, so they do not use up the one free hosted fighter; one request at a time still.
+test('fighters made on his own PC leave the one free hosted fighter alone; one open request at a time', async () => {
+  const { sql, call, healthy } = await generation();
+  const theirs = 'other-token-0123456789';
+  try {
+    await healthy();
+    await call('POST', 'generations/host', { name: '고양이 공방', billing: 'subscription', termsAccepted: true }, theirs);
+    const key = (await call('POST', 'generations/host/keys', {}, theirs)).body.key;
+    await call('POST', 'generation-worker/heartbeat', { health: { ok: true } }, key);
+    const ask = body => call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', ...body }, theirs, { 'idempotency-key': crypto.randomUUID() });
+    const free = (await ask({})).body.job;
+    await sql.query("update public.af_generation_jobs set status = 'submitted' where id = $1", [free.id]); // his free one, made
+    assert.equal((await ask({})).body.code, 'generation-quota');
+    const mine = (await ask({ host: 'mine' })).body.job;
+    assert.equal(mine.host.choice, 'host');
+    assert.equal((await ask({ host: 'mine' })).body.code, 'generation-quota'); // one at a time
+    await sql.query("update public.af_generation_jobs set status = 'submitted' where id = $1", [mine.id]);
+    assert.equal((await call('GET', 'generations', undefined, theirs)).body.used, true); // the free one
+    await sql.query("update public.af_generation_jobs set status = 'cancelled' where id = $1", [free.id]);
+    assert.equal((await call('GET', 'generations', undefined, theirs)).body.used, false); // his own PC's fighter does not count
+  } finally { await sql.close(); }
+});

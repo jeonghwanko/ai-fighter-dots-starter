@@ -3,6 +3,7 @@
 -- 수 없을까?" → "진행해줘"). Two changes:
 --   1. A host who accepted the terms makes his own requests on his own PC without the operator's approval. His words and pictures do not
 --      leave him, and his subscription pays, so there is nothing to approve. Approval is needed only to take other people's requests.
+--      A fighter made on his own PC does not use up the one free hosted fighter (his subscription paid for it).
 --   2. The site gives a signed-in host a one-time join code; his PC trades it for a worker key (`npm run host -- join <code>`), so the PC
 --      needs no ODDBOUT sign-in at all and keeps a host key only, never the account's session.
 -- The brief stays on the official host for every request.
@@ -71,7 +72,12 @@ begin
     if not (own or named.approved) then raise exception 'invalid-host'; end if;
   end if;
   if choice <> 'oddbout' and not own and not coalesce(p_host_consent, false) then raise exception 'host-consent-required'; end if;
-  if exists(select 1 from public.af_generation_jobs j where j.owner_id = p_owner and not public.af_generation_freed(j))
+  -- One request at a time; and one free hosted fighter on ODDBOUT's or another person's subscription. Fighters made on his own PC (his
+  -- own subscription) do not use it up.
+  if exists(select 1 from public.af_generation_jobs j where j.owner_id = p_owner and j.status not in ('submitted', 'rejected', 'failed', 'cancelled', 'expired'))
+    then raise exception 'generation-quota'; end if;
+  if not own and exists(select 1 from public.af_generation_jobs j where j.owner_id = p_owner and not public.af_generation_freed(j)
+      and not (j.host_choice = 'host' and j.requested_host in (select o.id from public.af_generation_hosts o where o.owner_id = p_owner)))
     then raise exception 'generation-quota'; end if;
   if (select count(*) from public.af_generation_jobs where owner_id = p_owner and created_at > now() - interval '1 day') >= 3
     then raise exception 'rate-limit'; end if;
