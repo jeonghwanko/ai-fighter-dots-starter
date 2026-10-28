@@ -45,11 +45,7 @@ test('a creator applies to host, waits for approval, and start puts a fresh work
     assert.equal(await host(), undefined);
     assert.equal(await runHost(['apply', '--name', '고양이 공방', '--accept-terms'], deps), 0);
     assert.match(lines.at(-1), /승인을 기다린다/);
-    assert.equal(await runHost(['start'], deps), 1);
-    assert.match(lines.at(-1), /승인되지 않았다/);
-    assert.ok(!ogCalls.some(c => c.args[0] === 'worker'));
-
-    await sql.query('update public.af_generation_hosts set approved = true where not official');
+    // Not approved, start all the same: the worker makes his own requests (내 선수는 내 PC로, 2026-10-28).
     lines.length = 0;
     assert.equal(await runHost(['start'], deps), 0);
     const keyCalls = ogCalls.filter(c => c.args.join(' ').startsWith('worker key'));
@@ -171,4 +167,32 @@ test('signin --device waits again on a link made before, and says how to get a n
   deps.signin.waitDevice = async () => { throw new Error('device-login-expired'); };
   assert.equal(await runHost(['signin', '--device'], deps), 1);
   assert.match(lines.at(-1), /만료됐다\. npm run host -- signin --device 로 새 링크를 받는다/);
+});
+
+// 내 PC 붙이기 (2026-10-28): a join code from the site, no sign-in on the PC; the key goes into og's stdin only, then the worker starts.
+test('join puts the site\'s code to work: the key into og only, then health and the worker, no session and no approval needed', async () => {
+  const lines = [], ogCalls = [], code = `ohj_${'a'.repeat(40)}`, key = `afw_${'b'.repeat(64)}`;
+  const deps = { root: path.join(os.tmpdir(), 'og-join-none'), out: line => lines.push(line), linger: () => true,
+    request: async () => { throw new Error('client-sign-in-required'); },
+    join: async given => { assert.equal(given, code); return { key, host: 'h1', name: '고양이 공방', approved: false, apiBase: 'https://example.supabase.co/functions/v1/ai-fighter' }; },
+    og: async (args, options = {}) => { ogCalls.push([args.join(' '), options.stdin]);
+      return { code: 0, output: args[0] === 'health' ? 'og: codex ok (h@x)\nog: grok ok (h@x)\n' : '' }; } };
+  assert.equal(await runHost(['join', 'ohj_short'], deps), 1);
+  assert.match(lines.at(-1), /붙이기 코드 모양이 아니다/);
+  assert.equal(await runHost(['join', code], deps), 1); // not installed yet
+  assert.match(lines.at(-1), /설치가 끝나면 같은 코드로 다시 한다/);
+  const root = await mkdtemp(path.join(os.tmpdir(), 'og-join-'));
+  try {
+    await mkdir(path.join(root, 'bin'), { recursive: true }); await writeFile(path.join(root, 'host.env'), ''); await writeFile(path.join(root, 'bin', 'og'), '');
+    deps.root = root; lines.length = 0;
+    assert.equal(await runHost(['join', code], deps), 0);
+    assert.deepEqual(ogCalls.map(([args]) => args), ['worker key https://example.supabase.co/functions/v1/ai-fighter', 'health', 'worker install']);
+    assert.equal(ogCalls[0][1], `${key}\n`);
+    assert.ok(!lines.some(line => line.includes(key)), 'the key never reaches the screen');
+    assert.ok(lines.some(line => line.includes('승인 전에는 내 신청만 이 PC로 만든다')));
+    // A used or late code says how to get a new one.
+    deps.join = async () => { throw new Error('join-code-invalid'); };
+    assert.equal(await runHost(['join', code], deps), 1);
+    assert.match(lines.at(-1), /새 코드를 받는다/);
+  } finally { await rm(root, { recursive: true, force: true }); }
 });
