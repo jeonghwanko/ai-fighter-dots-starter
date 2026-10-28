@@ -16,12 +16,16 @@ export const GENERATION_LIMITS = Object.freeze({ descriptionMin: 10, description
 const ARTIFACT = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const MOTIONS = Object.keys(spec.motions);
 const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
+// A join code (내 PC 붙이기): made by the site for a signed-in host, copied into his PC's terminal once; 160 bits, so nobody guesses one.
+export const JOIN_CODE = /^ohj_[a-f0-9]{40}$/;
+const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+const workerToken = () => `afw_${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
 const STATUS = { 'generation-unavailable': 409, 'generation-quota': 409, 'generation-capacity': 409, 'generation-state': 409, 'revision-limit': 409,
   'fighter-quota': 409, 'lease-lost': 409, 'rate-limit': 429, 'invalid-refs': 422, 'rights-required': 422, 'invalid-answer': 422,
   'invalid-result': 422, 'not-found': 404, 'account-disabled': 403, 'invite-required': 403,
   // 커뮤니티 호스트 (2026-10-28).
   'invalid-host': 422, 'host-consent-required': 422, 'host-offline': 409, 'host-capacity': 409, 'host-terms-required': 422,
-  'host-not-approved': 403, 'host-key-limit': 409,
+  'host-not-approved': 403, 'host-key-limit': 409, 'host-not-found': 404, 'join-code-invalid': 410, 'invalid-join-code': 400,
   // The submission path's own refusals (`af_create_submission`, `af_submit`), as the creator's routes name them.
   'submission-quota': 409, 'open-submission-exists': 409, 'idempotency-conflict': 409, 'upload-closed': 409, 'assets-incomplete': 409,
   'submissions-paused': 503, 'storage-budget-full': 503, 'beta-capacity': 503 };
@@ -136,9 +140,11 @@ export function createGenerationHandler({ db, authenticate, present }) {
     if (!data) return null;
     const { data: keys, error: keyError } = await db.from('af_workers').select('expires_at,enabled').eq('host_id', data.id);
     if (keyError) throw new Problem(503, 'database-unavailable');
-    const listed = (await call('af_generation_hosts_public', {})).find(h => h.id === data.id);
+    // On now, approved or not (not approved, he makes his own requests: 내 선수는 내 PC로).
+    const live = data.enabled && Date.parse(data.worker_seen_at ?? '') > Date.now() - 180_000 && data.worker_health?.ok === true;
+    const today = await call('af_generation_host_today', { p_host: data.id });
     return { id: data.id, name: data.name, approved: data.approved, enabled: data.enabled, acceptsAny: data.accepts_any, billing: data.billing,
-      dailyLimit: data.daily_limit, online: listed?.online ?? false, todayLeft: listed?.todayLeft ?? null, lastSeenAt: data.worker_seen_at ?? null,
+      dailyLimit: data.daily_limit, online: live, todayLeft: Math.max(data.daily_limit - (Number(today) || 0), 0), lastSeenAt: data.worker_seen_at ?? null,
       keys: (keys ?? []).filter(k => k.enabled && Date.parse(k.expires_at) > Date.now()).map(k => ({ expiresAt: k.expires_at })) };
   }
   const hostView = row => ({ id: row.id, name: row.name, approved: row.approved, enabled: row.enabled, acceptsAny: row.accepts_any,
@@ -165,20 +171,29 @@ export function createGenerationHandler({ db, authenticate, present }) {
     if (route === 'generations/host/keys') {
       if (method === 'POST') {
         // The key is shown once, here; the database keeps its hash.
-        const token = `afw_${Array.from(crypto.getRandomValues(new Uint8Array(32)), b => b.toString(16).padStart(2, '0')).join('')}`;
+        const token = workerToken();
         const issued = await call('af_generation_host_key', { p_owner: owner, p_hash: await sha256(new TextEncoder().encode(token)),
           p_label: `host-${new Date().toISOString().slice(0, 10)}` });
         return { ok: true, key: token, host: issued.host, expiresAt: issued.expiresAt };
       }
       if (method === 'DELETE') return { ok: true, revoked: await call('af_generation_host_revoke', { p_owner: owner }) };
     }
+    if (route === 'generations/host/join-codes' && method === 'POST') {
+      // Shown once, here, for the host to paste into his PC (`npm run host -- join <code>`); the database keeps its hash.
+      const code = `ohj_${hex(crypto.getRandomValues(new Uint8Array(20)))}`;
+      const made = await call('af_generation_host_join_code', { p_owner: owner, p_hash: await sha256(new TextEncoder().encode(code)) });
+      return { ok: true, code, host: made.host, expiresAt: made.expiresAt };
+    }
     if (method === 'GET' && route === 'generations') {
       const { data, error } = await db.from('af_generation_jobs').select('*').eq('owner_id', owner).order('created_at', { ascending: false }).limit(5);
       if (error) throw new Problem(503, 'database-unavailable');
       const jobs = await Promise.all((data ?? []).map(view));
       // His one hosted fighter is taken by a job that is not over — a submitted package that failed its check frees it, as the database does.
+      // A fighter made on his own PC (his subscription) does not use it up (내 선수는 내 PC로, 2026-10-28).
+      const { data: own, error: ownError } = await db.from('af_generation_hosts').select('id').eq('owner_id', owner).maybeSingle();
+      if (ownError) throw new Problem(503, 'database-unavailable');
       return { ok: true, jobs, used: jobs.some(job => !['rejected', 'failed', 'cancelled', 'expired'].includes(job.status)
-        && !(job.status === 'submitted' && job.submission?.stage === 'rejected')),
+        && !(job.status === 'submitted' && job.submission?.stage === 'rejected') && !(own && job.host?.requested?.id === own.id)),
         capabilities: await call('af_generation_capabilities', {}) };
     }
     if (method === 'POST' && route === 'generations/uploads') {
@@ -198,8 +213,15 @@ export function createGenerationHandler({ db, authenticate, present }) {
       const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed', 'delegate', 'host', 'hostConsent']);
       if (!['ko', 'en'].includes(body.language)) throw new Problem(422, 'invalid-language');
       if (body.delegate !== undefined && typeof body.delegate !== 'boolean') throw new Problem(422, 'invalid-body');
-      // Where it goes (커뮤니티 호스트): ODDBOUT's own worker by default, any approved host, or one host by id.
-      const host = body.host ?? 'oddbout';
+      // Where it goes (커뮤니티 호스트): ODDBOUT's own worker by default, any approved host, one host by id, or `mine` — his own host,
+      // approved or not, with no consent to give (내 선수는 내 PC로, 2026-10-28).
+      let host = body.host ?? 'oddbout';
+      if (host === 'mine') {
+        const { data: own, error: ownError } = await db.from('af_generation_hosts').select('id').eq('owner_id', owner).maybeSingle();
+        if (ownError) throw new Problem(503, 'database-unavailable');
+        if (!own) throw new Problem(404, 'host-not-found');
+        host = own.id;
+      }
       if (!['oddbout', 'any'].includes(host) && !UUID.test(host)) throw new Problem(422, 'invalid-host');
       const target = host === 'oddbout' ? {} : { p_host_choice: UUID.test(host) ? 'host' : 'any', ...(UUID.test(host) ? { p_host: host.toLowerCase() } : {}),
         p_host_consent: body.hostConsent === true };
@@ -270,6 +292,17 @@ export function createGenerationHandler({ db, authenticate, present }) {
       if (!isObject(health) || JSON.stringify(health).length > 2000) throw new Problem(422, 'invalid-health');
       return { ok: true, capabilities: await call('af_generation_host_heartbeat', { p_host: host, p_health: health }) };
     }
+    // Which of this host's jobs are over (the worker closes their folders): only his own, only the ended ones.
+    if (route === 'generation-worker/ended') {
+      const jobs = fields(body, ['jobs']).jobs;
+      if (!Array.isArray(jobs) || jobs.length > 50) throw new Problem(422, 'invalid-body');
+      if (!jobs.length) return { ok: true, ended: [] };
+      const ids = jobs.map(id), mine = host ?? await call('af_generation_official', {});
+      const { data, error } = await db.from('af_generation_jobs').select('id,status,assigned_host').in('id', ids);
+      if (error) throw new Problem(503, 'database-unavailable');
+      return { ok: true, ended: (data ?? []).filter(row => ['cancelled', 'expired', 'rejected', 'failed', 'submitted'].includes(row.status)
+        && (row.assigned_host === mine || (!host && row.assigned_host === null))).map(row => row.id) };
+    }
     if (route === 'generation-worker/claim') {
       const row = await call('af_generation_claim_for', { p_host: host });
       if (!row?.id) return { ok: true, stage: 'idle' };
@@ -315,6 +348,15 @@ export function createGenerationHandler({ db, authenticate, present }) {
         return json({ ok: true, capabilities: await call('af_generation_capabilities', {}) });
       if (!isWorker && request.method === 'GET' && parts.join('/') === 'generations/hosts')
         return json({ ok: true, hosts: await call('af_generation_hosts_public', {}) });
+      // A PC trades a join code for its worker key: no account session on the PC, a host key only.
+      if (!isWorker && request.method === 'POST' && parts.join('/') === 'generations/host/join') {
+        const body = fields(await readJson(request, 1000), ['code']);
+        if (typeof body.code !== 'string' || !JOIN_CODE.test(body.code)) throw new Problem(400, 'invalid-join-code');
+        const token = workerToken();
+        const joined = await call('af_generation_host_join', { p_code_hash: await sha256(new TextEncoder().encode(body.code)),
+          p_key_hash: await sha256(new TextEncoder().encode(token)), p_label: `host-join-${new Date().toISOString().slice(0, 10)}` });
+        return json({ ok: true, key: token, host: joined.host, name: joined.name, approved: joined.approved, expiresAt: joined.expiresAt });
+      }
       // The key names the worker's host; the stages it may take are his (the official host's when the key names none).
       if (isWorker) return json(await worker(request, parts, await authenticate(request, 'generation')));
       return json(await creator(request, parts, await authenticate(request, false)));

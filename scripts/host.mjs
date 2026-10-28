@@ -11,6 +11,7 @@ import { homedir, totalmem, userInfo } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { createRemoteClient } from '../api/client.mjs';
+import { JOIN_CODE } from '../api/generations.mjs';
 import { readProject } from '../mcp/connection-readiness.mjs';
 import { defaultSessionPath, login, startDeviceLogin, waitDeviceLogin } from './login.mjs';
 
@@ -105,6 +106,9 @@ const MESSAGES = {
   'device-login-start-failed': '승인 링크를 만들지 못했다. 잠시 뒤 npm run host -- signin --device 를 다시 실행한다.',
   'host-terms-required': `호스트 약속에 동의해야 신청된다(${TERMS_DOC}).`,
   'host-not-approved': '아직 승인되지 않았다. 승인되면 다시 한다(npm run host -- status).',
+  'host-not-found': '호스트 신청이 없다: oddbout.com 내 선수의 "내 PC로 만들기"나 npm run host -- apply --name <이름> --accept-terms',
+  'join-code-invalid': '붙이기 코드가 만료됐거나 이미 쓰였다. oddbout.com 내 선수의 "내 PC로 만들기"에서 새 코드를 받는다(30분 유효, 한 번).',
+  'invalid-join-code': '붙이기 코드 모양이 아니다(ohj_ 로 시작한다). 사이트에 보인 명령을 그대로 붙여 넣는다.',
   'host-key-limit': '살아 있는 워커 열쇠가 이미 둘이다. npm run host -- revoke 로 끄고 다시 한다.',
   'invalid-host': '이름(2~40자)·과금(subscription|api-key)·하루 한도(0~50)를 확인한다.',
   'not-found': '호스트 신청이 없다: npm run host -- apply …',
@@ -120,7 +124,8 @@ export const USAGE = `npm run host -- <명령>   (커뮤니티 생성 호스트,
   setup [--slots 2|3] [--memory <n>G]   이 PC에 생성기 설치·갱신            (npm run host:setup)
   login [codex|grok] [--replace]  설치 폴더 안의 구독 로그인                 (npm run host:login)
   health                          두 구독에 아주 작은 실제 호출
-  start                           열쇠가 없으면 받아 넣고 워커를 켠다       (npm run host:start)
+  join <코드>                     사이트(내 선수 → 내 PC로 만들기)의 붙이기 코드로 이 PC를 붙이고 워커를 켠다. 로그인 없이
+  start                           열쇠가 없으면 로그인한 계정으로 받아 넣고 워커를 켠다 (npm run host:start)
   stop | restart | log [n]        워커
   pause | resume                  새 신청 받기 끄기·켜기(서버 스위치)
   any on|off                      "아무 호스트" 신청 받기
@@ -139,6 +144,16 @@ export async function runHost(argv, deps) {
   const [command = 'help', ...args] = argv;
   const api = async (route, method = 'GET', body) => deps.request(route, { method, ...(body ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
   const needInstall = () => { if (installed(root)) return true; out(`이 PC에 설치가 없다(${root}): npm run host:setup`); return false; };
+  // Both subscriptions answered, then the user unit. Approval is not needed: not approved, the worker makes its owner's own requests.
+  async function startWorker() {
+    const health = await og(['health'], { capture: true });
+    out(health.output.trim());
+    if (!healthy(health.output)) { out('두 구독이 모두 ok여야 켠다: npm run host:login 뒤 npm run host:start'); return 1; }
+    if (!deps.linger()) out(`참고: 로그아웃하면 워커도 멈춘다. 계속 돌리려면 한 번: sudo loginctl enable-linger ${userInfo().username}`);
+    if ((await og(['worker', 'install'])).code !== 0) return 1;
+    out('워커가 켜졌다. 1분 안에 사이트의 내 호스트가 온라인이 된다. 내 선수 신청에서 "내 PC"를 고를 수 있다.');
+    return 0;
+  }
   const showHost = host => out(host
     ? `호스트 ${host.name} (${host.id}) — ${host.approved ? '승인됨' : '승인 대기'}, ${host.enabled ? '켜짐' : '꺼짐(pause)'}, 아무 호스트 신청 ${host.acceptsAny ? '받음' : '안 받음'}, `
       + `하루 한도 ${host.dailyLimit}${host.todayLeft != null ? `·오늘 남은 ${host.todayLeft}` : ''}, ${host.online ? '온라인' : '오프라인'}, 과금 ${host.billing}`
@@ -174,7 +189,7 @@ export async function runHost(argv, deps) {
         }
         const { host } = await api('generations/host', 'POST', { name, billing, termsAccepted: true });
         showHost(host);
-        if (!host.approved) out('운영자 승인을 기다린다. 그동안 npm run host:setup 과 npm run host:login 을 해 둘 수 있다.');
+        if (!host.approved) out('다른 사람의 신청은 운영자 승인을 기다린다. 승인 전에도 내 신청은 내 PC로 만든다: npm run host:setup → npm run host:login → npm run host:start');
         return 0;
       }
       case 'status': {
@@ -216,27 +231,33 @@ export async function runHost(argv, deps) {
         return (await og(['health'])).code;
       }
       case 'health': return needInstall() ? (await og(['health'])).code : 1;
+      case 'join': {
+        // 내 PC 붙이기 (2026-10-28): the code from the site becomes this PC's worker key; the PC keeps no account session.
+        const code = args[0] ?? '';
+        if (!JOIN_CODE.test(code)) { out(MESSAGES['invalid-join-code']); return 1; }
+        if (!needInstall()) { out(`설치가 끝나면 같은 코드로 다시 한다(30분 유효): npm run host -- join ${code.slice(0, 8)}…`); return 1; }
+        const joined = await deps.join(code);
+        // The key goes straight from the API reply into og's worker.env (stdin, mode 600): never on screen, in argv or a log.
+        const wrote = await og(['worker', 'key', joined.apiBase], { stdin: `${joined.key}\n`, capture: true });
+        if (wrote.code !== 0) { out(wrote.output.trim()); return 1; }
+        out(`이 PC를 호스트 ${joined.name}에 붙였다(워커 열쇠는 화면에 보이지 않는다, 90일). ${joined.approved
+          ? '승인된 호스트라 다른 사람의 신청도 받는다.' : '승인 전에는 내 신청만 이 PC로 만든다.'}`);
+        return startWorker();
+      }
       case 'start': {
         if (!needInstall()) return 1;
-        const { host } = await api('generations/host');
-        if (!host) { showHost(host); return 1; }
-        if (!host.approved) { out(MESSAGES['host-not-approved']); return 1; }
-        if (host.billing === 'api-key') out('참고: 이 꾸러미는 지금 구독 로그인(codex·grok)만 쓴다. API 키로 내려면 그 키로 로그인한 계정을 쓴다.');
         if (!existsSync(path.join(root, 'worker.env'))) {
+          // Without a join code: the key from the signed-in account (npm run host -- signin).
+          const { host } = await api('generations/host');
+          if (!host) { showHost(host); return 1; }
+          if (host.billing === 'api-key') out('참고: 이 꾸러미는 지금 구독 로그인(codex·grok)만 쓴다. API 키로 내려면 그 키로 로그인한 계정을 쓴다.');
           // The key goes straight from the API reply into og's worker.env (stdin, mode 600): never on screen, in argv or a log.
           const { key } = await api('generations/host/keys', 'POST');
           const wrote = await og(['worker', 'key', await deps.apiBase()], { stdin: `${key}\n`, capture: true });
           if (wrote.code !== 0) { out(wrote.output.trim()); return 1; }
           out('워커 열쇠를 받아 설치 폴더에 넣었다(화면에 보이지 않는다, 90일).');
         }
-        const health = await og(['health'], { capture: true });
-        out(health.output.trim());
-        if (!healthy(health.output)) { out('두 구독이 모두 ok여야 켠다: npm run host:login'); return 1; }
-        if (!deps.linger()) out(`참고: 로그아웃하면 워커도 멈춘다. 계속 돌리려면 한 번: sudo loginctl enable-linger ${userInfo().username}`);
-        if ((await og(['worker', 'install'])).code !== 0) return 1;
-        if (!host.enabled) out('서버 스위치가 꺼져 있다(pause). 신청을 받으려면: npm run host -- resume');
-        out('워커가 켜졌다. 1분 안에 목록에 온라인으로 보인다: npm run host -- status');
-        return 0;
+        return startWorker();
       }
       case 'stop': case 'restart': return needInstall() ? (await og(['worker', command])).code : 1;
       case 'log': return needInstall() ? (await og(['worker', 'log', String(Number(args[0]) || 40)])).code : 1;
@@ -301,6 +322,17 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     system: () => checkSystem(),
     linger: () => spawnSync('loginctl', ['show-user', userInfo().username, '--property=Linger', '--value'], { encoding: 'utf8' }).stdout?.trim() === 'yes',
     project: () => readProject(KIT),
+    // A join code needs no session: the kit's project and its publishable key reach the public route.
+    join: async code => {
+      const project = await readProject(KIT);
+      if (!project) throw new Error('kit-project-missing');
+      const apiBase = `${project.origin}/functions/v1/ai-fighter`;
+      const response = await fetch(`${apiBase}/generations/host/join`, { method: 'POST', body: JSON.stringify({ code }), redirect: 'error',
+        headers: { apikey: project.publishableKey, 'content-type': 'application/json' }, signal: AbortSignal.timeout(30_000) });
+      const result = await response.json().catch(() => null);
+      if (!response.ok || result?.ok !== true) throw new Error(result?.code ?? `api-http-${response.status}`);
+      return { ...result, apiBase };
+    },
     signin: { browser: argv => login({ argv }), startDevice: argv => startDeviceLogin({ argv, next: '승인하면 이 명령이 이어서 로그인을 마친다. 이 창을 닫지 않는다.' }), waitDevice: replace => waitDeviceLogin({ replace }) },
   }).then(code => { process.exitCode = code; });
 }

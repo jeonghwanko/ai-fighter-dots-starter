@@ -6,7 +6,8 @@
 // generation-stages.mjs. Config: `<root>/worker.env` (ODDBOUT_GENERATION_API, ODDBOUT_GENERATION_WORKER_KEY, optional
 // ODDBOUT_GENERATION_KEEP_DAYS), written by `og worker key`. Once a day it runs `og prune`: a finished job's request text and pictures go.
 import { spawn } from 'node:child_process';
-import { appendFile, mkdir, readFile, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createStages, ogJobId } from './generation-stages.mjs';
@@ -29,6 +30,20 @@ export function parseHealth(output, at = new Date().toISOString()) {
   return { ok: ok('codex') && ok('grok'), codex: ok('codex'), grok: ok('grok'), at };
 }
 
+/**
+ * This PC's worker jobs not marked closed: folder → job id. A job the requester cancelled, or that expired, while it waited for him
+ * never comes back to the worker, so it would stay "open" (and block og setup) until the 14-day prune; the worker asks the API.
+ */
+export async function unclosedJobs(output) {
+  const found = new Map();
+  for (const name of await readdir(output).catch(() => [])) {
+    const hex = /^\d{8}-gen-([0-9a-f]{32})$/.exec(name)?.[1];
+    if (hex && !existsSync(path.join(output, name, '.closed')))
+      found.set(name, `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`);
+  }
+  return found;
+}
+
 export function createApi({ base, key, fetcher = fetch }) {
   const headers = extra => ({ authorization: `Bearer ${key}`, ...extra });
   const json = async response => { try { return { status: response.status, ...(await response.json()) }; } catch { return { status: response.status, ok: false, code: 'bad-reply' }; } };
@@ -38,6 +53,7 @@ export function createApi({ base, key, fetcher = fetch }) {
   return {
     heartbeat: health => post('heartbeat', { health }),
     claim: () => post('claim', {}),
+    ended: jobs => post('ended', { jobs }),
     progress: (job, progress, event) => post('progress', { jobId: job.id, leaseToken: job.leaseToken, progress, ...(event ? { event } : {}) }),
     finish: (job, outcome, result) => post('finish', { jobId: job.id, leaseToken: job.leaseToken, outcome, result }),
     async artifact(job, name, bytes) {
@@ -96,6 +112,12 @@ export async function main({ once = false } = {}) {
       // A health check waits for a codex slot like any run; past ten minutes it counts as not healthy.
       health = parseHealth(await quiet(['health'], 600_000)); checkedAt = Date.now();
       await say(`health codex=${health.codex} grok=${health.grok}`);
+      // Jobs that ended while they waited for their requester (cancelled, expired): closed here, so og setup can update again.
+      const unclosed = await unclosedJobs(path.join(kit, 'output'));
+      if (unclosed.size) {
+        const reply = await api.ended([...unclosed.values()].slice(0, 50)).catch(() => null), ended = new Set(reply?.ended ?? []);
+        for (const [name, id] of unclosed) if (ended.has(id)) { await writeFile(path.join(kit, 'output', name, '.closed'), '').catch(() => {}); await say(`job ${id} ended — closed`); }
+      }
     }
     if (Date.now() - prunedAt >= TIMING.pruneMs) {
       // Between jobs only (this loop runs no stage meanwhile); og prune keeps open jobs and recent closed ones.

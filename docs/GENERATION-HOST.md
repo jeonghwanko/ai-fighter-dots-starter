@@ -1,12 +1,13 @@
 # 생성 호스트 되기
 
 ODDBOUT 제작자는 글과 그림으로 선수를 **신청**할 수 있다(호스팅 생성). 신청을 실제로 그리는 것은 생성 PC다.
-**생성 호스트**는 내 Linux PC와 내 구독으로 다른 제작자의 신청을 만든다. 신청자는 목록에서 나를 고르거나 "아무 호스트"를 고른다.
+**생성 호스트**는 내 Linux PC와 내 구독으로 선수를 만든다. 먼저 **내 신청을 내 PC로** 만들고(승인 없이), 운영자가 승인하면
+다른 제작자의 신청도 만든다. 신청자는 목록에서 나를 고르거나 "아무 호스트"를 고른다.
 
 - 신청 글의 안전 판정과 프로필 초안(브리프)은 늘 ODDBOUT이 한다. 호스트는 그 뒤의 외형·동작·제출을 맡는다.
 - 한 호스트가 처음 가져간 신청은 끝까지 그 호스트가 맡는다.
-- 지금은 **초대 호스트** 단계다. 운영자가 승인한 호스트만 일한다. 사이트의 호스트 화면과 보상(계정 금화, 선수의 "만든 호스트" 표시,
-  호스트 순위)은 다음 단계다.
+- 내 신청(신청할 때 호스트를 "내 PC", 에이전트는 `host: mine`)은 승인이 필요 없다. 내 글과 그림이 내 PC 밖으로 나가지 않고 내 구독이 낸다.
+- 다른 사람의 신청은 운영자가 승인한 호스트만 받는다(지금은 초대 단계). 보상(계정 금화, 선수의 "만든 호스트" 표시, 호스트 순위)은 다음 단계다.
 
 생성기 자체의 설명은 [host/README.md](../host/README.md)에 있다.
 
@@ -36,20 +37,27 @@ Windows·macOS는 아직 지원하지 않는다.
 ```bash
 git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter && git checkout codex/creator-hosting && npm ci
-
-npm run host -- signin                       # ODDBOUT 로그인. 브라우저가 없는 PC는: npm run host -- signin --device
-npm run host -- apply --name "고양이 공방" --accept-terms   # 신청. 운영자 승인을 기다린다
 npm run host:setup                           # 생성기 설치(처음은 오래 걸린다)
 npm run host:login                           # codex·grok 로그인(장치 코드), 끝나면 두 구독에 아주 작은 호출로 확인
-npm run host:start                           # 승인된 뒤: 워커 열쇠를 받아 넣고 워커를 켠다
-npm run host -- status
 ```
+
+1. **붙이기 코드** — oddbout.com 내 선수의 "내 PC로 만들기"에서 호스트 이름을 적고 호스트 약속에 동의하면 명령 한 줄이 나온다.
+   ```bash
+   npm run host -- join ohj_…                 # 이 PC를 내 호스트에 붙이고 워커를 켠다(30분 안에 한 번)
+   ```
+   PC에는 ODDBOUT 로그인이 남지 않는다. 그 호스트의 워커 열쇠만 남는다.
+2. 사이트에서 선수를 신청할 때 호스트로 **내 PC**를 고른다. 승인 전에도 된다.
+3. 다른 사람의 신청도 받고 싶으면 운영자 승인을 기다린다. 승인되면 워커를 다시 켤 필요 없이 그 신청도 가져간다.
+
+사이트 대신 터미널만으로도 된다: `npm run host -- signin`(브라우저가 없는 PC는 `--device`) → `npm run host -- apply --name "고양이 공방" --accept-terms`
+→ `npm run host:start`. `npm run host -- status`가 상태를 보인다.
 
 - `host:setup`은 설치 폴더(기본 `~/.local/share/oddbout-host`, 바꾸려면 모든 명령에 `--root <폴더>`나 `ODDBOUT_HOST_ROOT`)를 만든다.
   그 안에 생성기 파일, 고정된 키트(sprite-gen 엔진 포함), codex·grok CLI를 둔다. sudo는 쓰지 않는다.
 - `host:login`은 **설치 폴더 안에** 따로 로그인한다. 내 평소 `~/.codex`·`~/.grok` 로그인과 설정(MCP 서버, 플러그인)은 쓰지 않는다.
   호스트로 쓸 구독 계정으로 로그인한다. 로그인한 계정은 고정된다. 바꿀 때만 `npm run host:login -- --replace`를 쓴다.
-- `host:start`의 워커 열쇠는 화면에 나오지 않는다. 바로 설치 폴더의 `worker.env`(나만 읽음)에 들어간다. 열쇠는 90일 간다.
+- `join`·`host:start`의 워커 열쇠는 화면에 나오지 않는다. 바로 설치 폴더의 `worker.env`(나만 읽음)에 들어간다. 열쇠는 90일 간다.
+  살아 있는 열쇠는 두 개까지다. 세 번째 PC를 붙이면 가장 오래된 열쇠가 꺼진다.
 - 로그아웃해도 워커가 돌게 하려면 한 번 `sudo loginctl enable-linger $USER`를 한다. `host:start`가 필요하면 알려 준다.
 
 ## 운영
