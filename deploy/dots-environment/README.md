@@ -14,7 +14,7 @@ A complete managed base needs no sudo or system package changes. Only missing ba
 installation when root or supported noninteractive sudo is already available; otherwise preparation stops
 with the exact missing list. OS packages follow the base image's security repository. `dots:start` records versions. This is an environment-preparer operation, before any user login or character work.
 Grok's npm lifecycle scripts are disabled: its official launcher supports in-package binary extraction
-when the home directory is unwritable. Do not change HOME/GROK_HOME to route around authentication or
+when the home directory is unwritable. Executable extraction does not establish login storage. Do not change HOME/GROK_HOME during installation to route around authentication or
 host restrictions. Confirm the actual launched CLI version; no login or agent prompt is used by installation.
 The script never logs in or generates. Do not run it over a user's active environment.
 Only npm/pip download caches move to the workspace tools folder; env.sh retains those paths for later
@@ -27,7 +27,9 @@ the same files and versions in a new task explicitly selecting this saved enviro
 Set the Start skill to [DOTS-START.md](../../docs/DOTS-START.md), and save the repository front-door path.
 Every task sources `/workspace/.oddbout-tools/env.sh` before its first command. The runtime cache
 is `/workspace/.oddbout/runtimes`; the new user's persistent workspace is `/workspace/oddbout-workspace`.
-The template-workspace has only setup receipts and must not be reused as a user's character workspace.
+The release-specific /workspace/.oddbout-template-workspaces/<runtime-commit> has only setup receipts
+and must not be reused as a user's character workspace. Preparation retains older template bindings;
+changing the release must prepare a new template rather than silently reusing an old runtime.
 No service keys, `.grok` login, ODDBOUT sessions, private source files, or character jobs belong in the image.
 The presence-only guard allows an empty `.grok` directory or only its official `bin` cache: launching
 `grok --version` may create that cache before login. Authentication, unknown/hidden entries, symlinked
@@ -57,3 +59,6 @@ First user task: `node dots.mjs --install`. It returns one action; the agent ope
 device-login flow only if required, then reruns the same command. Thereafter `node dots.mjs` checks and
 recovers the bound runtime, with no pull or upgrade of an active character. An explicit creation request
 continues into the existing grouped workflow. Login and transfer receipts are not visual approval.
+
+For a running user's read-only default home, see the explicit private GROK_HOME procedure in
+[DOTS-START.md](../../docs/DOTS-START.md). This does not put authentication into the saved image.

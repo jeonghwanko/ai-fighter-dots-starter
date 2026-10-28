@@ -20,7 +20,7 @@ cloud-mcp, plugin-bundle, migration-rules, api, file-input-probe, runtime-fetch,
 cloud-plugin-publication, creator-plugin, sprite-tools) report **115 passed, 0 failed, 5 skipped**.
 Skipped checks require POSIX permissions/symlinks or the Linux WebP fixture. Directory junction rejection
 did run on Windows. Actual npm --version through the repaired launcher returned **10.9.7**.
-The Linux shell recipe passes Bash syntax validation; it has not been installed as a fresh saved image.
+The initial Linux shell recipe passed Bash syntax validation. Subsequent prepared-image evidence is recorded below.
 
 The existing Dots VM task **ODDBOUT 0.4.0 분리 설치 검증** ran the candidate in
 /workspace/oddbout-dots-vm-acceptance-20261028, preserving the original checkouts.
@@ -90,8 +90,8 @@ connect-grok-subscription / sign-in-required; these checks did not log in or gen
 Evidence: /workspace/work/oddbout-v055-evidence/direct-install-6b7b8bf/verification.json and adjacent
 stdout/stderr, exit-code, file-hash and Git-trace records in that VM.
 
-The saved environment draft now names this tested front door. Preparing its reusable filesystem and
-republishing still require the environment preparer, followed by a new-task and real-restart check.
+At that stage, the saved environment draft named the tested front door. Preparing its reusable filesystem and
+republishing still required the environment preparer. Later publication and fresh-task results follow below; an actual restart remains unverified.
 Direct installation in a running user's VM does not update the reusable saved image.
 
 ## Current pinned runtime and launcher verification
@@ -118,6 +118,42 @@ remained connect-grok-subscription / sign-in-required. Evidence is under
 Local readiness/startup/workspace/bundle regression tests after this change: **42 passed, 0 failed,
 3 platform skips**, 45 total. CI was not run. These tests and ordinary invocation are not a VM restart.
 
+## Prepared image publication and fresh VM (2026-10-28 KST)
+
+The environment editor prepared front door **25ea88ff7a3084f5025f8923af8b0872cfcceafc** with
+runtime **52db965f7ad6f54b99e8920a6be2db14dc1e2756**, kit 0.5.5 and unchanged engine pin.
+The old image guard incorrectly treated Grok's official binary-only `.grok/bin` cache as a login.
+The extracted presence-only guard now accepts that cache while rejecting unknown/hidden entries,
+symlinks, ODDBOUT auth and injected API/service keys without reading their contents. Its relevant
+Linux tests passed **4/4**, with no failures/skips (Windows: 3 passed, 1 POSIX skip).
+Installer re-preparation exited 0 with installation: reused and steps: []; template binding, runtime
+receipt and FETCH_HEAD hashes/mtimes stayed unchanged. No personal auth or character jobs were present.
+Evidence: /workspace/oddbout-repreparation-evidence/summary.json in the environment editor.
+
+The prepared filesystem was published at 08:41 KST. A separate new task explicitly selected this saved
+environment: **ODDBOUT 0.5.5 준비 이미지 새 VM 검증**, thread
+01a17fc0-ae3d-7039-bb4c-ffc03199a0a9, host **e13195d701ce**. Before any manual installation/fetch,
+it already contained the expected front/runtime/engine commits, clean source trees, env.sh, tools,
+runtime receipt and template binding. Actual versions were Node 22.22.2, Grok 1.0.70, Python 3.12.14,
+ffmpeg/ffprobe 7.1.5, plus working img2webp -exact.
+
+In /workspace/oddbout-published-image-check, first --install and ordinary resume both exited **0**
+with valid JSON. Installation returned **reused, steps: []**; ordinary resume has no installation/steps
+fields. Both Git traces contained no fetch/pull/clone. Across 3,575 monitored runtime items, including
+receipt, FETCH_HEAD and vendor, hashes and mtimes were unchanged. Template and user binding stayed
+unchanged; the presence-only guard passed before/after and inspected workspaces had no character jobs.
+The sole nextAction was connect-grok-subscription. No login, generation, registration or CI ran.
+Evidence: /workspace/oddbout-published-image-evidence/result.json and adjacent snapshots/traces.
+
+This proves prepared-file propagation to a fresh VM and process reinvocation. No supported VM restart
+operation was exposed; an actual reboot has not been verified. At this point the character VM's old
+login process was gone and its official probe reported login: unavailable. Later login attempts are
+recorded below. A subscription selection is not media entitlement.
+
+The saved Install script was subsequently aligned to front door 25ea88f and saved as a draft.
+That configuration-only republish is still pending: the environment editor reports starting/offline
+and exposes no supported restart/retry action. The successful publication above proves the prepared
+filesystem, not publication of that later draft.
 ## Actual private file transfer and display boundary
 
 A clearly labeled TEST PNG (not generated character artwork) completed official native file input,
@@ -130,14 +166,65 @@ The full PNG decoded and a repeated receive returned reused: true. Evidence is i
 
 VM view_image plus image emission did not establish display: the actual browser UI showed image load
 failure. The host's designated /codex output mount was read-only and yielded no downloadable artifact.
-Originals and receipts remain intact. conversationDisplayed is false; no fabricated URLs, file IDs,
-base64 chat dumps or duplicate generation were used. The official Pages file bridge then stored the same TEST PNG in an owner-only personal Page. Its
-write_page_reference receipt returned file_access_confirmed: true, matching byte_size and sha256.
-The exact native Markdown was inserted/read back; the actual browser screenshot showed the complete
-yellow TEST / TRANSFER FIXTURE image. The parent's read_page_reference returned actual PNG pixels.
-The earlier VM local-image failure remains a separate failed route. Page display is verified; current
-conversation inline rendering and future animation playback must be observed separately. Neither
-private transfer nor a source receipt alone proves display.
+Originals and receipts remain intact; that local route did not display them. No fabricated URLs, file IDs,
+base64 chat dumps or duplicate generation were used. The official Pages file bridge then stored the same
+TEST PNG in an owner-only personal Page. Its write_page_reference receipt returned
+file_access_confirmed: true, matching byte_size and sha256. The exact native Markdown was inserted and
+read back; the browser screenshot showed the complete yellow TEST / TRANSFER FIXTURE image. The parent's
+read_page_reference returned actual PNG pixels, and the user explicitly confirmed seeing that image
+in the parent conversation. Target-conversation still-image display is verified through this route.
+Animation playback remains unverified. Private transfer or a source receipt alone does not prove display.
+
+## Official Grok authentication storage
+
+The first newly approved official device login failed after approval with
+Failed to save credentials: Read-only file system (os error 30), exit 1. The default home was /home/agent
+on a read-only mount; ordinary write access was unavailable. A version check had not exposed this failure.
+No mount, HOME or CODEX_HOME change was attempted.
+
+Official GROK_HOME support was verified against the xAI settings documentation and the installed CLI.
+A separate, newly created empty fixture passed create/rename/read/delete of synthetic data; no credentials
+were read or copied. With explicit user approval, the character VM then initialized its own
+/workspace/oddbout-gun-meme-cat/.oddbout-private/grok-account directory, mode 0700, and a selector-only
+account-env.sh. The exact path and mode are kit design choices, not a mandatory xAI directory layout.
+The user approved the new official device code. The original process exited 0; the pinned engine
+reported login: ready / billing: subscription. The auth file's metadata showed uid 1000, mode 0600
+and owner-only access. No credential contents were printed. This confirms persistence in this running
+VM, not persistence after an actual reboot or transfer to a different task.
+
+The follow-up startup patch checks directory metadata and write/search access before the opt-in
+credential probe or a login recommendation. A blocked/unknown directory returns
+prepare-private-grok-auth-storage. The image guard also checks custom GROK_HOME and rejects a known
+per-user account store. It never reads authentication contents. Relevant Windows tests:
+37 passed, 0 failed, 5 platform skips (42 total). On the prepared-image verification VM, a separate
+clean checkout of 52717e69f787dc497a921f212a524784f231efa3 passed all 12 auth-storage/image-cleanliness
+Linux tests with no failures or skips. The actual default home returned grok-auth-storage-not-writable.
+The original runtime/vendor/receipt/FETCH_HEAD and workspace/template binding hashes and mtimes stayed
+unchanged. Evidence: /workspace/oddbout-published-image-evidence/auth-storage-*. This is isolated code
+verification, not publication of a new saved image. The existing character remains bound to runtime 52db965.
+
+## Actual requested appearance generation
+
+The same character VM, runtime 52db965 and engine 0dc264b completed the requested orange meme cat
+with a cartoon blaster using Grok subscription auth. The first job failed on a missing --facing
+argument before provider construction; source and empty-output evidence resolved it as not-started.
+The corrected job eba0be47-6d72-4cae-b262-07472fb763c6 ran once and completed succeeded / exit 0.
+The report records grok-imagine-image-2.0 and one completed provider call.
+
+The raw PNG is 832 x 1248, 666,663 bytes, SHA-256
+f34df0253e2cc130eb0f24c60d917e6e4d52b9f70a9302e83a97668f6d6dcd16.
+It is preserved under /workspace/oddbout-gun-meme-cat/output/gun-meme-cat-work/artifacts/idle/v1/
+alongside generation-report.json and artifact-evidence.json. Automatic magenta removal failed
+(only 381 nonzero-alpha pixels). A separate official white-background cutout retained the original
+without another provider call. Edge cleanup is still required before game packaging.
+
+The recovered full-body image, same-source face crop and raw original were saved to the existing
+private Page page_721df1d51e808191b01432f6dd03d078 and read back. The parent retrieved actual pixels
+through read_page_reference, but the user explicitly reported that these character images were not
+visible in this conversation. A browser subsequently opened the actual Page full-body preview successfully and preserved a screenshot.
+Character display in the parent conversation therefore remains unverified; the earlier TEST image
+confirmation does not certify this artifact. Appearance selection is pending and later motion groups
+are stopped. No video, all-eleven-motion package or complete creation acceptance is claimed.
 
 ## Related animation change
 
@@ -153,12 +240,12 @@ before a new immutable pin, without upgrading a character already in progress.
 
 ## Open acceptance gates
 
-The reviewed release remains a candidate. Still required: prepared saved-image publication, new-task verification and restart;
-official Grok login plus actual image/video entitlement;
-visible delivery to the current conversation; requested character creation, group review and final package.
-No successful actual generation, displayed VM output or complete fighter is claimed.
+The reviewed release remains a candidate. Prepared-image publication and fresh-task verification passed; an actual VM restart remains unverified;
+official Grok login and one actual still generation passed in the existing VM. Remaining gates are
+character display in the current conversation, video entitlement/playback, appearance selection, all
+remaining motion groups and final package. One generated appearance is not a completed fighter.
 
-## Required saved-VM evidence (still pending)
+## Saved-VM acceptance checklist (remaining gates noted above)
 
 Use the existing user's VM with an isolated validation workspace; retain existing characters and originals.
 The old task title is not a version source: record actual kit manifest/version, source commit and vendor pin.
@@ -179,4 +266,4 @@ The old task title is not a version source: record actual kit manifest/version, 
 
 The existing VM passed the related tests and the new selected VM passed direct installation/resume,
 immutable creation-readiness checks and private original transfer.
-The prepared saved image and complete creation path remain unverified. Main must not advertise this candidate as verified until that evidence exists. Publishing/Republishing the saved environment is a host operation outside the kit.
+The prepared saved image passed fresh-task verification; the complete creation path remains unverified. Main must not advertise this candidate as verified until that evidence exists. Publishing/Republishing the saved environment is a host operation outside the kit.
