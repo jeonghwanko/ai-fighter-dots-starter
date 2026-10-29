@@ -1,9 +1,12 @@
 import { access, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { inspectTools, inspectRife, installImg2webp, toolEnv, toolsItem } from './sprite-tools.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+import { guardDotsExecution } from './dots-provider.mjs';
+import { INSTALL_OUTCOME_UNKNOWN } from './dots-safety.mjs';
 
 export const kitRoot = fileURLToPath(new URL('../', import.meta.url));
 export const spriteRoot = path.join(kitRoot, 'vendor', 'sprite-gen');
@@ -38,14 +41,29 @@ export async function spriteStatus({ tools = true } = {}) {
 
 // Setup steps that can hang on a network or proxy get a bound; generation commands keep none (a video run takes minutes).
 const SETUP_TIMEOUT_MS = { git: 10 * 60_000, venv: 5 * 60_000, pip: 20 * 60_000, check: 60_000 };
-function run(command, args, { cwd = kitRoot, timeout = 0 } = {}) {
+// A stop (SIGTERM, SIGHUP) reaches sprite-gen, which writes its report and exits 128 + the signal; until then this wrapper
+// waits for it instead of dying first, so whoever stopped the run reads a finished report (vendor/sprite-gen docs/gen.md
+// "Outcome"). A stop sent to this process alone is passed on; one sent to the process group reaches sprite-gen itself, and
+// it acts on the first only. Ctrl-C (SIGINT) reaches the whole terminal group and is not passed on.
+const FORWARDED = ['SIGTERM', 'SIGHUP'];
+const WAITED = [...FORWARDED, 'SIGINT'];
+export function run(command, args, { cwd = kitRoot, timeout = 0 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, stdio: 'inherit', shell: false, windowsHide: true, timeout,
       env: { ...toolEnv(spriteRoot), PYTHONUTF8: '1', SPRITE_GEN_ROOT: spriteRoot } });
-    child.once('error', reject);
+    // Setup steps keep their bound and the default stop; a generation command (no timeout) is waited for.
+    const handlers = timeout ? [] : WAITED.filter(name => process.platform !== 'win32' || name !== 'SIGHUP').map(name => {
+      const handler = () => { if (FORWARDED.includes(name)) { try { child.kill(name); } catch {} } };
+      process.on(name, handler);
+      return [name, handler];
+    });
+    const done = () => { for (const [name, handler] of handlers) process.off(name, handler); };
+    child.once('error', error => { done(); reject(error); });
     child.once('exit', (code, signal) => {
-      if (signal && timeout) console.error(`${path.basename(command)} stopped after ${Math.round(timeout / 1000)} s; check the network or proxy and rerun.`);
-      resolve(signal ? 1 : code ?? 1);
+      done();
+      if (signal && timeout) console.error(`${path.basename(command)} was interrupted; inspect the original install before retrying.`);
+      // A child the signal itself ended exits 128 + its number, as a shell reports it (og's ledger reads 143 as interrupted).
+      resolve(signal && timeout ? INSTALL_OUTCOME_UNKNOWN : signal ? 128 + (os.constants.signals[signal] ?? 0) : code ?? 1);
     });
   });
 }
@@ -53,7 +71,7 @@ function run(command, args, { cwd = kitRoot, timeout = 0 } = {}) {
 export async function main(args) {
   if (args[0] === 'status') { console.log(JSON.stringify(await spriteStatus(), null, 2)); return 0; }
   if (args[0] === 'setup') {
-    if (args.length !== 1) throw new Error('Usage: npm run sprite:setup');
+    if (args.length !== 1 && !(args.length === 2 && args[1] === '--skip-rife')) throw new Error('Usage: npm run sprite:setup -- [--skip-rife]');
     if (await exists(path.join(kitRoot, '.git'))) {
       // Follow a moved pin or URL. History is not needed to run the pinned commit; depth 1 skips the download.
       // Git refuses, and setup stops, when the checkout has local edits the pinned commit would overwrite.
@@ -83,9 +101,10 @@ export async function main(args) {
     if (installed) return installed;
     const help = await run(spritePython, ['-m', 'sprite_gen.cli', '--help'], { timeout: SETUP_TIMEOUT_MS.check });
     if (help) return help;
-    return setupTools();
+    return setupTools({ includeRife: !args.includes('--skip-rife') });
   }
   if (!args.length) throw new Error('Pass a sprite-gen command, for example: npm run sprite -- workflow --kind sprite');
+  await guardDotsExecution(kitRoot, process.env.INIT_CWD || process.cwd(), args);
   if (!(await exists(spritePython))) throw new Error('Run npm run sprite:setup first. No fallback to a global sprite-gen installation.');
   if (!(await inspectSpriteEngine()).motion) throw new Error('vendor/sprite-gen predates sprite-gen-agent (no motion engine). Run npm run sprite:setup.');
   await requireMotionContract(args, process.env.INIT_CWD || process.cwd());
@@ -98,29 +117,33 @@ export async function main(args) {
  * After sprite-gen: the tools a run needs that the kit can fetch without sudo (img2webp with -exact, RIFE), then a report
  * of what the person preparing the workspace must still install. Exit 1 only when a kit download failed for a required tool.
  */
-async function setupTools() {
+export async function setupTools({ includeRife = true, inspect = inspectTools, inspectOptional = inspectRife,
+  installWebp = installImg2webp, execute = run, log = console.error } = {}) {
   const options = { spriteRoot, python: spritePython };
-  let tools = await inspectTools({ ...options, rife: false });
+  let tools = await inspect({ ...options, rife: false });
   let failed = 0;
   if (tools.img2webp.status !== 'ok' && tools.img2webp.install.actor === 'agent') {
-    try { console.error(`img2webp: installed ${await installImg2webp(options)}`); }
-    catch (error) { console.error(error.message); failed = 1; }
+    try { log(`img2webp: installed ${await installWebp(options)}`); }
+    catch (error) { log(error.message); failed = 1; }
   }
   // RIFE: sprite-gen's own installer. A finished install is only checked again; a failed check frame (no Vulkan) is a warning.
-  let rife = await inspectRife({ ...options, env: toolEnv(spriteRoot) });
-  if (rife.status === 'missing') {
-    if (await run(spritePython, ['-m', 'sprite_gen.cli', 'rife', 'install'])) console.error('rife: sprite-gen rife install did not finish; see the message above.');
-    rife = await inspectRife({ ...options, env: toolEnv(spriteRoot) });
+  let rife = { status: 'not-checked', required: false };
+  if (includeRife) {
+    rife = await inspectOptional({ ...options, env: toolEnv(spriteRoot) });
+    if (rife.status === 'missing') {
+      if (await execute(spritePython, ['-m', 'sprite_gen.cli', 'rife', 'install'])) log('rife: sprite-gen rife install did not finish; see the message above.');
+      rife = await inspectOptional({ ...options, env: toolEnv(spriteRoot) });
+    }
   }
-  tools = { ...(await inspectTools({ ...options, rife: false })), rife };
+  tools = { ...(await inspect({ ...options, rife: false })), rife };
   const item = toolsItem(tools);
-  console.error('\nsprite-gen tools:');
+  log('\nsprite-gen tools:');
   for (const name of ['ffmpeg', 'ffprobe', 'img2webp', 'rife']) {
     const tool = item[name];
-    console.error(`  ${name.padEnd(9)} ${tool.status.padEnd(8)} ${tool.path ?? ''}${tool.version ? ` (${tool.version})` : ''}${tool.reason ? ` — ${tool.reason}` : ''}`);
+    log(`  ${name.padEnd(9)} ${tool.status.padEnd(8)} ${tool.path ?? ''}${tool.version ? ` (${tool.version})` : ''}${tool.reason ? ` — ${tool.reason}` : ''}`);
   }
-  for (const warning of item.warnings) console.error(`  warning: rife ${warning.status} — ${warning.message}. Next: ${warning.command}`);
-  if (item.nextAction) console.error(`  action required (${item.nextAction.actor}): ${item.nextAction.commands.join('  |  ')}`);
+  for (const warning of item.warnings) log(`  warning: rife ${warning.status} — ${warning.message}. Next: ${warning.command}`);
+  if (item.nextAction) log(`  action required (${item.nextAction.actor}): ${item.nextAction.commands.join('  |  ')}`);
   return failed;
 }
 

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
-import { cp, lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises';
+import { cp, lstat, mkdtemp, mkdir, readFile, realpath, rm, symlink, utimes, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -54,6 +54,59 @@ function plan(overrides = {}) {
     groupId: 'appearance', targets: [{ item: 'idle', version: 'v1' }], inputs: [],
     outputs: [`output/${sessionId}-work/artifacts/idle/v1/image.png`], ...overrides };
 }
+
+test('Dots output contract blocks an existing prepared job before workflow or generation dispatch', async t => {
+  const f = await fixture(t), key = randomUUID();
+  await f.jobs.prepare(sessionId, 1, key, plan());
+  await f.put('output/creation-environment/environment.json', JSON.stringify({ host: 'dots' }));
+  let dispatches = 0;
+  await assert.rejects(runCreationJob(f.store, sessionId, key, { execute: async () => { dispatches++; return { code: 0 }; } }),
+    /dots-(?:protected-session-provider-blocked|generation-output-contract-unverified)/);
+  assert.equal(dispatches, 0); assert.equal((await f.jobs.read(sessionId, key)).attempt, 0);
+  const job = await f.jobs.read(sessionId, key); job.status = 'unknown'; job.attempt = 1; await f.jobs.write(sessionId, job);
+  const recovered = await runCreationJob(f.store, sessionId, key, { execute: async () => { dispatches++; return { code: 0 }; } });
+  assert.equal(recovered.status, 'unknown'); assert.equal(dispatches, 0);
+});
+
+test('Dots managed Grok image, batch and video recovery reach the original engine with unchanged arguments', async t => {
+  const routes = [
+    ['gen', '--provider', 'grok'], ['gen', '--provider=grok'], ['gen-set', '--provider=grok'],
+    ['video', '--image', 'input.png'], ['video-set', '--base=side=input.png'],
+    ['video-set', '--base=front=input.png', '--states=walk', '--still-provider=grok'],
+    ['video-resume', '--request-id', 'existing-request'],
+  ];
+  for (const args of routes) {
+    const f = await fixture(t), key = randomUUID();
+    await f.put('output/creation-environment/environment.json', JSON.stringify({ host: 'dots' }));
+    const video = args[0].startsWith('video');
+    const p = plan({ args, workflowArgs: ['workflow', '--kind', video ? 'sprite' : 'image', '--image-provider', 'grok',
+      ...(video ? ['--motion-method', 'grok-video'] : []), '--confirmed-access', 'grok'] });
+    await f.jobs.prepare(sessionId, 1, key, p);
+    const calls = [];
+    const execute = async (root, engine, actual) => {
+      calls.push([...actual]); assert.equal(root, f.root); assert.equal(engine, 'sprite');
+      if (actual[0] !== 'workflow') await f.put(p.outputs[0], 'mock output, no generation');
+      return { code: 0 };
+    };
+    const result = await runCreationJob(f.store, sessionId, key, { execute });
+    assert.equal(result.status, 'succeeded'); assert.deepEqual(calls, [p.workflowArgs, args]);
+    const job = await f.jobs.read(sessionId, key); job.status = 'unknown'; await f.jobs.write(sessionId, job);
+    assert.equal((await runCreationJob(f.store, sessionId, key, { execute })).status, 'unknown');
+    assert.equal(calls.length, 2, 'unknown jobs must not dispatch workflow, generation or recovery again');
+  }
+});
+
+test('Dots managed jobs reject ambiguous or mismatched providers without weakening the Codex row contract', async t => {
+  const f = await fixture(t);
+  await f.put('output/creation-environment/environment.json', JSON.stringify({ host: 'dots' }));
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan({ args: ['gen'] })), /explicit-provider-required/);
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan({ args: ['gen-set', '--provider=grok'] })), /provider-preflight-mismatch/);
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan({ args: ['gen-set', '--provider=codex'] })), /provider-preflight-mismatch/);
+  const workflowArgs = ['workflow', '--kind', 'sprite', '--image-provider', 'grok', '--motion-method', 'grok-video', '--confirmed-access', 'grok'];
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), plan({ args: ['video-set', '--base=front=a'], workflowArgs })),
+    /dots-video-set-still-provider-required/);
+  assert.deepEqual(await f.jobs.list(sessionId), []);
+});
 
 test('versions survive source overwrites; revised motions preserve other choices and old files', async t => {
   const f = await fixture(t);
@@ -348,8 +401,11 @@ test('one ODDBOUT plugin resolves the existing workspace without a local MCP or 
   const manifest = JSON.parse(await readFile(path.join(built.plugin, 'plugin.json'), 'utf8'));
   assert.equal(manifest.name, 'oddbout');
   assert.notEqual(manifest.extensions['com.openai'].requires_local_executor, true);
-  assert.equal(manifest.extensions['com.openai'].apps, './.app.json');
-  await assert.rejects(readFile(path.join(built.plugin, 'mcp.json')), { code: 'ENOENT' });
+  // One plugin: the hosted MCP inside (no separately added connector), never a local command.
+  assert.equal(manifest.extensions['com.openai'].apps, undefined);
+  await assert.rejects(readFile(path.join(built.plugin, '.app.json')), { code: 'ENOENT' });
+  const servers = JSON.parse(await readFile(path.join(built.plugin, 'mcp.json'), 'utf8')).mcpServers;
+  assert.deepEqual([servers.oddbout.type, servers.oddbout.url, servers.oddbout.command], ['streamable-http', 'https://mcp.oddbout.com/mcp', undefined]);
   const { initialize } = await import(pathToFileURL(path.join(built.plugin, 'launcher.mjs')).href);
   const location = await initialize({ base: path.join(scratch, 'user-data'), workspace: scratch });
   assert.equal(location.runtime, await realpath(kitRoot));
@@ -419,6 +475,68 @@ test('cancelling a running job stops its engine and leaves the generation unknow
   assert.deepEqual([result.status, result.reason], ['unknown', 'stopped-by-request']);
   await assert.rejects(lstat(await f.jobs.stopFile(sessionId, jobId)), /ENOENT/, 'the stop request is cleared');
   await assert.rejects(f.jobs.cancel(sessionId, jobId), /only-unstarted-or-running-job-can-be-cancelled/);
+});
+
+// A generation that leaves sprite-gen's outcome report (vendor/sprite-gen docs/gen.md "Outcome") where its --report says.
+const reportPlan = () => plan({ args: ['gen', '--provider', 'codex', '--prompt', 'fixture', '--report', `output/${sessionId}-work/artifacts/idle/v1/gen.report.json`] });
+const reporting = (f, code, report) => async (_root, _engine, argv) => {
+  if (argv[0] === 'workflow') return { code: 0 };
+  await f.put(argv[argv.indexOf('--report') + 1], JSON.stringify({ ok: false, ...report }));
+  return { code };
+};
+
+test('a generation its report shows sent nothing ends failed and not charged, exit 3 or stopped', async t => {
+  const f = await fixture(t), refusedId = randomUUID();
+  await f.jobs.prepare(sessionId, 1, refusedId, reportPlan());
+  const refused = await runCreationJob(f.store, sessionId, refusedId, { execute: reporting(f, 3, { provider_submitted: false,
+    errors: [{ state: null, code: 'preflight', retryable: false, message: 'gen: empty prompt' }] }) });
+  assert.deepEqual([refused.status, refused.outcome.charge, refused.outcome.next], ['failed', 'not-charged', 'fix']);
+  // Stopped before its request left: sprite-gen wrote `interrupted` with nothing sent, so the job is no longer `unknown`.
+  const g = await fixture(t), stoppedId = randomUUID();
+  await g.jobs.prepare(sessionId, 1, stoppedId, reportPlan());
+  const stopped = await runCreationJob(g.store, sessionId, stoppedId, { execute: reporting(g, 143, { provider_submitted: false,
+    errors: [{ state: null, code: 'interrupted', retryable: true, message: 'stopped by SIGTERM' }] }) });
+  assert.deepEqual([stopped.status, stopped.outcome.charge], ['failed', 'not-charged']);
+  assert.equal((await g.jobs.prepare(sessionId, 1, randomUUID(), reportPlan())).status, 'prepared', 'a failed job blocks nothing');
+});
+
+test('a generation whose request left is unknown unless its report names why it failed', async t => {
+  const f = await fixture(t), unseenId = randomUUID();
+  await f.jobs.prepare(sessionId, 1, unseenId, reportPlan());
+  const unseen = await runCreationJob(f.store, sessionId, unseenId, { execute: reporting(f, 1, { provider_submitted: true,
+    errors: [{ state: null, code: 'outcome-unknown', retryable: false, message: 'the server may have accepted it' }] }) });
+  assert.deepEqual([unseen.status, unseen.outcome.charge, unseen.outcome.next], ['unknown', 'request-sent', 'inspect']);
+  assert.match((await f.jobs.inspect(sessionId, unseenId)).nextAction, /never repeat this job/);
+
+  const g = await fixture(t), refusedId = randomUUID();
+  await g.jobs.prepare(sessionId, 1, refusedId, reportPlan());
+  const refused = await runCreationJob(g.store, sessionId, refusedId, { execute: reporting(g, 1, { provider_submitted: true,
+    errors: [{ state: null, code: 'provider-rate-limited', retryable: true, message: '(HTTP 429)' }] }) });
+  assert.deepEqual([refused.status, refused.outcome.charge, refused.outcome.next], ['failed', 'request-sent', 'retry']);
+  assert.match((await g.jobs.inspect(sessionId, refusedId)).nextAction, /may succeed/);
+});
+
+test('a video request xAI took is resumed by its id, never generated again', async t => {
+  const f = await fixture(t), jobId = randomUUID();
+  const videoPlan = plan({ args: ['video', '--image', 'still.png', '--prompt', 'walks', '--out', `output/${sessionId}-work/artifacts/idle/v1/clip.mp4`,
+    '--report', `output/${sessionId}-work/artifacts/idle/v1/clip.report.json`],
+  workflowArgs: ['workflow', '--kind', 'sprite', '--motion-method', 'grok-video'],
+  outputs: [`output/${sessionId}-work/artifacts/idle/v1/clip.mp4`] });
+  await f.jobs.prepare(sessionId, 1, jobId, videoPlan);
+  const result = await runCreationJob(f.store, sessionId, jobId, { execute: reporting(f, 143, { provider_submitted: true, request_id: 'req-7',
+    errors: [{ state: null, code: 'interrupted', retryable: false, message: 'stopped by SIGTERM', request_id: 'req-7' }] }) });
+  assert.deepEqual([result.status, result.outcome.next, result.outcome.requestIds], ['unknown', 'resume', ['req-7']]);
+  assert.match((await f.jobs.inspect(sessionId, jobId)).nextAction, /video-resume.*req-7|req-7.*video-resume/);
+});
+
+test('an earlier run\'s report, or none, leaves a failed generation unknown', async t => {
+  const f = await fixture(t), jobId = randomUUID(), p = reportPlan();
+  await f.jobs.prepare(sessionId, 1, jobId, p);
+  const stale = await f.put(p.args.at(-1), JSON.stringify({ ok: false, provider_submitted: false, errors: [] }));
+  const old = new Date(Date.now() - 3600_000);
+  await utimes(await localPath(f.root, stale), old, old);
+  const result = await runCreationJob(f.store, sessionId, jobId, { execute: async (_r, _e, argv) => ({ code: argv[0] === 'workflow' ? 0 : 1 }) });
+  assert.deepEqual([result.status, result.outcome.charge, result.outcome.next], ['unknown', 'unknown', 'inspect']);
 });
 
 test('a stopped step that generates nothing (extract, packing) ends failed', async t => {

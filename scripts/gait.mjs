@@ -1,9 +1,12 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import path from 'node:path';
 import sharp from 'sharp';
-import { walkPlan, loadSequence, combineReview, commonGameRequest, validatePlan, digest } from '../tools/ai-fighter/gait.mjs';
+import { walkPlan, loadSequence, combineReview, commonGameRequest, validatePlan, digest, loopReview, scaleCheckConfigErrors, scaleCheckRuns,
+  scaleCheckEntries } from '../tools/ai-fighter/gait.mjs';
+import { spritePython } from './sprite-gen.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
 const root = fileURLToPath(new URL('../', import.meta.url));
@@ -77,7 +80,6 @@ export async function bindKeyposes(requestFile, imageFile, reviewFile) {
 async function measure(sequence, plan, stance, out, annotationsBase) {
   if (!Array.isArray(stance.box) || stance.box.length !== 4 || !stance.box.every(Number.isInteger) ||
       !Number.isInteger(stance.start) || !Number.isInteger(stance.end)) throw Error('Each stance needs integer start/end and box [x,y,width,height].');
-  const python = path.join(root, 'vendor/sprite-gen/.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
   const args = stance.footEvidence === undefined ? ['-m', 'sprite_gen.cli', 'inspect-motion']
     : [path.join(root, 'tools/ai-fighter/contact_evidence.py'), 'inspect'];
   if (stance.footEvidence !== undefined) {
@@ -88,7 +90,7 @@ async function measure(sequence, plan, stance, out, annotationsBase) {
     '--contacts', `${stance.start}:${stance.end}`, '--foot-box', stance.box.join(','), '--facing', plan.facing, '--out', out);
   await new Promise((resolve, reject) => {
     // A measurement of one stance interval takes seconds; a bound keeps a stuck engine from holding the review forever.
-    const child = spawn(python, args, { cwd: root, env: { ...process.env, PYTHONUTF8: '1' }, windowsHide: true, timeout: 5 * 60_000 });
+    const child = spawn(spritePython, args, { cwd: root, env: { ...process.env, PYTHONUTF8: '1' }, windowsHide: true, timeout: 5 * 60_000 });
     let error = '';
     child.stdout.resume(); child.stderr.on('data', chunk => { error += chunk; });
     child.on('error', reject);
@@ -142,19 +144,78 @@ async function review(planFile, out, annotationsFile) {
   return { ok: report.status === 'pass', status: report.status, sequenceSha256: sequence.sha256, errors: report.errors, missing: report.missing, out };
 }
 
+/**
+ * The hosted generation's walk/run record (reviewPolicy engine-loop). Config, paths relative to it: { motion, source: { file, animation }
+ * (the final game pack), strip (the cut's strip.json from video-loop / video-cycle-align), verdict (the judge's JSON: identity, anatomy,
+ * loop, notes), judge (who judged), stridePixels (walk) }.
+ */
+async function writeLoopReview(configFile, out) {
+  const config = await json(configFile), base = path.dirname(path.resolve(configFile));
+  const sequence = await loadSequence(config.source, base);
+  const review = loopReview({ motion: config.motion, sequence, strip: await json(path.resolve(base, config.strip)),
+    visual: await json(path.resolve(base, config.verdict)), judge: config.judge, stridePixels: config.stridePixels });
+  await save(out, review);
+  return { ok: review.status === 'pass', status: review.status, sequenceSha256: review.sequenceSha256, errors: review.errors, out };
+}
+
+/** One `sprite-gen scale-check` run. Exit 1 with a report is a finished measurement with frames left for an eye check; exit 1
+ * without one is a refusal (the report is removed first, so an earlier run's report can never stand in for this one). */
+async function runScaleCheck(run) {
+  await rm(run.report, { force: true });
+  await new Promise((resolve, reject) => {
+    const child = spawn(spritePython, ['-m', 'sprite_gen.cli', ...run.args],
+      { cwd: root, env: { ...process.env, PYTHONUTF8: '1' }, windowsHide: true, timeout: 30 * 60_000 });
+    let error = '';
+    child.stdout.resume(); child.stderr.on('data', chunk => { error += chunk; });
+    child.on('error', reject);
+    child.on('close', (code, signal) => code === 0 || (code === 1 && existsSync(run.report)) ? resolve()
+      : reject(Error(signal ? `scale-check stopped after 30 minutes (${signal})` : 'scale-check failed: ' + error.slice(-3000))));
+  });
+  return json(run.report);
+}
+
+/**
+ * The common game-pack request. Unless the config says `"scaleCheck": false`, sprite-gen's scale-check first measures every
+ * frame's figure against the neutral reference by its head (one report and review board per source file, beside `out`) and the
+ * request brings each frame to that size: a walk or run at one scale for the cycle, any other clip frame by frame. A frame it
+ * could not measure stops the request until someone looks at the board and gives `scaleCheck.fix`, keyed by asset id
+ * (`"walk"` for a cycle, `"combo/2"` for one frame, `"combo"` for every frame of a clip).
+ */
+export async function gameRequest(configFile, out) {
+  const config = await json(configFile), base = path.dirname(path.resolve(configFile)), outDir = path.dirname(path.resolve(out));
+  // a request this command made before must not outlive a run that stops: game-pack would pack it
+  await rm(out, { force: true }); await rm(out + '.scale.json', { force: true });
+  const result = await commonGameRequest(config, base); // the request's own checks come before minutes of measuring
+  let scaleCheck = false;
+  if (config.scaleCheck !== false) {
+    const errors = scaleCheckConfigErrors(config);
+    if (errors.length) return { ok: false, code: 'SCALE_CHECK_CONFIG', errors };
+    if (!existsSync(spritePython)) throw Error('Run npm run sprite:setup first: game-request measures frames with the bundled sprite-gen.');
+    const runs = scaleCheckRuns(config, base, out), reports = [];
+    for (const run of runs) reports.push(await runScaleCheck(run));
+    const { entries, unsettled, errors: fixErrors } = scaleCheckEntries(config, base, runs, reports, outDir);
+    if (fixErrors.length) return { ok: false, code: 'SCALE_CHECK_CONFIG', errors: fixErrors };
+    if (unsettled.length) return { ok: false, code: 'SCALE_CHECK_EYE_CHECK', unsettled, boards: runs.map(run => run.board),
+      reports: runs.map(run => run.report),
+      next: 'Look at the boards; give scaleCheck.fix in the config by asset id ("walk" for a cycle, "combo/2" for one frame), then run game-request again.' };
+    result.request.assets.forEach(asset => { asset.scale_check = entries[asset.id]; });
+    result.note = 'One measured neutral reference scale, and every frame brought to the reference figure size by scale-check (head-measured). Shared canvas is checked; anatomy still needs visual review.';
+    scaleCheck = runs.map(run => path.relative(outDir, run.report));
+  }
+  // Resolve source files relative to the output request, not its input config.
+  result.request.assets.forEach(asset => { asset.source = path.relative(outDir, path.resolve(base, asset.source)); });
+  await save(out, result.request); await save(out + '.scale.json', { ...result, request: undefined });
+  return { ok: true, out, referenceBodyHeight: result.referenceBodyHeight, scaleCheck };
+}
+
 async function main(args) {
   const [command, first, second, third] = args;
   if (command === 'init' && first) return init(first);
   if (command === 'bind-keyposes' && first && second && third) return bindKeyposes(first, second, third);
   if (command === 'review' && first && second) return review(first, second, third);
-  if (command === 'game-request' && first && second) {
-    const result = await commonGameRequest(await json(first), path.dirname(path.resolve(first)));
-    // Resolve source files relative to the output request, not its input config.
-    result.request.assets.forEach(asset => { asset.source = path.relative(path.dirname(path.resolve(second)), path.resolve(path.dirname(path.resolve(first)), asset.source)); });
-    await save(second, result.request); await save(second + '.scale.json', { ...result, request: undefined });
-    return { ok: true, out: second, referenceBodyHeight: result.referenceBodyHeight };
-  }
-  throw Error('Usage: npm run fighter:gait -- init <new-directory> | bind-keyposes <request.json> <image.png> <review.json> | review <plan.json> <out-directory> [annotations.json] | game-request <config.json> <game.json>');
+  if (command === 'loop-review' && first && second) return writeLoopReview(first, second);
+  if (command === 'game-request' && first && second) return gameRequest(first, second);
+  throw Error('Usage: npm run fighter:gait -- init <new-directory> | bind-keyposes <request.json> <image.png> <review.json> | review <plan.json> <out-directory> [annotations.json] | game-request <config.json> <game.json> | loop-review <config.json> <review.json>');
 }
 if (process.argv[1] && pathToFileURL(path.resolve(process.argv[1])).href === import.meta.url) {
   main(process.argv.slice(2)).then(result => { console.log(JSON.stringify(result, null, 2)); if (result.ok === false) process.exitCode = 2; })

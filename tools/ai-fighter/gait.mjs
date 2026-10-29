@@ -200,9 +200,147 @@ export function requireReview(review, sequence, motion) {
   return review;
 }
 
+// The hosted generation's walk/run evidence (reviewPolicy `engine-loop`, 2026-10-28). A loop a video model filmed rolls its feet and
+// draws toes as bumps, so the same-foot stance measurement above rarely isolates one foot without luck in the pixels. This record
+// instead binds, to the final game-pack frames: the engine's own checks on the cut it took (sprite-gen video-loop and
+// video-cycle-align recorded no retake reason, and the alignment named a different own foot at its two strikes), a vision judge's
+// verdicts on what a picture shows (identity, anatomy, the loop's seam), and the stride the generator measured on the feet.
+// Alternation is the engine's, not the judge's: legs of one colour seen from the side look alike to a vision model, which called a
+// walk the engine read as alternating (no same-foot cut, feet named at both strikes) the same leg twice (2026-10-28).
+// It is never a same-foot stance claim; packs that take it say so in their report.
+export const LOOP_VISUAL = ['identity', 'anatomy', 'loop'];
+const retakeReasons = record => record ? (Array.isArray(record.reasons) ? record.reasons : record.reason ? [record.reason] : ['unnamed']) : [];
+
+/** The loop review of `sequence` (the game-pack animation) from its strip's metadata, the judge's verdicts and the measured stride. */
+export function loopReview({ motion, sequence, strip, visual, judge, stridePixels }) {
+  const errors = [];
+  if (!['walk', 'run'].includes(motion)) throw Error('Loop reviews cover walk and run');
+  const expected = spec.motions[motion].frames;
+  if (sequence.frames.length !== expected) errors.push({ code: 'FRAME_COUNT', actual: sequence.frames.length, expected });
+  if (new Set(sequence.frames.map(f => digest(f.data))).size !== sequence.frames.length) errors.push({ code: 'DUPLICATE_FRAME' });
+  const retake = [...retakeReasons(strip?.retake), ...retakeReasons(strip?.cycle_align?.retake)];
+  if (retake.length) errors.push({ code: 'ENGINE_RETAKE', reasons: retake });
+  const feet = strip?.cycle_align?.foot?.feet ?? null;
+  if (!Array.isArray(feet) || feet.length !== 2 || new Set(feet).size !== 2 || !feet.every(f => ['left', 'right'].includes(f)))
+    errors.push({ code: 'ENGINE_FEET_UNNAMED', feet });
+  for (const item of LOOP_VISUAL) if (visual?.[item] !== 'pass') errors.push({ code: 'VISUAL_' + item.toUpperCase(), verdict: visual?.[item] ?? null });
+  if (typeof visual?.notes !== 'string' || !visual.notes.trim()) errors.push({ code: 'VISUAL_NOTES' });
+  if (typeof judge !== 'string' || !judge.trim()) errors.push({ code: 'JUDGE_UNNAMED' });
+  if (motion === 'walk' && !positive(stridePixels)) errors.push({ code: 'STRIDE_UNMEASURED' });
+  return { kind: 'ai-fighter-loop-review', version: 1, motion, status: errors.length ? 'fail' : 'pass', sequenceSha256: sequenceHash(sequence),
+    durationSeconds: sequence.durations.reduce((sum, ms) => sum + ms, 0) / 1000, errors,
+    engine: { kind: strip?.kind ?? null, cutFrames: strip?.cycle_align?.from ?? null, seam: strip?.cycle_align?.seam_ratio ?? null,
+      beatJolt: strip?.cycle_align?.beat?.jolt ?? null, retake, strikes: strip?.cycle_align?.strikes ?? null, feet,
+      feetMargin: strip?.cycle_align?.foot?.margin ?? null },
+    visual: visual ? Object.fromEntries([...LOOP_VISUAL, 'notes'].map(key => [key, visual[key] ?? null])) : null, judge: judge ?? null,
+    stridePixels: motion === 'walk' && positive(stridePixels) ? round(stridePixels) : null,
+    scope: 'Engine loop checks and foot naming, a vision judge and a measured stride; no same-foot stance measurement (hosted generation).' };
+}
+
+export function requireLoopReview(review, sequence, motion) {
+  if (review?.kind !== 'ai-fighter-loop-review' || review.version !== 1 || review.motion !== motion || review.status !== 'pass' ||
+      review.errors?.length !== 0) throw Error('LOOP_REVIEW_REQUIRED: ' + motion);
+  if (review.sequenceSha256 !== sequenceHash(sequence)) throw Error('LOOP_REVIEW_STALE: ' + motion);
+  if (!LOOP_VISUAL.every(key => review.visual?.[key] === 'pass') || !review.visual?.notes?.trim() || !review.judge?.trim() ||
+      !Array.isArray(review.engine?.retake) || review.engine.retake.length || new Set(review.engine.feet ?? []).size !== 2 ||
+      (motion === 'walk' && !positive(review.stridePixels)))
+    throw Error('LOOP_REVIEW_INCOMPLETE: ' + motion);
+  return review;
+}
+
+// A state name's words: `koLie`, `fall-down`, `run_fast` -> ko lie, fall down, run fast (`cooldown` stays one word).
+const words = name => String(name).replace(/([a-z0-9])([A-Z])/g, '$1 $2').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+// A cycle is packed at one scale (its state's median), so its frames do not pulse; any other clip frame by frame.
+const CYCLE_WORDS = new Set(['walk', 'walking', 'run', 'running', 'jog', 'jogging', 'sprint', 'sprinting']);
+// States whose head turns past 45 degrees (a fall, a knock-down, lying): scale-check searches them to 90.
+const WIDE_WORDS = new Set(['fall', 'falling', 'fallen', 'ko', 'knock', 'knocked', 'knockdown', 'lie', 'lying', 'down', 'flip', 'flipping']);
+const SCALE_RANGE = [0.5, 2]; // the corrections game-pack accepts
+
+/** 'state' (one median for the cycle) or 'frame' for a common-request asset; `scaleCheck.per[assetId]` overrides. */
+export function scalePer(asset, config) {
+  const chosen = config.scaleCheck?.per?.[asset.id];
+  if (chosen !== undefined) return chosen;
+  return words(asset.source.state).some(word => CYCLE_WORDS.has(word)) ? 'state' : 'frame';
+}
+
+/** The config's own mistakes, found before any measurement: a fix names an asset (a cycle by its id; any other clip by its
+ * id, for every frame, or `id/index` for one) with a correction game-pack accepts; `per` and `wideStates` are well formed. */
+export function scaleCheckConfigErrors(config) {
+  const sc = config.scaleCheck ?? {}, ids = new Map(config.assets.map(asset => [asset.id, asset])), errors = [];
+  if (typeof sc !== 'object' || Array.isArray(sc)) return ['scaleCheck must be an object, or false'];
+  // game-pack sizes the corrections by the reference's own display, so the reference frame must be packed too
+  const same = (a, b) => path.normalize(a.file ?? '') === path.normalize(b.file ?? '') && a.state === b.state;
+  if (!config.assets.some(asset => same(asset.source, config.reference ?? {})))
+    errors.push('the reference (its file and state) must also be one of the assets: the corrections are sized by its display');
+  if (sc.wideStates !== undefined && (!Array.isArray(sc.wideStates) || !sc.wideStates.every(state => typeof state === 'string')))
+    errors.push('scaleCheck.wideStates must be a list of state names');
+  if (sc.per !== undefined && (typeof sc.per !== 'object' || Array.isArray(sc.per))) errors.push('scaleCheck.per must be an object');
+  else for (const [id, per] of Object.entries(sc.per ?? {}))
+    if (!ids.has(id) || !['state', 'frame'].includes(per)) errors.push(`scaleCheck.per.${id} must name an asset and be "state" or "frame"`);
+  if (sc.fix !== undefined && (typeof sc.fix !== 'object' || Array.isArray(sc.fix))) return [...errors, 'scaleCheck.fix must be an object'];
+  for (const [key, value] of Object.entries(sc.fix ?? {})) {
+    const id = ids.has(key) ? key : key.match(/^(.*)\/(\d+)$/)?.[1], asset = ids.get(id);
+    if (!asset) { errors.push(`scaleCheck.fix.${key} names no asset of this request`); continue; }
+    if (typeof value !== 'number' || !Number.isFinite(value) || value < SCALE_RANGE[0] || value > SCALE_RANGE[1])
+      errors.push(`scaleCheck.fix.${key} must be a number from ${SCALE_RANGE[0]} to ${SCALE_RANGE[1]}`);
+    if (key !== id && scalePer(asset, config) === 'state') errors.push(`scaleCheck.fix.${key}: ${id} is packed at one scale; fix it by its id`);
+  }
+  return errors;
+}
+
+/** One scale-check run per source file, measuring only the states this config takes from that file, against the neutral
+ * reference: `{ file, report, board, args }`. Reports and boards sit beside `out` (game.scale-check[-N].json and .png). */
+export function scaleCheckRuns(config, base, out) {
+  const groups = new Map();
+  for (const asset of config.assets) {
+    const file = path.resolve(base, asset.source.file);
+    if (!groups.has(file)) groups.set(file, []);
+    if (!groups.get(file).includes(asset.source.state)) groups.get(file).push(asset.source.state);
+  }
+  const stem = path.resolve(out).replace(/\.json$/, ''), many = groups.size > 1, extra = config.scaleCheck?.wideStates ?? [];
+  return [...groups].map(([file, states], index) => {
+    const report = `${stem}.scale-check${many ? '-' + (index + 1) : ''}.json`, board = report.replace(/\.json$/, '.png');
+    const wide = states.filter(state => extra.includes(state) || words(state).some(word => WIDE_WORDS.has(word)));
+    return { file, report, board, args: ['scale-check', '--reference', path.resolve(base, config.reference.file),
+      ...(config.reference.state ? ['--reference-state', config.reference.state] : []), '--reference-frame', String(config.reference.frame ?? 0),
+      '--asset', file, ...states.flatMap(state => ['--state', state]), ...wide.flatMap(state => ['--wide-state', state]),
+      '--out', report, '--board', board] };
+  });
+}
+
+/**
+ * Each asset's game-pack `scale_check`, from the reports of `runs` (read by run, so two files sharing a state name never
+ * share a measurement) with the config's fixes in the engine's `state/index` keys; the frames nobody has settled
+ * (`assetId` for a cycle, `assetId/index` otherwise); and fixes naming a frame the asset does not have.
+ */
+export function scaleCheckEntries(config, base, runs, reports, outDir) {
+  const fix = config.scaleCheck?.fix ?? {}, entries = {}, unsettled = [], errors = [];
+  for (const asset of config.assets) {
+    const at = runs.findIndex(run => run.file === path.resolve(base, asset.source.file)), state = asset.source.state;
+    const record = reports[at]?.assets?.find(r => r.identity?.state === state);
+    if (!record) { errors.push(`${asset.id}: the scale-check report has no ${state}`); continue; }
+    const per = scalePer(asset, config), own = {};
+    if (per === 'state') {
+      if (asset.id in fix) own[state] = fix[asset.id];
+      else if (record.state_correction === null) unsettled.push(asset.id);
+    } else {
+      for (const key of Object.keys(fix).filter(key => key.startsWith(asset.id + '/')))
+        if (Number(key.slice(asset.id.length + 1)) >= record.frames.length) errors.push(`scaleCheck.fix.${key}: ${asset.id} has ${record.frames.length} frames`);
+      record.frames.forEach((frame, index) => {
+        const value = fix[`${asset.id}/${index}`] ?? fix[asset.id];
+        if (value !== undefined) own[`${state}/${index}`] = value;
+        else if (frame.how === 'check') unsettled.push(`${asset.id}/${index}`);
+      });
+    }
+    entries[asset.id] = { report: path.relative(outDir, runs[at].report), per, ...(Object.keys(own).length ? { fix: own } : {}) };
+  }
+  return { entries, unsettled, errors };
+}
+
 // Assets already share a calibrated coordinate space. Measure neutral reference height once;
 // do not reinterpret a crouch, fall or extended attack's bounding box as standing body height.
-export async function commonGameRequest(config, base) {
+// With `scaleChecks` (scaleCheckEntries' entries, by asset id) every frame is also drawn at the reference figure's size.
+export async function commonGameRequest(config, base, { scaleChecks } = {}) {
   if (!Array.isArray(config.assets) || !config.assets.length || new Set(config.assets.map(a => a.id)).size !== config.assets.length) throw Error('Unique nonempty assets required');
   const reference = await loadSequence(config.reference, base);
   const frame = reference.frames[config.reference.frame ?? 0], bounds = frame && alphaBounds(frame);
@@ -212,9 +350,12 @@ export async function commonGameRequest(config, base) {
     const sequence = await loadSequence(asset.source, base);
     if (sequence.frames.some(f => f.width !== frame.width || f.height !== frame.height)) throw Error('Coordinate space mismatch: ' + asset.id);
     if (!asset.source.state) throw Error('Common request expects a sprite-gen manifest state');
-    assets.push({ id: asset.id, source: asset.source.file, state: asset.source.state, source_body_height: bodyHeight,
-      display: { body_height: spec.input.bodyHeight }, resample: config.resample ?? 'lanczos' });
+    const entry = { id: asset.id, source: asset.source.file, state: asset.source.state, source_body_height: bodyHeight,
+      display: { body_height: spec.input.bodyHeight }, resample: config.resample ?? 'lanczos' };
+    if (scaleChecks) entry.scale_check = scaleChecks[asset.id];
+    assets.push(entry);
   }
   return { request: { version: 1, assets }, referenceBodyHeight: bodyHeight, referenceSequenceSha256: reference.sha256,
-    note: 'One measured neutral reference scale. Shared canvas is checked; anatomical scale still needs visual review.' };
+    note: scaleChecks ? 'One measured neutral reference scale, and every frame brought to the reference figure size by scale-check (head-measured). Shared canvas is checked; anatomy still needs visual review.'
+      : 'One measured neutral reference scale. Shared canvas is checked; anatomical scale still needs visual review.' };
 }

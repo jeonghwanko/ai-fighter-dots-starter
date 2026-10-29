@@ -32,7 +32,7 @@ the desktop Plugins Directory. Open a new chat. Restart the desktop app if it ha
 `$create-fighter`, or describe the fighter you want to make.
 
 The generated marketplace is under `output/ai-fighter-marketplace/`. It contains `plugin.json`, the
-existing cloud `.app.json` mapping, the skill and a local marketplace catalog. `kit-location.json` points to
+hosted ODDBOUT MCP (`mcp.json`, Google sign-in), the skill and a local marketplace catalog. `kit-location.json` points to
 **this user's existing checkout and workspace**. Keep the checkout in place. Rebuild on each computer; do not
 publish the generated directory as a standalone distributable. The builder does not change host settings.
 
@@ -136,10 +136,20 @@ is an idempotency key for **one local execution**, separate from provider IDs an
 | `running` | Attempt recorded before launch; inspect before further action |
 | `succeeded` | Exit 0 and declared outputs fingerprinted; visual quality unverified |
 | `needs-input` | Preflight did not pass or upstream returned 75 |
-| `failed` | Launch known not to start, or a non-generation utility failed |
-| `unknown` | Abnormal generation exit, lost result or missing declared outputs |
+| `failed` | Launch known not to start, a non-generation utility failed, or a generation's own report shows no provider request left (exit 3) or the request left and failed for a reason it names |
+| `unknown` | A generation whose request may have been billed with no result: no report from this run, an `outcome-unknown` error, a run stopped after its request left, a video request xAI took, a lost result or missing declared outputs |
 | `resolved` | Evidence about an unknown outcome recorded; no rerun |
 | `cancelled` | Unstarted reservation cancelled |
+
+A generation job that does not succeed carries `outcome`: the engine's own report
+(vendor/sprite-gen `docs/gen.md` "Outcome": `--report`, or the set report of `gen-set` / `video-set`) read
+only when this run wrote it. `charge` is `not-charged` (exit 3, or the report says no provider request left),
+`request-sent` (one left: it may have been billed) or `unknown` (no report). `next` is `retry` (every error
+says the same command may succeed), `fix` (it would fail the same way again), `inspect`, `resume` (a video
+request xAI took: ask for it with `video-resume --request-id`, never generate it again) or `answer` (the codex
+question). A stopped job is judged the same way: sprite-gen writes its report on SIGTERM before it exits, and
+the kit's wrapper waits for it. `retryable` alone never reruns a job whose report says `outcome-unknown` or
+names a video request; nothing reruns a job automatically.
 
 Identical preparation retries return the same job. Changed args under the same ID are rejected. An
 attempted ID never executes again. A new ID targeting prepared/running/unknown work is blocked. A missing

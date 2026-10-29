@@ -6,7 +6,7 @@
 
 ODDBOUT is a fighting game where you play with a character you create. This repository contains the open-source tools for making that character. Work with an AI assistant to turn a description or reference image into artwork, animations, and a fighter package for the game. The tools and docs also use the name AI Fighter.
 
-[Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
+[Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Site guide](https://oddbout.com/docs.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
 
 ## What you can make
 
@@ -19,10 +19,32 @@ The kit includes sprite-gen, creation workflows, validation tools, and an MCP se
 
 In this kit, "sprite-gen" means the sprite-gen engine and CLI pinned at `vendor/sprite-gen`, which comes from [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent), our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen). Commands, paths and the Python package keep the name `sprite-gen`.
 
+## Ways to make a fighter
+
+Every way registers the fighter to your own Google account, up to three fighters per account. The first two need nothing installed;
+the third installs the generator from this repository on your PC; the last runs this whole kit. The [site guide](https://oddbout.com/docs.html?lang=en)
+walks through each.
+
+| Way | What you do | Good for |
+| --- | --- | --- |
+| **Leave it to ODDBOUT** | On [My fighters](https://oddbout.com/creator.html?lang=en), describe the fighter (10–600 characters, up to two pictures you may use). ODDBOUT draws two looks, then the motions; you pick, ask for changes and register. | The quickest start. One fighter per account is free; ODDBOUT takes a limited number of requests a day. |
+| **Talk to your agent** | On [My agents](https://oddbout.com/creator.html?lang=en#view=agents), connect Codex (ChatGPT · Dots), Grok or Claude to the hosted ODDBOUT MCP ([cloud connection](docs/CLOUD-MCP.md)), then ask `@ODDBOUT` in your chat. | Making and editing fighters from a conversation. Pictures can be attached from ChatGPT only. Gemini is coming soon. |
+| **Your own PC** | On My agents → My PC, create a host and run the three-line command it gives on a Linux PC with your ChatGPT and SuperGrok subscriptions ([generation host guide](docs/GENERATION-HOST.md)). | More fighters on your own subscriptions: no approval and no limit of one. |
+| **Make it yourself** | Run this kit with an assistant that can use local tools, and choose every concept and motion ([below](#create-with-the-local-kit)). | Full control over each frame. |
+
 ## Register from Dots without a PC
 
-Connect the hosted **ODDBOUT** MCP in ChatGPT Plugins, sign in with Google, then select
-`@ODDBOUT` in your Dots conversation. The cloud connector handles account checks,
+For **creation in a saved Dots VM**, use [the Dots VM entry point](docs/DOTS-START.md).
+The intended flow is one repository URL plus your creation request, using your own Grok subscription.
+The environment preparer runs [the install recipe](deploy/dots-environment/README.md) once; Dots then runs
+`node dots.mjs --install` once and `node dots.mjs` to resume the same pinned workspace. The source and
+preview-delivery checks remain distinct from login. This **0.5.5 candidate** still requires actual saved-VM
+creation acceptance; unit tests or a parent-container run do not certify it.
+
+Connect the hosted **ODDBOUT** MCP, sign in with Google, then select `@ODDBOUT` in your Dots conversation.
+The ODDBOUT plugin 0.6.0 or later already carries this connection; without the plugin, add it in ChatGPT Plugins as a custom
+MCP server (adding both shows ODDBOUT twice). Grok and Claude connect the same server from their connector settings, and
+[My agents](https://oddbout.com/creator.html?lang=en#view=agents) shows and disconnects every connection. The cloud connector handles account checks,
 file transfer and registration; no local MCP installation, API key or callback copying is needed.
 See [cloud connection instructions](docs/CLOUD-MCP.md) for the endpoint and first-time setup.
 Image generation, previews and package review still use the selected host and your own generation account.
@@ -34,7 +56,7 @@ Use the **ODDBOUT** plugin for creation, review and registration from a PC or a 
 The same connected ODDBOUT account registers the result in either environment. A second AI Fighter Creator
 plugin is no longer required. See [the unified plugin and migration guide](docs/ODDBOUT-PLUGIN.md).
 
-Send the [start link](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md) to a new chat with an assistant that can run local commands and access files, such as a supported Dot, Codex, or Claude setup. Add an idea or a reference image. For example:
+Send the [repository URL](https://github.com/jeonghwanko/ai-fighter-dots-starter) to your assistant in the prepared workspace. Add an idea or a reference image. For example:
 
 > Make a cat boxer in blue armor for ODDBOUT using this kit.
 > Show me the concept first so we can get the appearance right.
@@ -69,6 +91,14 @@ See the [full creation workflow](docs/DOT-CREATION.md) for generation, revision,
 
 ## Set up the kit yourself
 
+For a Dots VM, start with [Dots bootstrap, doctor and resume](docs/DOTS-QUICKSTART.md) and the
+[saved-environment Start instructions](docs/DOTS-START.md). The offline entry point is
+`node scripts/dots-workspace.mjs doctor --workspace <absolute-workspace>`; installation is explicit
+with `bootstrap --install`. A Git URL alone does not authorize generation. Use the service branch below,
+record its actual commit, and do not mistake an older main checkout for the current creator kit.
+The Dots workflow reports unsupported image-output contracts as blocked; it does not read protected
+Codex sessions or claim that login/installation proves image generation or parent delivery.
+
 Use the **codex/creator-hosting** branch, which contains the public service configuration. For a new installation:
 
 ```sh
@@ -83,17 +113,17 @@ Setup downloads the pinned sprite-gen source into this checkout and installs it 
 
 Setup also fetches the outside tools sprite-gen needs, without sudo: `img2webp` with `-exact` (libwebp 1.6.0, SHA-256 pinned, placed in the kit's environment when your system has none or an older one such as Ubuntu 24.04's 1.3.x) and RIFE for smooth walk and run loops (`sprite-gen rife install`, about 430 MB download). Install `ffmpeg` yourself first: `sudo apt install ffmpeg` (Ubuntu/Debian), `brew install ffmpeg` (macOS) or `winget install --id Gyan.FFmpeg -e` (Windows). Setup and `sprite:status` list each tool as `ok`, `missing` or `broken` with the command that fixes it. A Linux machine without a GPU also needs `sudo apt install libvulkan1 mesa-vulkan-drivers` for RIFE; without RIFE, loops are cut as filmed with a warning. Keep an in-progress character workspace in place and avoid pulling repository updates during creation.
 
-To connect the tools, follow the [local Codex plugin guide](docs/LOCAL-PLUGIN.md). For a manual MCP connection, run `node scripts/print-install.mjs` and follow the printed installation command. Other local hosts can connect `mcp/stdio.mjs` with `AI_FIGHTER_ROOT` set to the checkout.
+To connect the tools, follow the [local Codex plugin guide](docs/LOCAL-PLUGIN.md): `npm run plugin:build`, then the printed `codex plugin marketplace add …` and `codex plugin add oddbout@ai-fighter-local`. The older manual MCP connection (`node scripts/print-install.mjs`) remains for compatibility. Other local hosts can connect `mcp/stdio.mjs` with `AI_FIGHTER_ROOT` set to the checkout.
 
 The [unified plugin guide](docs/ODDBOUT-PLUGIN.md) covers the portable source package. A local plugin installation does not mean the plugin is installed in Dots or listed in a public directory.
 
 ## Register and play
 
-When you choose the final result and ask to register it, your assistant checks the package and helps you sign in with Google using the service settings included in the kit. You do not need to set up a backend or get service API keys.
+When you choose the final result and ask to register it, your assistant checks the package and registers it through your connected ODDBOUT account: the ODDBOUT plugin, or an agent connected on My agents, signed in with your Google account. You do not need to set up a backend or get service API keys. Older local tools without that connection sign in with `npm run login`.
 
 The server checks your uploaded files before making your fighter available in the game. Your assistant then checks the result to confirm that the fighter is registered and ready to play. The queue can take time to process.
 
-Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same Google account to see your fighter. See [registration, limits, and profile edits](docs/OPEN-REGISTRATION.md) for details. Keep login links, callback URLs, and session files private.
+Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same Google account to see your fighter; its My agents tab manages your connected agents and your PC. See [registration, limits, and profile edits](docs/OPEN-REGISTRATION.md) for details. Keep login links, callback URLs, and session files private.
 
 ## Help and contributions
 
@@ -103,13 +133,14 @@ Bug reports, clearer setup instructions, and reproducible examples are welcome. 
 
 | Resource | Use it for |
 | --- | --- |
-| [Cloud connection](docs/CLOUD-MCP.md) · [Connection recovery](docs/CONNECTION-READINESS.md) | Google sign-in, account checks, and cloud registration |
+| [Cloud connection](docs/CLOUD-MCP.md) · [Connection recovery](docs/CONNECTION-READINESS.md) | Connecting ChatGPT, Grok and Claude, Google sign-in, account checks, and cloud registration |
 | [Authoring guide](docs/AUTHORING.md) | Fighter files and the package contract |
 | [Creation UX](docs/CREATION-UX.md) | Character intake, feedback, and version selection |
 | [Game creation context](docs/GAME-CREATION-CONTEXT.md) | Current motions, controls, and timing |
 | [Gait review](docs/GAIT-REVIEW.md) | Walk/run quality and contact evidence |
 | [Execution environment](docs/EXECUTION-HOST.md) · [Preview delivery](docs/DELIVERY.md) | Account isolation, local execution, and actual media display |
 | [Hosting](docs/CREATOR-HOSTING.md) · [Security](SECURITY.md) | Deployment and security boundaries |
+| [Generation host (Korean)](docs/GENERATION-HOST.md) | Make your own fighters on your own Linux PC and subscriptions, and, once approved, other creators' requests |
 
 Local development checks, after installing dependencies:
 

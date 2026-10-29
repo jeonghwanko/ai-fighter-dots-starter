@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
@@ -86,6 +86,45 @@ test('an up-to-date checkout on the pre-fork pin is sent to setup, engine edits 
   const packaged = await checkKit({ progress: { inProgress: false }, installed, inspectEngine: engineState(true),
     git: async args => { calls.push(args[0]); return { code: 128, stdout: '' }; } });
   assert.deepEqual([packaged.status, packaged.reason, calls], ['ready', 'not-a-git-checkout', ['rev-parse']]);
+});
+
+test('Dots readiness verifies the immutable workspace pin without fetching or treating detached HEAD as a branch error', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'dots-pinned-readiness-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const root = path.join(dir, 'runtime'), workspaceRoot = path.join(dir, 'workspace');
+  await mkdir(root); await mkdir(path.join(workspaceRoot, 'output'), { recursive: true });
+  const marker = path.join(root, '.dots-runtime.json'), bindingFile = path.join(workspaceRoot, 'output/dots-workspace.json');
+  await writeFile(marker, JSON.stringify({ schemaVersion: 1, host: 'dots' }));
+  const binding = { schemaVersion: 1, runtime: root, provider: 'grok', version: '0.5.5', commit: 'a'.repeat(40) };
+  await writeFile(bindingFile, JSON.stringify(binding));
+  const report = { blockers: [], kit: { version: binding.version, distribution: 'source', commit: binding.commit } };
+  const options = { root, workspaceRoot, installed, progress: { inProgress: false },
+    git: () => assert.fail('pinned readiness never fetches, merges or switches a branch'), inspectEngine: engineState(true),
+    inspectPinnedRuntime: async args => { assert.equal(args.runtime, root); assert.equal(args.workspace, workspaceRoot);
+      assert.equal(args.provider, 'none'); assert.equal(args.checkAuth, undefined); return report; } };
+  const ready = await checkKit(options);
+  assert.deepEqual([ready.status, ready.commit, ready.nextCommands, ready.remoteChecked], ['ready', binding.commit, [], false]);
+  assert.equal((await checkKit({ ...options, progress: { inProgress: true } })).status, 'ready');
+  assert.equal((await checkKit({ ...options, workspaceRoot: undefined })).reason, 'dots-workspace-binding-required');
+  for (const change of [{ runtime: dir }, { provider: 'codex' }, { commit: 'not-a-pin' }]) {
+    await writeFile(bindingFile, JSON.stringify({ ...binding, ...change }));
+    assert.equal((await checkKit({ ...options, inspectPinnedRuntime: () => assert.fail('invalid binding must stop before inspection') })).reason,
+      'dots-workspace-binding-invalid');
+  }
+  await writeFile(bindingFile, JSON.stringify(binding));
+  assert.equal((await checkKit({ ...options, inspectPinnedRuntime: async () => ({ ...report, kit: { ...report.kit, commit: 'b'.repeat(40) } }) })).reason,
+    'dots-runtime-binding-mismatch');
+  for (const reason of ['source-local-changes', 'vendor-pin-mismatch', 'vendor-local-changes', 'source-metadata-unavailable']) {
+    const blocked = await checkKit({ ...options, inspectPinnedRuntime: async () => ({ ...report, blockers: [reason] }) });
+    assert.deepEqual([blocked.status, blocked.reason, blocked.nextCommands], ['blocked', reason, []]);
+  }
+  const manifestSha256 = 'c'.repeat(64);
+  await writeFile(bindingFile, JSON.stringify({ ...binding, commit: null, manifestSha256 }));
+  assert.equal((await checkKit({ ...options, inspectPinnedRuntime: async args => {
+    assert.equal(args.manifestSha256, manifestSha256);
+    return { blockers: [], kit: { version: binding.version, distribution: 'bundle', manifestSha256 } };
+  } })).status, 'ready');
+  await writeFile(marker, JSON.stringify({ schemaVersion: 99, host: 'dots' }));
+  assert.equal((await checkKit(options)).reason, 'dots-runtime-marker-invalid');
 });
 
 test('progress counts recorded versions and non-cancelled jobs only', async () => {

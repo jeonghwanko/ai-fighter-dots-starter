@@ -9,18 +9,46 @@ Dots의 플러그인에서 ODDBOUT을 연결하고 Google 로그인과 연결 �
 기존 개발 연결의 Supabase 함수 URL도 호환용으로 유지한다. 공개 심사에 제출한 주소는
 위 ODDBOUT 도메인이며, 현재 심사 중이다.
 
-개인 연결: ChatGPT → 플러그인 → 추가(+) → 사용자 지정 MCP 서버 추가.
+ODDBOUT 플러그인 0.6.0 이상을 쓰면 이 연결이 플러그인 안에 있다(`plugins/ai-fighter/mcp.json`, [ODDBOUT-PLUGIN.md](ODDBOUT-PLUGIN.md)).
+Google로 한 번 로그인하면 끝이다. 아래 사용자 지정 MCP 서버를 함께 더하면 플러그인 목록에 ODDBOUT이 둘 보이니 더하지 않는다.
+사이트의 내 에이전트(Codex 카드)도 이 순서로 안내한다.
+
+플러그인 없이 연결: ChatGPT → 플러그인 → 추가(+) → 사용자 지정 MCP 서버 추가.
 이름 `ODDBOUT`, 위 서버 URL, 인증 `OAuth`를 선택한다. 클라이언트 ID/Secret은
 직접 넣지 않는다. 서버가 동적 클라이언트 등록과 PKCE를 지원한다.
 Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른다.
 공개 플러그인 디렉터리 등록은 별도의 OpenAI 심사 절차이며 서버 배포와 다르다.
 
-Grok 연결(2026-10-27): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. 서버 URL은 위 주소, 인증은 OAuth다.
+Grok 연결(2026-10-27, 주소 2026-10-28): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. 서버 URL은
+**로그인 먼저 주소** `https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin`이다(`SIGN_IN_RESOURCE`). Grok의 커스텀 커넥터에는
+인증을 고르는 칸이 없고, 첫 요청의 답으로 로그인이 필요한지 정한다. 위 공개 주소는 공개 도구를 로그인 없이 답하므로 Grok이 계정 없이 붙어 버렸다(2026-10-28 실제 시도).
+로그인 먼저 주소는 같은 서버이고 모든 요청에 401과 `WWW-Authenticate`(`…/signin/.well-known/oauth-protected-resource`)로 로그인을 먼저 요구한다.
+이미 공개 주소로 추가했다면 지우고 이 주소로 다시 추가한다. 연결하면 oddbout.com 동의 화면에서 Google로 로그인해 승인한다.
 동의 화면(`web/cloud-connect/connect.mjs`의 `agentOf`)은 에이전트가 돌아갈 주소로 요청한 쪽을 가린다. ChatGPT(Dots)는 두 호스트 어디로든,
 Grok은 `https://grok.com/connectors-oauth-exchange-code/`, Cursor의 Grok Bot(웹)은 `https://www.cursor.com/agents/mcp/oauth/callback`·
 `https://www.cursor.com/bot/mcp/oauth/callback`로만 돌아간다. 데스크톱 클라이언트의 loopback·앱 스킴 주소는 받지 않는다. 화면의 문구와
 "돌아가기" 링크도 그 에이전트를 따른다. xAI는 이 콜백을 문서로 내지 않아 사용자 보고에서 가져왔다. 실제 Grok 연결로 한 번 확인한다.
 MCP 함수의 브라우저 Origin 허용 목록에도 `grok.com`·`www.grok.com`·`cursor.com`·`www.cursor.com`이 있다.
+
+Claude 연결(2026-10-28): claude.ai → 설정 → 커넥터(`https://claude.ai/settings/connectors`) → 커스텀 커넥터 추가. 이름 `ODDBOUT`, 서버 URL은 위 주소다.
+추가한 뒤 연결을 누르고 Google로 로그인해 승인한다. 동의 화면은 Anthropic의 MCP 콜백 `https://claude.ai/api/mcp/auth_callback`·
+`https://claude.com/api/mcp/auth_callback`으로만 돌아간다. Claude 웹·데스크톱·모바일과 Claude Code는 이 커넥터 하나를 함께 쓴다.
+Claude Code의 직접 연결(`claude mcp add`)은 loopback 콜백이라 받지 않는다. 그림을 받는 도구(`prepare_fighter_registration`의 파일,
+`upload_fighter_asset`, `request_hosted_fighter`의 그림)는 OpenAI 파일 호스트만 받으므로 Claude에서는 글로만 만든다.
+MCP 함수의 Origin 허용 목록에 `claude.ai`·`claude.com`이 있다. 2026-10-28 실제 연결로 확인했다: Claude가 이름 `Claude`, 돌아갈 주소
+`https://claude.ai/api/mcp/auth_callback`으로 클라이언트를 자동 등록했다. 그때 겪은 것:
+
+- 팀·엔터프라이즈 조직에서는 소유자만 커스텀 커넥터를 추가한다(조직 설정 → 커넥터, `https://claude.ai/admin-settings/connectors`). 구성원 화면의
+  "커스텀 커넥터 추가"는 회색이다. 소유자가 추가하면 구성원은 자기 커넥터 목록에서 연결을 누른다.
+- 인증은 **지금 로그인**을 고른다. 이 서버는 공개 도구를 로그인 없이 답하므로 Claude가 "로그인 없음"으로 자동 감지한다. 그대로 두면 계정이 필요한
+  도구(선수 만들기·등록·내 선수)를 쓸 수 없다. 인증 방식은 추가한 뒤 바꿀 수 없으니 지우고 다시 추가한다.
+- OAuth 클라이언트는 **자동으로 등록**(DCR)을 고른다. 추천으로 표시되는 "Claude의 게시된 ID"(CIMD)는 Supabase Auth가 지원하지 않는다.
+  클라이언트 ID·시크릿은 비워 둔다.
+- 추가할 때 "서버를 확인할 수 없습니다"가 나오면 `mcp.oddbout.com`의 Render 무료 서버가 잠들어 있던 것일 수 있다. 잠시 뒤 다시 시도한다
+  (운영자 PC가 14분마다 깨운다).
+
+사이트에서 보기(2026-10-28): oddbout.com 제작자 페이지의 My agents(`creator.html#view=agents`)가 Codex(ChatGPT·Dots)·Grok·Claude 카드에 연결을 보이고,
+연결을 끊는다(Supabase Auth의 `auth.oauth.listGrants`·`revokeGrant`). 카드 목록은 `af_account_agents`가 계정에 둔다.
 
 연결 후 대화 입력창에서 `@ODDBOUT`을 입력하고 **플러그인 항목을 선택**한다.
 일반 텍스트로 이름만 입력한 것과 실제 플러그인 선택은 다르다.
@@ -101,6 +129,46 @@ MCP 점검(2026-10-27): 도구 목록 20 KB → 17 KB(UUID 칸의 짧은 패턴,
 만든 에이전트: 이 MCP가 준비한 등록과 성격 고치기는 그 OAuth 클라이언트 이름을 남긴다(`af_record_submission_agent`,
 마이그레이션 `20261027180000_ai_fighter_made_with`). 명단(`GET /roster`, `/roster/:id`)은 선수의 가장 이른 기록을 `madeWith`로 보인다.
 이름은 클라이언트가 동적 등록 때 스스로 정한 것(예: `ChatGPT`)이고 40자까지다. 제작자 페이지·키트로 만든 선수는 없다.
+
+## 호스팅 생성 도구(2026-10-28)
+
+ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만든다. 에이전트는 사용자의 답만 전한다. 그래서 Grok·ChatGPT처럼 작업 공간이
+없는 호스트도 선수를 만들 수 있고, Dots도 생성 단계를 하나하나 운전하지 않는다. 길은 제작자 페이지와 같은 API(`api/generations.mjs`)다.
+상태 기계·쿼터(계정당 무료 한 명, 하루 신청 셋, 서비스 하루 상한)·운영 스위치는 DB가 정한다.
+도구는 함수 비밀 `ODDBOUT_HOSTED_GENERATION_TOOLS`가 `1`일 때만 목록에 나온다. 이 코드만 올리면 도구 목록은 그대로다.
+목록에 있어도 운영 스위치가 꺼져 있거나 워커가 없으면 신청은 `generation-unavailable`(그 이유 `reason`)로 끝나고 그림을 받지 않는다.
+
+| 도구 | 하는 일 |
+| --- | --- |
+| `request_hosted_fighter` | 설명·언어와 선택 그림 둘(`picture`·`secondPicture`, 파일 인자, 권리 확인 `rightsConfirmed`)로 신청. `delegate: true`는 맡기기다(아래). 같은 `idempotencyKey`는 같은 작업이고 그림을 다시 올리지 않는다 |
+| `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId`가 없으면 최근 신청과 열림 여부. `waitSeconds`(25초까지)는 워커가 일하는 동안 이 호출에서 기다린다 |
+| `choose_hosted_look` | 후보 `a`·`b` 고르기, 또는 한 문장 수정(두 장을 다시 그린다) |
+| `revise_hosted_motion` | 동작 하나를 한 문장으로 다시. 나머지 동작은 그대로 |
+| `register_hosted_fighter` | 사용자가 동작을 승인한 뒤 등록. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
+| `cancel_hosted_fighter` | 신청 취소. 무료 한 명이 다시 풀린다 |
+
+모든 결과에 `next`(`hostedNext`)가 있다: 사용자에게 무엇을 보이고 물을지, 또는 얼마나 기다릴지. 한 선수는 대략 신청 → 외형 두 장(몇 분) →
+고르기 → 동작 11개(15~30분) → 확인 → 등록이다. 에이전트가 읽을 긴 지침이 없다.
+
+**맡기기**(`delegate`, 2026-10-28): 사용자가 "알아서 해 줘"라고 하면 외형 고르기를 ODDBOUT이 한다. 워커가 두 장을 그린 뒤 codex 판정(도구 끔)이
+설명과 맞고 온몸·옆모습·깨끗한 한 장을 고른다. 고르면 기다리지 않고 동작으로 넘어간다(작업 열 `delegate`, 이관
+`20261028120000_oddbout_hosted_generation_delegate`). 둘 다 마땅치 않으면 원래대로 사용자에게 묻는다. 사용자가 외형에 수정 문장을 주면 그 뒤로는
+그가 고른다. 동작 확인과 등록은 맡기기여도 사용자가 한다. 그래서 사용자가 답하는 곳은 끝의 한 번이다.
+
+### 커뮤니티 호스트(2026-10-28)
+
+자기 구독(또는 API 키)을 쓰려는 제작자가 자기 PC에서 생성 워커를 돌려 다른 사람의 신청을 만든다. ODDBOUT 사무실 PC는 공식 호스트다.
+설계와 결정은 게임 저장소 `docs/Plan/2026-10-28-community-generation-hosts`에 있다. 이관 `20261028130000_oddbout_generation_hosts`.
+
+- 신청의 `host`: `oddbout`(기본, 공식 호스트), `any`(승인된 호스트 누구나), 호스트 id. `any`와 호스트 id는 사용자의 글과 그림이 그 호스트 PC로 가므로
+  `hostConsent: true`가 있어야 한다. 브리프(안전 판정)는 늘 공식 호스트가 쓴다. 그 뒤 단계를 처음 가져간 호스트가 끝까지 맡는다.
+  공식 호스트는 다른 호스트가 켜져 있으면 `any` 신청을 3분 기다려 준다.
+- `list_generation_hosts`(로그인 없음): 승인되고 켜진 호스트의 id·이름·켜짐·`any` 받기·오늘 남은 수.
+- 호스트 되기와 생성기 설치·운영은 `npm run host -- …`([생성 호스트 되기](GENERATION-HOST.md), 생성기 `host/`)가 아래 API를 부른다(사이트 화면은 다음 단계):
+  `POST /generations/host`(이름·`billing` `subscription`|`api-key`·약관 동의) →
+  운영자 승인(`af_generation_hosts.approved`) → `POST /generations/host/keys`(워커 열쇠, 한 번만 보인다, 90일, 둘까지) →
+  `PATCH /generations/host`(켜짐·`any` 받기·하루 한도 0~50), `DELETE /generations/host/keys`(열쇠 모두 끄기). 공개 목록은 `GET /generations/hosts`.
+- 하루 한도와 심장 박동은 호스트마다 `af_generation_hosts`에 있다(공식 호스트도). `af_generation_settings`에는 서비스 스위치 `enabled`만 남는다.
 
 ## 공방과 연대기 도구(4단계, 2026-10-27)
 

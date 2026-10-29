@@ -114,7 +114,7 @@ test('three fighters share an account; a fourth is refused and updates preserve 
     assert.equal((await create(rows[0].idempotency_key)).fighter_id, rows[0].fighter_id);
     // The database bound also applies outside the submission entry point.
     await assert.rejects(db.query("insert into af_fighters(submission_id,owner_id,manifest_sha,profile) values(gen_random_uuid(),$1,$2,'{}')", [owner, sha]), /fighter-quota/);
-    await assert.rejects(db.query('update af_fighters set account_slot=4 where id=$1', [rows[0].fighter_id]), /af_fighters_account_slot_check/);
+    await assert.rejects(db.query('update af_fighters set account_slot=4 where id=$1', [rows[0].fighter_id]), /fighter-quota/);
     await assert.rejects(db.query('update af_fighters set account_slot=2 where id=$1', [rows[0].fighter_id]), /af_fighters_owner_slot_key/);
     const before = (await db.query('select * from af_fighters where owner_id=$1 order by account_slot', [owner])).rows;
     const changed = JSON.stringify({ ...example, profile: { ...example.profile, concept: 'Updated first fighter' } });
@@ -127,6 +127,13 @@ test('three fighters share an account; a fourth is refused and updates preserve 
     // Moderation cannot be used to free slots and evade the per-account bound.
     await db.query("update af_fighters set review_state='rejected',runtime_approved=false,runtime_scope=null,runtime_manifest_sha=null,duel_approved=false,duel_manifest_sha=null where id=$1", [rows[2].fighter_id]);
     await assert.rejects(create(), /fighter-quota/);
+    // The operator raises one account: the submission and the slot follow its own limit, and nobody else's.
+    await db.query('update af_creators set fighter_limit=5 where owner_id=$1', [owner]);
+    for (let i = 0; i < 2; i++) rows.push(await finish(await create()));
+    assert.deepEqual((await db.query('select account_slot from af_fighters where owner_id=$1 order by account_slot', [owner])).rows.map(row => row.account_slot), [1, 2, 3, 4, 5]);
+    await assert.rejects(create(), /fighter-quota/);
+    await assert.rejects(db.query("insert into af_fighters(submission_id,owner_id,manifest_sha,profile) values(gen_random_uuid(),$1,$2,'{}')", [owner, sha]), /fighter-quota/);
+    await assert.rejects(db.query('update af_creators set fighter_limit=21 where owner_id=$1', [owner]), /af_creators_fighter_limit_check/);
   } finally { await db.close(); }
 });
 

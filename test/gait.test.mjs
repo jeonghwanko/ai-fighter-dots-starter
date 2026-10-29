@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { alphaBounds, walkPlan, sequenceHash, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence } from '../tools/ai-fighter/gait.mjs';
+import { alphaBounds, walkPlan, sequenceHash, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence, loopReview, requireLoopReview, scaleCheckRuns, scaleCheckEntries, scaleCheckConfigErrors, scalePer } from '../tools/ai-fighter/gait.mjs';
 import { preview } from '../scripts/gait.mjs';
 
 function frame(bottom = 70, mark = 0, height = 80) {
@@ -124,4 +124,88 @@ test('a game-pack sequence decodes each sheet once and keeps the exact per-cell 
       assert.deepEqual([sequence.frames[index].width, sequence.frames[index].height], [32, 32]);
     }
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('a loop review fails on an engine retake reason, unnamed feet, a failing verdict or an unmeasured walk stride, and binds to the frames', () => {
+  const seq = sequence(), verdicts = { identity: 'pass', anatomy: 'pass', loop: 'pass', notes: 'Clean loop.' };
+  const aligned = { from: 27, strikes: [0, 8], foot: { feet: ['left', 'right'], margin: 0.13 } };
+  const pass = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: aligned }, visual: verdicts, judge: 'test', stridePixels: 90 });
+  assert.equal(pass.status, 'pass', JSON.stringify(pass.errors));
+  assert.deepEqual(pass.engine.feet, ['left', 'right']);
+  assert.equal(requireLoopReview(pass, seq, 'walk'), pass);
+  const retake = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: { ...aligned, retake: { reason: 'broken-beat', reasons: ['broken-beat'] } } },
+    visual: verdicts, judge: 'test', stridePixels: 90 });
+  assert.deepEqual(retake.errors.map(e => e.code), ['ENGINE_RETAKE']);
+  // The alignment could not tell the feet apart (a low shade margin), or named one foot twice.
+  for (const foot of [undefined, { feet: [null, null] }, { feet: ['left', 'left'] }])
+    assert.deepEqual(loopReview({ motion: 'run', sequence: { ...seq, frames: seq.frames.slice(0, 12), durations: seq.durations.slice(0, 12) },
+      strip: { cycle_align: { ...aligned, foot } }, visual: verdicts, judge: 'test' }).errors.map(e => e.code), ['ENGINE_FEET_UNNAMED']);
+  const judged = loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: aligned }, visual: { ...verdicts, anatomy: 'fail' }, judge: 'test' });
+  assert.deepEqual(judged.errors.map(e => e.code), ['VISUAL_ANATOMY', 'STRIDE_UNMEASURED']);
+  assert.throws(() => requireLoopReview(judged, seq, 'walk'), /LOOP_REVIEW_REQUIRED/);
+  const changed = { ...seq, durations: seq.durations.map((ms, i) => i ? ms : ms + 1) };
+  assert.throws(() => requireLoopReview(pass, changed, 'walk'), /LOOP_REVIEW_STALE/);
+});
+test('a common request carries each asset scale check, and none when not asked', async () => temporary(async dir => {
+  const reference = await manifest(dir, 'standing', frame(70)), crouch = await manifest(dir, 'crouch', frame(40));
+  const config = { reference, assets: [{ id: 'idle', source: reference }, { id: 'crouch', source: crouch }] };
+  const scaleChecks = { idle: { report: 'game.scale-check-1.json', per: 'frame' }, crouch: { report: 'game.scale-check-2.json', per: 'frame', fix: { 'idle/0': 1 } } };
+  const value = await commonGameRequest(config, dir, { scaleChecks });
+  assert.deepEqual(value.request.assets.map(a => a.scale_check), [scaleChecks.idle, scaleChecks.crouch]);
+  assert.ok((await commonGameRequest(config, dir)).request.assets.every(a => a.scale_check === undefined));
+}));
+test('scale-check measures each file only for the states taken from it, and searches lying states wide', () => {
+  const config = { reference: { file: 'pack/manifest.json', state: 'idle' }, assets: [
+    { id: 'idle', source: { file: 'pack/manifest.json', state: 'idle' } }, { id: 'ko', source: { file: 'pack/manifest.json', state: 'koLie' } },
+    { id: 'cool', source: { file: 'pack/manifest.json', state: 'cooldown' } }, { id: 'walk', source: { file: 'walk/manifest.json', state: 'walk' } }],
+    scaleCheck: { wideStates: ['walk'] } };
+  const runs = scaleCheckRuns(config, '/kit', '/kit/out/game.json');
+  const values = (args, flag) => args.flatMap((v, i) => v === flag ? [args[i + 1]] : []);
+  assert.deepEqual(runs.map(run => run.file), [path.resolve('/kit', 'pack/manifest.json'), path.resolve('/kit', 'walk/manifest.json')]);
+  assert.deepEqual(runs.map(run => values(run.args, '--state')), [['idle', 'koLie', 'cooldown'], ['walk']]);
+  // koLie is a lying state by its words; cooldown is not "down"; wideStates adds to the words, never replaces them
+  assert.deepEqual(runs.map(run => values(run.args, '--wide-state')), [['koLie'], ['walk']]);
+  assert.deepEqual(runs.map(run => path.basename(run.report)), ['game.scale-check-1.json', 'game.scale-check-2.json']);
+  assert.equal(path.basename(scaleCheckRuns({ ...config, assets: config.assets.slice(0, 2) }, '/kit', '/kit/game.json')[0].board), 'game.scale-check.png');
+});
+test('a cycle is one scale and any other clip frame by frame, by the words of its state', () => {
+  const per = state => scalePer({ id: 'x', source: { state } }, {});
+  assert.deepEqual(['walk', 'Walk', 'walkCycle', 'run_fast', 'jog', 'sprint-left'].map(per), Array(6).fill('state'));
+  assert.deepEqual(['combo', 'fightIdle', 'rerun', 'brunch', 'groggy'].map(per), Array(5).fill('frame'));
+  assert.equal(scalePer({ id: 'runAttack', source: { state: 'runAttack' } }, { scaleCheck: { per: { runAttack: 'frame' } } }), 'frame');
+});
+test('fixes name an asset of the request with a correction game-pack accepts, before anything is measured', () => {
+  const config = { reference: { file: 'a.json', state: 'walk' }, assets: [{ id: 'walk', source: { file: 'a.json', state: 'walk' } }, { id: 'combo', source: { file: 'a.json', state: 'combo' } }] };
+  const errors = fix => scaleCheckConfigErrors({ ...config, scaleCheck: { fix } });
+  assert.deepEqual(errors({ walk: 1.02, combo: 1, 'combo/2': 0.97 }), []);
+  assert.match(errors({ 'cmobo/1': 1 })[0], /names no asset/);
+  assert.match(errors({ 'walk/1': 1.3 })[0], /walk is packed at one scale; fix it by its id/);
+  assert.match(errors({ 'combo/2': null })[0], /must be a number from 0.5 to 2/);
+  assert.match(errors({ combo: 3 })[0], /must be a number/);
+  assert.match(scaleCheckConfigErrors({ ...config, scaleCheck: { wideStates: 'fall' } })[0], /wideStates must be a list/);
+});
+test('each asset reads its own file\'s report, and only a fix of its own settles its frames', () => {
+  const config = { reference: { file: 'a.json', state: 'idle' }, assets: [
+    { id: 'combo', source: { file: 'a.json', state: 'combo' } }, { id: 'combo-b', source: { file: 'b.json', state: 'combo' } },
+    { id: 'walk', source: { file: 'a.json', state: 'walk' } }], scaleCheck: { fix: { 'combo-b/1': 1.05 } } };
+  const runs = scaleCheckRuns(config, '/kit', '/kit/game.json');
+  const frame = (how, correction) => ({ how, correction });
+  const reports = [
+    { assets: [{ identity: { state: 'combo' }, frames: [frame('head', 1), frame('head', 0.9)], state_correction: 0.95 },
+      { identity: { state: 'walk' }, frames: [frame('check', null), frame('head', 1.1)], state_correction: null }] },
+    { assets: [{ identity: { state: 'combo' }, frames: [frame('head', 1), frame('check', null)], state_correction: null }] }];
+  let result = scaleCheckEntries(config, '/kit', runs, reports, '/kit');
+  // a.json's combo is measured; b.json's unmeasured combo/1 is settled by its own fix, not by a.json's measurement
+  assert.deepEqual(result.unsettled, ['walk']);
+  assert.deepEqual(result.entries['combo'], { report: 'game.scale-check-1.json', per: 'frame' });
+  assert.deepEqual(result.entries['combo-b'], { report: 'game.scale-check-2.json', per: 'frame', fix: { 'combo/1': 1.05 } });
+  result = scaleCheckEntries({ ...config, scaleCheck: { fix: { walk: 1.04, 'combo/7': 1 } } }, '/kit', runs, reports, '/kit');
+  assert.deepEqual(result.entries.walk, { report: 'game.scale-check-1.json', per: 'state', fix: { walk: 1.04 } });
+  assert.deepEqual(result.errors, ['scaleCheck.fix.combo/7: combo has 2 frames']);
+  assert.deepEqual(result.unsettled, ['combo-b/1']);
+});
+test('a scale-checked request must pack its reference', () => {
+  const config = { reference: { file: './rows.json', state: 'idle' }, assets: [{ id: 'walk', source: { file: 'rows.json', state: 'walk' } }] };
+  assert.match(scaleCheckConfigErrors(config)[0], /reference .* must also be one of the assets/);
+  assert.deepEqual(scaleCheckConfigErrors({ ...config, assets: [...config.assets, { id: 'idle', source: { file: 'rows.json', state: 'idle' } }] }), []);
 });

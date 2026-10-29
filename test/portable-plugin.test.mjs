@@ -59,6 +59,19 @@ test('source distribution extracts on the host without native dependencies or a 
   await assert.rejects(readFile(path.join(result.runtime, 'node_modules', 'package.json')), { code: 'ENOENT' });
 });
 
+test('launcher reads its own normal Codex plugin cache but refuses cache writes and credential locations', async t => {
+  const f = await fixture(t), cached = path.join(f.scratch, '.codex/plugins/cache/oddbout/0.5.5');
+  await cp(f.plugin, cached, { recursive: true });
+  const launcher = await import(pathToFileURL(path.join(cached, 'launcher.mjs')).href);
+  const installed = await launcher.initialize({ base: f.base });
+  assert.equal(await readFile(path.join(installed.runtime, 'entry.mjs'), 'utf8'), f.data);
+  await assert.rejects(launcher.initialize({ base: cached }), /Protected location/);
+  await assert.rejects(launcher.initialize({ base: path.join(f.scratch, '.codex/sessions') }), /Protected location/);
+  await assert.rejects(launcher.initialize({ base: f.base, workspace: path.join(f.scratch, '.grok') }), /Protected location/);
+  const worktree = path.join(f.scratch, '.codex/worktrees/task/repo');
+  assert.equal((await launcher.initialize({ base: f.base, workspace: worktree })).root, worktree);
+});
+
 test('Windows scanner locks retry only the atomic install rename; permanent and unrelated failures propagate', async t => {
   const f = await fixture(t), marker = path.join(f.scratch, 'absent-marker');
   let calls = 0; const delays = [];

@@ -17,6 +17,8 @@ const runtimeFiles = [
   'deploy/creation-environments.json', 'deploy/creation-environment-trust.json', 'scripts/connect-generation.mjs', 'docs/ENVIRONMENT-ONBOARDING.md',
   'scripts/sprite-gen.mjs', 'scripts/pack-fighter.mjs', 'scripts/run-creation-job.mjs', 'scripts/creation-tool.mjs',
   'scripts/sprite-tools.mjs',
+  'scripts/dots-workspace.mjs', 'scripts/dots-start.mjs', 'scripts/dots-source.mjs',
+  'docs/DOTS-QUICKSTART.md', 'docs/DOTS-START.md', 'docs/DOTS-VM-ARCHITECTURE.md', 'docs/DOTS-PRIVATE-SOURCES.md',
   'scripts/login.mjs', 'scripts/gait.mjs', 'scripts/contact.mjs', 'scripts/creation-context.mjs',
   'scripts/check-creation-delivery.mjs', 'scripts/check-connection.mjs', 'docs/DELIVERY.md',
   'tools/ai-fighter/gait.mjs', 'tools/ai-fighter/contact_evidence.py', 'tools/ai-fighter/validate-package.mjs',
@@ -26,9 +28,10 @@ const runtimeFiles = [
 ];
 const runtimeDirectories = ['mcp', 'contracts/ai-fighter'];
 // The cloud MCP and its file-input probe run only in the Edge function (supabase/functions/ai-fighter-mcp) and import the server API.
-const edgeOnlyFiles = ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs'];
+const edgeOnlyFiles = ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs'];
 const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
-  'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run', 'creation:tool'];
+  'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run', 'creation:tool',
+  'dots:doctor', 'dots:bootstrap', 'dots:resume', 'dots:start', 'dots:source'];
 
 // Presentation media in the upstream documentation is not runtime/package data.
 // Keep all source, package assets, workflow text and licenses.

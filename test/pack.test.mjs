@@ -8,7 +8,7 @@ import sharp from 'sharp';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { toDuelStyle } from '../contracts/ai-fighter/validate.mjs';
 import { packFighter } from '../scripts/pack-fighter.mjs';
-import { loadSequence, sequenceHash } from '../tools/ai-fighter/gait.mjs';
+import { loadSequence, loopReview, sequenceHash } from '../tools/ai-fighter/gait.mjs';
 
 const fixture = fileURLToPath(new URL('../examples/sparring-bot/', import.meta.url));
 let temporary;
@@ -382,4 +382,37 @@ test('reviewed input uses the verified stride and rejects changed playback timin
   value.out = 'changed';
   const stale = await run(directory, value);
   assert.equal(stale.errors[0].code, 'GAIT_REVIEW_STALE');
+});
+
+test('hosted loops pack with loop reviews: engine checks, judge verdicts and the measured stride, bound to the pixels', async () => {
+  const directory = await gamePack('loop-review');
+  await addGetUp(directory);
+  const value = plan(directory, 'fighter', p => { useGetUp(p); p.reviewPolicy = 'engine-loop'; delete p.motions.walk.stridePixels; });
+  const missing = await run(directory, { ...value, out: 'missing' });
+  assert.equal(missing.errors[0].code, 'LOOP_REVIEW_REQUIRED');
+  for (const motion of ['walk', 'run']) {
+    const sequence = await loadSequence({ file: 'game-pack.json', animation: `bot/${motion}` }, directory);
+    // Fixture evidence exercises binding and packaging only, not a claim that the sample bot walks well.
+    const review = loopReview({ motion, sequence, strip: { kind: 'periodic', cycle_align: { from: 27, seam_ratio: 0.9, beat: { jolt: 0.2 },
+      strikes: [0, 8], foot: { feet: ['left', 'right'], margin: 0.13 } } },
+      visual: { identity: 'pass', anatomy: 'pass', loop: 'pass', notes: 'Fixture verdicts.' }, judge: 'fixture',
+      stridePixels: 111 });
+    assert.equal(review.status, 'pass', JSON.stringify(review.errors));
+    await writeFile(path.join(directory, `${motion}-loop.json`), JSON.stringify(review));
+    value.motions[motion].loopReview = `${motion}-loop.json`;
+  }
+  const mixed = await run(directory, { ...value, out: 'mixed', reviewPolicy: 'required' });
+  assert.equal(mixed.errors[0].code, 'PLAN_FIELD');
+  const packed = await run(directory, value);
+  assert.equal(packed.ok, true, JSON.stringify(packed.errors));
+  const fighter = JSON.parse(await readFile(path.join(directory, 'fighter/fighter.json'), 'utf8'));
+  const report = JSON.parse(await readFile(path.join(directory, 'fighter/pack-report.json'), 'utf8'));
+  assert.equal(fighter.clips.walk.stridePixels, 111);
+  assert.equal(report.motions.walk.stride.source, 'loop-review');
+  assert.match(report.review, /No same-foot stance was measured/);
+  const packFile = path.join(directory, 'game-pack.json'), pack = JSON.parse(await readFile(packFile, 'utf8'));
+  pack.animations['bot/run'].durations_ms[0] += 5;
+  await writeFile(packFile, JSON.stringify(pack));
+  const stale = await run(directory, { ...value, out: 'stale' });
+  assert.equal(stale.errors[0].code, 'LOOP_REVIEW_STALE');
 });

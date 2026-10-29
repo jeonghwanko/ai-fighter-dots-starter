@@ -1,4 +1,10 @@
 node_modules/
+.oddbout-private/
+input/sources/
+.cache/
+.dots-runtime.json
+.dots-install.json
+.dots-bootstrap.lock
 __pycache__/
 output/
 .env

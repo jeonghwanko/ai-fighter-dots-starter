@@ -1,4 +1,4 @@
-# ODDBOUT 통합 플러그인 (0.5.4)
+# ODDBOUT 통합 플러그인 (0.6.0)
 
 사용자는 ODDBOUT 하나에서 제작·묶음 검토·등록을 진행한다. PC와 Dots의 사용자별 작업 공간은
 같은 제작 도구와 파일 규격을 사용하며, 등록은 현재 대화에 연결된 ODDBOUT Google 계정으로 한다.
@@ -7,10 +7,13 @@ AI Fighter Creator라는 두 번째 플러그인 설치나 작업 공간의 별�
 ## 구성
 
 - `plugins/ai-fighter/plugin.json`: 호환을 위해 소스 폴더는 유지하지만 플러그인 이름은 `oddbout`이다.
-- `.app.json`: 기존 ODDBOUT 연결을 참조한다. 계정·토큰을 포함하지 않는다. 이 개발 연결에 접근 가능한
-  사용자/워크스페이스용이다. 공개 디렉터리 배포 때는 공식 With MCP 제출로 HTTPS 서버를 등록해야 한다.
+- `mcp.json`: 운영 MCP(`https://mcp.oddbout.com/mcp`, Google 로그인)를 플러그인 안에 둔다(0.6.0). 예전에는 `.app.json`으로 따로 추가한
+  ODDBOUT 연결(사용자 지정 MCP 커넥터)을 참조해서, 플러그인 목록에 ODDBOUT이 둘 보였다. 이제 하나다. 계정·토큰은 넣지 않는다.
+  로컬 명령 서버는 넣지 않는다(`streamable-http`만). 공개 디렉터리 심사는 같은 MCP를 쓰는 `plugins/oddbout-cloud`로 따로 진행 중이다.
 - `skills/create-fighter`: PC/Dots 실행 환경, 사용자 피드백, 패키지 검증, 공통 클라우드 등록을 안내한다.
-- `launcher.mjs --status`: 소스 해시를 검증하고 사용자 쓰기 가능 경로에 도구를 풀거나 개발 체크아웃을 찾는다.
+- 새 launcher의 `--status`: 소스·기존 runtime 해시를 검증하고 경로만 보고한다. 파일을 만들지 않는다.
+- `launcher.mjs --install --manifest-sha256 <검토된-runtime-manifest-SHA256>`: 명시적으로 사용자 runtime에 복사한다.
+  기존 릴리스의 명령 의미와 구분하며 [Dots 준비 안내](DOTS-QUICKSTART.md)를 따른다.
 - `scripts/creation-tool.mjs`: 기존 MCP 도구를 같은 스키마 검증과 잠금으로 한 번씩 호출한다.
   등록용 로컬 세션을 읽지 않고 클라우드 계정 확인을 안내한다. 준비와 실행은 기존처럼 분리된다.
 - 로컬 stdio MCP는 예전 클라이언트 호환용으로 남는다. 통합 플러그인은 이를 자동 실행하지 않는다.
@@ -22,13 +25,16 @@ AI Fighter Creator라는 두 번째 플러그인 설치나 작업 공간의 별�
 ## 빌드와 전환
 
 ```sh
-npm run plugin:build -- output/oddbout-development-0.5.4
-npm run plugin:bundle -- output/oddbout-0.5.4
+npm run plugin:build -- output/oddbout-development-0.6.0
+npm run plugin:bundle -- output/oddbout-0.6.0
 ```
 
 첫 명령은 이 사용자의 체크아웃/작업 공간을 가리키는 개발용 빌드다. 다른 기기 배포에는 두 번째 명령의
-`oddbout-0.5.4.zip`을 사용한다. ZIP은 원본 소스와 고정된 sprite-gen-agent(`vendor/sprite-gen`), 그 LICENSE/NOTICE를 포함하며
+`oddbout-0.6.0.zip`을 사용한다. ZIP은 원본 소스와 고정된 sprite-gen-agent(`vendor/sprite-gen`), 그 LICENSE/NOTICE를 포함하며
 OS별 node_modules·venv·로그인·사용자 결과물은 제외한다. 의존성은 추출한 런타임에서 잠금 파일로 설치한다.
+
+**0.6.0으로 옮기기(ChatGPT 개인 플러그인)**: 새 ZIP을 올려 설치하고 Google로 한 번 로그인한다. 그다음 예전 ODDBOUT 플러그인과
+따로 추가했던 ODDBOUT 연결(사용자 지정 MCP 커넥터)을 지운다. 작업 폴더·원본·작업 기록은 그대로다.
 
 기존 `ai-fighter-local` 마켓플레이스의 소스를 새 디렉터리로 전환하고 `oddbout@ai-fighter-local`을 설치한다.
 새 설치와 계정 연결을 확인한 뒤 이전 `ai-fighter-creator@ai-fighter-local` 설치를 제거한다.

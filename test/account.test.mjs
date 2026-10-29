@@ -15,7 +15,7 @@ test('verified accounts can submit without invitations, including prior declines
    rpc:async(name,args)=>{try{return {data:(await sql.query('select '+name+'($1) as result',[args.p_owner])).rows[0].result};}catch(error){return {error:{message:error.message}};}}};
   const handle=createHandler({db}),call=token=>handle(new Request('https://test/ai-fighter/me',{headers:token?{authorization:'Bearer '+token}:{}}));
   assert.equal((await call()).status,401);assert.equal((await call('fixture-anon-token')).status,401);
-  assert.deepEqual((await(await call('fixture-owner-token')).json()).account,{invited:true,expiresAt:null,request:null,accessMode:'open',canSubmit:true});
+  assert.deepEqual((await(await call('fixture-owner-token')).json()).account,{invited:true,expiresAt:null,request:null,accessMode:'open',canSubmit:true,fighterLimit:3});
   await sql.exec('set role service_role');
   assert.equal((await sql.query('select af_authorize($1) as ok',[owner])).rows[0].ok,true);
   await sql.query("update af_creators set expires_at=now()-interval '1 day' where owner_id=$1",[owner]);
@@ -23,6 +23,8 @@ test('verified accounts can submit without invitations, including prior declines
   await assert.rejects(sql.query('select af_authorize($1)',[disabled]),/account-disabled/);
   assert.equal((await sql.query('select af_account($1) as a',[disabled])).rows[0].a.canSubmit,false);
   assert.equal((await sql.query('select af_request_access($1,$2) as a',[owner,''])).rows[0].a.canSubmit,true);
+  await sql.query('update af_creators set fighter_limit=10 where owner_id=$1',[owner]);
+  assert.equal((await sql.query('select af_account($1) as a',[owner])).rows[0].a.fighterLimit,10);
   await sql.exec('reset role; set role authenticated');
   await assert.rejects(sql.query('select * from af_creators'),/permission denied/);
   await assert.rejects(sql.query('select af_authorize($1)',[owner]),/permission denied/);

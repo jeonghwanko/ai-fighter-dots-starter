@@ -29,10 +29,22 @@ from sprite_gen.spec.runio import acquire_run_dir_lock, atomic_write_set, releas
 
 ENGINES = {1: "ai-fighter-foot-evidence-v1", 2: "ai-fighter-foot-evidence-v2"}
 LOBE_REASON = "multiple contact lobes in foot ROI"
+LOBE_CODE = "foot-contact-lobes"
 REVIEW_KEYS = ("sameAnatomicalFoot", "completeFoot", "otherFootExcluded", "groundContact")
 # Upstream reasons that only proxy foot identity or travel through the ROI silhouette.
 # With v2 evidence the outlines answer identity and the leading contact track answers
 # travel. Every other upstream reason, including any added later, stays a failure.
+# Decided on the engine's stable codes (sprite_gen.qa.motion STANCE_REASONS): its texts may be reworded.
+SILHOUETTE_PROXY_CODES = (
+    LOBE_CODE,
+    "foot-centroid-moves",
+    "foot-area-changes",
+    "foot-dimensions-change",
+    "horizontal-reversal",
+    "no-net-displacement",
+    "velocity-inconsistent",
+)
+# The texts an engine without `reason_codes` gave for those codes (sprite-gen before f12cdcc).
 SILHOUETTE_PROXY_REASONS = (
     LOBE_REASON,
     "foot centroid moves vertically; stance is uncertain",
@@ -42,6 +54,15 @@ SILHOUETTE_PROXY_REASONS = (
     "insufficient net horizontal displacement",
     "foot velocity is inconsistent across the declared stance",
 )
+LEGACY_CODES = dict(zip(SILHOUETTE_PROXY_REASONS, SILHOUETTE_PROXY_CODES))
+
+
+def reason_codes(candidate):
+    """The code of each of an upstream candidate's reasons, in order; None for a text no code is known for (a failure)."""
+    codes = candidate.get("reason_codes")
+    if isinstance(codes, list) and len(codes) == len(candidate["reasons"]):
+        return list(codes)
+    return [LEGACY_CODES.get(reason) for reason in candidate["reasons"]]
 
 
 def pixel_binding(sequence):
@@ -291,23 +312,24 @@ def inspect(sequence, foot, start, end, box, facing, evidence):
     result = copy.deepcopy(upstream)
     candidate = result["contact_candidates"][0]
     original_reasons = list(candidate["reasons"])
+    reasons = list(zip(original_reasons, reason_codes(candidate)))
     # Never replace another failed check or use a reviewer-provided speed.
     track = None
     if version == 1:
-        other_failures = [reason for reason in original_reasons if reason != LOBE_REASON]
-        resolvable = [LOBE_REASON]
+        resolvable = {LOBE_CODE}
         speed = candidate.get("measured_velocity_candidate_px_per_second")
-        failures = other_failures
+        failures = [reason for reason, code in reasons if code not in resolvable]
     else:
-        other_failures = [reason for reason in original_reasons if reason not in SILHOUETTE_PROXY_REASONS]
-        resolvable = list(SILHOUETTE_PROXY_REASONS)
+        resolvable = set(SILHOUETTE_PROXY_CODES)
         track = contact_track(candidate,observations) if not issues else None
         speed = track["velocityPxPerSecond"] if track else None
-        failures = other_failures + (track["reasons"] if track else [])
+        failures = [reason for reason, code in reasons if code not in resolvable] + (track["reasons"] if track else [])
     verified = (not issues and not failures and isinstance(speed,(int,float)) and math.isfinite(speed)
-                and all(reason in resolvable for reason in original_reasons))
-    resolved = [reason for reason in original_reasons if reason in resolvable] if verified else []
+                and all(code in resolvable for _reason, code in reasons))
+    resolved = [reason for reason, code in reasons if code in resolvable] if verified else []
     candidate["reasons"] = [] if verified else original_reasons + (track["reasons"] if track else []) + issues
+    # The engine's codes name its own reasons only; this candidate's reasons are the kit's (upstream_report keeps them).
+    candidate.pop("reason_codes", None)
     candidate.update(status="verified" if verified else "needs-review",confidence=.9 if verified else 0.,
                      foot_velocity_px_per_second=speed if verified else None,
                      stride_px_per_second=abs(speed) if verified else None)
@@ -319,7 +341,7 @@ def inspect(sequence, foot, start, end, box, facing, evidence):
     result["foot_evidence"] = {"status":"verified" if not issues else "unverified", "stance":stance,
                                "sequence":pixel_binding(sequence),"review":evidence.get("review") if isinstance(evidence,dict) else None,
                                "issues":issues,"observations":observations,"declaration":copy.deepcopy(evidence),
-                               "resolvedReason":LOBE_REASON if verified and LOBE_REASON in original_reasons else None}
+                               "resolvedReason":next((reason for reason, code in reasons if code == LOBE_CODE), None) if verified else None}
     if version == 2:
         result["foot_evidence"].update(resolvedReasons=resolved,contactTrack=track)
     result["warnings"] = ["Conditional on explicit reviewer-labelled complete anatomical feet; not automatic foot recognition."]

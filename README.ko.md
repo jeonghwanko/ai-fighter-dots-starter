@@ -1,16 +1,12 @@
 # ODDBOUT
 
-**ODDBOUT 플러그인 하나로 제작·검토·등록을 진행합니다.** 사용자 PC 또는 지원되는 Dots 작업 공간에서
-제작하고 같은 연결 계정으로 등록합니다. 별도 AI Fighter Creator 플러그인은 필요하지 않습니다.
-[통합 플러그인 설치·전환 안내](docs/ODDBOUT-PLUGIN.md)를 참고하세요.
-
 [English](README.md) | **한국어**
 
 **AI와 함께 만든 나만의 캐릭터를 대전 게임에 출전시키세요.**
 
 ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. 이 저장소에는 캐릭터를 만드는 오픈소스 도구가 들어 있습니다. AI와 대화하며 설명이나 참고 이미지를 원화와 애니메이션으로 만들고, 게임에 쓸 선수 패키지로 완성할 수 있습니다. 도구와 문서에서는 AI Fighter라는 이름도 사용합니다.
 
-[게임하기](https://oddbout.com/fighter.html) · [내 선수 관리](https://oddbout.com/creator.html?lang=ko) · [제작 시작 안내](docs/START-HERE.md) · [문제 제보](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
+[게임하기](https://oddbout.com/fighter.html) · [내 선수 관리](https://oddbout.com/creator.html?lang=ko) · [사이트 가이드](https://oddbout.com/docs.html?lang=ko) · [제작 시작 안내](docs/START-HERE.md) · [문제 제보](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
 
 ## 무엇을 만들 수 있나요?
 
@@ -23,16 +19,40 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 이 키트에서 "sprite-gen"은 `vendor/sprite-gen`에 고정된 sprite-gen 엔진·CLI를 말하며, Alex Kim의 [sprite-gen](https://github.com/aldegad/sprite-gen)을 포크한 [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent)에서 가져옵니다. 명령·경로·Python 패키지 이름은 그대로 `sprite-gen`입니다.
 
+## 선수를 만드는 길
+
+어느 길로 만들든 선수는 내 Google 계정에 등록되고, 계정당 세 명까지 둘 수 있습니다. 앞의 두 길은 아무것도 설치하지 않습니다.
+세 번째는 이 저장소의 생성기를 내 PC에 설치하고, 마지막은 이 키트 전체를 씁니다. 길마다 자세한 순서는 [사이트 가이드](https://oddbout.com/docs.html?lang=ko)에 있습니다.
+
+| 길 | 하는 일 | 이럴 때 |
+| --- | --- | --- |
+| **ODDBOUT에 맡기기** | [내 선수](https://oddbout.com/creator.html?lang=ko)에서 선수를 설명합니다(10~600자, 쓸 권리가 있는 그림 두 장까지). ODDBOUT이 외형 두 장과 움직임을 그리면 고르고 고칠 점을 말한 뒤 등록합니다. | 가장 빠른 시작. 계정당 한 명 무료이고, 하루에 받는 신청 수가 정해져 있습니다. |
+| **에이전트와 대화로** | [내 에이전트](https://oddbout.com/creator.html?lang=ko#view=agents)에서 Codex(ChatGPT · Dots)·Grok·Claude를 ODDBOUT 클라우드 MCP에 연결하고([클라우드 연결](docs/CLOUD-MCP.md)), 대화에서 `@ODDBOUT`에게 말합니다. | 대화로 만들고 고치기. 그림 첨부는 ChatGPT에서만 됩니다. Gemini는 준비 중입니다. |
+| **내 PC로** | 내 에이전트 → 내 PC에서 호스트를 만들고, 내 ChatGPT·SuperGrok 구독이 있는 Linux PC에서 나온 세 줄 명령을 실행합니다([생성 호스트 안내](docs/GENERATION-HOST.md)). | 내 구독으로 더 만들기. 승인이 필요 없고 한 명 제한도 없습니다. |
+| **직접 만들기** | 로컬 도구를 쓸 수 있는 AI와 이 키트를 돌려 원화와 동작을 하나하나 고릅니다([아래](#로컬-키트로-캐릭터-만들기)). | 프레임마다 직접 정하고 싶을 때. |
+
 ## PC 없이 Dots에서 등록하기
 
-ChatGPT 플러그인에서 **ODDBOUT** 클라우드 MCP를 연결하고 Google로 로그인한 뒤,
-Dots 대화에서 `@ODDBOUT`을 선택하세요. 계정 확인·파일 전달·등록은 클라우드 연결이
+**Dots 저장 VM 제작 경로 (0.5.5 후보)**: 환경 준비자는 [설치 절차](deploy/dots-environment/README.md)를
+한 번 실행하고, 이후 사용자는 Git 주소와 제작 요청을 전달합니다. Dots가 `node dots.mjs --install`로
+고정 버전을 준비한 뒤 `node dots.mjs`로 같은 작업을 재개합니다. 생성은 본인의 Grok 구독을 사용합니다.
+[시작 지침](docs/DOTS-START.md)과 [비공개 원본 전달](docs/DOTS-PRIVATE-SOURCES.md)을 따릅니다.
+아직 실제 저장 VM의 생성·미리보기 전달까지 승인된 릴리스는 아닙니다. 설치·단위 테스트 통과와 구분합니다.
+
+**ODDBOUT** 클라우드 MCP를 연결하고 Google로 로그인한 뒤 Dots 대화에서 `@ODDBOUT`을 선택하세요.
+ODDBOUT 플러그인 0.6.0 이상에는 이 연결이 이미 들어 있습니다. 플러그인 없이 쓸 때는 ChatGPT 플러그인에서 사용자 지정 MCP 서버로 추가합니다
+(둘을 함께 더하면 ODDBOUT이 둘 보입니다). Grok과 Claude는 각자의 커넥터 설정에서 같은 서버에 연결하고,
+[내 에이전트](https://oddbout.com/creator.html?lang=ko#view=agents)에서 모든 연결을 보고 끊을 수 있습니다. 계정 확인·파일 전달·등록은 클라우드 연결이
 처리합니다. 로컬 MCP 설치, API 키 입력, 로그인 콜백 복사는 필요하지 않습니다.
 서버 주소와 최초 연결 순서는 [클라우드 연결 안내](docs/CLOUD-MCP.md)에 있습니다.
 이미지 생성·미리보기·최종 검토는 선택한 실행 환경과 본인의 생성 계정을 사용합니다.
 아래 설치 과정은 제작 키트를 작업 공간에서 실행할 때의 안내이며 클라우드 로그인에는 필요하지 않습니다.
 
 ## 로컬 키트로 캐릭터 만들기
+
+**ODDBOUT 플러그인 하나로 제작·검토·등록을 진행합니다.** 사용자 PC 또는 지원되는 Dots 작업 공간에서
+제작하고 같은 연결 계정으로 등록합니다. 별도 AI Fighter Creator 플러그인은 필요하지 않습니다.
+[통합 플러그인 설치·전환 안내](docs/ODDBOUT-PLUGIN.md)를 참고하세요.
 
 내 PC나 작업 환경에서 명령을 실행하고 파일을 읽을 수 있는 Dot·Codex·Claude 등의 새 대화에 [시작 링크](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md)를 보내세요. 원하는 캐릭터 설명이나 참고 이미지를 함께 보내면 됩니다. 예를 들면:
 
@@ -69,6 +89,11 @@ AI는 한 묶음이 끝날 때마다 실제 결과를 보여주고 의견을 기
 
 ## 직접 설치하기
 
+Dots VM 준비는 [bootstrap·doctor·resume 안내](docs/DOTS-QUICKSTART.md)와
+[저장된 환경 Start 지침](docs/DOTS-START.md)을 따른다. 기본 doctor는 무네트워크·무설치 검사이고,
+설치는 `bootstrap --install`로 분리된다. 일반 Git URL의 main과 `codex/creator-hosting`의 실제 버전을
+구분한다. Git 링크만 받은 것은 생성 승인이 아니며, 보호 Codex 세션을 요구하는 이미지 경로는 차단한다.
+
 공개 서비스 연결 설정이 있는 **codex/creator-hosting** 브랜치를 사용합니다. 새로 설치할 때는 다음 명령을 실행하세요.
 
 ```sh
@@ -83,17 +108,17 @@ npm run sprite:status
 
 설치 도구는 sprite-gen이 쓰는 외부 도구도 sudo 없이 받습니다. `-exact`를 지원하는 `img2webp`(libwebp 1.6.0, SHA-256 고정 — 시스템에 없거나 Ubuntu 24.04의 1.3.x처럼 오래되면 키트 전용 환경에 넣습니다)와 걷기·달리기 루프를 매끄럽게 잇는 RIFE(`sprite-gen rife install`, 약 430MB 다운로드)입니다. `ffmpeg`는 먼저 직접 설치하세요: `sudo apt install ffmpeg`(Ubuntu·Debian), `brew install ffmpeg`(macOS), `winget install --id Gyan.FFmpeg -e`(Windows). 설치와 `sprite:status`가 도구마다 `ok`·`missing`·`broken`과 고치는 명령을 보여줍니다. GPU가 없는 Linux에서는 RIFE용으로 `sudo apt install libvulkan1 mesa-vulkan-drivers`도 필요합니다. RIFE가 없으면 루프는 촬영된 그대로 잘리고 경고가 남습니다. 캐릭터를 제작 중이라면 작업 폴더를 유지하고 저장소 업데이트를 받지 마세요.
 
-도구 연결은 [Codex 로컬 플러그인 안내](docs/LOCAL-PLUGIN.md)를 따릅니다. MCP를 직접 연결하려면 `node scripts/print-install.mjs`로 설치 명령을 출력해 실행하세요. 다른 로컬 호스트는 `AI_FIGHTER_ROOT`를 이 저장소 경로로 지정하고 `mcp/stdio.mjs`를 연결합니다.
+도구 연결은 [Codex 로컬 플러그인 안내](docs/LOCAL-PLUGIN.md)를 따릅니다: `npm run plugin:build` 뒤 출력된 `codex plugin marketplace add …`와 `codex plugin add oddbout@ai-fighter-local`. 예전 MCP 직접 연결(`node scripts/print-install.mjs`)은 호환용으로 남아 있습니다. 다른 로컬 호스트는 `AI_FIGHTER_ROOT`를 이 저장소 경로로 지정하고 `mcp/stdio.mjs`를 연결합니다.
 
 별도의 Windows 배포 패키지는 [번들 안내](docs/PLUGIN-DISTRIBUTION.md)를 참고하세요. 로컬 플러그인 설치와 공개 디렉터리 등록은 별개입니다.
 
 ## 등록하고 플레이하기
 
-최종 결과를 선택하고 등록을 요청하면 AI가 패키지를 검사하고 Google 로그인을 도와줍니다. 키트에 서비스 연결 설정이 들어 있어, 직접 서버를 만들거나 서비스 API 키를 발급받을 필요는 없습니다.
+최종 결과를 선택하고 등록을 요청하면 AI가 패키지를 검사하고 연결된 ODDBOUT 계정으로 등록합니다. ODDBOUT 플러그인이나 내 에이전트에서 연결한 에이전트가 본인 Google 계정으로 로그인합니다. 직접 서버를 만들거나 서비스 API 키를 발급받을 필요는 없습니다. 그 연결이 없는 예전 로컬 도구는 `npm run login`으로 로그인합니다.
 
 서버가 업로드된 파일을 검사한 뒤 게임에서 쓸 수 있게 합니다. AI가 처리 결과까지 확인해 내 캐릭터가 실제로 등록됐고 게임에서 이용 가능한지 알려줍니다. 대기열 상황에 따라 시간이 걸릴 수 있습니다.
 
-같은 Google 계정으로 [제작자 페이지](https://oddbout.com/creator.html?lang=ko)에 로그인하면 내 선수를 확인할 수 있습니다. 이용 한도와 프로필 수정은 [등록 안내](docs/OPEN-REGISTRATION.md)를 참고하세요. 로그인 링크, 콜백 주소, 세션 파일은 공개하지 마세요.
+같은 Google 계정으로 [제작자 페이지](https://oddbout.com/creator.html?lang=ko)에 로그인하면 내 선수를 확인할 수 있습니다. 내 에이전트 탭에서 연결한 에이전트와 내 PC를 관리합니다. 이용 한도와 프로필 수정은 [등록 안내](docs/OPEN-REGISTRATION.md)를 참고하세요. 로그인 링크, 콜백 주소, 세션 파일은 공개하지 마세요.
 
 ## 문제 제보와 기여
 
@@ -103,13 +128,14 @@ npm run sprite:status
 
 | 문서 | 내용 |
 | --- | --- |
-| [클라우드 연결](docs/CLOUD-MCP.md) · [연결 복구](docs/CONNECTION-READINESS.md) | Google 로그인, 계정 확인, 클라우드 등록 |
+| [클라우드 연결](docs/CLOUD-MCP.md) · [연결 복구](docs/CONNECTION-READINESS.md) | ChatGPT·Grok·Claude 연결, Google 로그인, 계정 확인, 클라우드 등록 |
 | [제작 규격](docs/AUTHORING.md) | 선수 파일과 패키지 규격 |
 | [제작 UX](docs/CREATION-UX.md) | 캐릭터 입력, 피드백, 버전 선택 |
 | [게임 제작 데이터](docs/GAME-CREATION-CONTEXT.md) | 현재 동작·조작·시간 규칙 |
 | [보행 검수](docs/GAIT-REVIEW.md) | 걷기·달리기 품질과 접지 근거 |
 | [실행 환경](docs/EXECUTION-HOST.md) · [미리보기 전달](docs/DELIVERY.md) | 계정 분리, 로컬 실행, 실제 결과 표시 |
 | [호스팅](docs/CREATOR-HOSTING.md) · [보안](SECURITY.md) | 배포와 보안 경계 |
+| [생성 호스트 되기](docs/GENERATION-HOST.md) | 내 Linux PC와 구독으로 내 선수를 만들고, 승인되면 다른 제작자의 신청도 만든다 |
 
 의존성 설치 후 로컬 개발 검사는 다음 명령으로 실행합니다.
 

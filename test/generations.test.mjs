@@ -1,62 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
-import { createHandler, sha256 } from '../api/handler.mjs';
+import { sha256 } from '../api/handler.mjs';
 import { probeImage } from '../api/image-probe.mjs';
-import { migratedDatabase } from './helpers/fighter-database.mjs';
-
-// Minimal headers the probe reads (the API never decodes a picture).
-const png = (w, h) => { const b = new Uint8Array(64); b.set([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13]); b.set(new TextEncoder().encode('IHDR'), 12);
-  new DataView(b.buffer).setUint32(16, w); new DataView(b.buffer).setUint32(20, h); return b; };
-const webp = (w, h) => { const b = new Uint8Array(64); b.set(new TextEncoder().encode('RIFF'), 0); b.set(new TextEncoder().encode('WEBPVP8X'), 8);
-  b.set([(w - 1) & 255, (w - 1) >> 8 & 255, (w - 1) >> 16, (h - 1) & 255, (h - 1) >> 8 & 255, (h - 1) >> 16], 24); return b; };
-
-// One database, a creator with a token, another creator, the generation worker's key and a validation worker's key; Storage in memory.
-async function generation() {
-  const sql = await migratedDatabase(), owner = crypto.randomUUID(), other = crypto.randomUUID();
-  for (const user of [owner, other]) {
-    await sql.query('insert into auth.users(id) values($1)', [user]);
-    await sql.query('insert into public.af_creators(owner_id) values($1) on conflict do nothing', [user]);
-  }
-  const workerToken = `afw_${'a'.repeat(64)}`, validatorToken = `afw_${'b'.repeat(64)}`;
-  await sql.query("insert into public.af_workers(token_hash,label,scope) values($1,'gen','generation'),($2,'val','validation')",
-    [await sha256(new TextEncoder().encode(workerToken)), await sha256(new TextEncoder().encode(validatorToken))]);
-  const rpc = async (name, args) => {
-    try { return { data: (await sql.query(`select to_jsonb(public.${name}(${Object.keys(args).map((key, i) => `${key} => $${i + 1}`).join(',')})) as value`, Object.values(args))).rows[0].value }; }
-    catch (error) { return { error: { message: error.message } }; }
-  };
-  const from = table => {
-    const filters = [], values = []; let order = '', limit = '', gt = [];
-    const run = async () => (await sql.query(`select to_jsonb(t) as value from public.${table} t${filters.length ? ' where ' + filters.join(' and ') : ''}${order}${limit}`, values)).rows.map(r => r.value);
-    const q = { select: () => q, eq: (key, val) => { values.push(val); filters.push(`${key}=$${values.length}`); return q; },
-      gt: (key, val) => { values.push(val); filters.push(`${key}>$${values.length}`); return q; },
-      in: (key, vals) => { values.push(vals); filters.push(`${key}=any($${values.length})`); return q; },
-      order: (key, o) => { order = ` order by ${key}${o?.ascending === false ? ' desc' : ''}`; return q; }, limit: n => { limit = ` limit ${n}`; return q; },
-      maybeSingle: async () => ({ data: (await run())[0] ?? null }), then: (ok, no) => run().then(data => ({ data })).then(ok, no) };
-    return q;
-  };
-  const objects = new Map();
-  const storage = { from: bucket => ({
-    upload: async (path, bytes, options) => { const key = `${bucket}/${path}`; if (objects.has(key) && !options?.upsert) return { error: { message: 'exists' } };
-      objects.set(key, { bytes, type: options?.contentType }); return { data: { path } }; },
-    remove: async paths => { for (const p of paths) objects.delete(`${bucket}/${p}`); return {}; },
-    download: async path => objects.has(`${bucket}/${path}`) ? { data: new Blob([objects.get(`${bucket}/${path}`).bytes]) } : { error: { message: 'missing' } },
-    createSignedUrls: async paths => ({ data: paths.map(path => ({ path, signedUrl: `https://storage.test/${bucket}/${path}?token=t` })) }) }) };
-  const users = { 'owner-token-0123456789': owner, 'other-token-0123456789': other };
-  const db = { rpc, from, storage, auth: { getUser: async token => ({ data: { user: users[token] ? { id: users[token] } : null } }) } };
-  const handle = createHandler({ db });
-  const call = async (method, path, body, token = 'owner-token-0123456789', headers = {}) => {
-    const raw = body instanceof Uint8Array || typeof body === 'string';
-    const response = await handle(new Request(`http://localhost/ai-fighter/${path}`, { method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
-      'content-type': raw ? (headers['content-type'] ?? 'application/octet-stream') : 'application/json', ...headers },
-      ...(body === undefined ? {} : { body: raw ? body : JSON.stringify(body) }) }));
-    return { status: response.status, body: await response.json() };
-  };
-  const work = (method, path, body, headers = {}) => call(method, `generation-worker/${path}`, body, workerToken, headers);
-  const healthy = async () => { await sql.query('update public.af_generation_settings set enabled = true');
-    return work('POST', 'heartbeat', { health: { ok: true, codex: true, grok: true } }); };
-  return { sql, owner, other, call, work, healthy, objects, validatorToken };
-}
+import { generation, png, webp } from './helpers/generation-database.mjs';
 
 test('the probe reads a PNG, JPEG and WebP header and nothing else', () => {
   assert.deepEqual(probeImage(png(640, 480)), { type: 'image/png', ext: 'png', width: 640, height: 480 });
@@ -64,6 +11,22 @@ test('the probe reads a PNG, JPEG and WebP header and nothing else', () => {
   const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 4, 0, 0, 0xff, 0xc0, 0, 11, 8, 1, 0x2c, 2, 0x58, 3, 0, 0, 0]);
   assert.deepEqual(probeImage(jpeg), { type: 'image/jpeg', ext: 'jpg', width: 600, height: 300 });
   assert.equal(probeImage(new TextEncoder().encode('not a picture at all, just words here')), null);
+});
+
+test('a request past the account limit is refused until the operator raises that account', async () => {
+  const { sql, owner, call, healthy } = await generation();
+  try {
+    await healthy();
+    const profile = { name: 'Profile character', description: 'Introduction', portrait: '/art/character-profiles/test-v1.webp', color: '#ffeebb' };
+    for (let i = 0; i < 3; i++) await sql.query('select public.af_register_character_profile($1,$2,$3,$4)', [owner, crypto.randomUUID(), profile, 'kkumssi']);
+    const ask = () => call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() });
+    assert.equal((await ask()).body.code, 'fighter-quota');
+    await sql.query('update public.af_creators set fighter_limit = 4 where owner_id = $1', [owner]);
+    const made = await ask();
+    assert.equal(made.status, 200); assert.equal(made.body.job.status, 'queued');
+    for (const fn of ['af_create_submission', 'af_generation_create', 'af_generation_register'])
+      assert.match((await sql.query(`select pg_get_functiondef(oid) as d from pg_proc where proname = $1`, [fn])).rows[0].d, /af_fighter_limit\(p_owner\) then raise exception 'fighter-quota'/);
+  } finally { await sql.close(); }
 });
 
 test('a request: off until the worker is healthy, pictures with rights, one hosted fighter per account, the same key the same job', async () => {
@@ -95,7 +58,7 @@ test('a request: off until the worker is healthy, pictures with rights, one host
     const claim = (await work('POST', 'claim', {})).body.job;
     assert.equal((await work('POST', 'finish', { jobId: claim.id, leaseToken: claim.leaseToken, outcome: 'rejected', result: { code: 'real-person' } })).body.status, 'rejected');
     assert.equal((await call('GET', 'generations')).body.used, false);
-    await sql.query('update public.af_generation_settings set daily_limit = 1');
+    await sql.query('update public.af_generation_hosts set daily_limit = 1 where official');
     await sql.query("insert into public.af_generation_jobs(owner_id,idempotency_key,description,language) values($1,$2,'남이 이미 신청한 선수 하나','ko')", [other, crypto.randomUUID()]);
     assert.equal((await ask(crypto.randomUUID())).body.code, 'generation-capacity');
   } finally { await sql.close(); }
@@ -136,13 +99,26 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
     await finish(held, 'ok', { candidates: ['look-a-1', 'look-b-1'] });
     assert.equal((await call('POST', `generations/${job.id}/appearance`, { choose: 'b' })).body.job.status, 'motions');
     held = await step('motions'); assert.equal(held.choice, 'b'); assert.equal(held.candidates[1].name, 'look-b-1');
-    const preview = ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip.toLowerCase()}-0` }));
+    // Previews ahead of the package (2026-10-28): the worker's drafts show while the motions are made, this round's only.
+    const drafting0 = { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' };
+    for (const name of ['draft-combo-0', 'draft-walk-0']) assert.equal((await work('PUT', `jobs/${held.id}/artifacts/${name}`, webp(200, 200), drafting0)).status, 200);
+    assert.deepEqual((await call('GET', `generations/${job.id}`)).body.job.drafts, []);
+    await work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken, event: { kind: 'drafts',
+      clips: [{ clip: 'combo', name: 'draft-combo-0' }, { clip: 'walk', name: 'draft-walk-0' }, { clip: 'dance', name: 'draft-dance-0' }, { clip: 'run', name: 'motion-run-0' }] } });
+    const drafting = (await call('GET', `generations/${job.id}`)).body.job;
+    assert.deepEqual(drafting.drafts.map(d => d.clip), ['combo', 'walk']); assert.ok(drafting.drafts.every(d => typeof d.url === 'string'));
+    // The run made from the walk carries its note (2026-10-29); a note the API does not know is refused.
+    const preview = ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip.toLowerCase()}-0`, ...(clip === 'run' ? { note: 'run-from-walk' } : {}) }));
     assert.equal((await finish(held, 'ok', { preview: [{ clip: 'dance', name: 'x' }] })).body.code, 'invalid-result');
+    assert.equal((await finish(held, 'ok', { preview: preview.map(p => ({ ...p, note: 'made-up' })) })).body.code, 'invalid-result');
     await finish(held, 'ok', { preview });
     read = (await call('GET', `generations/${job.id}`)).body.job;
     assert.equal(read.status, 'motion_ready'); assert.deepEqual(read.preview.map(p => p.clip), ['idle', 'walk', 'run']);
+    assert.deepEqual(read.preview.map(p => p.note ?? null), [null, null, 'run-from-walk']);
+    assert.deepEqual(read.drafts, []); // the package's previews replace them
     assert.equal((await call('POST', `generations/${job.id}/motions`, { revise: { clip: 'walk', note: '덜 통통 튀게'.repeat(25) } })).body.job.revisionsLeft.motions, 2);
     held = await step('motions'); assert.deepEqual(held.motionNote, { clip: 'walk', note: '덜 통통 튀게'.repeat(25) });
+    assert.deepEqual((await call('GET', `generations/${job.id}`)).body.job.drafts, []); // round 0's drafts are not this round's
     await finish(held, 'ok', { preview });
     // Registered: his confirmed profile, the package submitted under his account by the worker.
     assert.equal((await call('POST', `generations/${job.id}/register`, { profile: { name: '', description: 'x' } })).body.code, 'invalid-profile');
@@ -217,7 +193,7 @@ test('retries count toward a stage\'s three leases and wait; progress is a heart
     // Progress keeps the worker on the books while a long stage runs.
     const second = (await ask()).body.job, held = (await work('POST', 'claim', {})).body.job;
     assert.match(held.createdAt, /^\d{4}-\d{2}-\d{2}/);
-    await sql.query("update public.af_generation_settings set worker_seen_at = now() - interval '10 minutes'");
+    await sql.query("update public.af_generation_hosts set worker_seen_at = now() - interval '10 minutes' where official");
     assert.equal((await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.hosted, false);
     await work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken, progress: 50 });
     assert.equal((await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.hosted, true);
@@ -240,3 +216,39 @@ test('retries count toward a stage\'s three leases and wait; progress is a heart
   } finally { await sql.close(); }
 });
 
+
+test('맡기기: the worker picks the look and the job goes on to the motions; with no pick, or a job not left to it, the creator is asked', async () => {
+  const { sql, call, work, healthy } = await generation();
+  try {
+    await healthy();
+    const ask = (body, token) => call('POST', 'generations', { description: '모자를 쓴 너구리 레슬러', language: 'ko', ...body }, token, { 'idempotency-key': crypto.randomUUID() });
+    assert.equal((await ask({ delegate: 'yes' })).body.code, 'invalid-body');
+    const job = (await ask({ delegate: true })).body.job;
+    assert.equal(job.delegate, true);
+    const finish = (c, result) => work('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome: 'ok', result });
+    let held = (await work('POST', 'claim', {})).body.job;
+    assert.equal(held.delegate, true);
+    await finish(held, { brief: { profile: { name: '너구리' } } });
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'], choice: 'c' })).body.code, 'invalid-result');
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'], choice: 'b' })).body.status, 'motions');
+    const read = (await call('GET', `generations/${job.id}`)).body.job;
+    assert.equal(read.status, 'motions'); assert.equal(read.choice, 'b'); assert.equal(read.candidates.length, 2);
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal(held.status, 'motions'); assert.equal(held.choice, 'b');
+    // The pick found none: he is asked as before.
+    await call('DELETE', `generations/${job.id}`);
+    const asked = (await ask({ delegate: true })).body.job;
+    held = (await work('POST', 'claim', {})).body.job; await finish(held, { brief: { profile: {} } });
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'] })).body.status, 'appearance_ready');
+    assert.equal((await call('GET', `generations/${asked.id}`)).body.job.choice, null);
+    // A job he did not leave to us takes no pick.
+    await call('DELETE', `generations/${asked.id}`);
+    const own = (await ask({})).body.job;
+    assert.equal(own.delegate, false);
+    held = (await work('POST', 'claim', {})).body.job; await finish(held, { brief: { profile: {} } });
+    held = (await work('POST', 'claim', {})).body.job;
+    assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'], choice: 'a' })).body.code, 'invalid-result');
+  } finally { await sql.close(); }
+});
