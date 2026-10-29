@@ -76,7 +76,7 @@ export function compactText(value) {
   if (text.length <= 1200 || value?.ok === false) return text;
   const parts = Object.entries(value).map(([key, item]) => Array.isArray(item) ? `${key}[${item.length}]`
     : item && typeof item === 'object' ? `${key}{${Object.keys(item).slice(0, 8).join(',')}${Object.keys(item).length > 8 ? ',…' : ''}}`
-      : `${key}=${JSON.stringify(item).slice(0, 40)}`);
+      : `${key}=${(JSON.stringify(item) ?? String(item)).slice(0, 40)}`);
   return `Full result in structuredContent (${text.length} characters): ${parts.join(', ')}`;
 }
 /** A host's own anonymous user id (`_meta["openai/subject"]` — the Apps SDK sends it "for the purposes of rate limiting"), as a UUID-shaped key. */
@@ -145,7 +145,10 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     try { await db.rpc('af_record_submission_agent', { p_owner: identity.owner, p_submission: submissionId, p_client: identity.claims.client_id }); }
     catch { /* the maker is a label, not a gate */ }
   };
-  const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, idempotent = true, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
+  // A write states whether repeating it with the same arguments is safe (idempotentHint). It once defaulted to yes, and three tools that
+  // make something new on every call told retrying clients they could repeat them (MCP 점검 2026-10-29).
+  const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, idempotent = write ? undefined : true, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
+    if (typeof idempotent !== 'boolean') throw Error(`${name}: a write tool states idempotent`);
     server.registerTool(name, { title, description, inputSchema,
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
       annotations: { ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
@@ -209,12 +212,12 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     { fighterId: UUID_ARG() }, async ({ fighterId }) => ({
       ...await deletionRpc('af_prepare_fighter_deletion', { p_fighter: fighterId }),
       account: { id: identity.owner, email: identity.email },
-    }), { write: true });
+    }), { write: true, idempotent: true });
   register('delete_fighter', '내 캐릭터 삭제', 'Execute only the user’s explicit deletion instruction for the exact account and fighter returned by prepare_fighter_deletion. Pass that token and exact confirmName, with confirm=true. Existing approval counts only if it unambiguously matches this unchanged fighter and deletion scope; otherwise ask first. Ownership, live session, expiry and package/profile identity are rechecked atomically. This is soft deletion: private package bytes and history remain. Retry only with identical confirmation arguments.',
     { fighterId: UUID_ARG(), confirmationToken: UUID_ARG(), confirmName: z.string().min(1).max(200), confirm: z.literal(true) },
     ({ fighterId, confirmationToken, confirmName }) => deletionRpc('af_delete_owned_fighter', {
       p_fighter: fighterId, p_token: confirmationToken, p_confirm_name: confirmName,
-    }), { write: true, publish: true, openWorld: true });
+    }), { write: true, publish: true, openWorld: true, idempotent: true });
   register('prepare_fighter_registration', '캐릭터 등록 준비', 'After the user requests registration and approves the final package, create/resume a private upload from the actual fighter.json file. Use a new UUID for changed package bytes and the same UUID for immutable retries. This does not publish. Return pending asset IDs for upload_fighter_asset.',
     { manifest: FILE, idempotencyKey: UUID_ARG() }, async ({ manifest, idempotencyKey }) => {
       const bytes = await downloadHostFile(manifest, spec.limits.jsonBytes, fetcher);
@@ -224,7 +227,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       const { data, error } = await db.from('af_submissions').select('manifest').eq('id', result.submissionId).eq('owner_id', identity.owner).single();
       if (error) throw new Problem(503, 'database-unavailable');
       return { ...result, assets: data.manifest.assets.map(({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 })) };
-    }, { write: true, openWorld: true, files: ['manifest'] });
+    }, { write: true, openWorld: true, idempotent: true, files: ['manifest'] });
   register('upload_fighter_asset', '캐릭터 파일 전달', 'Upload one actual WebP file to your private submission. Its size and SHA-256 must match fighter.json. Repeat safely with identical bytes; never regenerate for a delivery failure.',
     { submissionId: UUID_ARG(), assetId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), file: FILE }, async ({ submissionId, assetId, file }) => {
       const { data: row, error } = await db.from('af_submissions').select('manifest,status,expires_at').eq('id', submissionId).eq('owner_id', identity.owner).maybeSingle();
@@ -235,9 +238,9 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       const bytes = await downloadHostFile(file, asset.bytes, fetcher);
       if (bytes.length !== asset.bytes || await sha256(bytes) !== asset.sha256) throw new Problem(422, 'asset-hash-or-size');
       return invoke(`submissions/${submissionId}/assets/${assetId}`, 'PUT', bytes, { 'content-type': 'image/webp' });
-    }, { write: true, openWorld: true, files: ['file'] });
+    }, { write: true, openWorld: true, idempotent: true, files: ['file'] });
   register('submit_fighter_registration', '캐릭터 등록', 'Publish the user-approved uploaded package after authoritative validation. Requires the user’s explicit registration request. All asset uploads and visual reviews must be complete. Queued/validating is not registered; follow get_fighter_submission until final.',
-    { submissionId: UUID_ARG() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true, publish: true, openWorld: true });
+    { submissionId: UUID_ARG() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true, publish: true, openWorld: true, idempotent: true });
   register('get_fighter_submission', '등록 진행 상태', 'Read your submission. Only registered confirms registration; rejected contains the validation failure. Do not regenerate automatically.',
     { submissionId: UUID_ARG() }, ({ submissionId }) => invoke(`submissions/${submissionId}`));
   register('get_registered_fighter', '등록된 캐릭터 확인', 'Read your registered fighter and immutable package identity.',
@@ -327,7 +330,7 @@ function registerAgentTools({ register, arena, db, identity, invoke, recordAgent
         if (cup?.ok && cup.cup && cup.cup.state !== 'open') return { ...issued, cup: cup.cup };
       }
       return { ...issued, state: 'open', next: 'get_cup' };
-    }, { write: true, openWorld: true });
+    }, { write: true, openWorld: true, idempotent: false });
   // The owner's current registered package hash (the version an edit is made on), or a 404.
   const currentSha = async fighterId => {
     const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', identity.owner)
@@ -336,8 +339,21 @@ function registerAgentTools({ register, arena, db, identity, invoke, recordAgent
     if (!fighter) throw new Problem(404, 'fighter-not-found');
     return fighter.manifest_sha;
   };
+  // The package an edit is made on. A key that already made its edit names the package that edit started from: the fighter has since
+  // moved to the edit's own package, and rebuilt on that, a successful edit whose response was lost came back as a conflict
+  // (MCP 점검 2026-10-29). The API checks the key's fighter and change itself.
+  const baseSha = async (fighterId, idempotencyKey) => {
+    const { data: previous, error } = await db.from('af_submissions').select('validation').eq('owner_id', identity.owner)
+      .eq('idempotency_key', idempotencyKey).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    const base = previous?.validation?.profileBaseSubmission;
+    if (!base) return currentSha(fighterId);
+    const { data, error: baseError } = await db.from('af_submissions').select('manifest_sha').eq('id', base).eq('owner_id', identity.owner).maybeSingle();
+    if (baseError) throw new Problem(503, 'database-unavailable');
+    return data?.manifest_sha ?? currentSha(fighterId);
+  };
   const edit = async (fighterId, change, idempotencyKey) => {
-    const result = await invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: await currentSha(fighterId), ...change }),
+    const result = await invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: await baseSha(fighterId, idempotencyKey), ...change }),
       { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
     if (result.ok) await recordAgent(result.submissionId);
     return result;
@@ -347,10 +363,10 @@ function registerAgentTools({ register, arena, db, identity, invoke, recordAgent
       language: z.enum(profileLimits.languages), concept: z.string().min(1).max(profileLimits.concept), moves: z.record(z.string(), z.unknown()), names: z.union([z.record(z.string(), z.string()), z.null()]),
       lines: z.union([z.record(z.string(), z.string()), z.null()]) }).partial().strict(), idempotencyKey: UUID_ARG() },
     ({ fighterId, profile, idempotencyKey }) => Object.keys(profile).length ? edit(fighterId, { profile }, idempotencyKey) : { ok: false, code: 'invalid-profile' },
-    { write: true, publish: true, openWorld: true });
+    { write: true, publish: true, openWorld: true, idempotent: true });
   register('update_fighter_style', '싸우는 성격 고치기', 'Change the connected user\'s registered fighter\'s fighting style (combat.style) without new art: an object replaces it, null removes it. Checked against the contract (get_style_guide). His next bouts fight the new style. Requires the user\'s approval of the change. Use a new UUID per change and the same UUID to retry it.',
     { fighterId: UUID_ARG(), style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: UUID_ARG() },
-    ({ fighterId, style, idempotencyKey }) => edit(fighterId, { style }, idempotencyKey), { write: true, publish: true, openWorld: true });
+    ({ fighterId, style, idempotencyKey }) => edit(fighterId, { style }, idempotencyKey), { write: true, publish: true, openWorld: true, idempotent: true });
 }
 
 const CANON = z.object({ personality: z.string().min(1).max(300), voice: z.string().min(1).max(200), motive: z.string().min(1).max(300),
@@ -387,7 +403,7 @@ function registerWorkshopTools({ register, arena, invoke }) {
     }, { publicTool: true });
   register('update_fighter_canon', '정본 고치기', 'Write the next version of the connected user\'s fighter\'s canon sheet: the whole sheet, over baseVersion (the version you read; 0 when he has none). A stale base is refused: read get_fighter_story again. The canon is what reviews and other agents read about him. Requires the user\'s approval.',
     { fighterId: UUID_ARG(), baseVersion: z.number().int().min(0), sheet: CANON }, ({ fighterId, baseVersion, sheet }) =>
-      send(`fighters/${fighterId}/canon`, 'PUT', { base: baseVersion, sheet }), { write: true, publish: true, openWorld: true });
+      send(`fighters/${fighterId}/canon`, 'PUT', { base: baseVersion, sheet }), { write: true, publish: true, openWorld: true, idempotent: true });
   register('post_workshop_note', '공방 글 쓰기', 'Write in a registered fighter\'s workshop: a critique, a review of his bouts, or a proposal his owner accepts or declines (canon: update_fighter_canon\'s fields, null removes one; style: a combat.style object or null; remake: a request for new art). Evidence: up to three bouts (cupId, round, slot; or a, b, seed); a review needs one. Spar or read_bout first. Public, under your public name (nickname sets it once). Requires the user\'s request.',
     { fighterId: UUID_ARG(), kind: z.enum(['critique', 'proposal', 'review']), body: z.string().min(2).max(1200), evidence: EVIDENCE.optional(),
       proposal: z.object({ canon: z.record(z.string(), z.unknown()).optional(), style: z.union([z.record(z.string(), z.unknown()), z.null()]).optional(),
@@ -399,12 +415,12 @@ function registerWorkshopTools({ register, arena, invoke }) {
       try { checkNote(payload); } catch (error) { if (error instanceof Problem) return { ok: false, stage: 'api', code: error.message }; throw error; }
       const failed = await named(nickname); if (failed) return failed;
       return send('notes', 'POST', payload);
-    }, { write: true, publish: true, openWorld: true });
+    }, { write: true, publish: true, openWorld: true, idempotent: false });
   register('get_workshop_inbox', '내 공방 받은 글', `The connected user's workshop inbox: open notes about his fighters (the newest 100), relations waiting for him or proposed by him (otherKind: the kind as the other fighter sees it), his fighters' current canon (version: the baseVersion to write over) and his public name. ${DATA_NOTE}`,
     {}, () => invoke('me/workshop'));
   register('resolve_workshop_note', '제안 받기·거절', 'Accept or decline an open proposal about the connected user\'s fighter; decline also dismisses a critique or review. Accepting writes its canon fields over the current canon as a new version and applies its fighting style (accepting again finishes a style that failed); a remake request is only marked accepted. Requires the user\'s decision.',
     { noteId: UUID_ARG(), decision: z.enum(['accept', 'decline']) }, ({ noteId, decision }) => send(`notes/${noteId}/resolve`, 'POST', { decision }),
-    { write: true, publish: true, openWorld: true });
+    { write: true, publish: true, openWorld: true, idempotent: true });
   register('set_fighter_relation', '관계 맺기', 'Declare a relation between the connected user\'s fighter and another registered fighter: rival, comrade, mentor (his fighter teaches) or student. Another owner\'s fighter waits for that owner to accept; one relation per pair. accept/decline answer one waiting for him; remove ends one. Results-made rivalries need nothing. Requires the user\'s request.',
     { action: z.enum(['propose', 'accept', 'decline', 'remove']), fighterId: UUID_ARG().optional(), otherId: UUID_ARG().optional(),
       kind: z.enum(['rival', 'comrade', 'mentor', 'student']).optional(), relationId: UUID_ARG().optional(), nickname: NICKNAME.optional() },
@@ -414,7 +430,7 @@ function registerWorkshopTools({ register, arena, invoke }) {
       const failed = await named(nickname); if (failed) return failed;
       if (action === 'propose') return send('relations', 'POST', { fighter: fighterId, other: otherId, kind });
       return action === 'remove' ? invoke(`relations/${relationId}`, 'DELETE') : send(`relations/${relationId}/answer`, 'POST', { accept: action === 'accept' });
-    }, { write: true, publish: true, openWorld: true });
+    }, { write: true, publish: true, openWorld: true, idempotent: true });
   register('get_world', '세계', `No worldId: the published worlds and the covers a new world may wear. A worldId: its text, factions, cast, canon chronicle (posts its owner raised) and its fighters' recent cup bouts and reviews. ${DATA_NOTE}`,
     { worldId: z.string().min(1).max(48).regex(/^[a-z0-9-]+$/).optional() }, async ({ worldId }) => {
       if (worldId === undefined) {
@@ -440,12 +456,12 @@ function registerWorkshopTools({ register, arena, invoke }) {
       if (!worldId) return { ok: false, code: 'world-not-found' };
       return send(`worlds/${worldId}`, 'PATCH', { ...only(['name', 'tagline', 'description', 'place', 'cover', 'factions']), ...(canonPostId ? { canon: { post: canonPostId, on: canon ?? true } } : {}),
         ...(removeFighterId ? { remove: removeFighterId } : {}) });
-    }, { write: true, publish: true, openWorld: true });
+    }, { write: true, publish: true, openWorld: true, idempotent: false });
   register('write_world_post', '세계 글 쓰기', 'Write a post in a world\'s lounge as the connected user (a story, a chronicle entry, a bout recap). Pass nickname to join the world first. The world\'s owner may mark it canon (정사) at once. Public. Requires the user\'s request. Use a new UUID per post and the same UUID to retry it.',
     { worldId: z.string().min(1).max(48).regex(/^[a-z0-9-]+$/), title: z.string().min(2).max(80), body: z.string().min(2).max(2000),
       nickname: NICKNAME.optional(), canon: z.boolean().optional(), idempotencyKey: UUID_ARG() },
     ({ worldId, title, body, nickname, canon, idempotencyKey }) => send(`worlds/${worldId}/posts`, 'POST', { id: idempotencyKey, title, body,
-      ...(nickname ? { nickname } : {}), ...(canon !== undefined ? { canon } : {}) }), { write: true, publish: true, openWorld: true });
+      ...(nickname ? { nickname } : {}), ...(canon !== undefined ? { canon } : {}) }), { write: true, publish: true, openWorld: true, idempotent: true });
 }
 
 /**
@@ -514,11 +530,19 @@ function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }
       // Once saved, the same key returns its job without re-uploading pictures. Before that, use read-only recovery.
       const existingId = await jobIdForKey(idempotencyKey);
       if (existingId) return withNext(await invoke(`generations/${existingId}`));
-      // Off (the service switch, the worker away or unwell) before any picture is kept.
-      const { capabilities } = await invoke('generations/capabilities');
-      if (!capabilities?.hosted) return { ok: false, code: 'generation-unavailable', reason: capabilities?.reason ?? null };
+      // Off (the service switch, the worker away or unwell) before any picture is kept. A failed read is the database's, not the switch's.
+      const service = await invoke('generations/capabilities');
+      if (!service.ok) return service;
+      if (!service.capabilities?.hosted) return { ok: false, code: 'generation-unavailable', reason: service.capabilities?.reason ?? null };
       const pictures = [picture, secondPicture].filter(Boolean);
       if (pictures.length && rightsConfirmed !== true) return { ok: false, code: 'rights-required' };
+      const ask = { description, language, ...(delegate ? { delegate: true } : {}), ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}) };
+      // The request's own checks (consent, one at a time, the day's limits, the host) before a picture moves: each kept picture spends one
+      // of the day's uploads and stays in storage (MCP 점검 2026-10-29). A request without pictures is checked where it is made.
+      if (pictures.length) {
+        const checked = await post('generations/check', ask);
+        if (!checked.ok) return checked;
+      }
       const refs = [];
       for (const file of pictures) {
         const uploaded = await invoke('generations/uploads', 'POST', await downloadHostFile(file, GENERATION_LIMITS.refBytes, fetcher),
@@ -526,8 +550,7 @@ function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }
         if (!uploaded.ok) return uploaded;
         refs.push(uploaded.upload.id);
       }
-      return withNext(await post('generations', { description, language, ...(refs.length ? { refs, rightsConfirmed: true } : {}), ...(delegate ? { delegate: true } : {}),
-        ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}) }, { 'idempotency-key': idempotencyKey }));
+      return withNext(await post('generations', { ...ask, ...(refs.length ? { refs, rightsConfirmed: true } : {}) }, { 'idempotency-key': idempotencyKey }));
     }, { write: true, openWorld: true, idempotent: false, files: ['picture', 'secondPicture'] });
   register('list_generation_hosts', '선수 만드는 호스트', 'List who can make a fighter: ODDBOUT itself and the community hosts the operator approved (creators who run the generation worker on their own PC and subscription). For each: id, name, whether it is on now, whether it takes requests that name no host, and how many it can still take today. Pass an id as request_hosted_fighter\'s host.',
     {}, () => invoke('generations/hosts'), { publicTool: true });
@@ -576,9 +599,9 @@ function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }
       for (const key of ['names', 'lines']) if (profile[key] && draft[key]) merged[key] = { ...draft[key], ...profile[key] };
       const confirmed = Object.fromEntries(PROFILE_KEYS.filter(key => merged[key] != null).map(key => [key, merged[key]]));
       return withNext(await post(`generations/${jobId}/register`, { profile: confirmed }));
-    }, { write: true, publish: true, openWorld: true });
+    }, { write: true, publish: true, openWorld: true, idempotent: true });
   register('cancel_hosted_fighter', '맡긴 선수 취소', 'Cancel the connected user\'s hosted fighter request; work in progress stops at its next step and his free fighter is free again. Only on his explicit request.',
-    { jobId: JOB }, async ({ jobId }) => withNext(await invoke(`generations/${jobId}`, 'DELETE')), { write: true, publish: true });
+    { jobId: JOB }, async ({ jobId }) => withNext(await invoke(`generations/${jobId}`, 'DELETE')), { write: true, publish: true, idempotent: true });
 }
 
 /**

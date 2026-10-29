@@ -85,11 +85,11 @@ export function registerCreatorSources({ register, fileSchema, identity, db, dow
   register('store_creator_source', '제작 원본 비공개 보관',
     'Store an authorized original PNG privately for this account and VM creation. Use actual host file input and measured original size/hash. Reuse the same idempotency key for identical bytes, including an unknown result. No generation or publication.',
     { file: fileSchema, expectedBytes: z.number().int().min(33).max(SOURCE_LIMIT), expectedSha256: z.string().regex(/^[a-f0-9]{64}$/), idempotencyKey: UUID() },
-    args => service.save(args), { write: true, files: ['file'], openWorld: true });
+    args => service.save(args), { write: true, idempotent: true, files: ['file'], openWorld: true });
   register('get_creator_source', '제작 원본 상태', 'Read this account’s private original receipt. Does not prove VM delivery or display.',
     { sourceId: UUID() }, ({ sourceId }) => service.get(sourceId));
   register('prepare_creator_source_download', 'VM 원본 전달 준비',
     'Authorize a five-minute download of your private original to the VM public request created in the user-selected workspace. Returns an encrypted grant, never a signed URL or login token. Pass its envelope as a file to dots:source receive on that same VM. Renew after expiry without regenerating or reuploading the source.',
     { sourceId: UUID(), vmRequest: z.object({ version: z.literal(1), requestId: UUID(), publicKey: z.string().max(2048) }).strict() },
-    ({ sourceId, vmRequest }) => service.grant(sourceId, vmRequest), { write: true });
+    ({ sourceId, vmRequest }) => service.grant(sourceId, vmRequest), { write: true, idempotent: true });
 }

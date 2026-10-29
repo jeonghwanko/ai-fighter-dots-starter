@@ -19,6 +19,7 @@ export async function profileFixture() {
       return rows.map(row => row.value);
     };
     const q = { select: () => q, eq: (key, val) => { if (!/^[a-z_]+$/.test(key)) throw Error('invalid-test-column'); values.push(val); filters.push(`${key}=$${values.length}`); return q; },
+      is: (key, val) => { if (!/^[a-z_]+$/.test(key) || val !== null) throw Error('invalid-test-column'); filters.push(`${key} is null`); return q; },
       order: (key, options) => { if (!/^[a-z_]+$/.test(key)) throw Error('invalid-test-column'); order=` order by ${key}${options?.ascending===false?' desc':' asc'}`; return q; },
       limit: n => { if (!Number.isInteger(n)) throw Error('invalid-test-limit'); limit=` limit ${n}`; return q; },
       maybeSingle: async () => ({ data: (await run())[0] ?? null }), then: (resolve,reject) => run().then(data=>({data})).then(resolve,reject) };

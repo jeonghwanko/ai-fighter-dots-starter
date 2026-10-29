@@ -249,7 +249,8 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   const progress = await creationProgress({ store, jobs, sessionId });
   // A generation environment configured in this workspace keeps the provider the user stated there.
   const workspace = needsGeneration ? environment ?? (store?.root ? createEnvironmentStore(store.root) : null) : null;
-  const saved = workspace ? await workspace.read() : null;
+  // A workspace moved to another host still names its provider; its inspection below reports the rebind instead of failing this check.
+  const saved = workspace ? await workspace.read({ allowMoved: true }) : null;
   const savedChoice = ACCOUNT_OPTIONS.some(o => o.id === saved?.account) ? saved.account : null;
   let choice = account ?? savedChoice, elicitation = savedChoice && !account ? 'saved-environment' : 'not-needed';
   if (needsGeneration && !choice) ({ method: elicitation, choice } = await elicitAccount(lowLevelServer));

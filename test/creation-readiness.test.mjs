@@ -9,6 +9,7 @@ import { ElicitRequestSchema } from '@modelcontextprotocol/sdk/types.js';
 import { accountItem, checkKit, checkLogin, checkReadiness, creationProgress, elicitAccount, KIT_BRANCH } from '../mcp/creation-readiness.mjs';
 import { pendingLoginPath, pendingDeviceLoginPath } from '../scripts/login.mjs';
 import { createServer } from '../mcp/server.mjs';
+import { createEnvironmentStore } from '../mcp/creation-environment.mjs';
 
 const installed = { source: true, environment: true };
 const workingTools = { inspect: async () => ({ ffmpeg: { status: 'ok' }, ffprobe: { status: 'ok' }, img2webp: { status: 'ok' }, rife: { status: 'ok' } }) };
@@ -313,6 +314,20 @@ test('a saved environment keeps the stated provider and reports its precondition
   assert.equal(saved.readyForGeneration, false);
   const other = await checkReadiness({ ...base, account: 'grok', environment });
   assert.equal(other.items.environment.matchesChoice, false);
+});
+
+test('a workspace moved to another host keeps its stated provider and reports the rebind instead of failing readiness', async t => {
+  const root = await mkdtemp(path.join(tmpdir(), 'fighter-moved-'));
+  t.after(() => rm(root, { recursive: true, force: true }));
+  const loginProbe = async () => ({ status: 'signed-in' });
+  await createEnvironmentStore(root, { hostId: 'host-a', loginProbe }).update(0, { type: 'configure', host: 'dots', account: 'gpt', conversationId: 'chat-1',
+    confirmedAccess: ['gpt-image'], feedback: '내 GPT 이미지 기능을 사용할 수 있어요. 이 VM에서 연결해줘.' });
+  const moved = createEnvironmentStore(root, { hostId: 'host-b', loginProbe });
+  const result = await checkReadiness({ kit: { installed, git: fakeGit({ counts: '0\t0' }).git, inspectEngine: engineState(true) }, tools: workingTools,
+    registrationMode: 'cloud', environment: moved, lowLevelServer: { getClientCapabilities: () => { assert.fail('must reuse the stated choice'); } } });
+  assert.equal(result.items.account.choice, 'gpt');
+  assert.equal(result.items.environment.status, 'host-changed-reconnect-required');
+  assert.equal(result.readyForGeneration, false);
 });
 
 test('connection and registration never ask generation questions or touch the engine', async t => {

@@ -167,8 +167,9 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
       if (!item) continue;
       const version = item.versions[item.version];
       const currentBasis = basisFor(state, id);
+      // A stale review of an earlier item is that item's to redo; the items made on its unchanged files stand.
       const basisValid = Object.entries(version.basis).every(([key, value]) => currentBasis[key] === value &&
-        !problems.some(p => p.item === key));
+        !problems.some(p => p.item === key && p.reason !== 'review-stale'));
       const valid = basisValid && await unchanged(root, version.files);
       const reviewed = version.review?.contextRevision === state.contextRevision && await unchanged(root, version.review?.evidence);
       item.review = valid && reviewed ? version.review?.verdict ?? 'unverified' : 'unverified';
