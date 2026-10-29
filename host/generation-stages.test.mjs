@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ALIGN_AGAIN, BEAT_LIMIT, BRIEF_SCHEMA, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
+import { ALIGN_AGAIN, BEAT_LIMIT, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
   submissionOutcome, withProfile } from './generation-stages.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 
@@ -400,14 +400,17 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
       await mkdir(loop, { recursive: true }); await writeFile(path.join(loop, `side-${gait}.strip.json`), '{}'); }
     if (tool === 'video-cycle-align') { const dirOf = flag(args, '--loop-dir'), gait = dirOf.includes('walk') ? 'walk' : 'run';
       // No --length (the server takes a gait at its own count): the cut keeps the frames it was filmed in.
-      const to = args.includes('--length') ? flag(args, '--length') : ownFrames[gait];
+      // --cycles <cut>=2: the engine takes one cycle out of the cut (half its frames, as filmed).
+      const cycles = args.includes('--cycles') ? Number(flag(args, '--cycles').split('=').at(-1)) : null;
+      const to = args.includes('--length') ? flag(args, '--length') : cycles ? Math.round(ownFrames[gait] / cycles) : ownFrames[gait];
       // alignFails[gait]: that many of the gait's alignments stop first (the GPU out of memory), leaving the cut unaligned.
       const failing = Object.keys(alignFails).find(gait => dirOf.includes(`video-${gait}`) && alignFails[gait] > 0);
       if (failing) { alignFails[failing] -= 1; return { code: 1 }; }
       // brokenRun: every filmed run breaks its beat (the walk, and a run made from its cut, align clean).
       const retake = brokenRun && dirOf.includes('video-run') ? { reason: 'broken-beat', reasons: ['broken-beat'] } : undefined;
       await writeFile(path.join(dirOf, `side-${dirOf.includes('walk') ? 'walk' : 'run'}.strip.json`),
-        JSON.stringify({ frames: Number(to), cycle_align: { to: Number(to), foot: { feet: ['left', 'right'] }, ...(retake ? { retake } : {}) } })); }
+        JSON.stringify({ frames: Number(to), cycle_align: { to: Number(to), foot: { feet: ['left', 'right'] }, ...(cycles ? { cycles_given: cycles } : {}),
+          ...(retake ? { retake } : {}) } })); }
     if (tool === 'codex') await writeFile(flag(args, '-o'), JSON.stringify({ identity: 'pass', anatomy: 'pass', loop: 'pass', notes: 'A clean loop.' }));
     if (tool === 'scale-check') { const code = scaleCheck(args); if (code !== 2) await writeFile(flag(args, '--out'), '{}'); return { code }; }
     if (tool === 'game-pack') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'game-pack.json'), '{}'); }
@@ -471,11 +474,21 @@ test('a server that takes a gait at its own count gets the cut as filmed: nothin
   assert.ok(filmed.length && filmed.every(a => !a.includes('--length') && flag(a, '--loop-dir').endsWith('-own')));
   const added = gait => calls.find(a => a[0] === 'motions.py' && a[1] === 'add-gait' && a[3] === gait);
   assert.ok(added('walk')[4].includes('-own') && added('run')[4].includes('-own'));
-  // Two strides in one cut (26 frames) is over the run's range: refused before any judge, and the take films again.
+  // Two strides in one cut (26 frames) is over the run's range: aligned again as the one stride it holds (ONE_STRIDE_OF), 13 frames,
+  // and that is judged — no take filmed again, no run made from the walk.
   const twice = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), spec: ownSpec, ownFrames: { walk: 24, run: 26 } });
   assert.equal(twice.done.outcome, 'ok', JSON.stringify(twice.done));
-  assert.ok(!twice.calls.some(a => a[0] === 'motions.py' && a[1] === 'judge-request' && a[2] === 'run' && a[3].includes('video-run-0')));
-  assert.deepEqual(twice.done.result.preview.filter(p => p.note).map(p => p.clip), ['run']);
+  const once = twice.calls.find(a => a.includes('video-cycle-align') && a.includes('--cycles'));
+  assert.ok(flag(once, '--loop-dir').endsWith('-own1') && flag(once, '--cycles') === `${flag(once, '--loop-dir')}=${ONE_STRIDE_OF}`);
+  assert.ok(twice.calls.some(a => a[0] === 'motions.py' && a[1] === 'judge-request' && a[2] === 'run' && a[3].includes('-own1')));
+  assert.equal(twice.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'run').length, 1);
+  assert.deepEqual(twice.done.result.preview.filter(p => p.note), []);
+  const runEvent = twice.events.find(e => e.kind === 'gait' && e.gait === 'run');
+  assert.deepEqual(runEvent.tried.map(t => [t.cut, t.reasons ?? 'passed']), [['loop', ['frames-26']], ['loop-one-stride', 'passed']]);
+  // Over the range by more than two strides' worth (half still over it): refused as before, the take films again.
+  const thrice = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), spec: ownSpec, ownFrames: { walk: 24, run: 40 } });
+  assert.ok(!thrice.calls.some(a => a.includes('--cycles')));
+  assert.deepEqual(thrice.done.result.preview.filter(p => p.note).map(p => p.clip), ['run']);
 });
 
 test('a gait event keeps under the progress limit, the oldest cuts giving way first', () => {

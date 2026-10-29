@@ -279,6 +279,12 @@ export function gaitEvent(gait, loop) {
 /** What a cut's alignment says about it, for `tried`: frames filmed and delivered, the beat's jolt, frames RIFE made. */
 const cutFacts = meta => { const a = meta?.cycle_align;
   return a ? { from: a.from ?? null, frames: meta.frames ?? null, jolt: a.beat?.jolt ?? null, rife: a.made_by_rife ?? null } : {}; };
+/**
+ * A cut the engine took as two strides (2026-10-29): at its own length it is over the range (the 냥잽 cat's runs cut at 22, 26 and 27
+ * frames, each two strides of 11 to 14), and it was refused, a take filmed again. Its frames hold one stride twice: aligned again with
+ * `--cycles <cut>=ONE_STRIDE_OF`, the engine takes out the one stride whose next is most like its first, and that is judged instead.
+ */
+export const ONE_STRIDE_OF = 2;
 /** The gait frame ranges the server's spec gives, when it takes a gait at its own count, or null. */
 export async function gaitRanges(api) {
   const reply = await Promise.resolve(api.spec?.()).catch(() => null);
@@ -596,7 +602,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
           // The contract's frame count, starting as a foot lands; a cut the engine reads as two cycles is aligned as it is (the judge sees it).
           // A cut aligned by an earlier run of this stage is kept (the cut never changes: its clip and frames are kept too).
           // At its own length (GAIT_OWN_FEATURE) the alignment only turns the cut to start as a foot lands: no --length, nothing resampled.
-          const aligned = `${cut}-${range ? 'own' : GAIT_FRAMES[gait]}`, strip = path.join(aligned, `side-${gait}.strip.json`);
+          let aligned = `${cut}-${range ? 'own' : GAIT_FRAMES[gait]}`, strip = path.join(aligned, `side-${gait}.strip.json`), cutName = path.basename(cut);
           const kept = (await readJson(strip).catch(() => null))?.cycle_align;
           if (!kept || (!range && kept.to !== GAIT_FRAMES[gait])) {
             await rm(aligned, { recursive: true, force: true });
@@ -605,13 +611,30 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
               '--start-foot', 'left', ...beatLimit(gait)];
             if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
           }
-          const meta = await readJson(strip).catch(() => null);
+          let meta = await readJson(strip).catch(() => null);
           // No alignment at all (the engine stopped: out of memory, a crash) says nothing about the clip.
           if (meta && !meta.cycle_align) { unaligned += 1; tried.push({ take, cut: path.basename(cut), reasons: ['not-aligned'] }); continue; }
-          const reasons = meta ? retakeReasons(meta) : ['unreadable'];
-          if (meta && (range ? meta.frames < range.min || meta.frames > range.max : meta.frames !== GAIT_FRAMES[gait])) reasons.push(`frames-${meta.frames}`);
-          if (meta && !namedFeet(meta)) reasons.push('feet-unnamed');
-          if (reasons.length) { tried.push({ take, cut: path.basename(cut), reasons, ...cutFacts(meta) }); continue; }
+          const refusals = meta => { const reasons = meta ? retakeReasons(meta) : ['unreadable'];
+            if (meta && (range ? meta.frames < range.min || meta.frames > range.max : meta.frames !== GAIT_FRAMES[gait])) reasons.push(`frames-${meta.frames}`);
+            if (meta && !namedFeet(meta)) reasons.push('feet-unnamed');
+            return reasons; };
+          let reasons = refusals(meta);
+          // ONE_STRIDE: a cut of two strides, over the range at its own length, is aligned again as the one stride it holds.
+          const half = meta && range && meta.frames > range.max ? Math.round(meta.frames / ONE_STRIDE_OF) : 0;
+          if (half >= (range?.min ?? Infinity) && half <= (range?.max ?? 0)) {
+            tried.push({ take, cut: cutName, reasons, ...cutFacts(meta) });
+            const one = `${cut}-own1`, oneStrip = path.join(one, `side-${gait}.strip.json`);
+            if ((await readJson(oneStrip).catch(() => null))?.cycle_align?.cycles_given !== ONE_STRIDE_OF) {
+              await rm(one, { recursive: true, force: true });
+              await cp(cut, one, { recursive: true });
+              await align(sprite('video-cycle-align', '--loop-dir', one, '--cycles', `${one}=${ONE_STRIDE_OF}`, '--view', 'side@right', '--start-foot', 'left',
+                ...beatLimit(gait)));
+            }
+            const taken = await readJson(oneStrip).catch(() => null);
+            if (taken?.cycle_align) { aligned = one; strip = oneStrip; meta = taken; cutName = `${cutName}-one-stride`; reasons = refusals(taken); }
+            else { tried.push({ take, cut: `${cutName}-one-stride`, reasons: ['not-aligned'] }); continue; }
+          }
+          if (reasons.length) { tried.push({ take, cut: cutName, reasons, ...cutFacts(meta) }); continue; }
           // The judge: codex with every tool off sees the look and the loop's frames.
           const judge = path.join(aligned, 'judge');
           if ((await motionsPy(['judge-request', gait, judge])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judge, 'sheet.png')])).code !== 0)
@@ -625,8 +648,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
             verdict = judged === 0 ? checkedVerdict(await readJson(verdictFile).catch(() => null)) : null;
           }
           if (!verdict) return { retry: `judge-exit-${judged}` };
-          if (LOOP_VISUAL.every(key => verdict[key] === 'pass')) { tried.push({ take, cut: path.basename(cut), passed: true, ...cutFacts(meta) }); return { strip, verdict: verdictFile, take, tried }; }
-          tried.push({ take, cut: path.basename(cut), judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass'), ...cutFacts(meta) });
+          if (LOOP_VISUAL.every(key => verdict[key] === 'pass')) { tried.push({ take, cut: cutName, passed: true, ...cutFacts(meta) }); return { strip, verdict: verdictFile, take, tried }; }
+          tried.push({ take, cut: cutName, judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass'), ...cutFacts(meta) });
           break;   // the judge saw this take: another cut of it would show the same motion
         }
         if (!cuts.length || unaligned < cuts.length) break;
