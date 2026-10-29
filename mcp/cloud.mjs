@@ -589,6 +589,7 @@ function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }
  * @param {typeof fetch} [options.fetcher]
  * @param {{url: string, key: string, fetcher?: typeof fetch, cupWaitMs?: number, pollMs?: number, pollTries?: number} | null} [options.arena]
  * @param {{pollMs?: number} | null} [options.hosted]
+ * @returns {(request: Request) => Promise<Response>}
  */
 export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null }) {
   return async request => {
