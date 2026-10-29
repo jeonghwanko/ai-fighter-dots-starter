@@ -8,6 +8,14 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 [Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Site guide](https://oddbout.com/docs.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
 
+## Gameplay preview
+
+[![ODDBOUT gameplay: two fighters in the arena](docs/media/oddbout-gameplay.gif)](docs/media/oddbout-gameplay.mp4)
+
+Existing ODDBOUT gameplay. The subscription-based character creation workflow is still experimental; this clip does not show a complete creation run.
+
+[Watch the 10-second clip](docs/media/oddbout-gameplay.mp4) · [Play ODDBOUT](https://oddbout.com/fighter.html) · [Questions and feedback](https://github.com/jeonghwanko/ai-fighter-dots-starter/discussions)
+
 ## What you can make
 
 - Start with a short idea, reference images, or both.
