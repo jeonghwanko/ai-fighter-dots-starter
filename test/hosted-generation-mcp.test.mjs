@@ -14,10 +14,15 @@ async function connector(g, hosted) {
   const db = { ...g.db, auth: { getClaims: async () => ({ data: { claims } }) },
     rpc: (name, args) => name === 'af_mcp_session_active' ? { data: true } : g.db.rpc(name, args) };
   const handle = createCloudHandler({ db, hosted, fetcher: async url => { downloads.push(url); return new Response(png(512, 512)); } });
-  const rpc = async (method, params) => (await (await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
+  let loseResponse = false;
+  const rpc = async (method, params) => {
+    const response = await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer signed-connector-token-for-test' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }))).json()).result;
-  return { downloads, tools: async () => (await rpc('tools/list', {})).tools,
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }));
+    if (loseResponse) { loseResponse = false; await response.body?.cancel(); throw new Error('simulated lost response'); }
+    return (await response.json()).result;
+  };
+  return { downloads, loseNextResponse: () => { loseResponse = true; }, tools: async () => (await rpc('tools/list', {})).tools,
     call: async (name, args) => (await rpc('tools/call', { name, arguments: args })).structuredContent };
 }
 
@@ -90,6 +95,67 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     assert.deepEqual(held.profile, { name: '빨간 주먹', names: { ko: '빨간 주먹', en: 'Red Fist' }, description: '귀가 큰 고양이 복서.',
       lines: { challenge: '덤벼!', win: '또 와!', lose: '다음엔…' }, stats: { power: 4, toughness: 3, speed: 2 } });
     assert.equal((await call('cancel_hosted_fighter', { jobId })).code, 'generation-state');
+  } finally { await g.sql.close(); }
+});
+
+test('a lost request response resumes on a fresh connector with the same job and fresh previews, even while new requests are disabled', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    // Model Storage issuing a different short-lived URL on each read; this does not test actual host display.
+    const storageFrom = g.db.storage.from;
+    let signing = 0;
+    g.db.storage.from = bucket => ({ ...storageFrom(bucket), createSignedUrls: async (paths, seconds) => {
+      assert.equal(seconds, 600);
+      const version = ++signing;
+      return { data: paths.map(path => ({ path, signedUrl: `https://storage.test/${bucket}/${path}?token=fixture-${version}` })) };
+    } });
+    const original = await connector(g, {});
+    const ask = { description: '큰 귀와 빨간 글러브를 가진 고양이 복서', language: 'ko', idempotencyKey: crypto.randomUUID(),
+      picture: { download_url: 'https://files.oaiusercontent.com/fixture-reference', file_id: 'fixture-reference' }, rightsConfirmed: true };
+    original.loseNextResponse();
+    await assert.rejects(original.call('request_hosted_fighter', ask), /simulated lost response/);
+    // A new handler and OAuth session retain no in-process state from the lost call.
+    const resumed = await connector(g, { pollMs: 10 });
+    assert.equal((await resumed.call('get_profile', {})).id, g.owner);
+    const listed = await resumed.call('get_hosted_fighter', {});
+    assert.equal(listed.jobs.length, 1);
+    const jobId = listed.jobs[0].id;
+    const replay = await resumed.call('request_hosted_fighter', ask);
+    assert.equal(replay.job.id, jobId);
+    const waiting = await resumed.call('get_hosted_fighter', { jobId, waitSeconds: 1 });
+    assert.equal(waiting.job.status, 'queued'); assert.match(waiting.next, /get_hosted_fighter/);
+
+    let held = (await g.work('POST', 'claim', {})).body.job;
+    const finish = (job, result) => g.work('POST', 'finish', { jobId: job.id, leaseToken: job.leaseToken, outcome: 'ok', result });
+    await finish(held, { brief: { profile: { name: 'Fixture Boxer' } } });
+    held = (await g.work('POST', 'claim', {})).body.job;
+    for (const name of ['look-a-0', 'look-b-0'])
+      await g.work('PUT', `jobs/${held.id}/artifacts/${name}`, webp(400, 600), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
+    await finish(held, { candidates: ['look-a-0', 'look-b-0'] });
+    const before = await resumed.call('get_hosted_fighter', { jobId });
+    assert.equal(before.job.status, 'appearance_ready');
+    await g.sql.query('update public.af_generation_settings set enabled = false');
+    const reconnected = await connector(g, {});
+    const after = await reconnected.call('request_hosted_fighter', ask);
+    assert.equal(after.job.id, jobId); assert.equal(after.job.status, 'appearance_ready');
+    assert.equal(after.job.updatedAt, before.job.updatedAt); assert.equal(after.next, before.next);
+    const refreshed = await reconnected.call('get_hosted_fighter', { jobId });
+    assert.equal(refreshed.job.updatedAt, before.job.updatedAt);
+    assert.notEqual(refreshed.job.candidates[0].url, before.job.candidates[0].url);
+    assert.equal(new URL(refreshed.job.candidates[0].url).pathname, new URL(before.job.candidates[0].url).pathname);
+    assert.deepEqual(refreshed.job.revisionsLeft, before.job.revisionsLeft);
+    assert.equal(refreshed.job.choice, null); assert.match(refreshed.next, /choose_hosted_look/);
+    assert.equal(original.downloads.length, 1); assert.equal(resumed.downloads.length, 0); assert.equal(reconnected.downloads.length, 0);
+    for (const table of ['af_generation_jobs', 'af_generation_uploads'])
+      assert.equal((await g.sql.query(`select count(*)::int as n from public.${table}`)).rows[0].n, 1);
+    // An accidental account switch cannot reveal or adopt the first account's job/key.
+    const other = await connector({ ...g, owner: g.other }, {});
+    assert.equal((await other.call('get_profile', {})).id, g.other);
+    assert.deepEqual((await other.call('get_hosted_fighter', {})).jobs, []);
+    assert.equal((await other.call('get_hosted_fighter', { jobId })).code, 'not-found');
+    assert.equal((await other.call('request_hosted_fighter', ask)).code, 'generation-unavailable');
+    assert.equal(other.downloads.length, 0);
   } finally { await g.sql.close(); }
 });
 
