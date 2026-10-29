@@ -10,11 +10,19 @@ import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promise
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { MODELS, createStages, ogJobId } from './generation-stages.mjs';
+import { ASKS, MODELS, createStages, ogJobId } from './generation-stages.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
 const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, renewMs: 60_000, errorMs: 60_000, pruneMs: 86_400_000 });
+export const TIMING = Object.freeze({ heartbeatMs: 60_000, healthMs: 3_600_000, idleMs: 15_000, renewMs: 60_000, errorMs: 60_000, pruneMs: 86_400_000,
+  askedRecheckMs: 900_000 });
+/**
+ * How long one stage may run (2026-10-29): past it the stage's runs are stopped (SIGTERM, so sprite-gen writes its reports) and the job
+ * goes to an operator as `<stage>-stage-timeout`, never back to the queue, since a stopped run may already have sent a paid request.
+ * A motions stage usually takes 15-30 minutes; og stops any single run at 90 (RUN_TIMEOUT).
+ */
+export const STAGE_LIMIT_MS = Object.freeze({ queued: 20 * 60_000, appearance: 45 * 60_000, motions: 150 * 60_000, submitting: 30 * 60_000 });
+export const stageLimitMs = status => STAGE_LIMIT_MS[status] ?? 150 * 60_000;
 /** Days a closed job's folder stays (worker.env ODDBOUT_GENERATION_KEEP_DAYS, 1-90): the requester's words and pictures are his. */
 export const keepDays = value => { const days = Number(value ?? 7); return Number.isInteger(days) && days >= 1 && days <= 90 ? days : 7; };
 
@@ -179,6 +187,8 @@ export async function main({ once = false } = {}) {
     await writeFile(path.join(dir, 'request.json'), JSON.stringify({ id: ogId, api: { jobId: job.id, owner: job.owner }, createdAt: new Date().toISOString() }, null, 2) + '\n');
     await api.progress(job, undefined, await versionsEvent(kit)).catch(() => {});
     const controller = new AbortController(), tally = createTally();
+    let timedOut = false;
+    const limit = setTimeout(() => { timedOut = true; controller.abort(); }, stageLimitMs(job.status));
     // The lease runs five minutes: renew it every minute; a job cancelled meanwhile (lease lost) stops the stage's child.
     const renew = setInterval(() => {
       api.progress(job, undefined).then(reply => { if (!reply.ok && reply.code === 'lease-lost') controller.abort(); }).catch(() => {});
@@ -203,8 +213,17 @@ export async function main({ once = false } = {}) {
     } catch (error) {
       outcome = { outcome: 'retry', result: { code: (error.code ?? 'stage-error').slice(0, 60) } };
       await appendFile(log, `stage error: ${error.stack ?? error}\n`).catch(() => {});
-    } finally { clearInterval(renew); }
-    if (controller.signal.aborted) { await say(`job ${job.id} ${job.status} stopped (lease lost)`); return; }
+    } finally { clearInterval(renew); clearTimeout(limit); }
+    if (timedOut) {
+      await say(`job ${job.id} ${job.status} stopped after ${Math.round(stageLimitMs(job.status) / 60_000)} minutes`);
+      outcome = { outcome: 'review', result: { code: `${job.status}-stage-timeout` } };
+    } else if (controller.signal.aborted) { await say(`job ${job.id} ${job.status} stopped (lease lost)`); return; }
+    // codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon.
+    if (outcome.result?.code === ASKS) {
+      health = { ...health, ok: false, codex: false };
+      checkedAt = Date.now() - TIMING.healthMs + TIMING.askedRecheckMs;
+      await say(`codex asked a question: no claims until health passes (checked again in ${TIMING.askedRecheckMs / 60_000} minutes)`);
+    }
     const reply = await api.finish(job, outcome.outcome, { ...outcome.result, ...(tally.size ? { calls: tally.value() } : {}) });
     await say(`job ${job.id} ${job.status} → ${outcome.outcome}${outcome.result?.code ? ` (${outcome.result.code})` : ''} ${reply.ok ? reply.status : `finish refused ${reply.code}`}`);
     if (['rejected', 'failed'].includes(outcome.outcome) || reply.status === 'submitted') await writeFile(path.join(dir, '.closed'), '').catch(() => {});

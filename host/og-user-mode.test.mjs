@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawnSync } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { existsSync, statSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, readdir, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
@@ -77,6 +77,21 @@ test('a host install runs og as its own account: providers signed in inside the 
     // Refused before its command started: exit 3, sprite-gen's "nothing was sent", which the worker may run again.
     const refused = og(['run', '20261028-gen-missing0', '--', 'codex', 'exec', 'hello']);
     assert.equal(refused.status, 3, refused.stderr); assert.match(refused.stderr, /no job 20261028-gen-missing0/);
+    // Every codex slot held elsewhere: past OG_SLOT_WAIT the run is not started (exit 3), and the ledger ends it as such.
+    const holders = [];
+    for (const slot of ['slot0', 'slot1']) {
+      const file = path.join(root, 'slots', slot);
+      if (!existsSync(file)) await writeFile(file, '');
+      holders.push(spawn('flock', [file, 'sleep', '30'], { stdio: 'ignore' }));
+    }
+    await new Promise(done => setTimeout(done, 500));
+    process.env.OG_SLOT_WAIT = '1';
+    try {
+      const waited = og(['run', job, '--', 'codex', 'exec', 'hello']);
+      assert.equal(waited.status, 3, waited.stderr); assert.match(waited.stderr, /no 1 free codex slot\(s\) within 1s — not started/);
+      const last = (await readFile(path.join(root, 'ledger.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line)).at(-1);
+      assert.deepEqual([last.kind, last.phase, last.exit], ['run', 'end', 3]);
+    } finally { delete process.env.OG_SLOT_WAIT; for (const holder of holders) holder.kill(); }
 
     // The worker: its key on stdin (mode 600), codex locked first, a user unit in the host's own systemd.
     assert.notEqual(og(['worker', 'key', 'https://example.supabase.co/functions/v1/ai-fighter'], 'not-a-key').status, 0);
