@@ -58,7 +58,7 @@ export function createApi({ base, key, fetcher = fetch }) {
     finish: (job, outcome, result) => post('finish', { jobId: job.id, leaseToken: job.leaseToken, outcome, result }),
     decisions: (job, evidence) => fetcher(`${base}/generation-worker/jobs/${job.id}/decisions`, {
       method: 'POST', headers: leased(job, { 'content-type': 'application/json' }), body: JSON.stringify(evidence),
-      signal: AbortSignal.timeout(40_000), redirect: 'error' }).then(json),
+      signal: AbortSignal.timeout(140_000), redirect: 'error' }).then(json),
     async artifact(job, name, bytes) {
       const reply = await fetcher(`${base}/generation-worker/jobs/${job.id}/artifacts/${name}`, { method: 'PUT', headers: leased(job, { 'content-type': 'image/webp' }),
         body: bytes, signal: AbortSignal.timeout(120_000) }).then(json);

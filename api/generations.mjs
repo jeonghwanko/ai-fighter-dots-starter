@@ -75,7 +75,8 @@ export function confirmedProfile(value) {
   return out;
 }
 
-export function createGenerationHandler({ db, authenticate, present, decisionsReviewer = null, responsesReviewer = null }) {
+export function createGenerationHandler({ db, authenticate, present, decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null }) {
+  const productionReviewer = cascadeReviewer ?? decisionsReviewer;
   async function call(name, args) {
     const { data, error } = await db.rpc(name, args);
     if (!error) return data;
@@ -290,7 +291,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   async function worker(request, parts, host) {
     const method = request.method, route = parts.join('/');
     if (method === 'POST' && parts[1] === 'decision-benchmarks' && parts.length === 3)
-      return { ok: true, review: await benchmarkReview({ db, reviewer: decisionsReviewer, responsesReviewer, host, caseId: id(parts[2]),
+      return { ok: true, review: await benchmarkReview({ db, reviewer: decisionsReviewer, responsesReviewer, cascadeReviewer, host, caseId: id(parts[2]),
         body: await readJson(request, DECISIONS.bodyBytes) }) };
     if (method === 'POST' && parts[1] === 'jobs' && parts[3] === 'decisions' && parts.length === 4) {
       const lease = id(request.headers.get('x-generation-lease'));
@@ -299,9 +300,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const effectiveHost = host ?? await call('af_generation_official', {});
       if (row.assigned_host !== effectiveHost) throw new Problem(403, 'worker-required');
       if (!['appearance', 'motions'].includes(row.status)) throw new Problem(409, 'generation-state');
-      if (!decisionsReviewer?.enabled) return { ok: true, review: { mode: 'off', status: 'disabled', advisory: true, visualApproval: false } };
+      if (!productionReviewer?.enabled) return { ok: true, review: { mode: 'off', status: 'disabled', advisory: true, visualApproval: false } };
       const evidence = await reviewEvidence(await readJson(request, DECISIONS.bodyBytes));
-      return { ok: true, review: await decisionsReviewer.review({ db, job: row, host, lease, evidence }) };
+      return { ok: true, review: await productionReviewer.review({ db, job: row, host, lease, evidence }) };
     }
     if (method === 'PUT' && parts[1] === 'jobs' && parts[3] === 'artifacts' && parts.length === 5) {
       const row = await call('af_generation_held', { p_id: id(parts[2]), p_token: id(request.headers.get('x-generation-lease')) });
@@ -356,7 +357,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const urls = await signed([...(refs ?? []).map(ref => ref.path), ...candidates.map(name => artifactPath(row.id, name))]);
       return { ok: true, job: { id: row.id, status: row.status, leaseToken: row.lease_token, owner: row.owner_id, createdAt: row.created_at, description: row.description,
         language: row.language, brief: row.brief ?? null, delegate: row.delegate === true, choice: row.choice ?? null, appearanceNote: row.appearance_note ?? null,
-        decisionsReview: { mode: decisionsReviewer?.enabled ? 'shadow' : 'off' },
+        decisionsReview: { mode: productionReviewer?.enabled ? 'shadow' : 'off' },
         appearanceRound: row.appearance_revisions, motionNote: row.motion_note ?? null, motionRound: row.motion_revisions, profile: row.profile ?? null,
         refs: (refs ?? []).map(ref => ({ id: ref.id, contentType: ref.content_type, width: ref.width, height: ref.height, url: urls.get(ref.path) ?? null })),
         candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', name, url: urls.get(artifactPath(row.id, name)) ?? null })),

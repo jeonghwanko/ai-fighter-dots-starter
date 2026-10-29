@@ -1,4 +1,5 @@
-// Operator-enrolled comparisons only. Never wired into ordinary generation reviews.
+// Shared Responses transport. Production uses the fixed Sol-only factory below;
+// arbitrary comparison models remain restricted to operator-enrolled benchmarks.
 import { Problem, readBody, sha256 } from './http.mjs';
 import { RULES, questions } from './decisions-review.mjs';
 
@@ -21,6 +22,9 @@ export function benchmarkConfig(config, stage) {
 
 export function responsesRequest({ model, job, evidence, questionNames }) {
   const selected = benchmarkConfig({ model, questionNames }, evidence.stage).questions;
+  return buildRequest({ model, job, evidence, selected });
+}
+function buildRequest({ model, job, evidence, selected }) {
   const intent = { description: job.description, brief: job.brief, appearanceNote: job.appearance_note ?? null,
     motionNote: job.motion_note ?? null, scope: evidence.scope, stage: evidence.stage };
   const item = { type: 'object', properties: {
@@ -70,31 +74,68 @@ function checksOf(value, model, names, count) {
 }
 
 export function createResponsesBenchmarkReviewer({ apiKey, enabled = false, fetcher = fetch } = {}) {
+  return createReviewer({ apiKey, enabled, fetcher, select: ({ config, evidence }) => benchmarkConfig(config, evidence.stage) });
+}
+
+export const SOL_FOLLOWUP = Object.freeze({ model: 'gpt-6.1-sol', policy: 'luna-sol-v1', timeoutMs: 90_000 });
+export function followupQuestions(primary, evidence) {
+  // Only completed semantic judgments can trigger a second model. A transport failure,
+  // unknown outcome or refusal is not evidence of a visual defect and is not retried.
+  if (primary?.status !== 'completed' || primary.binding?.model !== 'gpt-6-luna'
+    || !/^[a-f0-9]{64}$/.test(primary.binding.requestSha256 ?? '')
+    || primary.stage !== evidence.stage || primary.scope !== evidence.scope
+    || !Array.isArray(primary.binding.images) || primary.binding.images.length !== evidence.binding.length
+    || evidence.binding.some((image, index) => {
+      const original = primary.binding.images[index];
+      return !original || Object.keys(original).length !== Object.keys(image).length || Object.keys(image).some(k => image[k] !== original[k]);
+    })) return [];
+  return questions(evidence.stage).filter(q => ['unverified', 'defect'].includes(primary.checks?.[q.name]?.status)
+    && OPTIONS.includes(primary.checks[q.name].choice));
+}
+export function createSolFollowupReviewer(options = {}) {
+  return createReviewer({ ...options, timeoutMs: SOL_FOLLOWUP.timeoutMs,
+    select: ({ primary, evidence }) => {
+      const selected = followupQuestions(primary, evidence);
+      if (!selected.length) throw new Problem(422, 'invalid-followup');
+      return { model: SOL_FOLLOWUP.model, questions: selected,
+        binding: { policy: SOL_FOLLOWUP.policy, parentRequestSha256: primary.binding.requestSha256 } };
+    } });
+}
+
+function createReviewer({ apiKey, enabled = false, fetcher = fetch, select, timeoutMs = RESPONSE_REVIEW.timeoutMs }) {
   const active = enabled === true && typeof apiKey === 'string' && apiKey.trim().length > 0;
-  return { enabled: active, async review({ db, job, host, evidence, config }) {
+  return { enabled: active, async review({ db, job, host, lease, evidence, config, primary }) {
     if (!active) return { mode: 'off', status: 'disabled', advisory: true, visualApproval: false };
-    const selected = benchmarkConfig(config, evidence.stage), names = selected.questions.map(q => q.name);
-    const request = responsesRequest({ model: selected.model, job, evidence, questionNames: names });
+    const selected = select({ config, evidence, primary }), names = selected.questions.map(q => q.name);
+    const request = buildRequest({ model: selected.model, job, evidence, selected: selected.questions });
     const raw = JSON.stringify(request), requestSha256 = await sha256(new TextEncoder().encode(raw));
     const binding = { images: evidence.binding, requestSha256, model: selected.model, rubric: RESPONSE_REVIEW.rubric,
       adapter: RESPONSE_REVIEW.adapter, questionNames: names, reasoning: RESPONSE_REVIEW.reasoning,
-      maxOutputTokens: RESPONSE_REVIEW.maxOutputTokens, confidenceType: 'not-available', approvalGate: false };
+      maxOutputTokens: RESPONSE_REVIEW.maxOutputTokens, confidenceType: 'not-available', approvalGate: false, ...selected.binding };
+    const fingerprint = selected.binding
+      ? await sha256(new TextEncoder().encode(JSON.stringify({ requestSha256, ...selected.binding }))) : requestSha256;
     const rpc = async (name, args) => {
       const { data, error } = await db.rpc(name, args);
       if (error) {
-        const code = ['review-limit', 'worker-required', 'benchmark-expired', 'benchmark-evidence-changed'].find(k => error.message?.includes(k));
+        const code = ['review-limit', 'worker-required', 'lease-lost', 'generation-state', 'benchmark-expired', 'benchmark-evidence-changed'].find(k => error.message?.includes(k));
         throw new Problem(code === 'review-limit' ? 429 : code === 'worker-required' ? 403 : code === 'benchmark-expired' ? 410
-          : code ? 422 : 503, code ?? 'review-store-unavailable');
+          : code === 'benchmark-evidence-changed' ? 422 : code ? 409 : 503, code ?? 'review-store-unavailable');
       }
       return data;
     };
-    const claimed = await rpc('af_decision_review_start', { p_fingerprint: requestSha256,
+    const claimed = await rpc('af_decision_review_start', { p_job: job.id, p_host: host, p_lease: lease, p_fingerprint: fingerprint,
       p_stage: evidence.stage, p_scope: evidence.scope, p_binding: binding });
-    if (!claimed.started) return claimed.report;
+    if (!claimed.started) {
+      // Benchmark cases are one-shot even if an operator later edits their config.
+      // Never present a previously consumed Luna/different request as a Sol answer.
+      if (claimed.report?.binding?.requestSha256 !== requestSha256 || claimed.report.binding.model !== selected.model
+        || claimed.report.binding.parentRequestSha256 !== binding.parentRequestSha256) throw new Problem(409, 'review-binding-changed');
+      return claimed.report;
+    }
     const start = performance.now(); let requestId = null, providerHttpStatus = null, usage = null, report;
     try {
       const response = await fetcher('https://api.openai.com/v1/responses', { method: 'POST', redirect: 'error',
-        signal: AbortSignal.timeout(RESPONSE_REVIEW.timeoutMs), headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, body: raw });
+        signal: AbortSignal.timeout(timeoutMs), headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, body: raw });
       providerHttpStatus = response.status;
       const rid = response.headers.get('x-request-id');
       requestId = /^req_[A-Za-z0-9_-]{1,120}$/.test(rid ?? '') ? rid : null;
