@@ -14,10 +14,20 @@ const step = integer(0, 127);
 const pair = { ...array(step, 2, 2) };
 const borrowed = object({ clip: { enum: ['fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'] }, frame: integer(0, 63) });
 
+/**
+ * A gait cycle keeps the frames it was filmed or drawn in (2026-10-29, `gait-frames-1`): `frames` is the village standard a writer aims at,
+ * `minFrames`..`maxFrames` what a manifest may carry. A cycle resampled to the standard skips or makes frames — a video run cycles in 13 or
+ * 14 frames, and squeezed to 12 its legs jolt where a frame was dropped. The game plays any count (`durationMs` per frame); its pace is the
+ * cycle's time, which the count does not change.
+ */
+export const gaitFrames = Object.freeze({ walk: Object.freeze({ min: 12, max: 32 }), run: Object.freeze({ min: 10, max: 16 }) });
+
 export const motions = {
   idle: { kind: 'gait', frames: 1, loop: false, purpose: '정지 전신. 모든 동작과 같은 정체성.' },
-  walk: { kind: 'gait', frames: frameStandard.roles.fighter.walk, loop: true, purpose: '걷기 한 주기. 양발 교대, 같은 접지 기준.' },
-  run: { kind: 'gait', frames: frameStandard.roles.fighter.run, loop: true, purpose: '달리기 한 주기. 양발 교대.' },
+  walk: { kind: 'gait', frames: frameStandard.roles.fighter.walk, minFrames: gaitFrames.walk.min, maxFrames: gaitFrames.walk.max, loop: true,
+    purpose: '걷기 한 주기. 양발 교대, 같은 접지 기준.' },
+  run: { kind: 'gait', frames: frameStandard.roles.fighter.run, minFrames: gaitFrames.run.min, maxFrames: gaitFrames.run.max, loop: true,
+    purpose: '달리기 한 주기. 양발 교대.' },
   fightIdle: { kind: 'action', loop: true, minHits: 0, maxHits: 0, purpose: '전투 준비 자세 반복.' },
   combo: { kind: 'action', loop: false, minHits: 3, maxHits: 8, purpose: '3개 구간으로 나누어 재생할 연타. 접촉 시점 최소 3개.' },
   slam: { kind: 'action', loop: false, minHits: 1, maxHits: 1, purpose: '강타의 준비·접촉·회수.' },
@@ -87,8 +97,8 @@ function clipSchema(name, motion) {
   const fields = {
     assetId: id, frameWidth: integer(1, 1024), frameHeight: integer(1, 1024),
     columns: integer(1, 8), rows: integer(1, 8),
-    frames: { ...array(integer(0, 63), motion.frames ?? 1, motion.frames ?? 64), uniqueItems: true },
-    origins: array(ref('origin'), motion.frames ?? 1, motion.frames ?? 64), loop: { const: motion.loop },
+    frames: { ...array(integer(0, 63), motion.minFrames ?? motion.frames ?? 1, motion.maxFrames ?? motion.frames ?? 64), uniqueItems: true },
+    origins: array(ref('origin'), motion.minFrames ?? motion.frames ?? 1, motion.maxFrames ?? motion.frames ?? 64), loop: { const: motion.loop },
   };
   if (motion.kind === 'gait') {
     fields.durationMs = number(1, 2000);
@@ -157,7 +167,8 @@ export const spec = {
     mirror: 'right-source-left-runtime-flip', bodyHeight: 400, cameraElevationDegrees: 16 },
   limits, motions, optionalClips,
   // A reader that predates a feature rejects manifests using it (additionalProperties: false): writers emit it only when listed here.
-  features: ['profile-extras-1', 'combat-stats-1', 'profile-names-1', 'combat-style-1', 'extra-clips-1', 'profile-lines-1'],
+  features: ['profile-extras-1', 'combat-stats-1', 'profile-names-1', 'combat-style-1', 'extra-clips-1', 'profile-lines-1', 'gait-frames-1'],
+  gaitFrames: { ...gaitFrames, note: '걷기·달리기는 찍거나 그린 한 주기의 칸 수 그대로 낸다(이 범위 안). frames 는 마을 표준(걷기 16·달리기 12)이다. 칸마다 같은 durationMs 로 재생하고, 한 주기 시간이 걸음 속도를 정한다.' },
   profileExtras: { languages: ['ko', 'en'], conceptMaxLength: 800, namedMoves, moveNameMaxLength: 24, moveDescriptionMaxLength: 160, nameMaxLength: 40,
     names: '선택. profile.names.ko·en 은 그 언어 화면에 띄울 이름(각 40자). 없는 언어는 profile.name 을 띄운다.',
     note: '컨셉과 기술 이름·설명은 표시용 소개 텍스트다. 기술 이름은 표준 키트의 고정 동작에 붙는다. 새 동작이나 AI 지시가 아니다.' },

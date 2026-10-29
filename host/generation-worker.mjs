@@ -99,6 +99,8 @@ export function createApi({ base, key, fetcher = fetch }) {
   const leased = (job, extra) => headers({ 'x-generation-lease': job.leaseToken, ...extra });
   return {
     heartbeat: health => post('heartbeat', { health }),
+    // The server's public contract: its features say what a package may carry (a gait at its own frame count: gait-frames-1).
+    spec: () => fetcher(`${base}/spec`, { signal: AbortSignal.timeout(30_000) }).then(json),
     claim: () => post('claim', {}),
     ended: jobs => post('ended', { jobs }),
     progress: (job, progress, event) => post('progress', { jobId: job.id, leaseToken: job.leaseToken, progress, ...(event ? { event } : {}) }),

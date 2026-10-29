@@ -255,6 +255,21 @@ export function submissionOutcome(reply) {
 
 /** The contract's walk and run frame counts, and the motion text of a loop filmed again (a take changes its input, never repeats it). */
 export const GAIT_FRAMES = Object.freeze({ walk: 16, run: 12 });
+/**
+ * A server whose contract lists GAIT_OWN_FEATURE takes a walk or run at the frames one cycle was filmed in, inside its `gaitFrames` range
+ * (2026-10-29). A cut aligned at its own length moves no frame off its time: its beat is never broken, no frame is made by RIFE. A Grok run
+ * cycles in 13 or 14 frames; squeezed to 12 its legs jolted where a frame was dropped (the 냥잽 cat's seven run takes). A cut outside the
+ * range (half a stride, or two) is refused (`frames-<n>`). A server without it takes the standard GAIT_FRAMES, resampled as before.
+ */
+export const GAIT_OWN_FEATURE = 'gait-frames-1';
+/** The gait frame ranges the server's spec gives, when it takes a gait at its own count, or null. */
+export async function gaitRanges(api) {
+  const reply = await Promise.resolve(api.spec?.()).catch(() => null);
+  const data = reply?.ok ? reply.data : null, ranges = data?.gaitFrames;
+  const ok = range => Number.isInteger(range?.min) && Number.isInteger(range?.max) && range.min <= range.max;
+  return data?.features?.includes(GAIT_OWN_FEATURE) && ok(ranges?.walk) && ok(ranges?.run)
+    ? { walk: { min: ranges.walk.min, max: ranges.walk.max }, run: { min: ranges.run.min, max: ranges.run.max } } : null;
+}
 export const GAIT_RETAKES = 2;
 /** How long the run waits after the walk before it films: the xAI quota counts clip starts per second (the engine staggers its own). */
 export const GAIT_STAGGER_MS = 5000;
@@ -523,8 +538,9 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
   }
 
   /** `change`: the creator's latest change to this gait ({ round, note }) — its takes film the change, quoted, and nothing else is tried.
-   * `early()`: a loop to take instead of the retakes when the first take's beat broke (RUN_FROM_WALK_FIRST), or null. */
-  async function gaitLoop(gait, look, stills, character, m, change = null, early = null) {
+   * `early()`: a loop to take instead of the retakes when the first take's beat broke (RUN_FROM_WALK_FIRST), or null. `range`: the server
+   * takes this gait at its own frame count inside it (GAIT_OWN_FEATURE), or null for the standard GAIT_FRAMES. */
+  async function gaitLoop(gait, look, stills, character, m, change = null, early = null, range = null) {
     const tried = [];
     for (let take = 0; take <= GAIT_RETAKES; take++) {
       // A retake films from the relaxed still and asks for an even beat. Its folder names its input (`-s<take>-<words' hash>`): a clip filmed
@@ -562,19 +578,21 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         for (const cut of cuts) {
           // The contract's frame count, starting as a foot lands; a cut the engine reads as two cycles is aligned as it is (the judge sees it).
           // A cut aligned by an earlier run of this stage is kept (the cut never changes: its clip and frames are kept too).
-          const aligned = `${cut}-${GAIT_FRAMES[gait]}`, strip = path.join(aligned, `side-${gait}.strip.json`);
-          if ((await readJson(strip).catch(() => null))?.cycle_align?.to !== GAIT_FRAMES[gait]) {
+          // At its own length (GAIT_OWN_FEATURE) the alignment only turns the cut to start as a foot lands: no --length, nothing resampled.
+          const aligned = `${cut}-${range ? 'own' : GAIT_FRAMES[gait]}`, strip = path.join(aligned, `side-${gait}.strip.json`);
+          const kept = (await readJson(strip).catch(() => null))?.cycle_align;
+          if (!kept || (!range && kept.to !== GAIT_FRAMES[gait])) {
             await rm(aligned, { recursive: true, force: true });
             await cp(cut, aligned, { recursive: true });
-            const args = ['video-cycle-align', '--loop-dir', aligned, '--length', String(GAIT_FRAMES[gait]), '--view', 'side@right', '--start-foot', 'left',
-              ...beatLimit(gait)];
+            const args = ['video-cycle-align', '--loop-dir', aligned, ...(range ? [] : ['--length', String(GAIT_FRAMES[gait])]), '--view', 'side@right',
+              '--start-foot', 'left', ...beatLimit(gait)];
             if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
           }
           const meta = await readJson(strip).catch(() => null);
           // No alignment at all (the engine stopped: out of memory, a crash) says nothing about the clip.
           if (meta && !meta.cycle_align) { unaligned += 1; tried.push({ take, cut: path.basename(cut), reasons: ['not-aligned'] }); continue; }
           const reasons = meta ? retakeReasons(meta) : ['unreadable'];
-          if (meta && meta.frames !== GAIT_FRAMES[gait]) reasons.push(`frames-${meta.frames}`);
+          if (meta && (range ? meta.frames < range.min || meta.frames > range.max : meta.frames !== GAIT_FRAMES[gait])) reasons.push(`frames-${meta.frames}`);
           if (meta && !namedFeet(meta)) reasons.push('feet-unnamed');
           if (reasons.length) { tried.push({ take, cut: path.basename(cut), reasons }); continue; }
           // The judge: codex with every tool off sees the look and the loop's frames.
@@ -785,11 +803,12 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const input = await stillReady;
       return input.retry ? input : { still, key: input.key };
     };
+    const ranges = await gaitRanges(api);
     const gaitBranch = (gait, delayMs, early = null) => async () => {
       const input = await stillReady;
       if (input.retry) return input;
       if (delayMs) await new Promise(done => setTimeout(done, delayMs));
-      const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null, early);
+      const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null, early, ranges?.[gait] ?? null);
       if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip);
       return loop;
     };

@@ -4,6 +4,10 @@ import { decodeBase64, encodeBase64 } from './base64.mjs';
 import { Problem, readBody, sha256 } from './http.mjs';
 import { probeImage } from './image-probe.mjs';
 import { sequencePresentation, SEQUENCE_METHODS, PAIRED_SEQUENCE_METHOD, BENCHMARK_TIMEOUT_MS } from './sequence-benchmark.mjs';
+import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+
+/** A gait sequence's frame counts: the contract's range (`gait-frames-1`), the village standard inside it. */
+export const gaitCount = (scope, count) => count >= spec.gaitFrames[scope].min && count <= spec.gaitFrames[scope].max;
 
 export const DECISIONS = Object.freeze({ model: 'gpt-6-luna', rubric: 'hosted-sprite-v1', threshold: 0.8,
   bodyBytes: 8 * 1024 * 1024, imageBytes: 2 * 1024 * 1024, timeoutMs: 25_000 });
@@ -74,7 +78,7 @@ async function parseEvidence(body, native) {
     content.push({ type: 'input_json', data: record }, { type: 'input_image', detail: 'original', image_url: `data:${info.type};base64,${encodeBase64(bytes)}` });
   }
   if (references > 3 || (stage === 'input' && candidates !== 0) || (stage === 'pose' && candidates !== 1)
-    || (stage === 'sequence' && (references !== 1 || (native ? candidates < 2 || candidates > 64 : candidates !== (scope === 'walk' ? 16 : 12))))) invalid();
+    || (stage === 'sequence' && (references !== 1 || (native ? candidates < 2 || candidates > 64 : !gaitCount(scope, candidates))))) invalid();
   return { stage, scope, binding, content };
 }
 
