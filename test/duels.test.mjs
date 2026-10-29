@@ -1,14 +1,13 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createHandler,sha256} from '../api/handler.mjs';
-import {applyMigration,migrationNames,supabasePlatform} from './helpers/fighter-database.mjs';
+import {migratedDatabase} from './helpers/fighter-database.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with {type:'json'};
 
 /** Two duel-approved fighters in a migrated PGlite, and a db adapter shaped like the Supabase client. */
 async function duelFixture() {
-  // The shared platform stand-in, so a migration needing a new auth column (client_name) is added once.
-  const sql=await supabasePlatform();
-  for(const name of await migrationNames()) await applyMigration(sql,name);
+  // The shared platform stand-in, so a migration needing a new auth column (client_name) is added once, and its safeupdate replay.
+  const sql=await migratedDatabase();
   const ids=[]; const manifestText=JSON.stringify(example),hash=await sha256(new TextEncoder().encode(manifestText));
   for(const name of ['A','B']) {
     const owner=crypto.randomUUID(),sub=crypto.randomUUID(),id=crypto.randomUUID();ids.push(id);
