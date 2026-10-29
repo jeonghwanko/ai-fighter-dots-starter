@@ -145,6 +145,23 @@ test('later delegation cannot pass earlier review; appearance revisions invalida
   assert.equal((await f.store.read(sessionId)).groupId, 'appearance');
 });
 
+test('a stale review of an earlier motion leaves the motions made on it standing; a changed earlier file does not', async t => {
+  const f = await fixture(t);
+  await f.record('idle'); await f.review('idle'); await f.select('idle'); await f.change({ type: 'advance' });
+  await f.record('walk'); await f.review('walk'); await f.select('walk');
+  // Only the evidence behind idle's review changed: idle needs a fresh look, the walk made on that same idle does not.
+  const idle = (await f.store.read(sessionId)).items.idle.versions.v1;
+  await f.put(idle.review.evidence[0].path, 'changed evidence');
+  let inspection = await f.store.inspect(sessionId);
+  assert.deepEqual(inspection.problems, [{ item: 'idle', reason: 'review-stale' }]);
+  assert.equal(inspection.effectiveItems.idle.review, 'unverified');
+  assert.equal(inspection.effectiveItems.walk.review, 'passed'); assert.equal(inspection.effectiveItems.walk.selectedVersion, 'v1');
+  await f.put(idle.files[0].path, 'changed idle pixels');
+  inspection = await f.store.inspect(sessionId);
+  assert.ok(inspection.problems.some(p => p.item === 'walk' && p.reason === 'basis-changed'));
+  assert.equal(inspection.effectiveItems.walk.selectedVersion, null);
+});
+
 test('concurrent writers do not lose decisions; fresh revisions and context are required', async t => {
   let current = structuredClone(context);
   const f = await fixture(t, { contextRequest: async () => new Response(JSON.stringify(current)) });

@@ -267,6 +267,41 @@ test('커뮤니티 호스트: the hosts are listed to anyone, and a request name
   } finally { await g.sql.close(); }
 });
 
+test('a request the database would refuse is refused before any of the user\'s pictures is downloaded or kept (MCP 점검 2026-10-29)', async () => {
+  // Each kept picture spends one of the day's twelve uploads and stays in storage; a refused request kept two.
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { call, downloads } = await connector(g, {});
+    const pictures = { picture: { download_url: 'https://files.oaiusercontent.com/file-1', file_id: 'file-1' },
+      secondPicture: { download_url: 'https://files.oaiusercontent.com/file-2', file_id: 'file-2' }, rightsConfirmed: true };
+    const ask = extra => call('request_hosted_fighter', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID(), ...pictures, ...extra });
+    const kept = async () => (await g.sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n;
+    assert.equal((await ask({ host: 'any' })).code, 'host-consent-required');
+    assert.equal((await ask({ description: '짧은\u0000설명이에요요요' })).code, 'invalid-description');
+    assert.equal(downloads.length, 0); assert.equal(await kept(), 0);
+    const made = await ask({});
+    assert.equal(made.job.status, 'queued'); assert.equal(downloads.length, 2); assert.equal(await kept(), 2);
+    // One request at a time: the second is refused before its pictures move.
+    assert.equal((await ask({})).code, 'generation-quota');
+    assert.equal(downloads.length, 2); assert.equal(await kept(), 2);
+  } finally { await g.sql.close(); }
+});
+
+test('a database failure reading the service switch is reported as one, not as the service being off', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const rpc = g.db.rpc;
+    g.db.rpc = (name, args) => name === 'af_generation_capabilities' ? { error: { message: 'fixture outage' } } : rpc(name, args);
+    const { call, downloads } = await connector(g, {});
+    const result = await call('request_hosted_fighter', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID(),
+      picture: { download_url: 'https://files.oaiusercontent.com/file-1', file_id: 'file-1' }, rightsConfirmed: true });
+    assert.equal(result.ok, false); assert.equal(result.code, 'database-unavailable');
+    assert.equal(downloads.length, 0);
+  } finally { await g.sql.close(); }
+});
+
 test('next names what the user is asked or how long ODDBOUT works', () => {
   assert.match(hostedNext({ status: 'motions' }), /15 to 30 minutes/);
   assert.match(hostedNext({ status: 'submitted', submission: { stage: 'registered', fighterId: 'f-1' } }), /Registered: fighter f-1/);

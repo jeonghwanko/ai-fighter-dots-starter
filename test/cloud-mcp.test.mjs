@@ -1,9 +1,10 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudHandler, authenticateCloud, allowedFileUrl, downloadHostFile, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE } from '../mcp/cloud.mjs';
+import { createCloudHandler, authenticateCloud, allowedFileUrl, downloadHostFile, compactText, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE } from '../mcp/cloud.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { safeClientRedirect, authorizationId } from '../web/cloud-connect/connect.mjs';
 import { migratedDatabase } from './helpers/fighter-database.mjs';
+import { profileFixture } from './helpers/profile-api-fixture.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 const owner = crypto.randomUUID(), session = crypto.randomUUID(), client = crypto.randomUUID();
 const token = 'signed-connector-token-for-test';
@@ -244,6 +245,48 @@ test('a profile edit goes through the same edit on the owner\'s current package,
   assert.equal((await call(handle, 'update_fighter_profile', { fighterId: fighter, profile: { portrait: 'x' }, idempotencyKey: crypto.randomUUID() })).isError, true);
   await call(handle, 'update_fighter_profile', { fighterId: fighter, profile: { lines: { win: 'Again!' } }, idempotencyKey: crypto.randomUUID() });
   assert.ok(filters.some(([k, v]) => k === 'owner_id' && v === owner)); assert.ok(filters.some(([k, v]) => k === 'id' && v === fighter));
+});
+
+test('an edit retried with its key after a lost response returns that edit, not a conflict (MCP 점검 2026-10-29)', async () => {
+  // The first call moved the fighter to a new package: the retry must rebuild on the package the first call edited, not the new one.
+  const f = await profileFixture();
+  try {
+    const fighter = (await f.register()).fighter_id;
+    const db = { ...f.db, auth: { getClaims: async () => ({ data: { claims: { ...claims(), sub: f.owner } } }) },
+      rpc: (name, args) => name === 'af_mcp_session_active' ? { data: true } : f.db.rpc(name, args) };
+    const handle = createCloudHandler({ db, arena: { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true }) } });
+    for (const [tool, change, other] of [['update_fighter_style', { style: { distance: 2 } }, { style: { distance: 4 } }],
+      ['update_fighter_profile', { profile: { name: 'Retried fighter' } }, { profile: { name: 'Another name' } }]]) {
+      const args = { fighterId: fighter, ...change, idempotencyKey: crypto.randomUUID() };
+      const first = (await call(handle, tool, args)).structuredContent;
+      assert.equal(first.ok, true, JSON.stringify(first));
+      const retried = (await call(handle, tool, args)).structuredContent;
+      assert.equal(retried.ok, true, JSON.stringify(retried));
+      assert.equal(retried.submissionId, first.submissionId); assert.equal(retried.manifestSha256, first.manifestSha256);
+      // The same key for a different change is still refused.
+      assert.equal((await call(handle, tool, { ...args, ...other })).structuredContent.code, 'idempotency-conflict');
+    }
+    assert.equal((await f.sql.query('select count(*)::int as n from public.af_submissions where fighter_id = $1', [fighter])).rows[0].n, 3);
+  } finally { await f.sql.close(); }
+});
+
+test('every write tool says whether a retry is safe; the ones that make something new on each call say no (MCP 점검 2026-10-29)', async () => {
+  const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true }) };
+  const tools = (await (await createCloudHandler({ db: dbFor(), arena, hosted: {} })(request('tools/list'))).json()).result.tools;
+  const writes = Object.fromEntries(tools.filter(t => !t.annotations.readOnlyHint).map(t => [t.name, t.annotations.idempotentHint]));
+  assert.deepEqual(writes, {
+    prepare_fighter_deletion: true, delete_fighter: true, prepare_fighter_registration: true, upload_fighter_asset: true, submit_fighter_registration: true,
+    enter_cup: false, update_fighter_profile: true, update_fighter_style: true,
+    update_fighter_canon: true, post_workshop_note: false, resolve_workshop_note: true, set_fighter_relation: true, manage_world: false, write_world_post: true,
+    request_hosted_fighter: false, choose_hosted_look: false, revise_hosted_motion: false, register_hosted_fighter: true, cancel_hosted_fighter: true,
+    store_creator_source: true, prepare_creator_source_download: true,
+  });
+  for (const tool of tools.filter(t => t.annotations.readOnlyHint)) assert.equal(tool.annotations.idempotentHint, true, tool.name);
+});
+
+test('a large result\'s short text survives a field with no JSON form', () => {
+  const text = compactText({ ok: true, rules: undefined, fighters: Array.from({ length: 40 }, (_, i) => ({ id: `f${i}`, name: `Fighter ${i}` })) });
+  assert.match(text, /^Full result in structuredContent \(\d+ characters\): ok=true, rules=undefined, fighters\[40\]$/);
 });
 
 test('ChatGPT\'s calls get a short text for a large result (it reads the structured one) and its anonymous user as the read budget', async () => {

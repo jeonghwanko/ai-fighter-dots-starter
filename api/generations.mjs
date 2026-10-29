@@ -213,6 +213,31 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   const hostView = row => ({ id: row.id, name: row.name, approved: row.approved, enabled: row.enabled, acceptsAny: row.accepts_any,
     billing: row.billing, dailyLimit: row.daily_limit });
 
+  /**
+   * A request's body, read the same way for its check and for the request itself.
+   * @param {Request} request @param {string} owner
+   */
+  async function requested(request, owner) {
+    const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed', 'delegate', 'host', 'hostConsent']);
+    if (!['ko', 'en'].includes(body.language)) throw new Problem(422, 'invalid-language');
+    if (body.delegate !== undefined && typeof body.delegate !== 'boolean') throw new Problem(422, 'invalid-body');
+    // Where it goes (커뮤니티 호스트): ODDBOUT's own worker by default, any approved host, one host by id, or `mine` — his own host,
+    // approved or not, with no consent to give (내 선수는 내 PC로, 2026-10-28).
+    let host = body.host ?? 'oddbout';
+    if (host === 'mine') {
+      const { data: own, error: ownError } = await db.from('af_generation_hosts').select('id,removed_at').eq('owner_id', owner).maybeSingle();
+      if (ownError) throw new Problem(503, 'database-unavailable');
+      if (!own || own.removed_at) throw new Problem(404, 'host-not-found');
+      host = own.id;
+    }
+    if (!['oddbout', 'any'].includes(host) && !UUID.test(host)) throw new Problem(422, 'invalid-host');
+    const target = host === 'oddbout' ? {} : { p_host_choice: UUID.test(host) ? 'host' : 'any', ...(UUID.test(host) ? { p_host: host.toLowerCase() } : {}),
+      p_host_consent: body.hostConsent === true };
+    if (body.refs !== undefined && (!Array.isArray(body.refs) || body.refs.length > GENERATION_LIMITS.refs)) throw new Problem(422, 'invalid-refs');
+    return { body, target, refs: (body.refs ?? []).map(id),
+      description: text(body.description, GENERATION_LIMITS.description, '/description', { min: GENERATION_LIMITS.descriptionMin, lines: true, code: 'invalid-description' }) };
+  }
+
   /** @param {Request} request @param {string[]} parts @param {string} owner */
   async function creator(request, parts, owner) {
     const method = request.method, route = parts.join('/');
@@ -277,27 +302,17 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       } catch (problem) { await bucket().remove([path]).catch(() => {}); throw problem; }
       return { ok: true, upload: { id: upload, width: image.width, height: image.height } };
     }
+    // The checks of a request without making it (MCP 점검 2026-10-29): the connector asks before it uploads the user's pictures, so a
+    // refused request keeps none of them. Nothing is made or kept.
+    if (method === 'POST' && route === 'generations/check') {
+      const { target } = await requested(request, owner);
+      await call('af_generation_check', { p_owner: owner, ...target });
+      return { ok: true };
+    }
     if (method === 'POST' && route === 'generations') {
       const key = id(request.headers.get('idempotency-key'));
-      const body = fields(await readJson(request, 8000), ['description', 'language', 'refs', 'rightsConfirmed', 'delegate', 'host', 'hostConsent']);
-      if (!['ko', 'en'].includes(body.language)) throw new Problem(422, 'invalid-language');
-      if (body.delegate !== undefined && typeof body.delegate !== 'boolean') throw new Problem(422, 'invalid-body');
-      // Where it goes (커뮤니티 호스트): ODDBOUT's own worker by default, any approved host, one host by id, or `mine` — his own host,
-      // approved or not, with no consent to give (내 선수는 내 PC로, 2026-10-28).
-      let host = body.host ?? 'oddbout';
-      if (host === 'mine') {
-        const { data: own, error: ownError } = await db.from('af_generation_hosts').select('id,removed_at').eq('owner_id', owner).maybeSingle();
-        if (ownError) throw new Problem(503, 'database-unavailable');
-        if (!own || own.removed_at) throw new Problem(404, 'host-not-found');
-        host = own.id;
-      }
-      if (!['oddbout', 'any'].includes(host) && !UUID.test(host)) throw new Problem(422, 'invalid-host');
-      const target = host === 'oddbout' ? {} : { p_host_choice: UUID.test(host) ? 'host' : 'any', ...(UUID.test(host) ? { p_host: host.toLowerCase() } : {}),
-        p_host_consent: body.hostConsent === true };
-      if (body.refs !== undefined && (!Array.isArray(body.refs) || body.refs.length > GENERATION_LIMITS.refs)) throw new Problem(422, 'invalid-refs');
-      const refs = (body.refs ?? []).map(id);
-      const row = await call('af_generation_create', { p_owner: owner, p_key: key,
-        p_description: text(body.description, GENERATION_LIMITS.description, '/description', { min: GENERATION_LIMITS.descriptionMin, lines: true, code: 'invalid-description' }),
+      const { body, description, refs, target } = await requested(request, owner);
+      const row = await call('af_generation_create', { p_owner: owner, p_key: key, p_description: description,
         p_language: body.language, p_refs: refs, p_rights: body.rightsConfirmed === true,
         // 맡기기 (2026-10-28): the worker picks the look and goes on to the motions; the creator answers once, at the end.
         ...(body.delegate ? { p_delegate: true } : {}), ...target });
