@@ -281,6 +281,17 @@ export const EVEN_BEAT = ' The motion flows at one steady speed through the whol
  */
 export const RUN_FROM_WALK = 'run-from-walk';
 export const RUN_FROM_WALK_PACE = 0.6;
+/**
+ * The run made from the walk is tried before the run's retakes when the first run take's beat broke (2026-10-29). A broken beat is the
+ * aligner's, not the clip's: a Grok run cycles in 13 or 14 frames, the contract's run in 12, and RIFE's frames between them ghost on legs
+ * that fast, so the nearer source frame is taken and the step skips (sprite-gen cadence.py). The 냥잽 cat's seven run takes, from the look,
+ * the relaxed still and with an even beat asked, all broke at jolt 0.36 to 1.25 (13→12: 0.84, one dropped frame); its walk's cut, 24
+ * frames halved with no RIFE frame, passed at once. A creator's change to the run still films it.
+ */
+export const RUN_FROM_WALK_FIRST = true;
+/** A take none of whose cuts aligned (the engine stopped) is aligned ALIGN_AGAIN more times, ALIGN_PAUSE_MS apart, before an operator. */
+export const ALIGN_AGAIN = 1;
+export const ALIGN_PAUSE_MS = 120_000;
 /** A walk or run filmed again for a creator's change: the house sentence of the take with his words quoted as a description of the motion. */
 export function gaitChangeMotion(gait, note, take) {
   const base = GAIT_MOTION[gait][take];
@@ -347,7 +358,8 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * worker's API client; `fetchBytes(url)`; `toWebp(png, webp)` re-encodes a still (at most 1024 px); `motionsPy(args)` runs motions.py
  * on the kit's sprite-gen venv (pixels only, no provider) and resolves `{ code }`. Calls may overlap: `og` waits for a free codex slot.
  */
-export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS }) {
+export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS,
+  alignPauseMs = ALIGN_PAUSE_MS }) {
   // One loop alignment at a time on this worker: RIFE on the GPU takes about 4 GB, and a walk and a run aligning at once (or two jobs) ran
   // an 8 GB card out of memory (2026-10-28).
   let aligning = Promise.resolve();
@@ -502,8 +514,9 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     return verdict && LOOP_VISUAL.every(key => verdict[key] === 'pass') ? { strip, verdict: verdictFile, note: RUN_FROM_WALK } : null;
   }
 
-  /** `change`: the creator's latest change to this gait ({ round, note }) — its takes film the change, quoted, and nothing else is tried. */
-  async function gaitLoop(gait, look, stills, character, m, change = null) {
+  /** `change`: the creator's latest change to this gait ({ round, note }) — its takes film the change, quoted, and nothing else is tried.
+   * `early()`: a loop to take instead of the retakes when the first take's beat broke (RUN_FROM_WALK_FIRST), or null. */
+  async function gaitLoop(gait, look, stills, character, m, change = null, early = null) {
     const tried = [];
     for (let take = 0; take <= GAIT_RETAKES; take++) {
       // A retake films from the relaxed still and asks for an even beat. Its folder names its input (`-s<take>-<words' hash>`): a clip filmed
@@ -535,43 +548,56 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         }
         if (existsSync(path.join(auto, `side-${gait}.strip.json`))) cuts.push(auto);
       }
-      let unaligned = 0;
-      for (const cut of cuts) {
-        // The contract's frame count, starting as a foot lands; a cut the engine reads as two cycles is aligned as it is (the judge sees it).
-        // A cut aligned by an earlier run of this stage is kept (the cut never changes: its clip and frames are kept too).
-        const aligned = `${cut}-${GAIT_FRAMES[gait]}`, strip = path.join(aligned, `side-${gait}.strip.json`);
-        if ((await readJson(strip).catch(() => null))?.cycle_align?.to !== GAIT_FRAMES[gait]) {
-          await rm(aligned, { recursive: true, force: true });
-          await cp(cut, aligned, { recursive: true });
-          const args = ['video-cycle-align', '--loop-dir', aligned, '--length', String(GAIT_FRAMES[gait]), '--view', 'side@right', '--start-foot', 'left'];
-          if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
+      const seen = tried.length;
+      for (let pass = 0; ; pass++) {
+        let unaligned = 0;
+        for (const cut of cuts) {
+          // The contract's frame count, starting as a foot lands; a cut the engine reads as two cycles is aligned as it is (the judge sees it).
+          // A cut aligned by an earlier run of this stage is kept (the cut never changes: its clip and frames are kept too).
+          const aligned = `${cut}-${GAIT_FRAMES[gait]}`, strip = path.join(aligned, `side-${gait}.strip.json`);
+          if ((await readJson(strip).catch(() => null))?.cycle_align?.to !== GAIT_FRAMES[gait]) {
+            await rm(aligned, { recursive: true, force: true });
+            await cp(cut, aligned, { recursive: true });
+            const args = ['video-cycle-align', '--loop-dir', aligned, '--length', String(GAIT_FRAMES[gait]), '--view', 'side@right', '--start-foot', 'left'];
+            if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
+          }
+          const meta = await readJson(strip).catch(() => null);
+          // No alignment at all (the engine stopped: out of memory, a crash) says nothing about the clip.
+          if (meta && !meta.cycle_align) { unaligned += 1; tried.push({ take, cut: path.basename(cut), reasons: ['not-aligned'] }); continue; }
+          const reasons = meta ? retakeReasons(meta) : ['unreadable'];
+          if (meta && meta.frames !== GAIT_FRAMES[gait]) reasons.push(`frames-${meta.frames}`);
+          if (meta && !namedFeet(meta)) reasons.push('feet-unnamed');
+          if (reasons.length) { tried.push({ take, cut: path.basename(cut), reasons }); continue; }
+          // The judge: codex with every tool off sees the look and the loop's frames.
+          const judge = path.join(aligned, 'judge');
+          if ((await motionsPy(['judge-request', gait, judge])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judge, 'sheet.png')])).code !== 0)
+            return { retry: 'judge-input' };
+          const verdictFile = path.join(judge, 'verdict.json');
+          // A verdict an earlier run of this stage got on this cut is kept (no second codex call for the same picture).
+          let verdict = checkedVerdict(await readJson(verdictFile).catch(() => null)), judged = 0;
+          if (!verdict) {
+            ({ code: judged } = await og(briefCommand({ schema: path.join(judge, 'judge-schema.json'), out: verdictFile, refs: [look, path.join(judge, 'sheet.png')] }),
+              { stdin: await readFile(path.join(judge, 'judge-prompt.txt'), 'utf8') }));
+            verdict = judged === 0 ? checkedVerdict(await readJson(verdictFile).catch(() => null)) : null;
+          }
+          if (!verdict) return { retry: `judge-exit-${judged}` };
+          if (LOOP_VISUAL.every(key => verdict[key] === 'pass')) return { strip, verdict: verdictFile, take };
+          tried.push({ take, cut: path.basename(cut), judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass') });
+          break;   // the judge saw this take: another cut of it would show the same motion
         }
-        const meta = await readJson(strip).catch(() => null);
-        // No alignment at all (the engine stopped: out of memory, a crash) says nothing about the clip.
-        if (meta && !meta.cycle_align) { unaligned += 1; tried.push({ take, cut: path.basename(cut), reasons: ['not-aligned'] }); continue; }
-        const reasons = meta ? retakeReasons(meta) : ['unreadable'];
-        if (meta && meta.frames !== GAIT_FRAMES[gait]) reasons.push(`frames-${meta.frames}`);
-        if (meta && !namedFeet(meta)) reasons.push('feet-unnamed');
-        if (reasons.length) { tried.push({ take, cut: path.basename(cut), reasons }); continue; }
-        // The judge: codex with every tool off sees the look and the loop's frames.
-        const judge = path.join(aligned, 'judge');
-        if ((await motionsPy(['judge-request', gait, judge])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judge, 'sheet.png')])).code !== 0)
-          return { retry: 'judge-input' };
-        const verdictFile = path.join(judge, 'verdict.json');
-        // A verdict an earlier run of this stage got on this cut is kept (no second codex call for the same picture).
-        let verdict = checkedVerdict(await readJson(verdictFile).catch(() => null)), judged = 0;
-        if (!verdict) {
-          ({ code: judged } = await og(briefCommand({ schema: path.join(judge, 'judge-schema.json'), out: verdictFile, refs: [look, path.join(judge, 'sheet.png')] }),
-            { stdin: await readFile(path.join(judge, 'judge-prompt.txt'), 'utf8') }));
-          verdict = judged === 0 ? checkedVerdict(await readJson(verdictFile).catch(() => null)) : null;
-        }
-        if (!verdict) return { retry: `judge-exit-${judged}` };
-        if (LOOP_VISUAL.every(key => verdict[key] === 'pass')) return { strip, verdict: verdictFile, take };
-        tried.push({ take, cut: path.basename(cut), judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass') });
-        break;   // the judge saw this take: another cut of it would show the same motion
+        if (!cuts.length || unaligned < cuts.length) break;
+        // Not one cut of this clip aligned. The engine stops when the GPU is out of memory (2026-10-28: every alignment of the 냥잽 cat's
+        // first two stage runs, the clips sound), so the cuts are aligned once more after ALIGN_PAUSE_MS (no provider call); still none:
+        // stop rather than film another take (the stopped stage keeps its clips for an operator's retry).
+        if (pass >= ALIGN_AGAIN) return { review: `${gait}-align`, tried };
+        await new Promise(done => setTimeout(done, alignPauseMs));
       }
-      // Not one cut of this clip aligned: stop rather than film another take (the stopped stage keeps its clips for an operator's retry).
-      if (cuts.length && unaligned === cuts.length) return { review: `${gait}-align`, tried };
+      // RUN_FROM_WALK_FIRST: the first take's beat broke and no judge saw it: another take films the same kind of cycle again.
+      const first = tried.slice(seen);
+      if (!take && early && !change && first.length && first.every(t => t.reasons) && first.some(t => t.reasons.includes('broken-beat'))) {
+        const made = await early();
+        if (made) return { ...made, tried };
+      }
     }
     return { review: `${gait}-not-clean`, tried };
   }
@@ -750,11 +776,11 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const input = await stillReady;
       return input.retry ? input : { still, key: input.key };
     };
-    const gaitBranch = (gait, delayMs) => async () => {
+    const gaitBranch = (gait, delayMs, early = null) => async () => {
       const input = await stillReady;
       if (input.retry) return input;
       if (delayMs) await new Promise(done => setTimeout(done, delayMs));
-      const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null);
+      const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null, early);
       if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip);
       return loop;
     };
@@ -771,7 +797,13 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     let ended = 0;
     const settle = branch => branch().catch(error => ({ retry: String(error.code ?? 'stage-error').slice(0, 60) }))
       .finally(() => report(5 + 20 * ++ended));
-    const [actions, walk, filmed] = await Promise.all([settle(actionRows), settle(gaitBranch('walk', 0)), settle(gaitBranch('run', gaitStaggerMs))]);
+    const walking = settle(gaitBranch('walk', 0));
+    // RUN_FROM_WALK_FIRST: a run whose first take's beat broke waits for the walk, and takes the run made from it before any retake.
+    const fromWalk = RUN_FROM_WALK_FIRST ? async () => {
+      const walked = await walking;
+      return walked.strip && !walked.retry && !walked.review ? runFromWalk(walked, look, m) : null;
+    } : null;
+    const [actions, walk, filmed] = await Promise.all([settle(actionRows), walking, settle(gaitBranch('run', gaitStaggerMs, fromWalk))]);
     // A run the gate refused (or could not align) while the walk passed: the walk makes it (RUN_FROM_WALK); otherwise the stage stops as before.
     let run = filmed;
     if (['run-not-clean', 'run-align'].includes(filmed.review) && walk.strip && !actions.review && !actions.retry) {
