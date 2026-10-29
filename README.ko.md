@@ -99,13 +99,13 @@ AI는 한 묶음이 끝날 때마다 실제 결과를 보여주고 의견을 기
 
 Dots VM 준비는 [bootstrap·doctor·resume 안내](docs/DOTS-QUICKSTART.md)와
 [저장된 환경 Start 지침](docs/DOTS-START.md)을 따른다. 기본 doctor는 무네트워크·무설치 검사이고,
-설치는 `bootstrap --install`로 분리된다. 일반 Git URL의 main과 `codex/creator-hosting`의 실제 버전을
-구분한다. Git 링크만 받은 것은 생성 승인이 아니며, 보호 Codex 세션을 요구하는 이미지 경로는 차단한다.
+설치는 `bootstrap --install`로 분리된다. `main`에서 시작하고 실제 커밋을
+기록한다. Git 링크만 받은 것은 생성 승인이 아니며, 보호 Codex 세션을 요구하는 이미지 경로는 차단한다.
 
-공개 서비스 연결 설정이 있는 **codex/creator-hosting** 브랜치를 사용합니다. 새로 설치할 때는 다음 명령을 실행하세요.
+공개 서비스 연결 설정이 있는 **main** 브랜치를 사용합니다. 새로 설치할 때는 다음 명령을 실행하세요.
 
 ```sh
-git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run sprite:setup

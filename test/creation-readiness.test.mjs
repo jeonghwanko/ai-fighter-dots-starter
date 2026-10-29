@@ -60,7 +60,7 @@ test('a character in progress, unknown progress, local edits, a wrong branch or 
     assert.equal(result.status, 'deferred');
     assert.ok(!calls.some(call => call.startsWith('merge')));
   }
-  const cases = [[{ dirty: ' M AGENTS.md' }, 'local-changes'], [{ branch: 'main' }, 'wrong-branch'], [{ counts: '1\t2' }, 'diverged-from-published-branch']];
+  const cases = [[{ dirty: ' M AGENTS.md' }, 'local-changes'], [{ branch: 'codex/creator-hosting' }, 'wrong-branch'], [{ counts: '1\t2' }, 'diverged-from-published-branch']];
   for (const [options, reason] of cases) {
     const { git, calls } = fakeGit(options);
     const result = await checkKit({ progress: { inProgress: false }, installed, git, inspectEngine: engineState(true) });

@@ -47,7 +47,7 @@ Dot's default one-use sign-in links now target the Pages URL. The former
 
 Render service `ai-fighter-validator` (`srv-dbbohr8m7kps73flja7g`) uses the Free
 instance in Singapore, with no payment card added. It deploys the
-`codex/creator-hosting` branch. Auto-deploy is off; deploy reviewed commits
+`main` branch. Auto-deploy is off; deploy reviewed commits
 manually. `render.yaml` records the configuration.
 
 - Build: `npm ci --omit=dev`
