@@ -39,7 +39,7 @@ function check(error) {
  * `agentClient` (공방과 연대기, 2026-10-27): the cloud MCP's OAuth client for its in-process calls — the workshop labels notes and canon
  * versions with that agent's name. The public Edge handler never sets it.
  */
-export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null, limiter = null, decisionsReviewer = null }) {
+export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null, limiter = null, decisionsReviewer = null, responsesReviewer = null }) {
   const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release,limiter});
   const statisticsHandler = createFighterStatisticsHandler({ db });
   const accountHandler = createAccountHandler({ db, creatorLink });
@@ -89,7 +89,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
     return owner;
   }
   const workshopHandler = createWorkshopHandler({ db, authenticate: request => authenticate(request, false), rpc, agentClient });
-  const generationHandler = createGenerationHandler({ db, authenticate, present, decisionsReviewer });
+  const generationHandler = createGenerationHandler({ db, authenticate, present, decisionsReviewer, responsesReviewer });
   async function ownSubmission(owner, id) {
     const { data, error } = await db.from('af_submissions').select('*').eq('id', requireId(id)).eq('owner_id', owner).maybeSingle();
     check(error); if (!data) throw new Problem(404, 'not-found'); return data;

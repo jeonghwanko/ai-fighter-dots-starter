@@ -1,0 +1,112 @@
+// Operator-enrolled comparisons only. Never wired into ordinary generation reviews.
+import { Problem, readBody, sha256 } from './http.mjs';
+import { RULES, questions } from './decisions-review.mjs';
+
+export const RESPONSE_MODELS = Object.freeze(['gpt-6.1-sol', 'gpt-6-astra']);
+export const RESPONSE_REVIEW = Object.freeze({ rubric: 'hosted-sprite-v1', adapter: 'responses-choice-v1',
+  reasoning: 'medium', maxOutputTokens: 1800, timeoutMs: 110_000 });
+const OPTIONS = ['clear', 'defect', 'unverified'];
+const invalid = () => { throw new Problem(422, 'invalid-benchmark-config'); };
+
+export function benchmarkConfig(config, stage) {
+  if (!config || typeof config !== 'object' || Array.isArray(config)
+    || Object.keys(config).some(k => !['model', 'questionNames'].includes(k)) || !RESPONSE_MODELS.includes(config.model)) invalid();
+  const all = questions(stage), names = config.questionNames;
+  if (!Array.isArray(names) || !names.length || new Set(names).size !== names.length
+    || names.some(name => !all.some(q => q.name === name))) invalid();
+  // Sol is the full first comparison. Astra may answer the frozen difficult subset in original order.
+  if (config.model === 'gpt-6.1-sol' && names.length !== all.length) invalid();
+  return { model: config.model, questions: all.filter(q => names.includes(q.name)) };
+}
+
+export function responsesRequest({ model, job, evidence, questionNames }) {
+  const selected = benchmarkConfig({ model, questionNames }, evidence.stage).questions;
+  const intent = { description: job.description, brief: job.brief, appearanceNote: job.appearance_note ?? null,
+    motionNote: job.motion_note ?? null, scope: evidence.scope, stage: evidence.stage };
+  const item = { type: 'object', properties: {
+    choice: { type: 'string', enum: OPTIONS },
+    reason: { type: 'string', maxLength: 400 },
+    frames: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 15 }, maxItems: 16 },
+  }, required: ['choice', 'reason', 'frames'], additionalProperties: false };
+  // input_json is serialized without altering its data; images, order, detail and durations are unchanged.
+  const content = [{ type: 'input_json', data: { designIntentNotObservations: intent } }, ...evidence.content]
+    .map(p => p.type === 'input_json' ? { type: 'input_text', text: JSON.stringify(p.data) } : p);
+  return { model, store: false, service_tier: 'default', reasoning: { effort: RESPONSE_REVIEW.reasoning },
+    max_output_tokens: RESPONSE_REVIEW.maxOutputTokens,
+    input: [{ role: 'developer', content: RULES + '\nAnswer exactly these questions using their choices. '
+      + 'Give a short visible-evidence reason and relevant zero-based candidate frame indices (empty if none). '
+      + 'Do not invent probabilities or confidence scores.\n' + JSON.stringify(selected) }, { role: 'user', content }],
+    text: { format: { type: 'json_schema', name: 'sprite_review', strict: true,
+      schema: { type: 'object', properties: Object.fromEntries(selected.map(q => [q.name, item])),
+        required: selected.map(q => q.name), additionalProperties: false } } } };
+}
+
+function usageOf(value) {
+  if (!value || typeof value !== 'object') return null;
+  const out = {};
+  for (const name of ['input_tokens', 'output_tokens', 'total_tokens'])
+    if (Number.isSafeInteger(value[name]) && value[name] >= 0) out[name] = value[name];
+  for (const [group, names] of [['input_tokens_details', ['cached_tokens', 'cache_write_tokens']], ['output_tokens_details', ['reasoning_tokens']]])
+    for (const name of names) if (Number.isSafeInteger(value[group]?.[name]) && value[group][name] >= 0)
+      (out[group] ??= {})[name] = value[group][name];
+  return Object.keys(out).length ? out : null;
+}
+function checksOf(value, model, names, count) {
+  if (value.model !== model || value.status !== 'completed' || !Array.isArray(value.output)) throw Error('invalid-response');
+  const parts = value.output.filter(o => o.type === 'message').flatMap(o => o.content ?? []);
+  if (parts.length !== 1 || parts[0].type !== 'output_text') throw Error('invalid-response');
+  const answers = JSON.parse(parts[0].text);
+  if (!answers || Array.isArray(answers) || Object.keys(answers).length !== names.length) throw Error('invalid-response');
+  const checks = {};
+  for (const name of names) {
+    const a = answers[name];
+    if (!a || Object.keys(a).sort().join(',') !== 'choice,frames,reason' || !OPTIONS.includes(a.choice)
+      || typeof a.reason !== 'string' || a.reason.length > 400 || a.reason.includes('\0') || !a.reason.isWellFormed()
+      || !Array.isArray(a.frames) || a.frames.length > 16 || new Set(a.frames).size !== a.frames.length
+      || a.frames.some(n => !Number.isSafeInteger(n) || n < 0 || n >= count)) throw Error('invalid-response');
+    checks[name] = { status: a.choice, choice: a.choice, reason: a.reason, frames: a.frames };
+  }
+  return checks;
+}
+
+export function createResponsesBenchmarkReviewer({ apiKey, enabled = false, fetcher = fetch } = {}) {
+  const active = enabled === true && typeof apiKey === 'string' && apiKey.trim().length > 0;
+  return { enabled: active, async review({ db, job, host, evidence, config }) {
+    if (!active) return { mode: 'off', status: 'disabled', advisory: true, visualApproval: false };
+    const selected = benchmarkConfig(config, evidence.stage), names = selected.questions.map(q => q.name);
+    const request = responsesRequest({ model: selected.model, job, evidence, questionNames: names });
+    const raw = JSON.stringify(request), requestSha256 = await sha256(new TextEncoder().encode(raw));
+    const binding = { images: evidence.binding, requestSha256, model: selected.model, rubric: RESPONSE_REVIEW.rubric,
+      adapter: RESPONSE_REVIEW.adapter, questionNames: names, reasoning: RESPONSE_REVIEW.reasoning,
+      maxOutputTokens: RESPONSE_REVIEW.maxOutputTokens, confidenceType: 'not-available', approvalGate: false };
+    const rpc = async (name, args) => {
+      const { data, error } = await db.rpc(name, args);
+      if (error) {
+        const code = ['review-limit', 'worker-required', 'benchmark-expired', 'benchmark-evidence-changed'].find(k => error.message?.includes(k));
+        throw new Problem(code === 'review-limit' ? 429 : code === 'worker-required' ? 403 : code === 'benchmark-expired' ? 410
+          : code ? 422 : 503, code ?? 'review-store-unavailable');
+      }
+      return data;
+    };
+    const claimed = await rpc('af_decision_review_start', { p_fingerprint: requestSha256,
+      p_stage: evidence.stage, p_scope: evidence.scope, p_binding: binding });
+    if (!claimed.started) return claimed.report;
+    const start = performance.now(); let requestId = null, providerHttpStatus = null, usage = null, report;
+    try {
+      const response = await fetcher('https://api.openai.com/v1/responses', { method: 'POST', redirect: 'error',
+        signal: AbortSignal.timeout(RESPONSE_REVIEW.timeoutMs), headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, body: raw });
+      providerHttpStatus = response.status;
+      const rid = response.headers.get('x-request-id');
+      requestId = /^req_[A-Za-z0-9_-]{1,120}$/.test(rid ?? '') ? rid : null;
+      if (!response.ok) { await response.body?.cancel(); throw Error('provider-refused'); }
+      const value = JSON.parse(new TextDecoder().decode(await readBody(response, 128 * 1024)));
+      usage = usageOf(value.usage);
+      report = { status: 'completed', checks: checksOf(value, selected.model, names, evidence.binding.filter(x => x.role === 'candidate').length) };
+    } catch {
+      report = { status: 'unverified', errorCode: 'provider-outcome-unverified',
+        checks: Object.fromEntries(names.map(name => [name, { status: 'unverified' }])) };
+    }
+    return rpc('af_decision_review_finish', { p_id: claimed.id, p_report: { ...claimed.report, ...report, requestId,
+      providerHttpStatus, usage, elapsedSeconds: (performance.now() - start) / 1000 } });
+  } };
+}

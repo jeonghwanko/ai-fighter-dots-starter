@@ -75,7 +75,7 @@ export function confirmedProfile(value) {
   return out;
 }
 
-export function createGenerationHandler({ db, authenticate, present, decisionsReviewer = null }) {
+export function createGenerationHandler({ db, authenticate, present, decisionsReviewer = null, responsesReviewer = null }) {
   async function call(name, args) {
     const { data, error } = await db.rpc(name, args);
     if (!error) return data;
@@ -290,7 +290,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   async function worker(request, parts, host) {
     const method = request.method, route = parts.join('/');
     if (method === 'POST' && parts[1] === 'decision-benchmarks' && parts.length === 3)
-      return { ok: true, review: await benchmarkReview({ db, reviewer: decisionsReviewer, host, caseId: id(parts[2]),
+      return { ok: true, review: await benchmarkReview({ db, reviewer: decisionsReviewer, responsesReviewer, host, caseId: id(parts[2]),
         body: await readJson(request, DECISIONS.bodyBytes) }) };
     if (method === 'POST' && parts[1] === 'jobs' && parts[3] === 'decisions' && parts.length === 4) {
       const lease = id(request.headers.get('x-generation-lease'));
