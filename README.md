@@ -105,8 +105,8 @@ See the [full creation workflow](docs/DOT-CREATION.md) for generation, revision,
 For a Dots VM, start with [Dots bootstrap, doctor and resume](docs/DOTS-QUICKSTART.md) and the
 [saved-environment Start instructions](docs/DOTS-START.md). The offline entry point is
 `node scripts/dots-workspace.mjs doctor --workspace <absolute-workspace>`; installation is explicit
-with `bootstrap --install`. A Git URL alone does not authorize generation. Use the service branch below,
-record its actual commit, and do not mistake an older main checkout for the current creator kit.
+with `bootstrap --install`. A Git URL alone does not authorize generation. Start from `main` (below) and
+record its actual commit.
 The Dots workflow reports unsupported image-output contracts as blocked; it does not read protected
 Codex sessions or claim that login/installation proves image generation or parent delivery.
 
@@ -118,6 +118,18 @@ cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run sprite:setup
 npm run sprite:status
+```
+
+Installed before 2026-10-29 from `codex/creator-hosting`? That branch is frozen, and the kit's readiness check now stops a checkout
+on it as the wrong branch. Commit or set aside any local changes, then move the checkout to `main` (a plain `git checkout main`
+fails in a single-branch clone):
+
+```sh
+git remote set-branches origin main
+git fetch origin
+git switch -C main origin/main
+npm ci --ignore-scripts
+npm run sprite:setup
 ```
 
 Setup downloads the pinned sprite-gen source into this checkout and installs it in a dedicated Python environment. Use Git clone; the GitHub source ZIP does not contain the submodule files. The status command checks installation, not generation access or quota.
@@ -141,6 +153,8 @@ Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same 
 If setup, generation, sign-in, registration, or gameplay fails, [open an issue](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues) with the failing step, expected and actual behavior, error message, and tool version or commit. Exclude credentials and private files. For generation or upload timeouts, check existing requests and outputs before retrying.
 
 Bug reports, clearer setup instructions, and reproducible examples are welcome. Read [AGENTS.md](AGENTS.md) before using an assistant to change this repository.
+Pull requests target `main` and merge only after the `test` workflow passes; `npm test` runs the same suite locally, including the
+strict type check of `api/`.
 
 | Resource | Use it for |
 | --- | --- |
