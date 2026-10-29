@@ -1,3 +1,4 @@
+// @ts-check
 // Per-caller brakes for unauthenticated routes. Stores only a keyed hash of the caller's address (af_rate_hits).
 //
 // Which header carries the real address on Supabase Edge is an operator setting, not a guess in code:

@@ -1,3 +1,4 @@
+// @ts-check
 // Classify only observable transport failures. Never return raw messages (URLs/tokens may be present).
 export function transportCode(error) {
   const seen = new Set(), queue = [error], messages = [], codes = [];

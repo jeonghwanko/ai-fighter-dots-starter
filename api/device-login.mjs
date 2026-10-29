@@ -1,3 +1,4 @@
+// @ts-check
 import { Problem, bearerToken, jsonResponse, readBody, sha256, verifiedUserId } from './http.mjs';
 import { CLIENT_LIMITS } from './client-limit.mjs';
 
@@ -70,6 +71,7 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
     const row = await call('af_device_login_approve', { p_owner: owner, p_user_code: code });
     return { ok: true, stage: 'device-login-approved', expiresAt: row.expiresAt };
   }
+  /** @returns {Promise<[Record<string, any>, number]>} */
   async function token(request) {
     const { deviceCode } = await body(request);
     if (typeof deviceCode !== 'string' || !DEVICE_CODE.test(deviceCode)) throw new Problem(400, 'invalid-device-code');

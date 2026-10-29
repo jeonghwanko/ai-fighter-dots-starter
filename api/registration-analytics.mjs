@@ -1,3 +1,4 @@
+// @ts-check
 import { jsonResponse, Problem, readBody } from './http.mjs';
 export const validClient = value => typeof value === 'string' && /^\d{1,20}\.\d{1,20}$/.test(value);
 const cors = { methods: 'POST, OPTIONS', headers: 'authorization, apikey, content-type' };

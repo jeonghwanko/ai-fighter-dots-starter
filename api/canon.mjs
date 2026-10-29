@@ -1,3 +1,4 @@
+// @ts-check
 // 공방과 연대기 (4단계, 2026-10-27): the shapes the workshop API accepts — a canon sheet, a note's evidence and proposal, a world's text and
 // factions. Pure checks; each returns the cleaned value or throws Problem(422). No Node-only imports: this file runs on Deno and Node.
 import { Problem, UUID } from './http.mjs';
@@ -117,8 +118,8 @@ export const nickname = value => text(value, 16, '/nickname', { min: 2, code: 'i
 /** A world's text fields (`partial`: only those given). */
 export function worldText(body, { partial = false } = {}) {
   const out = {};
-  for (const [key, max, min] of [['name', WORLD_LIMITS.name, 1], ['tagline', WORLD_LIMITS.tagline, 0], ['description', WORLD_LIMITS.description, 0],
-    ['place', WORLD_LIMITS.place, 0]]) {
+  for (const [key, max, min] of /** @type {[string, number, number][]} */ ([['name', WORLD_LIMITS.name, 1], ['tagline', WORLD_LIMITS.tagline, 0], ['description', WORLD_LIMITS.description, 0],
+    ['place', WORLD_LIMITS.place, 0]])) {
     if (body[key] === undefined) { if (!partial && key === 'name') throw invalid('invalid-world', `/${key}`); continue; }
     if (min === 0 && typeof body[key] === 'string' && body[key].trim() === '') { out[key] = ''; continue; }
     out[key] = text(body[key], max, `/${key}`, { min, lines: key === 'description', code: 'invalid-world' });

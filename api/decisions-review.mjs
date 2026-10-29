@@ -1,5 +1,6 @@
+// @ts-check
 // Server-only advisory review. The caller supplies evidence, never a model, prompt, endpoint or credential.
-import { Buffer } from 'node:buffer';
+import { decodeBase64, encodeBase64 } from './base64.mjs';
 import { Problem, readBody, sha256 } from './http.mjs';
 import { probeImage } from './image-probe.mjs';
 import { sequencePresentation, SEQUENCE_METHODS, PAIRED_SEQUENCE_METHOD, BENCHMARK_TIMEOUT_MS } from './sequence-benchmark.mjs';
@@ -24,11 +25,6 @@ const RUBRICS = {
     contact: 'Is there visible stance sliding or contradictory contact? Without sufficient visible feet and a stable ground reference, use unverified.' },
 };
 const invalid = () => { throw new Problem(422, 'invalid-review'); };
-function base64(bytes) {
-  let text = '';
-  for (let i = 0; i < bytes.length; i += 8192) text += String.fromCharCode(...bytes.subarray(i, i + 8192));
-  return btoa(text);
-}
 function object(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !keys.includes(k))) invalid();
   return value;
@@ -56,16 +52,7 @@ async function parseEvidence(body, native) {
     // Inline bytes only: the service cannot fetch a host-chosen URL (SSRF) or a local path.
     const match = /^data:image\/(png|jpeg|webp);base64,([A-Za-z0-9+/]+={0,2})$/.exec(image.dataUrl);
     if (!match) invalid();
-    let bytes;
-    try {
-      if (native) {
-        // Buffer's native codec avoids a binary JS string and a callback per byte on long research sequences.
-        // Preserve atob's accepted padding/length rules; Buffer alone silently accepts malformed tails.
-        const encoded = match[2];
-        if (encoded.length % 4 === 1 || (encoded.endsWith('=') && encoded.length % 4 !== 0)) invalid();
-        bytes = Buffer.from(encoded, 'base64');
-      } else bytes = Uint8Array.from(atob(match[2]), c => c.charCodeAt(0));
-    } catch { invalid(); }
+    let bytes; try { bytes = decodeBase64(match[2]); } catch { invalid(); }
     if (bytes.length > DECISIONS.imageBytes) invalid();
     const info = probeImage(bytes);
     if (!info || info.type !== `image/${match[1]}` || info.width < 1 || info.height < 1 || info.width > 2048 || info.height > 2048) invalid();
@@ -84,8 +71,7 @@ async function parseEvidence(body, native) {
     const record = { role: image.role, sha256: hash, width: info.width, height: info.height,
       ...(image.role === 'candidate' ? { index: candidates - 1, durationMs: image.durationMs } : {}) };
     binding.push(record);
-    content.push({ type: 'input_json', data: record }, { type: 'input_image', detail: 'original',
-      image_url: `data:${info.type};base64,${native ? bytes.toString('base64') : base64(bytes)}` });
+    content.push({ type: 'input_json', data: record }, { type: 'input_image', detail: 'original', image_url: `data:${info.type};base64,${encodeBase64(bytes)}` });
   }
   if (references > 3 || (stage === 'input' && candidates !== 0) || (stage === 'pose' && candidates !== 1)
     || (stage === 'sequence' && (references !== 1 || (native ? candidates < 2 || candidates > 64 : candidates !== (scope === 'walk' ? 16 : 12))))) invalid();
@@ -138,6 +124,7 @@ export async function decisionsRequest({ job, evidence, sequenceConfig }) {
   const presentation = sequenceConfig === undefined || paired ? null : await sequencePresentation(evidence, sequenceConfig);
   const request = { model: DECISIONS.model, input: [{ role: 'developer', content: RULES + (presentation?.rules ?? '') },
     { role: 'user', content: [{ type: 'input_json', data: { designIntentNotObservations: intent } }, ...(presentation?.content ?? evidence.content)] }], questions: qs };
+  /** @type {Record<string, any> | undefined} */
   let researchBinding = presentation?.binding;
   if (paired) {
     const baseline = await sequencePresentation(evidence, { ...sequenceConfig, method: SEQUENCE_METHODS[0] });
@@ -161,6 +148,7 @@ export async function decisionsRequest({ job, evidence, sequenceConfig }) {
   return { request, raw, binding, fingerprint };
 }
 
+/** @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch }} [options] */
 export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fetch } = {}) {
   const active = enabled === true && typeof apiKey === 'string' && apiKey.trim().length > 0;
   return {

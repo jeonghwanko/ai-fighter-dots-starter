@@ -1,20 +1,22 @@
+// @ts-check
 // Standard WebCrypto envelope; only the requesting VM can open the temporary grant.
+import { decodeBase64, encodeBase64 } from './base64.mjs';
 import { Problem, UUID, sha256 } from './bytes.mjs';
 
 export const SOURCE_BUCKET = 'af-creator-sources';
 export const SOURCE_LIMIT = 16 * 1024 * 1024;
 export const STORAGE_ORIGIN = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co';
-export const base64 = bytes => btoa(Array.from(new Uint8Array(bytes), b => String.fromCharCode(b)).join(''));
+export const base64 = encodeBase64;
 export function unbase64(value, maximum = 32768) {
   if (typeof value !== 'string' || value.length > maximum || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new Problem(400, 'invalid-envelope');
-  try { return Uint8Array.from(atob(value), c => c.charCodeAt(0)); } catch { throw new Problem(400, 'invalid-envelope'); }
+  try { return decodeBase64(value); } catch { throw new Problem(400, 'invalid-envelope'); }
 }
 export async function importVmPublicKey(request) {
   if (request?.version !== 1 || !UUID.test(request.requestId ?? '')) throw new Problem(400, 'invalid-vm-request');
   try {
     const raw = unbase64(request.publicKey, 2048);
     const key = await crypto.subtle.importKey('spki', raw, { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['encrypt']);
-    if (key.algorithm.modulusLength !== 2048) throw Error('key-size');
+    if (/** @type {RsaHashedKeyAlgorithm} */ (key.algorithm).modulusLength !== 2048) throw Error('key-size');
     return { key, sha256: await sha256(raw) };
   } catch { throw new Problem(400, 'invalid-vm-public-key'); }
 }

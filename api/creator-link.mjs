@@ -1,3 +1,4 @@
+// @ts-check
 import { Problem } from './http.mjs';
 
 /** Must match Supabase Auth's "Email OTP expiration" setting; the page cannot redeem a token after Auth expires it. */

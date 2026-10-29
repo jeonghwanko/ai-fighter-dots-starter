@@ -1,3 +1,4 @@
+// @ts-check
 import { createDecisionsReviewer } from './decisions-review.mjs';
 import { createSolFollowupReviewer, followupQuestions, SOL_FOLLOWUP } from './responses-benchmark.mjs';
 

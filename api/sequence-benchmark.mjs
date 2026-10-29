@@ -1,3 +1,4 @@
+// @ts-check
 // Fixed, label-free research presentations. Not a production acceptance policy.
 import { Problem, sha256 } from './http.mjs';
 

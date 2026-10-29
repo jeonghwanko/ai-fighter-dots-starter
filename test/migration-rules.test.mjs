@@ -20,7 +20,8 @@ test('a migration restates a changed function instead of string-patching its liv
 
 test('a function names the rows it updates or deletes (the API role preloads safeupdate)', async () => {
   // Production's authenticator role loads safeupdate: an UPDATE or DELETE without WHERE fails, but only when the API calls it — a
-  // migration runs as postgres and a local database has no safeupdate, so neither shows it (the generation heartbeat, 2026-10-27).
+  // migration runs as postgres, so it never shows (the generation heartbeat, 2026-10-27). The test database replays safeupdate on
+  // the function statements tests run (helpers/fighter-database.mjs); this check also covers branches and functions no test reaches.
   // Each function's last definition across the migrations is the live one.
   const latest = new Map();
   for (const name of migrations) {

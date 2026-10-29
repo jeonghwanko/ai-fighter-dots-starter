@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ALIGN_AGAIN, BRIEF_SCHEMA, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
+import { ALIGN_AGAIN, BEAT_LIMIT, BRIEF_SCHEMA, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
   submissionOutcome, withProfile } from './generation-stages.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 
@@ -440,6 +440,9 @@ test('a run the gate refuses is made from the walk that passed, played faster, a
   assert.ok(!calls.some(a => a.includes('gen')));
   const derived = calls.find(a => a.includes('video-cycle-align') && path.basename(flag(a, '--loop-dir')).startsWith('run-from-walk-'));
   assert.equal(flag(derived, '--length'), '12');
+  // Every run alignment takes the run's beat limit; the walk's keep the engine's.
+  const aligns = calls.filter(a => a.includes('video-cycle-align'));
+  for (const a of aligns) assert.equal(a.includes('--beat-limit') ? flag(a, '--beat-limit') : null, flag(a, '--length') === '12' ? String(BEAT_LIMIT.run) : null);
   assert.ok(existsSync(path.join(flag(derived, '--loop-dir'), 'judge', 'judge-prompt.txt')));
   assert.ok(calls.some(a => a[0] === 'motions.py' && a[1] === 'judge-request' && a[2] === 'run' && a[3].startsWith(flag(derived, '--loop-dir'))));
   // The run plays RUN_FROM_WALK_PACE times the walk's filmed length; the walk as filmed. The run's loop review names where it came from.
