@@ -140,6 +140,11 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
     const row = (await sql.query('select owner_id, id from public.af_submissions where idempotency_key = $1', [held.id])).rows[0];
     assert.equal(row.owner_id, owner);
     for (const a of example.assets) await sql.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta', `${owner}/${row.id}/${a.id}.webp`, { size: a.bytes }]);
+    // An upload past its window is refused by its own code, as on the creator's routes, not as a database fault (API 점검 2026-10-29).
+    await sql.query("update public.af_submissions set expires_at = now() - interval '1 minute' where id = $1", [row.id]);
+    const expired = await work('POST', `jobs/${held.id}/submission/submit`, {}, lease);
+    assert.deepEqual([expired.status, expired.body.code], [409, 'upload-expired']);
+    await sql.query("update public.af_submissions set expires_at = now() + interval '1 day' where id = $1", [row.id]);
     assert.equal((await work('POST', `jobs/${held.id}/submission/submit`, {}, lease)).body.stage, 'queued');
     await finish(held, 'ok', { submissionId: row.id });
     read = (await call('GET', `generations/${job.id}`)).body.job;

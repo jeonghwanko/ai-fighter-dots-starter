@@ -6,6 +6,20 @@ import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/valid
 import { Problem, readBody, sha256, unstorableTextPath } from './http.mjs';
 
 export const BUCKET = 'ai-fighter-beta';
+/**
+ * The submission path's refusals (`af_create_submission`, `af_submit`, `af_finish`, profile edits) and their statuses, for every route
+ * that calls it. The hosted worker's routes kept their own copy: an expired upload came back to it as a database fault (503, which it
+ * retries) and the service-busy refusals with another status (API 점검 2026-10-29).
+ * @type {Readonly<Record<string, number>>}
+ */
+export const SUBMISSION_STATUS = Object.freeze({
+  'idempotency-conflict': 409, 'fighter-quota': 409, 'fighter-removed': 409, 'fighter-unchanged': 409, 'fighter-changed': 409,
+  'profile-not-editable': 409, 'open-submission-exists': 409, 'submission-quota': 409, 'storage-budget-full': 409, 'assets-incomplete': 409,
+  'upload-expired': 409, 'stale-validation': 409, 'submissions-paused': 409, 'beta-capacity': 409,
+  'not-found': 404, 'fighter-not-found': 404, 'rate-limit': 429, 'account-disabled': 403,
+  'validator-version': 400, 'validation-incomplete': 400, 'validation-result-limit': 400,
+  'byte-budget-mismatch': 422, 'profile-only-required': 422,
+});
 /** @type {(submission: { owner_id: string, asset_source_submission?: string | null, id: string }, asset: { id: string }) => string} */
 export const objectKey = (submission, asset) => `${submission.owner_id}/${submission.asset_source_submission ?? submission.id}/${asset.id}.webp`;
 

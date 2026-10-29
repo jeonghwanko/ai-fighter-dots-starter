@@ -9,7 +9,7 @@ import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
 import { createWorkshopHandler, workshopRoute } from './workshop.mjs';
 import { createGenerationHandler, generationRoute } from './generations.mjs';
 import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, verifiedUserId } from './http.mjs';
-import { BUCKET, checkedManifest, objectKey, storeAsset } from './submissions.mjs';
+import { BUCKET, SUBMISSION_STATUS, checkedManifest, objectKey, storeAsset } from './submissions.mjs';
 
 export { Problem, readBody, sha256 } from './http.mjs';
 export { BUCKET, objectKey } from './submissions.mjs';
@@ -24,7 +24,7 @@ const ROSTER_CORS = { methods: 'GET, OPTIONS' };
  */
 /**
  * A registered fighter's admission, as present() reads it from af_fighters.
- * @typedef {{ runtime_approved: boolean, runtime_scope: string | null, moderation_reason: string }} Admission
+ * @typedef {{ submission_id: string, runtime_approved: boolean, runtime_scope: string | null, moderation_reason: string }} Admission
  */
 /**
  * An af_roster_entries row (af_fighters with its maker) as the roster lists it; `profile` is the registered package's.
@@ -32,28 +32,33 @@ const ROSTER_CORS = { methods: 'GET, OPTIONS' };
  *   runtime_scope: string | null, runtime_manifest_sha: string | null, duel_approved: boolean, duel_manifest_sha: string | null,
  *   made_with: string | null }} RosterFighter
  */
-/** @type {(value: any) => string} An id from the path, a header or a body, checked here. */
-const requireId = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value; };
+/**
+ * @type {(value: any) => string} An id from the path, a header or a body, checked here, lowercase as the database writes it: an
+ * uppercase fighter id made a retried edit's own key a conflict (API 점검 2026-10-29).
+ */
+const requireId = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value.toLowerCase(); };
 // rejected and expired uploads are final: nothing remains to wait for, so pending is empty.
 /** @type {(row: { status: string, expires_at: string }) => boolean} */
 const uploadExpired = row => row.status === 'uploading' && Date.parse(row.expires_at) <= Date.now();
-/** @type {(row: Submission, admission?: Admission | null) => object} */
-const view = (row, admission) => ({ ok: true, stage: row.status, submissionId: row.id, manifestSha256: row.manifest_sha,
-  fighterId: row.fighter_id ?? null, validation: row.validation ?? null, ...(uploadExpired(row) ? { code: 'upload-expired' } : {}),
-  runtimeApproved: admission?.runtime_approved === true, runtimeScope: admission?.runtime_scope ?? null,
-  ...(row.status === 'registered' ? { availability: admission?.runtime_approved ? 'active' : 'removed', moderationReason: admission?.moderation_reason ?? '' } : {}),
-  pending: row.status === 'registered' ? []
-    : row.status === 'rejected' || uploadExpired(row) ? [] : ['server-validation', 'registration'] });
-const conflictCodes = ['idempotency-conflict','fighter-quota','fighter-removed','fighter-unchanged','fighter-changed','profile-not-editable','open-submission-exists','submission-quota','storage-budget-full','assets-incomplete','upload-expired','stale-validation','submissions-paused','beta-capacity'];
+/**
+ * A registered submission the fighter has moved on from (a later edit or update) is `superseded`, naming the fighter's current one;
+ * only the current one carries the fighter's admission.
+ * @type {(row: Submission, fighter?: Admission | null) => object}
+ */
+const view = (row, fighter) => {
+  const superseded = Boolean(fighter && fighter.submission_id !== row.id), admission = superseded ? null : fighter;
+  return { ok: true, stage: row.status, submissionId: row.id, manifestSha256: row.manifest_sha,
+    fighterId: row.fighter_id ?? null, validation: row.validation ?? null, ...(uploadExpired(row) ? { code: 'upload-expired' } : {}),
+    runtimeApproved: admission?.runtime_approved === true, runtimeScope: admission?.runtime_scope ?? null,
+    ...(row.status !== 'registered' ? {} : superseded ? { availability: 'superseded', currentSubmissionId: fighter?.submission_id }
+      : { availability: admission?.runtime_approved ? 'active' : 'removed', moderationReason: admission?.moderation_reason ?? '' }),
+    pending: row.status === 'registered' ? []
+      : row.status === 'rejected' || uploadExpired(row) ? [] : ['server-validation', 'registration'] };
+};
 /** @param {{ message: string } | null} error  A database call's error, if any. */
 function check(error) {
   if (!error) return;
-  if (conflictCodes.includes(error.message)) throw new Problem(409, error.message);
-  if (error.message === 'not-found' || error.message === 'fighter-not-found') throw new Problem(404, error.message);
-  if (error.message === 'rate-limit') throw new Problem(429, 'rate-limit');
-  if (error.message === 'account-disabled') throw new Problem(403, 'account-disabled');
-  if (['validator-version','validation-incomplete','validation-result-limit'].includes(error.message)) throw new Problem(400, error.message);
-  if (['byte-budget-mismatch','profile-only-required'].includes(error.message)) throw new Problem(422, error.message);
+  if (Object.hasOwn(SUBMISSION_STATUS, error.message)) throw new Problem(SUBMISSION_STATUS[error.message], error.message);
   throw new Problem(503, 'database-unavailable');
 }
 /**
@@ -77,7 +82,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
   /** @param {Submission} row */
   async function present(row) {
     if (row.status !== 'registered') return view(row);
-    const { data, error } = await db.from('af_fighters').select('runtime_approved,runtime_scope,moderation_reason').eq('submission_id', row.id).maybeSingle();
+    // By the fighter, not by this submission: an older submission of an edited fighter found none and read as removed (API 점검 2026-10-29).
+    const { data, error } = await db.from('af_fighters').select('submission_id,runtime_approved,runtime_scope,moderation_reason').eq('id', row.fighter_id).maybeSingle();
     check(error); return view(row, data);
   }
   /** One Storage call signs every asset of a submission, in manifest order. @param {Submission} row @param {number} seconds @returns {Promise<string[]>} */

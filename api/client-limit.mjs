@@ -8,10 +8,34 @@
 // global limits apply; a limiter fault also lets the request through to those global limits.
 const SOURCES = ['cf-connecting-ip', 'forwarded-last'];
 const IPV4 = /^(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}$/;
-const IPV6 = /^[0-9a-f:]{2,39}$/i;
 
 /**
- * The caller's address from the configured header, or null when it is missing or not an address.
+ * An IPv6 address's eight 16-bit groups, or null when it is not one. A dotted IPv4 tail (`::ffff:192.0.2.1`) is its last two groups.
+ * @param {string} value  Lowercase.
+ * @returns {number[] | null}
+ */
+function ipv6Groups(value) {
+  let text = value;
+  const dotted = /^(.*:)(\d+\.\d+\.\d+\.\d+)$/.exec(text);
+  if (dotted) {
+    if (!IPV4.test(dotted[2])) return null;
+    const [a, b, c, d] = dotted[2].split('.').map(Number);
+    text = `${dotted[1]}${(a << 8 | b).toString(16)}:${(c << 8 | d).toString(16)}`;
+  }
+  const halves = text.split('::');
+  if (halves.length > 2) return null;
+  const [head, tail] = halves.map(half => half ? half.split(':') : []);
+  const missing = 8 - head.length - (tail?.length ?? 0);
+  // `::` stands for at least one group of zeros; without it the eight groups are all written.
+  if (tail ? missing < 1 : missing !== 0) return null;
+  const groups = [...head, ...Array(tail ? missing : 0).fill('0'), ...(tail ?? [])];
+  return groups.every(group => /^[0-9a-f]{1,4}$/.test(group)) ? groups.map(group => parseInt(group, 16)) : null;
+}
+
+/**
+ * The caller from the configured header, or null when it is missing or not an address. An IPv4 address is itself; an IPv6 address is
+ * its /64 (`2001:db8:0:0::/64`): one host or network is given a whole /64, so keyed by address it had a fresh brake per request
+ * (API 점검 2026-10-29). IPv4 written as IPv6 (`::ffff:198.51.100.7`) is that IPv4 address.
  * @param {Request} request
  * @param {string} source
  * @returns {string | null}
@@ -21,7 +45,13 @@ export function clientAddress(request, source) {
   if (source === 'cf-connecting-ip') value = request.headers.get('cf-connecting-ip');
   else if (source === 'forwarded-last') value = request.headers.get('x-forwarded-for')?.split(',').at(-1) ?? null;
   value = value?.trim().toLowerCase() ?? null;
-  return value && (IPV4.test(value) || (value.includes(':') && IPV6.test(value))) ? value : null;
+  if (!value) return null;
+  if (IPV4.test(value)) return value;
+  const groups = value.includes(':') ? ipv6Groups(value) : null;
+  if (!groups) return null;
+  if (groups.slice(0, 5).every(group => group === 0) && groups[5] === 0xffff)
+    return [groups[6] >> 8, groups[6] & 255, groups[7] >> 8, groups[7] & 255].join('.');
+  return `${groups.slice(0, 4).map(group => group.toString(16)).join(':')}::/64`;
 }
 
 /** @param {string} secret @param {string} text */

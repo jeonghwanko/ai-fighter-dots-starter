@@ -20,7 +20,7 @@ before(async () => {
 after(async () => { globalThis.fetch = realFetch; await rm(directory, { recursive: true, force: true }); });
 
 /** A claimed job served by a stub API. `download(id)` returns the asset response or throws. */
-async function serve(download, text = manifestText, { finishFailures = 0, release = 200 } = {}) {
+async function serve(download, text = manifestText, { finishFailures = 0, release = 200, finishRefusal = null } = {}) {
   const calls = { finish: null, finishAttempts: 0, release: null, inFlight: 0, maxInFlight: 0 };
   const manifestSha256 = await sha256(new TextEncoder().encode(text));
   globalThis.fetch = async (target, init) => {
@@ -29,6 +29,7 @@ async function serve(download, text = manifestText, { finishFailures = 0, releas
       manifestText: text, manifestSha256, files: manifest.assets.map(a => ({ ...a, downloadUrl: `${url}/storage/v1/object/sign/ai-fighter-beta/${a.id}.webp?token=t` })) });
     if (route.endsWith('/worker/finish')) {
       if (calls.finishAttempts++ < finishFailures) return Response.json({ ok: false, code: 'service-unavailable' }, { status: 503 });
+      if (finishRefusal) return Response.json({ ok: false, stage: 'api', code: finishRefusal.code }, { status: finishRefusal.status });
       calls.finish = JSON.parse(init.body); return Response.json({ ok: true, stage: calls.finish.passed ? 'registered' : 'rejected' });
     }
     if (route.endsWith('/worker/release')) { calls.release = JSON.parse(init.body); return Response.json({ ok: release === 200, stage: 'requeued' }, { status: release }); }
@@ -92,4 +93,17 @@ test('the first failed download stops the others before the job folder is remove
   const result = await runOnce(config);
   assert.equal(result.stage, 'retry-later');
   assert.ok(started < manifest.assets.length, `${started} of ${manifest.assets.length} downloads started`);
+});
+test('a finish the server refuses hands the job back instead of letting its lease spend an attempt (API 점검 2026-10-29)', async () => {
+  // A validator version the server does not take refused every valid package's finish; each lease then expired into one of three attempts.
+  let calls = await serve(ok, manifestText, { finishRefusal: { status: 400, code: 'validator-version' } });
+  const result = await runOnce(config);
+  assert.deepEqual([result.stage, result.code, result.requeued], ['retry-later', 'finish-refused-validator-version', true]);
+  assert.equal(calls.finishAttempts, 1); assert.equal(calls.release.code, 'finish-refused-validator-version');
+  // A lost lease is not this worker's to hand back, and a refused worker key stops the worker.
+  for (const refusal of [{ status: 409, code: 'stale-validation' }, { status: 401, code: 'worker-required' }]) {
+    calls = await serve(ok, manifestText, { finishRefusal: refusal });
+    await assert.rejects(runOnce(config), new RegExp(refusal.code));
+    assert.equal(calls.release, null);
+  }
 });

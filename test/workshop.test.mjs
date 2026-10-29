@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { profileFixture } from './helpers/profile-api-fixture.mjs';
+import { text } from '../api/canon.mjs';
 
 // Two accounts on one database: the fixture's owner and another, each with a bearer token.
 async function workshop() {
@@ -243,4 +244,23 @@ test('보강: relations and worlds take only fighters on the public stage; the c
     assert.equal(noted.status, 200);
     assert.equal((await call('GET', `story/${theirs}`, undefined, null)).body.notes[0].evidence[0].b, theirs);
   } finally { await f.sql.close(); }
+});
+
+test('a world edit with a malformed canon or removal changes nothing (API 점검 2026-10-29)', async () => {
+  const { f, call } = await workshop();
+  try {
+    const world = (await call('POST', 'worlds', { name: '네온 항구', nickname: '항구지기' })).body.world.id;
+    for (const extra of [{ canon: { post: 'not-an-id', on: true } }, { canon: { post: crypto.randomUUID() } }, { canon: 'x' }, { remove: 'not-an-id' }]) {
+      const refused = await call('PATCH', `worlds/${world}`, { name: '바뀐 이름', ...extra });
+      assert.ok(refused.status >= 400 && refused.status < 500, JSON.stringify(refused.body));
+      assert.equal((await call('GET', `worlds/${world}`, undefined, null)).body.world.name, '네온 항구', JSON.stringify(extra));
+    }
+    assert.equal((await call('PATCH', `worlds/${world}`, { name: '바뀐 이름' })).body.world.name, '바뀐 이름');
+  } finally { await f.sql.close(); }
+});
+
+test('Windows line endings are line breaks in a multi-line field, and still refused in a one-line field (API 점검 2026-10-29)', () => {
+  assert.equal(text('첫 줄\r\n둘째 줄\r셋째 줄', 100, '/body', { lines: true }), '첫 줄\n둘째 줄\n셋째 줄');
+  assert.throws(() => text('첫 줄\r\n둘째 줄', 100, '/name'), /invalid-text/);
+  assert.throws(() => text('제어\u0007문자', 100, '/body', { lines: true }), /invalid-text/);
 });

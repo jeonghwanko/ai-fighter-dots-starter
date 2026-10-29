@@ -12,7 +12,15 @@ test('the address never comes from the client-written first X-Forwarded-For entr
   assert.equal(clientAddress(request(spoofed), 'forwarded-last'), '203.0.113.9');
   assert.equal(clientAddress(request(spoofed), 'cf-connecting-ip'), '198.51.100.7');
   assert.equal(clientAddress(request(spoofed), 'x-forwarded-for'), null, 'unknown sources read nothing');
-  assert.equal(clientAddress(request({ 'cf-connecting-ip': '2001:DB8::1' }), 'cf-connecting-ip'), '2001:db8::1');
+  // IPv6 by its /64: one host or network holds a whole /64, so a key per address was one per request (API 점검 2026-10-29).
+  const v6 = value => clientAddress(request({ 'cf-connecting-ip': value }), 'cf-connecting-ip');
+  assert.equal(v6('2001:DB8::1'), '2001:db8:0:0::/64');
+  for (const same of ['2001:db8::2', '2001:0db8:0000:0000:ffff:1:2:3', '2001:db8:0:0:1::', '2001:db8::192.0.2.1']) assert.equal(v6(same), '2001:db8:0:0::/64', same);
+  assert.equal(v6('2001:db8:0:1::1'), '2001:db8:0:1::/64');
+  // IPv4 written as IPv6 is that IPv4 address.
+  assert.equal(v6('::ffff:198.51.100.7'), '198.51.100.7'); assert.equal(v6('::FFFF:c633:6407'), '198.51.100.7');
+  for (const bad of ['2001:db8::1::2', '1:2:3:4:5:6:7:8:9', '2001:db8::12345', '::ffff:999.1.1.1', 'fe80::1%eth0', ':::'])
+    assert.equal(v6(bad), null, bad);
   for (const bad of ['', 'unknown', '999.1.1.1', '1.2.3', 'not:an;address'])
     assert.equal(clientAddress(request({ 'cf-connecting-ip': bad }), 'cf-connecting-ip'), null, bad);
 });

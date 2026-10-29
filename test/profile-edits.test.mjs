@@ -167,3 +167,25 @@ test('the fighting style is edited without new art; null removes it, and nothing
       p_text: stats, p_sha: 'a'.repeat(64) })).error.message, 'profile-only-required');
   } finally { await f.sql.close(); }
 });
+
+test('an edited fighter\'s older submission reads as superseded, not removed; an uppercase id retries the same edit (API 점검 2026-10-29)', async () => {
+  const f = await profileFixture();
+  try {
+    const first = await f.register(), id = first.fighter_id, key = crypto.randomUUID();
+    const edit = await f.request(id.toUpperCase(), first.manifest_sha, { name: 'Upper edit' }, key);
+    assert.equal(edit.status, 200, await edit.clone().text());
+    const saved = await edit.json();
+    const retried = await f.request(id.toUpperCase(), first.manifest_sha, { name: 'Upper edit' }, key);
+    assert.equal(retried.status, 200, await retried.clone().text()); assert.equal((await retried.json()).submissionId, saved.submissionId);
+    const read = async submission => (await f.handle(new Request(`http://localhost/ai-fighter/submissions/${submission}`,
+      { headers: { authorization: 'Bearer local-profile-test-token' } }))).json();
+    const old = await read(first.id);
+    assert.deepEqual([old.stage, old.availability, old.currentSubmissionId, old.runtimeApproved], ['registered', 'superseded', saved.submissionId, false]);
+    const current = await read(saved.submissionId);
+    assert.deepEqual([current.availability, current.runtimeApproved, 'currentSubmissionId' in current], ['active', true, false]);
+    // A removed fighter still reads as removed, on its current submission.
+    await f.sql.query(`update af_fighters set review_state='rejected',runtime_approved=false,runtime_scope=null,runtime_manifest_sha=null,duel_approved=false,
+      duel_manifest_sha=null,moderation_reason='test' where id=$1`, [id]);
+    assert.deepEqual([(await read(saved.submissionId)).availability, (await read(saved.submissionId)).moderationReason], ['removed', 'test']);
+  } finally { await f.sql.close(); }
+});
