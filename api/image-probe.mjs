@@ -1,3 +1,4 @@
+// @ts-check
 // A picture's kind and dimensions from its header bytes (PNG, JPEG, WebP), without decoding it. No Node-only imports: Deno and Node.
 // Null when the bytes are not one of the three kinds or their header does not read.
 

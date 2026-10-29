@@ -1,3 +1,4 @@
+// @ts-check
 // 호스팅 생성 (2026-10-27): a creator asks our generation worker to make his fighter. The creator's routes (`generations/…`, his own token)
 // and the worker's (`generation-worker/…`, a worker key of scope `generation`). The state machine, quotas and leases are the database's
 // (`supabase/migrations/20261028100000_oddbout_hosted_generation.sql`); pictures stay in the private bucket `af-generation` and reach a reader
@@ -60,7 +61,7 @@ export function confirmedProfile(value) {
   const body = fields(value, ['name', 'description', 'names', 'lines', 'stats']);
   const out = { name: text(body.name, profileLimits.name, '/profile/name', { code: 'invalid-profile' }),
     description: text(body.description, profileLimits.description, '/profile/description', { lines: true, code: 'invalid-profile' }) };
-  for (const [key, allowed, max] of [['names', profileLimits.languages, profileLimits.displayName], ['lines', profileLimits.lineKeys, profileLimits.line]]) {
+  for (const [key, allowed, max] of /** @type {[string, string[], number][]} */ ([['names', profileLimits.languages, profileLimits.displayName], ['lines', profileLimits.lineKeys, profileLimits.line]])) {
     if (body[key] === undefined || body[key] === null) continue;
     const part = fields(body[key], allowed), kept = {};
     for (const name of allowed) if (part[name] !== undefined && part[name] !== null && part[name] !== '')

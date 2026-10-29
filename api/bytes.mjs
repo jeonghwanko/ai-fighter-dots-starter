@@ -1,3 +1,4 @@
+// @ts-check
 // Environment-neutral byte validation, shared by the server and the VM receiver.
 export const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 export class Problem extends Error { constructor(status, code, errors) { super(code); this.status = status; this.errors = errors; } }

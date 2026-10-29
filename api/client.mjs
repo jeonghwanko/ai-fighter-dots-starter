@@ -1,3 +1,4 @@
+// @ts-check
 import { readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { createClient } from '@supabase/supabase-js';
 import { transportCode } from './connection-errors.mjs';
@@ -11,16 +12,20 @@ export function validProjectUrl(url) {
 export const transferTimeoutMs = bytes => 30000 + Math.ceil(Math.max(0, bytes || 0) / 65536) * 1000;
 const bodyBytes = body => body == null ? 0 : typeof body === 'string' ? Buffer.byteLength(body) : body.byteLength ?? 0;
 
+/**
+ * @param {string} url @param {string} token @param {string} route
+ * @param {{ method?: string, body?: any, headers?: Record<string, string>, timeoutMs?: number }} [options]
+ */
 export async function apiRequest(url, token, route, { method = 'GET', body, headers = {}, timeoutMs = transferTimeoutMs(bodyBytes(body)) } = {}) {
   let response;
   try { response = await runtimeFetch(`${url}/functions/v1/ai-fighter/${route}`, { method, body, headers: { authorization: `Bearer ${token}`, ...headers }, redirect: 'error', signal: AbortSignal.timeout(timeoutMs) }); }
   catch (error) { throw new Error(transportCode(error)); }
   let result;
   try { result = await response.json(); } catch {
-    const error = new Error(response.ok ? 'invalid-api-response' : `api-http-${response.status}`);
+    const error = /** @type {Error & { status?: number }} */ (new Error(response.ok ? 'invalid-api-response' : `api-http-${response.status}`));
     error.status = response.status; throw error;
   }
-  if (!response.ok) { const error = new Error(result?.code ?? `api-http-${response.status}`); error.status = response.status; throw error; }
+  if (!response.ok) { const error = /** @type {Error & { status?: number }} */ (new Error(result?.code ?? `api-http-${response.status}`)); error.status = response.status; throw error; }
   if (!result || typeof result !== 'object') throw new Error('invalid-api-response');
   return result;
 }

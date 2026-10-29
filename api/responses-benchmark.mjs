@@ -1,3 +1,4 @@
+// @ts-check
 // Shared Responses transport. Production uses the fixed Sol-only factory below;
 // arbitrary comparison models remain restricted to operator-enrolled benchmarks.
 import { Problem, readBody, sha256 } from './http.mjs';
@@ -51,7 +52,7 @@ function usageOf(value) {
   const out = {};
   for (const name of ['input_tokens', 'output_tokens', 'total_tokens'])
     if (Number.isSafeInteger(value[name]) && value[name] >= 0) out[name] = value[name];
-  for (const [group, names] of [['input_tokens_details', ['cached_tokens', 'cache_write_tokens']], ['output_tokens_details', ['reasoning_tokens']]])
+  for (const [group, names] of /** @type {[string, string[]][]} */ ([['input_tokens_details', ['cached_tokens', 'cache_write_tokens']], ['output_tokens_details', ['reasoning_tokens']]]))
     for (const name of names) if (Number.isSafeInteger(value[group]?.[name]) && value[group][name] >= 0)
       (out[group] ??= {})[name] = value[group][name];
   return Object.keys(out).length ? out : null;
@@ -76,6 +77,7 @@ function checksOf(value, model, names, count) {
   return checks;
 }
 
+/** @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch }} [options] */
 export function createResponsesBenchmarkReviewer({ apiKey, enabled = false, fetcher = fetch } = {}) {
   return createReviewer({ apiKey, enabled, fetcher, select: ({ config, evidence }) => benchmarkConfig(config, evidence.stage) });
 }
@@ -105,6 +107,7 @@ export function createSolFollowupReviewer(options = {}) {
     } });
 }
 
+/** @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch, select: (context: any) => any, timeoutMs?: number }} options */
 function createReviewer({ apiKey, enabled = false, fetcher = fetch, select, timeoutMs = RESPONSE_REVIEW.timeoutMs }) {
   const active = enabled === true && typeof apiKey === 'string' && apiKey.trim().length > 0;
   return { enabled: active, async review({ db, job, host, lease, evidence, config, primary }) {

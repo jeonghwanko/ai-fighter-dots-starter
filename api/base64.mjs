@@ -1,3 +1,4 @@
+// @ts-check
 // Native base64 for Deno and Node. bytes.mjs and http.mjs stay free of Node imports; Buffer enters here only.
 import { Buffer } from 'node:buffer';
 
