@@ -4,7 +4,7 @@ import { createServer } from 'node:net';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { login, logout, projectSettings, waitForCallback } from '../scripts/login.mjs';
+import { finishPasteLogin, login, logout, parsePastedCallback, pendingDeviceLoginPath, pendingLoginPath, projectSettings, startDeviceLogin, startPasteLogin, waitDeviceLogin, waitForCallback } from '../scripts/login.mjs';
 
 const URL_ = 'https://abcdefghijklmnopqrst.supabase.co', KEY = 'sb_publishable_fixtureFixtureFixture01';
 const jwt = payload => `e30.${Buffer.from(JSON.stringify(payload)).toString('base64url')}.sig`;
@@ -72,7 +72,8 @@ test('login runs PKCE through a state-bound loopback callback and writes only th
   assert.deepEqual(Object.keys(file), ['url', 'publishableKey', 'accessToken', 'refreshToken']);
   assert.equal(file.refreshToken, 'refresh-user-1');
   assert.equal(result.userId, 'user-1');
-  assert.ok(logs.some(line => line.includes('초대를 요청')));
+  assert.ok(logs.some(line => line.includes('이용이 제한')));
+  assert.ok(logs.every(line => !line.includes('초대를 요청')));
   assert.ok(logs.every(line => !line.includes('refresh-user-1') && !line.includes(file.accessToken)));
 
   // The same user may log in again; a different user would silently replace an operator-issued session.
@@ -151,4 +152,175 @@ test('the callback rejects a denied login, a bad code, a busy port, a timeout an
   try { await assert.rejects(waitForCallback({ port, state, timeoutMs: 5000 }), /login-port-busy/); }
   finally { await new Promise(resolve => blocker.close(resolve)); }
   await assert.rejects(waitForCallback({ port, state, timeoutMs: 50 }), /login-timeout/);
+});
+
+/** A fake PKCE client: sign-in stores a verifier in the given storage; exchange requires that same verifier. */
+function fakePaste({ user = 'user-1', calls = {} } = {}) {
+  const createAuthClient = (url, key, options) => ({ auth: {
+    signInWithOAuth: async args => { calls.oauth = args; options.auth.storage.setItem('sb-fixture-auth-token-code-verifier', 'verifier-xyz');
+      return { data: { url: 'https://accounts.example/authorize?x=1&y=2' } }; },
+    exchangeCodeForSession: async code => { calls.code = code; calls.verifier = options.auth.storage.getItem('sb-fixture-auth-token-code-verifier');
+      if (calls.verifier !== 'verifier-xyz') return { error: { message: 'missing verifier' } };
+      return { data: { session: { access_token: jwt({ sub: user, exp: 9999999999 }), refresh_token: `refresh-${user}`, user: { id: user, email: 'player@example.com' } } } }; },
+  } });
+  return { createAuthClient, request: async () => ({ ok: true, account: { invited: true } }) };
+}
+
+test('paste login keeps the PKCE verifier on this host and completes from the pasted loopback address', async () => {
+  const sessionPath = path.join(directory, 'paste', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  const calls = {}, logs = [], fake = fakePaste({ calls });
+  const started = await startPasteLogin({ argv: ['--url', URL_, '--key', KEY], log: line => logs.push(line), createAuthClient: fake.createAuthClient });
+  assert.equal(started.authorizationUrl, 'https://accounts.example/authorize?x=1&y=2');
+  const pending = await saved(pendingLoginPath(sessionPath));
+  assert.equal(pending.storage['sb-fixture-auth-token-code-verifier'], 'verifier-xyz');
+  assert.match(calls.oauth.options.redirectTo, new RegExp(`^http://127\.0\.0\.1:47821/callback/${pending.state}$`));
+  if (process.platform !== 'win32') assert.equal((await import('node:fs/promises').then(f => f.stat(pendingLoginPath(sessionPath)))).mode & 0o777, 0o600);
+  // The address carries an authorization code: entry goes only through this workspace's own terminal, never chat.
+  assert.ok(logs.some(line => line.includes('대화·메시지·일반 로그에 붙여 넣지 마세요')));
+  assert.ok(logs.some(line => line.includes('로그인이 막혔다고 알리세요')));
+  assert.ok(!logs.some(line => /대화에 붙여 넣으세요|안전/.test(line)));
+  // A wrong address keeps the pending login for a correct paste; nothing is exchanged.
+  await assert.rejects(finishPasteLogin({ pasted: 'no address here', ...fake }), /pasted-address-invalid/);
+  await assert.rejects(finishPasteLogin({ pasted: `http://127.0.0.1:47821/callback/${'b'.repeat(32)}?code=fixture-code-123`, ...fake }), /pasted-address-mismatch/);
+  await assert.rejects(finishPasteLogin({ pasted: `http://127.0.0.1:1234/callback/${pending.state}?code=fixture-code-123`, ...fake }), /pasted-address-mismatch/);
+  assert.equal(calls.code, undefined);
+  const result = await finishPasteLogin({ pasted: `붙여넣기: "http://127.0.0.1:47821/callback/${pending.state}?code=fixture-code-123" 입니다`, log: () => {}, ...fake });
+  assert.equal(calls.code, 'fixture-code-123');
+  assert.equal(calls.verifier, 'verifier-xyz');
+  assert.equal(result.userId, 'user-1');
+  assert.equal((await saved(sessionPath)).refreshToken, 'refresh-user-1');
+  await assert.rejects(saved(pendingLoginPath(sessionPath)), /ENOENT/);
+  await assert.rejects(finishPasteLogin({ pasted: 'anything', ...fake }), /pending-login-missing/);
+});
+
+test('paste login refuses --link, an expired start, a denied login and a different user without --replace', async () => {
+  const sessionPath = path.join(directory, 'paste-2', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  await assert.rejects(startPasteLogin({ argv: ['--url', URL_, '--key', KEY, '--link'], log: () => {}, ...fakePaste() }), /paste-link-unsupported/);
+  await startPasteLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, ...fakePaste() });
+  let state = (await saved(pendingLoginPath(sessionPath))).state;
+  await assert.rejects(finishPasteLogin({ pasted: `http://127.0.0.1:47821/callback/${state}?code=fixture-code-123`, now: () => Date.now() + 11 * 60 * 1000, ...fakePaste() }), /pending-login-expired/);
+  await assert.rejects(saved(pendingLoginPath(sessionPath)), /ENOENT/);
+  assert.throws(() => parsePastedCallback(`http://127.0.0.1:47821/callback/${state}?error=access_denied`, { port: 47821, state }), /oauth-denied/);
+  assert.throws(() => parsePastedCallback('fixture-code-123', { port: 47821, state }), /pasted-address-invalid/);
+  await writeFile(sessionPath, JSON.stringify({ url: URL_, publishableKey: KEY, accessToken: jwt({ sub: 'someone-else', exp: 9999999999 }), refreshToken: 'r' }));
+  await startPasteLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, ...fakePaste() });
+  state = (await saved(pendingLoginPath(sessionPath))).state;
+  await assert.rejects(finishPasteLogin({ pasted: `http://127.0.0.1:47821/callback/${state}?code=fixture-code-123`, log: () => {}, ...fakePaste() }), /session-user-differs/);
+  assert.equal(jwtSub(await saved(sessionPath)), 'someone-else');
+  await assert.rejects(saved(pendingLoginPath(sessionPath)), /ENOENT/); // the code is spent either way
+});
+const jwtSub = file => JSON.parse(Buffer.from(file.accessToken.split('.')[1], 'base64url').toString()).sub;
+
+const DEVICE = 'afd_' + 'c'.repeat(64), HASH = 'f'.repeat(56);
+/** A scripted device API: start, then the given poll answers in order (an Error is thrown as the API would). */
+function deviceApi(answers, calls = []) {
+  return async (url, key, route, body) => {
+    calls.push({ url, key, route, body });
+    if (route === 'device-logins') return { ok: true, deviceCode: DEVICE, userCode: 'BCDF-GHJK', expiresAt: new Date(Date.now() + 600000).toISOString(), interval: 5 };
+    const answer = answers.shift();
+    if (answer instanceof Error) throw answer;
+    return answer;
+  };
+}
+
+test('device login keeps the secret here, prints only a public pairing link, and redeems one approval', async () => {
+  const sessionPath = path.join(directory, 'device', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  const calls = [], logs = [];
+  const started = await startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: line => logs.push(line), post: deviceApi([], calls) });
+  assert.equal(started.verificationUrl, 'https://oddbout.com/creator.html#device=BCDF-GHJK');
+  assert.equal((await saved(pendingDeviceLoginPath(sessionPath))).deviceCode, DEVICE);
+  // The chat-facing output carries the link and pairing code, never the device secret.
+  assert.ok(logs.some(line => line.includes('#device=BCDF-GHJK')) && !logs.some(line => line.includes(DEVICE)));
+  assert.ok(logs.some(line => line.includes('본인이 시작하지 않은 요청이면 승인하지 마세요')));
+  // Where to go when the approval screen does not come up, and until when the link lives.
+  assert.ok(logs.some(line => line.includes('같은 링크를 다시 여세요')) && logs.some(line => /\d\d:\d\d까지/.test(line)));
+  assert.equal(logs.at(-1), '승인한 뒤에는 이 작업 공간에서 npm run login -- --device-wait 를 실행합니다.');
+  const slow = Object.assign(new Error('slow-down'), { status: 429 }), slept = [], verified = [];
+  const createAuthClient = () => ({ auth: { verifyOtp: async args => { verified.push(args);
+    return { data: { session: { access_token: jwt({ sub: 'user-7', exp: 9999999999 }), refresh_token: 'refresh-user-7', user: { id: 'user-7', email: 'p@example.com' } } } }; } } });
+  const result = await waitDeviceLogin({ post: deviceApi([{ ok: true, status: 'pending' }, slow, { ok: true, status: 'approved', tokenHash: HASH }], calls),
+    createAuthClient, request: async () => ({ ok: true, account: { invited: true } }), sleep: async ms => { slept.push(ms); }, log: () => {} });
+  assert.equal(result.userId, 'user-7');
+  assert.deepEqual(slept, [5000, 10000]); // slow-down widens the interval
+  assert.deepEqual(verified, [{ type: 'email', token_hash: HASH }]);
+  assert.ok(calls.filter(c => c.route === 'device-logins/token').every(c => c.body.deviceCode === DEVICE));
+  assert.equal((await saved(sessionPath)).refreshToken, 'refresh-user-7');
+  await assert.rejects(saved(pendingDeviceLoginPath(sessionPath)), /ENOENT/);
+  await assert.rejects(waitDeviceLogin({ post: deviceApi([]) }), /pending-device-login-missing/);
+});
+
+test('device login stops while pending without losing the request, and ends on expiry or an old server', async () => {
+  const sessionPath = path.join(directory, 'device-2', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  await startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: deviceApi([]) });
+  let clock = Date.now();
+  const tick = { now: () => clock, sleep: async ms => { clock += ms; } };
+  await assert.rejects(waitDeviceLogin({ timeoutSeconds: 7, post: deviceApi([{ status: 'pending' }, { status: 'pending' }]), ...tick }), /device-login-pending/);
+  assert.equal((await saved(pendingDeviceLoginPath(sessionPath))).deviceCode, DEVICE);
+  const gone = Object.assign(new Error('device-login-expired'), { status: 410 });
+  await assert.rejects(waitDeviceLogin({ post: deviceApi([gone]), ...tick }), /device-login-expired/);
+  await assert.rejects(saved(pendingDeviceLoginPath(sessionPath)), /ENOENT/);
+  // A server without the route is reported as unavailable; nothing falls back to a pasted callback.
+  const old = async () => { throw Object.assign(new Error('route-not-found'), { status: 404 }); };
+  await assert.rejects(startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: old }), /device-login-unavailable/);
+  await assert.rejects(startDeviceLogin({ argv: ['--url', URL_, '--key', KEY, '--link'], log: () => {}, post: deviceApi([]) }), /device-link-unsupported/);
+});
+
+test('device connection transport failure preserves the pending request and recovery never starts a second login', async () => {
+  const sessionPath = path.join(directory, 'device-recovery', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  const calls = [];
+  const post = deviceApi([], calls);
+  await startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post });
+  const pendingPath = pendingDeviceLoginPath(sessionPath), original = await readFile(pendingPath, 'utf8');
+  await assert.rejects(startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post }), /device-login-already-pending/);
+  assert.equal(calls.length, 1);
+  for (const reason of ['network-connect-forbidden', 'network-timeout', 'api-unreachable']) {
+    await assert.rejects(waitDeviceLogin({ post: deviceApi([new Error(reason)], calls),
+      sleep: async () => assert.fail('do not loop on connection failure'), log: () => {} }), { message: reason });
+    assert.equal(await readFile(pendingPath, 'utf8'), original);
+  }
+  await assert.rejects(waitDeviceLogin({ timeoutSeconds: 0, post: deviceApi([{ status: 'pending' }], calls), log: () => {} }), /device-login-pending/);
+  assert.equal(calls.filter(call => call.route === 'device-logins').length, 1);
+  assert.equal(await readFile(pendingPath, 'utf8'), original);
+});
+
+test('an approved device login survives a failed redeem or a needed --replace without a second approval', async () => {
+  const sessionPath = path.join(directory, 'device-resume', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  await startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: deviceApi([]) });
+  const pendingPath = pendingDeviceLoginPath(sessionPath), calls = [], verified = [];
+  const session = user => ({ data: { session: { access_token: jwt({ sub: user, exp: 9999999999 }), refresh_token: `refresh-${user}`, user: { id: user } } } });
+  const auth = answer => () => ({ auth: { verifyOtp: async args => { verified.push(args); return answer(); } } });
+  const options = { request: async () => ({ ok: true, account: { invited: true } }), sleep: async () => {}, log: () => {} };
+  // Auth unreachable after approval: the token is kept, and the server is not asked again.
+  const offline = Object.assign(new Error('fetch failed'), { name: 'AuthRetryableFetchError', status: 0 });
+  await assert.rejects(waitDeviceLogin({ ...options, post: deviceApi([{ ok: true, status: 'approved', tokenHash: HASH }], calls), createAuthClient: auth(() => ({ error: offline })) }),
+    /device-login-redeem-retry/);
+  assert.equal((await saved(pendingPath)).tokenHash, HASH);
+  await assert.rejects(startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: deviceApi([]) }), /device-login-already-pending/);
+  // Another user's session is in the file: the redeemed session waits in the pending file for --replace.
+  await writeFile(sessionPath, JSON.stringify({ url: URL_, publishableKey: KEY, accessToken: jwt({ sub: 'someone-else', exp: 9999999999 }), refreshToken: 'r' }));
+  await assert.rejects(waitDeviceLogin({ ...options, post: deviceApi([], calls), createAuthClient: auth(() => session('user-9')) }), /session-user-differs/);
+  assert.equal((await saved(pendingPath)).session.user.id, 'user-9');
+  assert.equal((await saved(pendingPath)).tokenHash, undefined, 'the spent token is not kept');
+  const result = await waitDeviceLogin({ ...options, replace: true, post: deviceApi([], calls), createAuthClient: auth(() => assert.fail('never redeemed twice')) });
+  assert.equal(result.userId, 'user-9');
+  assert.equal((await saved(sessionPath)).refreshToken, 'refresh-user-9');
+  await assert.rejects(saved(pendingPath), /ENOENT/);
+  assert.equal(verified.length, 2, 'one failed and one successful redeem, no third');
+  assert.equal(calls.filter(call => call.route === 'device-logins/token').length, 1, 'the approval was polled once');
+});
+
+test('a refused device-login token ends the request so a new approval can start', async () => {
+  const sessionPath = path.join(directory, 'device-refused', 'client.json');
+  process.env.AI_FIGHTER_CLIENT_CONFIG = sessionPath;
+  await startDeviceLogin({ argv: ['--url', URL_, '--key', KEY], log: () => {}, post: deviceApi([]) });
+  const refused = Object.assign(new Error('Token has expired or is invalid'), { name: 'AuthApiError', status: 403 });
+  await assert.rejects(waitDeviceLogin({ post: deviceApi([{ ok: true, status: 'approved', tokenHash: HASH }]), sleep: async () => {}, log: () => {},
+    createAuthClient: () => ({ auth: { verifyOtp: async () => ({ error: refused }) } }) }), /device-login-redeem-failed/);
+  await assert.rejects(saved(pendingDeviceLoginPath(sessionPath)), /ENOENT/);
 });

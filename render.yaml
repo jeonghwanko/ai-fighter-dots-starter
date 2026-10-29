@@ -1,0 +1,20 @@
+services:
+  - type: web
+    name: ai-fighter-validator
+    runtime: node
+    plan: free
+    region: singapore
+    branch: codex/creator-hosting
+    buildCommand: npm ci --omit=dev
+    startCommand: node worker/server.mjs
+    healthCheckPath: /health
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_VERSION
+        value: 22.22.2
+      - key: AI_FIGHTER_PROJECT_URL
+        value: https://ztfxxhtmtrvxvuxlqmgz.supabase.co
+      - key: AI_FIGHTER_WORKER_TOKEN
+        sync: false
+      - key: AI_FIGHTER_WAKE_TOKEN
+        sync: false

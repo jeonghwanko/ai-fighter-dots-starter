@@ -116,10 +116,60 @@ export function validateFighter(data) {
       if (getUpMs > spec.limits.clipDurationMs)
         add('GET_UP_DURATION_LIMIT', `${at}/landmarks/getUp`, spec.limits.clipDurationMs, getUpMs);
     }
+    if (name === 'skill') {
+      // A strike lands once; a run has a tell and a recovery; a stance has a window and a strike segment around its one contact. Each is
+      // readable: its tell lasts at least the floor (combatStyle.tellFloorMs).
+      const marks = clip.skill, startMs = index => steps.slice(0, index).reduce((sum, step) => sum + step.durationMs, 0);
+      for (const key of ['windupTo', 'recoverFrom', 'launch', 'struck', 'windowFrom', 'windowTo', 'strikeFrom', 'strikeTo'])
+        if (marks[key] !== undefined) indexInRange(marks[key], `${at}/skill/${key}`);
+      for (const [index, value] of (marks.run ?? []).entries()) indexInRange(value, `${at}/skill/run/${index}`);
+      if (spec.combatStyle.strikeKinds.includes(marks.kind)) {
+        if (hits.length !== 1) add('SKILL_CONTACT', `${at}/hitSequenceIndices`, 'one contact', hits.length);
+        else if (startMs(hits[0]) < spec.combatStyle.tellFloorMs.strike) add('SKILL_TELL', `${at}/hitSequenceIndices/0`, `>= ${spec.combatStyle.tellFloorMs.strike} ms`, startMs(hits[0]));
+      } else if (spec.combatStyle.stanceKinds.includes(marks.kind)) {
+        const { windowFrom: from, windowTo: to, strikeFrom, strikeTo } = marks, window = spec.combatStyle.stanceWindowMs;
+        if (hits.length !== 1) add('SKILL_CONTACT', `${at}/hitSequenceIndices`, 'one contact', hits.length);
+        else if ([from, to, strikeFrom, strikeTo].some(value => value === undefined) || !(from < to && to <= strikeFrom && strikeFrom <= hits[0] && hits[0] < strikeTo))
+          add('SKILL_STANCE_MARKS', `${at}/skill`, 'windowFrom < windowTo <= strikeFrom <= contact < strikeTo', marks);
+        else if (startMs(from) < spec.combatStyle.tellFloorMs.stance) add('SKILL_TELL', `${at}/skill/windowFrom`, `>= ${spec.combatStyle.tellFloorMs.stance} ms`, startMs(from));
+        else if (startMs(to) - startMs(from) < window.min || startMs(to) - startMs(from) > window.max)
+          add('SKILL_WINDOW', `${at}/skill`, `${window.min}..${window.max} ms`, startMs(to) - startMs(from));
+      } else if (marks.windupTo === undefined || marks.recoverFrom === undefined || !(marks.windupTo < marks.recoverFrom))
+        add('SKILL_RUN_MARKS', `${at}/skill`, 'windupTo < recoverFrom', marks);
+      else if (startMs(marks.windupTo) < spec.combatStyle.tellFloorMs.run) add('SKILL_TELL', `${at}/skill/windupTo`, `>= ${spec.combatStyle.tellFloorMs.run} ms`, startMs(marks.windupTo));
+    }
   }
   for (const [index, asset] of data.assets.entries()) if (!used.has(asset.id)) add('UNUSED_ASSET', `/assets/${index}/id`, 'referenced asset', asset.id);
+  // The schema bounds each grade; only a sum check keeps every allocation on one budget.
+  if (data.combat.stats) {
+    const total = spec.combatStats.keys.reduce((sum, key) => sum + data.combat.stats[key], 0);
+    if (total !== spec.combatStats.budget) add('STATS_BUDGET', '/combat/stats', spec.combatStats.budget, total);
+  }
+  // A style rotates at least one swing, its quick cut never more than his slams and combos together (all cuts lost 96 % of its bouts, 2026-10-27),
+  // and picks at most `extrasBudget` of the skill clip, a summon and the shockwave.
+  const style = data.combat.style;
+  if (style?.mix && (spec.combatStyle.actions.every(action => style.mix[action] === 0) || style.mix.fast > style.mix.slam + style.mix.combo))
+    add('STYLE_MIX', '/combat/style/mix', 'a swing above 0, fast <= slam + combo', style.mix);
+  const extras = (data.clips.skill ? 1 : 0) + (style?.summon ? 1 : 0) + (style?.shockwave ? 1 : 0);
+  if (extras > spec.combatStyle.extrasBudget) add('STYLE_EXTRAS', '/combat/style', spec.combatStyle.extrasBudget, extras);
   return { ok: errors.length === 0, stage: 'references-and-geometry', errors, assetBytes: bytes, decodedPixels: pixels,
     pending: ['bytes-hashes-and-full-decode', 'runtime-preview', 'visual-review', 'server-registration'] };
+}
+
+/** The duel grades a valid manifest fights with: its `combat.stats`, or every grade at the default (the engine before stats). */
+export function toDuelStats(data) {
+  const stats = data?.combat?.stats;
+  return Object.fromEntries(spec.combatStats.keys.map(key => [key, stats ? stats[key] : spec.combatStats.default]));
+}
+
+/**
+ * The fighting style a valid manifest fights with (2026-10-27): its `combat.style` with its skill clip's kind, or null — the standard kit as it
+ * was (a manifest without either fights exactly as before).
+ */
+export function toDuelStyle(data) {
+  const style = data?.combat?.style, kind = data?.clips?.skill?.skill?.kind;
+  if (!style && !kind) return null;
+  return { ...(style ?? {}), ...(kind ? { skill: kind } : {}) };
 }
 
 /** A side-only preview adapter for the existing left/right consumers; not a registered world pack. */
@@ -128,10 +178,11 @@ export function toSidePreviewPack(data) {
   if (!result.ok) throw new Error('Invalid AI Fighter authoring data');
   const assets = new Map(data.assets.map(asset => [asset.id, asset]));
   const side = Object.fromEntries(Object.entries(data.clips).map(([name, clip]) => {
-    const { assetId, loop, landmarks, ...fields } = clip;
+    const { assetId, loop, landmarks, skill, ...fields } = clip;
     const asset = assets.get(assetId);
+    // The skill clip's own marks become the runtime keys the engine times it by (`keys.skill` names the rule).
     const keys = name === 'dash' ? { standIns: landmarks }
-      : name === 'fall' ? { getUp: landmarks.getUp } : landmarks;
+      : name === 'fall' ? { getUp: landmarks.getUp } : name === 'skill' ? (({ kind, ...marks }) => ({ ...marks, skill: kind }))(skill) : landmarks;
     return [name, { ...fields, key: `ai-fighter-preview-${data.localId}-${name}-${asset.sha256}-${clip.frameWidth}x${clip.frameHeight}`, path: asset.path,
       bodyHeight: data.appearance.bodyHeight, oneShot: !loop, durationMs: clip.durationMs ?? null,
       ...(keys ? { keys } : {}), ...(name === 'fall' ? { lieSequenceIndex: landmarks.lieSequenceIndex } : {}),

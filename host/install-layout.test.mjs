@@ -1,0 +1,40 @@
+import { test } from 'node:test';
+import assert from 'node:assert/strict';
+import { mkdtemp, readFile, readdir } from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import { fileURLToPath, pathToFileURL } from 'node:url';
+import { HOST_FILES, installFiles } from '../scripts/host.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+
+// A host runs host/'s files from one flat bin folder. On 2026-10-29 a worker that imported ../mcp/ restarted in a loop on
+// office-stable: node --check and the tests in the checkout had both passed.
+test('the modules a host installs load from the flat bin folder they run in', async () => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'host-layout-'));
+  await installFiles(root, here);
+  const bin = path.join(root, 'bin');
+  assert.deepEqual((await readdir(bin)).sort(), [...HOST_FILES].sort());
+  // generation-worker.mjs starts the worker when loaded; it imports nothing of its own but generation-stages.mjs.
+  assert.deepEqual(localImports(await readFile(path.join(bin, 'generation-worker.mjs'), 'utf8')), ['./generation-stages.mjs']);
+  for (const name of HOST_FILES.filter(name => name.endsWith('.mjs') && name !== 'generation-worker.mjs')) {
+    await import(pathToFileURL(path.join(bin, name)).href);
+  }
+});
+
+test('og self-update carries every file a host installs', async () => {
+  const og = await readFile(path.join(here, 'og'), 'utf8');
+  const lists = {
+    pack: og.match(/tar -C "\$here" -c ([^|]+)\|/)[1],
+    unpack: og.match(/tar -x -C "\$tmp" ([^\n]+)/)[1],
+    install: og.match(/install -m 640 ([^\n]+) "\$HERE\/"/)[1].replaceAll('"$tmp/', '').replaceAll('"', ''),
+  };
+  for (const [step, list] of Object.entries(lists)) {
+    const names = list.trim().split(/\s+/);
+    for (const name of HOST_FILES.filter(name => name !== 'og')) assert.ok(names.includes(name), `og self-update ${step} misses ${name}`);
+  }
+});
+
+function localImports(source) {
+  return [...source.matchAll(/^import [^;]*? from '(\.[^']+)';/gm)].map(match => match[1]);
+}

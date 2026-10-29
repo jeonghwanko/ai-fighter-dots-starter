@@ -1,0 +1,741 @@
+#!/usr/bin/env bash
+# ODDBOUT hosted fighter generation: the generation PC's tool. Runbook: README.md beside this file.
+# Two installs (2026-10-28, 커뮤니티 호스트).
+# - Service (ODDBOUT's own PC, the official host): one file, two roles. The operator's copy (~/.local/bin/og) only reads the
+#   operator's own login identities and runs this script again as the service user through sudo. Every generation runs as
+#   that unix user: its HOME holds the dedicated GPT/Grok logins, and it cannot read the operator's home (750).
+# - User (a community host, `npm run host:setup`, scripts/host.mjs): the files sit in <root>/bin beside <root>/host.env and
+#   everything runs as the host's own unix account, no sudo. The providers still sign in inside the root (HOME=<root> for every
+#   provider run), so the host's own ~/.codex — its MCP servers, plugins and shell tools — never sees a requester's text.
+set -euo pipefail
+
+SELF_DIR=$(cd "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")" && pwd)
+if [ -f "$SELF_DIR/../host.env" ]; then
+  MODE=user
+  G=$(cd "$SELF_DIR/.." && pwd)
+  # KEY=value lines written by scripts/host.mjs; read one key at a time, never sourced.
+  host_value() { sed -n "s/^$1=//p" "$G/host.env" | tail -n1; }
+  SVC_USER=$(id -un)
+  OG_NODE_BIN=${OG_NODE_BIN:-$(host_value NODE_BIN)}
+  TOOL_PATH=$(host_value TOOL_PATH)
+  BOOTSTRAP_PYTHON=$(host_value PYTHON)
+  SLICE=oddbout-host.slice
+  SLICE_MEMORY=${OG_SLICE_MEMORY:-$(host_value MEMORY)}
+  SLOTS=${CODEX_SLOTS:-$(host_value SLOTS)}
+  SLOT_DIR=${CODEX_SLOT_DIR:-$G/slots}
+  WORKER_UNIT=oddbout-host-worker.service
+else
+  MODE=service
+  SVC_USER=${OG_SVC_USER:-oddbout-gen}
+  G=${OG_ROOT:-/srv/oddbout-gen}
+  TOOL_PATH= BOOTSTRAP_PYTHON=
+  SLICE=oddbout-gen.slice
+  SLICE_MEMORY=${OG_SLICE_MEMORY:-}
+  SLOTS=${CODEX_SLOTS:-}
+  SLOT_DIR=${CODEX_SLOT_DIR:-/tmp/codex-slots}
+  WORKER_UNIT=oddbout-gen-worker.service
+fi
+SLICE_MEMORY=${SLICE_MEMORY:-8G}
+SLOTS=${SLOTS:-3}
+KIT=$G/kit
+KIT_URL=https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+KIT_REF=${OG_KIT_REF:-d1da659441c645af40f44ca9b5d30e0133eb2906}
+CODEX_VERSION=0.165.0
+GROK_VERSION=1.0.52
+RUN_TIMEOUT=${OG_RUN_TIMEOUT:-5400}
+SLOT_WAIT=${OG_SLOT_WAIT:-1800}
+LEDGER=$G/ledger.jsonl
+PINS=$G/accounts.json
+# sprite-gen-agent 3.4 tools that never reach a provider, and the Grok video/audio ones. Any other sprite tool may call
+# codex (sprite-gen's default provider) and takes a codex slot; `og run` warns when a run started codex sessions
+# its classification did not expect, so a wrong entry here shows up in the first job that uses it. video-follow and
+# video-follow-inspect are 3.4's old names of the Sway layer, which moves pixels only.
+LOCAL_TOOLS=" defaults workflow prepare gait-motion extract unpack-atlas slice-sheet ui-kit cutout anchor game-pack compose-atlas
+  compose-cycle compose-gif export-pngs export-aseprite background-tile shadow recolor recolor-palette breathe rife gait-guide
+  scene-render scene-inspect inspect-motion preview handed-check inspect score curation compose video-canvas video-prompt
+  video-frames video-loop video-loop-compare video-source-manifest video-loop-repair video-cycle-align video-sway
+  video-sway-inspect video-follow video-follow-inspect video-set-sheet video-stop video-face face-bake migrate-breathe migrate-request "
+LOCAL_TOOLS=" $(echo $LOCAL_TOOLS) "
+GROK_TOOLS=" video video-set video-resume video-extend video-edit sound "
+# Tools that reach a provider P0 does not use (pixel-draw draws with a Claude subscription or a billed API key).
+REFUSED_TOOLS=" pixel-draw "
+
+die() { echo "og: $*" >&2; exit "${DIE_EXIT:-1}"; }
+now_ms() { date +%s%3N; }
+
+# The signed-in account of a login file, one per line, from one known field only: codex = the id_token's `email`,
+# grok = each `https://auth.x.ai::<id>` entry's `email`. With --describe, also the plan and the workspace id's tail
+# (shown when a login is refused, so the operator sees which account the browser actually used). No tokens printed.
+emails_of() {
+  [ -f "$2" ] || return 0
+  "$1" -e '
+    const [file, mode] = process.argv.slice(1), out = [];
+    try {
+      const a = JSON.parse(require("fs").readFileSync(file, "utf8"));
+      if (a?.tokens?.id_token) {
+        const p = JSON.parse(Buffer.from(a.tokens.id_token.split(".")[1], "base64url").toString());
+        const auth = p["https://api.openai.com/auth"] ?? {};
+        if (p.email) out.push(mode ? `${p.email} (plan ${auth.chatgpt_plan_type ?? "?"}, workspace …${String(auth.chatgpt_account_id ?? "").slice(-6)})` : p.email);
+      } else {
+        for (const [k, v] of Object.entries(a ?? {})) {
+          if (k.startsWith("https://auth.x.ai::") && typeof v?.email === "string") out.push(mode ? `${v.email} (grok user …${String(v.user_id ?? "").slice(-6)})` : v.email);
+        }
+      }
+    } catch {}
+    process.stdout.write([...new Set(out.map(e => mode ? e : e.toLowerCase()))].join("\n"));' "$2" ${3:-}
+}
+
+# ---------------------------------------------------------------- operator role
+if [ "$(id -un)" != "$SVC_USER" ]; then
+  NODE=${OG_NODE_BIN:-$HOME/.fnm/node-versions/v22.22.2/installation/bin}/node
+  [ -x "$NODE" ] || die "node not found at $NODE (set OG_NODE_BIN)"
+  personal=$( { emails_of "$NODE" "$HOME/.codex/auth.json"; echo; emails_of "$NODE" "$HOME/.grok/auth.json"; } | grep @ | sort -u | paste -sd, || true)
+  if [ "${1:-}" = self-update ]; then
+    here=$(dirname "$(readlink -f "$0")")
+    tar -C "$here" -c og ledger-report.mjs ledger-report.test.mjs generation-stages.mjs generation-worker.mjs sprite-outcome.mjs motions.py |
+      sudo -n -u "$SVC_USER" "$G/bin/og" --personal "$personal" self-update
+    exit $?
+  fi
+  exec sudo -n -u "$SVC_USER" "$G/bin/og" --personal "$personal" "$@"
+fi
+
+# ---------------------------------------------------------------- service role
+PERSONAL=
+if [ "${1:-}" = --personal ]; then PERSONAL=$2; shift 2; fi
+# systemd reads user units from the account's own home: the root itself for the service user, the host's home in user mode.
+UNIT_DIR=${OG_UNIT_DIR:-$(getent passwd "$(id -un)" | cut -d: -f6)/.config/systemd/user}
+export HOME=$G XDG_RUNTIME_DIR=/run/user/$(id -u)
+export DBUS_SESSION_BUS_ADDRESS=unix:path=$XDG_RUNTIME_DIR/bus
+cd "$G"
+umask 027
+NODE_BIN=${OG_NODE_BIN:-$G/node/bin}
+NODE=$NODE_BIN/node
+HERE=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+[ -x "$NODE" ] || die "node not found at $NODE"
+
+# Nothing from the caller's environment; codex stays the default provider and a codex that cannot run asks instead
+# of silently switching to grok or a per-call API key.
+# A host's ffmpeg, img2webp or Python may sit outside the system folders (host.env TOOL_PATH, PYTHON — found by host:setup).
+SVC_ENV=(env -i HOME="$G" USER="$SVC_USER" LANG=C.UTF-8 LC_ALL=C.UTF-8 TERM="${TERM:-dumb}"
+  PATH="$G/tools/node_modules/.bin:$NODE_BIN${TOOL_PATH:+:$TOOL_PATH}:/usr/local/bin:/usr/bin:/bin" AI_FIGHTER_ROOT="$KIT"
+  SPRITE_GEN_CODEX_UNAVAILABLE=ask)
+[ -z "$BOOTSTRAP_PYTHON" ] || SVC_ENV+=(AI_FIGHTER_BOOTSTRAP_PYTHON="$BOOTSTRAP_PYTHON")
+# RIFE (the loop alignment's in-betweens) on PyTorch and CUDA instead of the ncnn binary (`og rife torch`, 2026-10-28): the binary starts
+# again for every frame — 1.2 to 1.7 s a call, nearly all of it its start — and one loop's alignment took 3 to 5 minutes.
+RIFE_FILE=$G/rife.backend
+[ "$(cat "$RIFE_FILE" 2>/dev/null)" != torch ] || SVC_ENV+=(SPRITE_GEN_RIFE_BACKEND=torch)
+svc_env() { "${SVC_ENV[@]}" "$@"; }
+
+ledger() { "$NODE" "$HERE/ledger-report.mjs" --append "$LEDGER" "$@" || echo "og: ledger write failed" >&2; }
+
+in_slice() {
+  if systemctl --user show-environment >/dev/null 2>&1; then
+    systemd-run --user --scope --quiet --collect --slice="$SLICE" -- "$@"
+  elif [ "${OG_ALLOW_NO_SLICE:-}" = 1 ]; then
+    echo "og: user systemd unreachable — running WITHOUT the memory cap (OG_ALLOW_NO_SLICE=1)" >&2
+    "$@"
+  else
+    die "user systemd for $SVC_USER is unreachable (linger? loginctl enable-linger $SVC_USER) — refusing to run without the $SLICE memory cap"
+  fi
+}
+
+# ---- codex slots, shared with internal runs (tools/art/fighter-gpt/slot.sh opens the same files for writing).
+HELD=()
+release_slots() { local fd; for fd in "${HELD[@]}"; do eval "exec $fd>&-"; done; HELD=(); }
+acquire_slots() {
+  local k=$1 i fd f
+  [ "$k" -gt 0 ] || return 0
+  [ "$k" -le "$SLOTS" ] || die "needs $k codex slots, only $SLOTS exist"
+  if [ ! -d "$SLOT_DIR" ]; then (umask 000; mkdir -p "$SLOT_DIR"; chmod 1777 "$SLOT_DIR"); fi
+  # Bounded (2026-10-29): a run needing two slots could wait forever behind single-slot runs. Past SLOT_WAIT this fails, and og run
+  # refuses the run before it starts (exit 3), so the worker runs the stage again later.
+  local until=$((SECONDS + SLOT_WAIT))
+  while :; do
+    HELD=()
+    for ((i = 0; i < SLOTS && ${#HELD[@]} < k; i++)); do
+      f=$SLOT_DIR/slot$i
+      [ -e "$f" ] || (umask 000; : >"$f") 2>/dev/null || continue
+      exec {fd}<"$f" || continue
+      if flock -n "$fd"; then HELD+=("$fd"); else eval "exec $fd>&-"; fi
+    done
+    [ ${#HELD[@]} -ge "$k" ] && return 0
+    release_slots   # all or nothing: two runs holding half each would wait forever
+    [ "$SECONDS" -lt "$until" ] || return 1
+    sleep 4
+  done
+}
+
+# ---- identities: pinned at `og login`, required before every provider run.
+pinned() { [ -f "$PINS" ] && "$NODE" -e 'const p=require(process.argv[1]); process.stdout.write(p[process.argv[2]] ?? "")' "$PINS" "$1" || true; }
+current() { local e; e=$(case $1 in codex) emails_of "$NODE" "$G/.codex/auth.json" ;; grok) emails_of "$NODE" "$G/.grok/auth.json" ;; esac); head -n1 <<<"$e"; }
+is_personal() { [ -n "$1" ] && [[ ",$PERSONAL," == *",$1,"* ]]; }
+# The one personal account the operator allowed for this provider with `og login <p> --allow-personal`, or empty.
+# Until a dedicated subscription exists (2026-10-26 user decision for codex); every such run is marked in the ledger.
+personal_allowed() { [ -f "$PINS" ] && "$NODE" -e 'const p=require(process.argv[1]); process.stdout.write(p.personal?.[process.argv[2]]?.email ?? "")' "$PINS" "$1" || true; }
+RUN_ACCOUNT=service
+guard_account() {
+  local p=$1 pin cur
+  pin=$(pinned "$p"); cur=$(current "$p")
+  [ -n "$cur" ] || die "$p is not signed in for $SVC_USER (or its identity is unreadable) — og login $p"
+  [ -n "$pin" ] || die "$p identity was never pinned — og login $p"
+  [ "$cur" = "$pin" ] || die "$p login is $cur but the pinned service account is $pin"
+  RUN_ACCOUNT=service
+  # A community host generates on his own subscription by design (host terms); the pin only keeps the account from changing.
+  if [ $MODE = user ]; then RUN_ACCOUNT=host; return 0; fi
+  # The worker calls og as the service user without the operator's emails: the allowed personal account is then known by its pin.
+  if is_personal "$cur" || [ "$(personal_allowed "$p")" = "$cur" ]; then
+    [ "$(personal_allowed "$p")" = "$cur" ] || die "$p login $cur is the operator's personal account"
+    RUN_ACCOUNT=personal
+    echo "og: note — $p runs on the operator's personal account $cur (allowed with --allow-personal)" >&2
+  fi
+}
+
+# ---- what a command will bill.
+sprite_tool() { local a prev=; for a in "$@"; do [ "$a" = -- ] && continue; case $prev in sprite | sprite-gen | */sprite-gen) echo "$a"; return ;; esac; prev=$a; done; }
+explicit_provider() { local a prev=; for a in "$@"; do case $prev in --provider) echo "$a"; return ;; esac; case $a in --provider=*) echo "${a#--provider=}"; return ;; esac; prev=$a; done; }
+option_value() { local name=$1 a prev=; shift; for a in "$@"; do case $prev in "$name") echo "$a"; return ;; esac; case $a in "$name"=*) echo "${a#"$name"=}"; return ;; esac; prev=$a; done; }
+# "provider slots" for a command.
+classify() {
+  local tool explicit p k=0
+  tool=$(sprite_tool "$@"); explicit=$(explicit_provider "$@")
+  if [ -n "$explicit" ] && [ "$explicit" != codex ] && [ "$explicit" != grok ]; then
+    die "provider '$explicit' is not allowed — P0 uses only the GPT (codex) and Grok subscriptions"
+  fi
+  if [ -n "$tool" ]; then
+    [[ $REFUSED_TOOLS == *" $tool "* ]] && die "sprite tool '$tool' reaches a provider P0 does not use — only the GPT (codex) and Grok subscriptions"
+    if [[ $LOCAL_TOOLS == *" $tool "* ]]; then p=local
+    elif [[ $GROK_TOOLS == *" $tool "* ]]; then p=grok
+    else p=${explicit:-codex}
+    fi
+  else
+    case ${1:-} in codex | grok) p=$1 ;; *) p=local ;; esac
+  fi
+  if [ "$p" = codex ]; then
+    k=1
+    if [ "$tool" = gen-set ]; then
+      k=$(option_value --concurrency "$@")
+      [[ $k =~ ^[0-9]+$ ]] && [ "$k" -ge 1 ] && [ "$k" -le "$SLOTS" ] ||
+        die "codex gen-set must name --concurrency 1..$SLOTS (its default 6 is past this PC's codex memory limit)"
+    fi
+  fi
+  echo "$p $k"
+}
+# Tool words only — never prompts, paths or requester text.
+tool_label() {
+  local out=() a after=0
+  for a in "$@"; do
+    [[ $a == -* ]] && continue
+    [[ $a =~ ^[A-Za-z][A-Za-z0-9:._-]{0,30}$ ]] || break
+    out+=("$a"); [ $after = 1 ] && break
+    case $a in sprite | sprite-gen | codex | grok) after=1 ;; esac
+    [ ${#out[@]} -ge 4 ] && break
+  done
+  echo "${out[*]}"
+}
+
+# Sprite-gen reads the grok token without refreshing it (it lives about 6 h); the CLI refreshes on use.
+refresh_grok() {
+  local left lock
+  # The walk and the run film at once (2026-10-28): one refresh at a time, and the second finds the token fresh.
+  exec {lock}>"$G/.grok/refresh.lock" && flock "$lock"
+  left=$("$NODE" -e '
+    const a = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    const e = Object.values(a).map(v => Date.parse(v?.expires_at)).filter(Number.isFinite);
+    process.stdout.write(String(e.length ? Math.round((Math.max(...e) - Date.now()) / 60000) : -1));' "$G/.grok/auth.json")
+  if [ "$left" -lt 45 ]; then
+    echo "og: grok token has ${left} min left — refreshing through the CLI" >&2
+    svc_env timeout 120 grok -p "Reply with the single word ok." --output-format plain >/dev/null 2>&1 || die "grok refresh failed — og login grok"
+  fi
+  exec {lock}>&-
+}
+
+job_dir() {
+  [[ ${1:-} =~ ^[0-9]{8}-[a-z0-9][a-z0-9-]{1,40}$ ]] || die "job id looks like 20261026-red-cat, got '${1:-}'"
+  local d=$KIT/output/$1
+  [ -f "$d/request.json" ] || die "no job $1 (og new first)"
+  echo "$d"
+}
+open_jobs() {
+  [ -d "$KIT/output" ] || return 0
+  local r
+  for r in "$KIT"/output/*/request.json; do [ -f "$r" ] && [ ! -f "$(dirname "$r")/.closed" ] && basename "$(dirname "$r")"; done || true
+}
+
+cmd_setup() {
+  local open; open=$(open_jobs)
+  [ -z "$open" ] || die "jobs still open — setup changes the kit and CLIs under them: $open"
+  mkdir -p "$G/tools" "$G/deliveries"
+  PATH="$NODE_BIN:$PATH" npm install --prefix "$G/tools" --no-fund --no-audit --loglevel=error \
+    "@openai/codex@$CODEX_VERSION" "@xai-official/grok@$GROK_VERSION"
+  [ -d "$KIT/.git" ] || git clone --quiet --branch codex/creator-hosting "$KIT_URL" "$KIT"
+  if [ "$(git -C "$KIT" rev-parse HEAD)" != "$KIT_REF" ]; then
+    # sprite:setup patches the submodule's tracked files; drop the patch (not the venv) so the new gitlink checks out.
+    git -C "$KIT" submodule foreach --quiet --recursive 'git checkout --quiet -- .'
+    [ -z "$(git -C "$KIT" status --porcelain --untracked-files=no --ignore-submodules=dirty)" ] || die "kit has local changes"
+    # Not into the submodule here: it would fetch the new engine commit from the URL the old checkout configured.
+    git -C "$KIT" fetch --quiet --no-recurse-submodules origin codex/creator-hosting
+    git -C "$KIT" checkout --quiet --detach "$KIT_REF"
+  fi
+  # The engine submodule moved (sprite-gen → sprite-gen-agent, 2026-10-27): take the URL the checked-out .gitmodules names.
+  git -C "$KIT" submodule sync --recursive --quiet
+  # Where the checked-out engine is not the one the kit records (`+` in submodule status), also drop the files the old
+  # sprite:setup patch added — the new engine ships them and the checkout refuses to overwrite them. Ignored files (the venv) stay.
+  git -C "$KIT" submodule status --recursive | while read -r sha path _; do
+    [ "${sha:0:1}" = + ] || continue
+    git -C "$KIT/$path" checkout --quiet -- . && git -C "$KIT/$path" clean -fdq
+  done
+  git -C "$KIT" submodule update --init --recursive --quiet
+  (cd "$KIT" && svc_env npm ci --ignore-scripts --no-fund --no-audit --loglevel=error)
+  (cd "$KIT" && svc_env npm run --silent sprite:setup >/dev/null && svc_env npm run --silent sprite:status >/dev/null)
+  # A torch backend chosen before stays: a new venv gets PyTorch and the model again.
+  [ "$(cat "$RIFE_FILE" 2>/dev/null)" != torch ] || rife_torch_install
+  mkdir -p "$UNIT_DIR"
+  printf '[Unit]\nDescription=ODDBOUT hosted fighter generation (memory cap)\n\n[Slice]\nMemoryMax=%s\nMemorySwapMax=0\n' \
+    "$SLICE_MEMORY" >"$UNIT_DIR/$SLICE"
+  systemctl --user daemon-reload
+  cmd_status
+}
+
+cmd_login() {
+  local p=${1:-} replace= allow= a cur pin
+  case $p in codex | grok) shift ;; *) die "usage: og login codex|grok [--replace] [--allow-personal]" ;; esac
+  for a in "$@"; do
+    case $a in --replace) replace=1 ;; --allow-personal) allow=1 ;; *) die "unknown option $a" ;; esac
+  done
+  [ -z "$allow" ] || [ -n "$PERSONAL" ] || die "--allow-personal needs the operator's personal $p login readable on the operator side"
+  svc_env "$p" login --device-auth
+  cur=$(current "$p"); pin=$(pinned "$p")
+  # A refused login must not stay behind: its tokens would sit in the service HOME.
+  [ -n "$cur" ] || { cmd_logout "$p"; die "$p login left no readable identity in $G/.$p/auth.json — signed out, not pinning"; }
+  if is_personal "$cur" && [ -z "$allow" ]; then
+    echo "og: the browser signed in as: $(emails_of "$NODE" "$G/.$p/auth.json" --describe)" >&2
+    cmd_logout "$p"
+    die "$p signed in as $cur, the operator's personal account — signed out again; sign in with the service account, or og login $p --allow-personal"
+  fi
+  if [ -n "$allow" ] && ! is_personal "$cur"; then
+    allow=   # a dedicated account signed in after all: pin it as the service account, no allowance
+  fi
+  if [ -n "$pin" ] && [ "$pin" != "$cur" ] && [ -z "$replace" ]; then
+    cmd_logout "$p"
+    die "$p signed in as $cur but $pin is pinned — signed out; og login $p --replace to change the account"
+  fi
+  "$NODE" -e '
+    const fs = require("fs"), [file, p, email, allow] = process.argv.slice(1);
+    const pins = fs.existsSync(file) ? JSON.parse(fs.readFileSync(file, "utf8")) : {};
+    pins[p] = email;
+    pins.personal ??= {};
+    if (allow) pins.personal[p] = { email, allowedAt: new Date().toISOString() }; else delete pins.personal[p];
+    fs.writeFileSync(file, JSON.stringify(pins, null, 2) + "\n", { mode: 0o600 });' "$PINS" "$p" "$cur" "$allow"
+  # A ChatGPT login on the free plan signs in but cannot make the pictures: say so at once, not at the first job (2026-10-28 — the first
+  # test host's own account had no subscription and only found out by asking).
+  if [ "$p" = codex ] && emails_of "$NODE" "$G/.$p/auth.json" --describe | grep -q '(plan free'; then
+    echo "og: WARNING this ChatGPT account is on the free plan — hosting needs a paid plan (Plus, Pro, Team): og login codex --replace" >&2
+  fi
+  if [ $MODE = user ]; then
+    echo "og: $p pinned: $(emails_of "$NODE" "$G/.$p/auth.json" --describe) — this host's own subscription; og health next"
+  elif [ -n "$allow" ]; then
+    echo "og: $p pinned to the operator's PERSONAL account $(emails_of "$NODE" "$G/.$p/auth.json" --describe) — allowed until a dedicated subscription exists; every run is marked personal in the ledger"
+  else
+    echo "og: $p service account pinned: $(emails_of "$NODE" "$G/.$p/auth.json" --describe) — check this is the dedicated account, then og health"
+  fi
+}
+
+cmd_logout() {
+  local p=${1:-}
+  case $p in codex | grok) ;; *) die "usage: og logout codex|grok" ;; esac
+  svc_env "$p" logout >/dev/null 2>&1 || true
+  rm -f "$G/.$p/auth.json"
+  [ -z "$(current "$p")" ] || die "$p is still signed in for $SVC_USER"
+  echo "og: $p signed out for $SVC_USER"
+}
+
+cmd_health() {
+  local p t rc out err
+  err=$(mktemp)
+  for p in codex grok; do
+    if ! (guard_account $p) 2>"$err"; then echo "og: $p NOT READY — $(sed 's/^og: //' "$err")"; continue; fi
+    t=$(now_ms); rc=0
+    if [ $p = codex ]; then
+      if ! acquire_slots 1; then echo "og: codex NOT READY — no free codex slot within ${SLOT_WAIT}s"; continue; fi
+      out=$(in_slice "${SVC_ENV[@]}" timeout 180 codex exec --skip-git-repo-check --sandbox read-only \
+        "Reply with the single word ok." 2>"$err") || rc=$?
+      release_slots
+    else
+      out=$(in_slice "${SVC_ENV[@]}" timeout 180 grok -p "Reply with the single word ok." --output-format plain 2>"$err") || rc=$?
+    fi
+    ledger --job _health --kind health --provider $p --ms $(($(now_ms) - t)) --exit $rc
+    if [ $rc -eq 0 ] && [ "$(tail -n1 <<<"$out" | tr -d '[:space:][:punct:]' | tr '[:upper:]' '[:lower:]')" = ok ]; then
+      echo "og: $p ok ($(pinned $p))"
+    else
+      echo "og: $p FAILED (exit $rc)"; tail -n5 "$err"
+    fi
+  done
+  rm -f "$err"
+}
+
+# The P0 manual flow (a Discord request, a ZIP handed over, closed by hand) is the official host's; a community host runs the worker only.
+service_only() { [ $MODE = service ] || die "$1 is the official host's manual flow — a community host's PC runs the worker only (npm run host -- …)"; }
+
+cmd_new() {
+  service_only new
+  local slug=${1:-} discord=${2:-} account=${3:-} id dir description
+  [[ $slug =~ ^[a-z0-9][a-z0-9-]{1,40}$ ]] && [ -n "$discord" ] && [[ $account == *@* ]] ||
+    die "usage: og new <slug> <discord-user-id> <oddbout-account-email> < description.txt"
+  description=$(cat)
+  [ -n "${description//[[:space:]]/}" ] || die "description on stdin is empty"
+  id=$(date +%Y%m%d)-$slug; dir=$KIT/output/$id
+  [ ! -e "$dir" ] || die "$id already exists"
+  mkdir -p "$dir"
+  "$NODE" -e '
+    const fs = require("fs"), [dir, id, discord, account, kitRef, codex, grok] = process.argv.slice(1);
+    const description = fs.readFileSync(0, "utf8").trim();
+    fs.writeFileSync(dir + "/request.json", JSON.stringify({ id, requester: { discord, account }, description,
+      createdAt: new Date().toISOString(), kitRef, codexVersion: codex, grokVersion: grok }, null, 2) + "\n");
+    fs.writeFileSync(dir + "/creation-notes.md", `# ${id}\n\n요청: ${description}\n\n## 선택·피드백\n\n## 묶음 진행\n`);
+  ' "$dir" "$id" "$discord" "$account" "$(git -C "$KIT" rev-parse HEAD)" "$CODEX_VERSION" "$GROK_VERSION" <<<"$description"
+  ledger --job "$id" --kind new
+  echo "$id"
+}
+
+cmd_explain() {
+  [ "${1:-}" = -- ] && shift
+  local c; c=$(classify "$@")
+  echo "provider ${c% *}  codex-slots ${c#* }  ledger \"$(tool_label "$@")\""
+}
+
+# Codex sessions this job started: sessions whose working directory lies under the job folder. sprite-gen runs codex
+# with -C <run dir> (run dirs live under output/<job>/), and gen-set rows in a TMPDIR scratch dir, which `og run`
+# points inside the job. With a marker file, only sessions started since. Two runs of one job overlapping in time both
+# count each other's sessions, so per-run numbers are approximate; `og deliver` records the exact per-job total.
+# codex 0.157 keeps sessions in ~/.codex/state_<n>.sqlite (threads: cwd, created_at) and no rollout files;
+# older codex wrote one rollout-*.jsonl per session with the cwd in its first line.
+codex_sessions() {
+  local jobdir=$1 marker=${2:-} newer=() db
+  db=$(ls "$G"/.codex/state_*.sqlite 2>/dev/null | sort -V | tail -n1)
+  if [ -n "$db" ]; then
+    python3 - "$db" "$jobdir" "$([ -n "$marker" ] && stat -c %Y "$marker" || echo 0)" <<'PY' 2>/dev/null || echo 0
+import os, sqlite3, sys
+db, jobdir, since = sys.argv[1], sys.argv[2], int(sys.argv[3])
+prefixes = {jobdir.rstrip("/") + "/", os.path.realpath(jobdir) + "/"}
+con = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=10)
+rows = con.execute("select cwd from threads where created_at >= ?", (since,)).fetchall()
+print(sum(any((cwd + "/").startswith(p) for p in prefixes) for (cwd,) in rows))
+PY
+    return
+  fi
+  [ -d "$G/.codex/sessions" ] || { echo 0; return; }
+  [ -n "$marker" ] && newer=(-newer "$marker")
+  find "$G/.codex/sessions" -name 'rollout-*.jsonl' "${newer[@]}" -print0 2>/dev/null | "$NODE" -e '
+    const fs = require("fs"), prefixes = [process.argv[1], fs.realpathSync(process.argv[1])].map(p => p + "/");
+    const files = fs.readFileSync(0, "utf8").split(String.fromCharCode(0)).filter(Boolean);
+    let n = 0;
+    for (const f of files) {
+      try {
+        const first = fs.readFileSync(f, "utf8").split(String.fromCharCode(10), 1)[0];
+        const cwd = JSON.parse(first)?.payload?.cwd ?? "";
+        if (prefixes.some(p => (cwd + "/").startsWith(p))) n += 1;
+      } catch {}
+    }
+    process.stdout.write(String(n));' "$jobdir"
+}
+
+# Globals so the signal traps can close the ledger line of an interrupted run.
+RUN_JOB= RUN_DIR= RUN_ID= RUN_TOOL= RUN_PROVIDER= RUN_T0= RUN_WAIT=0 RUN_MARK= RUN_DONE=
+finish_run() {
+  [ -n "$RUN_ID" ] && [ -z "$RUN_DONE" ] || return 0
+  RUN_DONE=1
+  local rc=$1 ms=0 sessions=0
+  release_slots
+  [ -n "$RUN_T0" ] && ms=$(($(now_ms) - RUN_T0))
+  [ -n "$RUN_MARK" ] && sessions=$(codex_sessions "$RUN_DIR" "$RUN_MARK")
+  rm -f "$RUN_MARK"
+  ledger --job "$RUN_JOB" --kind run --phase end --run "$RUN_ID" --tool "$RUN_TOOL" --provider "$RUN_PROVIDER" \
+    --account "$RUN_ACCOUNT" --ms "$ms" --waitMs "$RUN_WAIT" --exit "$rc" --codexSessions "$sessions"
+  if [ "$RUN_PROVIDER" != codex ] && [ "$sessions" -gt 0 ]; then
+    echo "og: WARNING — '$RUN_TOOL' was classified $RUN_PROVIDER but $sessions codex session(s) started in this job meanwhile (it, or a run overlapping it)" >&2
+  fi
+}
+
+cmd_run() {
+  local job=${1:-} dir c k t1 rc=0; shift || true
+  [ "${1:-}" = -- ] && shift
+  [ $# -gt 0 ] || die "usage: og run <job> -- <command...>"
+  # A refusal from here until the command starts (job, account, slots, memory slice) exits 3, sprite-gen's own
+  # "nothing was sent": the worker may run it again, where a run that ended without a report is never re-sent unseen.
+  DIE_EXIT=3
+  dir=$(job_dir "$job")
+  c=$(classify "$@"); RUN_PROVIDER=${c% *}; k=${c#* }
+  RUN_ACCOUNT=none
+  case $RUN_PROVIDER in codex) guard_account codex ;; grok) guard_account grok; refresh_grok ;; esac
+  RUN_JOB=$job RUN_DIR=$dir RUN_ID=$(date +%s%N) RUN_TOOL=$(tool_label "$@")
+  RUN_MARK=$(mktemp)
+  rm -f "$dir/.delivered"   # the package may change; deliver again
+  mkdir -p "$dir/.tmp"      # scratch dirs (sprite-gen gen-set rows) stay inside the job: purge removes them, and their codex sessions count
+  trap 'finish_run 129; exit 129' HUP
+  trap 'finish_run 130; exit 130' INT
+  trap 'finish_run 143; exit 143' TERM
+  ledger --job "$job" --kind run --phase start --run "$RUN_ID" --tool "$RUN_TOOL" --provider "$RUN_PROVIDER" --account "$RUN_ACCOUNT"
+  t1=$(now_ms)
+  if ! acquire_slots "$k"; then
+    RUN_WAIT=$(($(now_ms) - t1)); finish_run 3; trap - HUP INT TERM
+    echo "og: no $k free codex slot(s) within ${SLOT_WAIT}s — not started" >&2
+    return 3
+  fi
+  RUN_WAIT=$(($(now_ms) - t1)); RUN_T0=$(now_ms)
+  (cd "$KIT" && in_slice "${SVC_ENV[@]}" TMPDIR="$dir/.tmp" timeout --kill-after=30 "$RUN_TIMEOUT" "$@") || rc=$?
+  finish_run $rc
+  trap - HUP INT TERM
+  return $rc
+}
+
+cmd_deliver() {
+  service_only deliver
+  local job=${1:-} dir manifest pkg stage check zipfile sha
+  dir=$(job_dir "$job")
+  if [ -n "${2:-}" ]; then manifest=$dir/$2/fighter.json; else
+    manifest=$(find "$dir" -name fighter.json -not -path '*/node_modules/*' -not -path '*/.deliver-*')
+    [ -n "$manifest" ] || die "no fighter.json under $job"
+    [ "$(wc -l <<<"$manifest")" -eq 1 ] || die "several fighter.json under $job — og deliver $job <package-dir>"
+  fi
+  [ -f "$manifest" ] || die "no $manifest"
+  pkg=$(dirname "$manifest"); stage=$KIT/output/.deliver-$job; check=$KIT/output/.deliver-check-$job
+  zipfile=$G/deliveries/$job.zip
+  rm -rf "$stage" "$check"; mkdir -p "$stage" "$check" "$G/deliveries"
+  # Only the files the manifest declares — stale sheets from earlier passes stay out.
+  local list
+  list=$("$NODE" -e '
+    const m = JSON.parse(require("fs").readFileSync(process.argv[1], "utf8"));
+    for (const a of m.assets ?? []) { if (!/^assets\/[a-z0-9-]+\.webp$/.test(a.path)) { console.error("bad asset path " + a.path); process.exit(1); } console.log(a.path); }' "$manifest") ||
+    die "manifest asset list is unreadable"
+  mapfile -t assets <<<"$list"
+  [ ${#assets[@]} -gt 0 ] || die "manifest declares no assets"
+  mkdir -p "$stage/assets"
+  cp "$manifest" "$stage/fighter.json"
+  for a in "${assets[@]}"; do cp "$pkg/$a" "$stage/$a"; done
+  (cd "$stage" && zip -X -q "$zipfile.tmp" fighter.json "${assets[@]}")
+  rm -rf "$stage"
+  # Validate what the requester will upload: the extracted ZIP, not the folder it came from.
+  unzip -q "$zipfile.tmp" -d "$check"
+  if ! (cd "$KIT" && svc_env npm run --silent validate -- "output/.deliver-check-$job/fighter.json"); then
+    rm -rf "$check" "$zipfile.tmp"; die "package failed validation — not delivering"
+  fi
+  rm -rf "$check"
+  mv "$zipfile.tmp" "$zipfile"; chmod 640 "$zipfile"
+  sha=$(sha256sum "$zipfile" | cut -d' ' -f1)
+  echo "$sha" >"$dir/.delivered"
+  ledger --job "$job" --kind deliver --bytes "$(stat -c %s "$zipfile")" --codexSessions "$(codex_sessions "$dir")"
+  echo "og: $zipfile ($(stat -c %s "$zipfile") bytes, ${#assets[@]} sheets, sha256 $sha)"
+  echo "og: send it in the requester's private room; they upload it at creator.html → 내 선수 → 패키지 올리기"
+}
+
+cmd_close() {
+  service_only close
+  local job=${1:-} fighter=${2:-} dir
+  dir=$(job_dir "$job")
+  [ -f "$dir/.delivered" ] || die "$job was not delivered (or changed after delivery)"
+  [[ $fighter =~ ^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$ ]] ||
+    die "usage: og close <job> <registered-fighter-uuid> — after admin.html shows it registered under the requester's account"
+  printf '{"fighterId":"%s","closedAt":"%s"}\n' "$fighter" "$(date -Is)" >"$dir/.closed"
+  ledger --job "$job" --kind close
+  echo "og: $job closed"
+}
+
+# Request text, reference images and generated pictures are personal data; only ledger numbers stay.
+cmd_purge() {
+  local job=${1:-} dir
+  dir=$(job_dir "$job")
+  [ -f "$dir/.closed" ] || [ "${2:-}" = --cancelled ] || die "$job is not closed — og purge $job --cancelled for an abandoned request"
+  rm -rf "$dir" "$G/deliveries/$job.zip"
+  ledger --job "$job" --kind purge
+  echo "og: $job purged"
+}
+cmd_prune() {
+  local days=${1:-30} idle
+  [[ $days =~ ^[0-9]+$ ]] || die "usage: og prune [days]"
+  find "$G/.codex/sessions" "$G/.codex/generated_images" -type f -mtime "+$days" -delete 2>/dev/null || true
+  local r d
+  for r in "$KIT"/output/*/.closed; do
+    [ -f "$r" ] || continue
+    d=$(dirname "$r"); [ -n "$(find "$r" -mtime "+$days")" ] && cmd_purge "$(basename "$d")"
+  done
+  # A worker job the API cancelled or expired never gets .closed (the worker only learns it lost the lease). No file of it
+  # changed in 14 days (or $days, when longer) — past the 7-day wait for its creator — means it is over: its request text and pictures go.
+  idle=$((days > 14 ? days : 14))
+  for d in "$KIT"/output/*-gen-*/; do
+    [ -f "$d/request.json" ] && [ ! -f "$d/.closed" ] || continue
+    [ -z "$(find "$d" -newermt "-$idle days" -print -quit)" ] && cmd_purge "$(basename "$d")" --cancelled
+  done
+  echo "og: provider sessions and closed jobs older than $days days removed, idle worker jobs older than $idle"
+}
+
+# One file of a job to stdout, for the operator to look at and show the requester (sprite-gen writes 600 files).
+cmd_cat() {
+  local job=${1:-} rel=${2:-} dir real
+  dir=$(job_dir "$job")
+  [[ $rel =~ ^[A-Za-z0-9._/-]+$ ]] && [[ $rel != *..* ]] || die "usage: og cat <job> <path inside the job> > file"
+  real=$(realpath -e "$dir/$rel" 2>/dev/null) || die "no $rel in $job"
+  [[ $real == "$(realpath "$dir")"/* ]] && [ -f "$real" ] || die "$rel is not a file inside $job"
+  cat "$real"
+}
+
+cmd_status() {
+  echo "root    $G (user $SVC_USER, $MODE install)"
+  echo "kit     $(git -C "$KIT" rev-parse --short HEAD 2>/dev/null || echo missing) (pinned ${KIT_REF:0:7})"
+  echo "codex   $(svc_env codex --version 2>/dev/null || echo missing)   pinned: $(pinned codex || true)"
+  echo "grok    $(svc_env grok --version 2>/dev/null | head -1 || echo missing)   pinned: $(pinned grok || true)"
+  echo "slice   $SLICE MemoryMax=$(systemctl --user show -p MemoryMax --value "$SLICE" 2>/dev/null || echo ?)"
+  cmd_rife status
+  local r d s
+  for r in "$KIT"/output/*/request.json; do
+    [ -f "$r" ] || continue
+    d=$(dirname "$r")
+    if [ -f "$d/.closed" ]; then s=closed; elif [ -f "$d/.delivered" ]; then s=delivered; else s=open; fi
+    echo "job     $(basename "$d") $s"
+  done
+}
+
+cmd_report() { "$NODE" "$HERE/ledger-report.mjs" "$LEDGER" "$@"; }
+
+# og rife torch|ncnn|status — which RIFE the alignment runs. torch needs an NVIDIA GPU (CUDA) and about 3 GB for PyTorch in the engine's venv.
+ENGINE=$KIT/vendor/sprite-gen
+rife_torch_install() {
+  command -v nvidia-smi >/dev/null && nvidia-smi -L >/dev/null 2>&1 || die "no NVIDIA GPU here — keep the binary (og rife ncnn)"
+  svc_env "$ENGINE/.venv/bin/python" -I -c 'import torch' 2>/dev/null ||
+    svc_env "$ENGINE/.venv/bin/pip" install --quiet --progress-bar off 'torch>=2.13.0,<3' || die "PyTorch did not install"
+  svc_env "$ENGINE/.venv/bin/python" -I -c 'import torch, sys; sys.exit(0 if torch.cuda.is_available() else 1)' ||
+    die "PyTorch sees no CUDA device — keep the binary (og rife ncnn)"
+  (cd "$ENGINE" && svc_env SPRITE_GEN_RIFE_BACKEND=torch "$ENGINE/.venv/bin/sprite-gen" rife install --backend torch >/dev/null) ||
+    die "the torch model did not install"
+}
+cmd_rife() {
+  case ${1:-status} in
+    torch)
+      local open; open=$(open_jobs); [ -z "$open" ] || die "jobs still open — a loop half aligned one way would finish the other: $open"
+      rife_torch_install; echo torch >"$RIFE_FILE"; echo "og: RIFE runs on PyTorch (CUDA)" ;;
+    ncnn)
+      local open; open=$(open_jobs); [ -z "$open" ] || die "jobs still open: $open"
+      rm -f "$RIFE_FILE"; echo "og: RIFE runs the ncnn binary" ;;
+    status) echo "rife    $(cat "$RIFE_FILE" 2>/dev/null || echo ncnn)" ;;
+    *) die "usage: og rife torch|ncnn|status" ;;
+  esac
+}
+
+# Replace this tool's own files from a tar on stdin (the operator cannot write here directly).
+cmd_self_update() {
+  [ $MODE = service ] || die "a community host updates with npm run host -- update (from the kit checkout)"
+  local tmp; tmp=$(mktemp -d)
+  tar -x -C "$tmp" og ledger-report.mjs ledger-report.test.mjs generation-stages.mjs generation-worker.mjs sprite-outcome.mjs motions.py
+  sed -i 's/\r$//' "$tmp"/*
+  bash -n "$tmp/og" && "$NODE" --check "$tmp/ledger-report.mjs" && "$NODE" --check "$tmp/generation-stages.mjs" &&
+    "$NODE" --check "$tmp/generation-worker.mjs" && "$KIT/vendor/sprite-gen/.venv/bin/python" -I -c 'import ast, sys; ast.parse(open(sys.argv[1]).read())' "$tmp/motions.py" ||
+    { rm -rf "$tmp"; die "new files do not parse — kept the old ones"; }
+  # --check reads one file and follows no import: load the modules the worker loads, from the folder they will run in, so an
+  # import of a file this install does not carry is refused here and not by a worker that restarts in a loop (2026-10-29).
+  "$NODE" --input-type=module -e 'for (const f of process.argv.slice(1)) await import(f)' "$tmp/generation-stages.mjs" "$tmp/ledger-report.mjs" ||
+    { rm -rf "$tmp"; die "new files do not load together — kept the old ones"; }
+  # Rename into place: bash keeps reading the old inode of the running script.
+  install -m 750 "$tmp/og" "$HERE/og.new" && mv -f "$HERE/og.new" "$HERE/og"
+  install -m 640 "$tmp/ledger-report.mjs" "$tmp/ledger-report.test.mjs" "$tmp/generation-stages.mjs" "$tmp/generation-worker.mjs" "$tmp/sprite-outcome.mjs" "$tmp/motions.py" "$HERE/"
+  rm -rf "$tmp"
+  echo "og: updated $HERE"
+}
+
+# ---- codex reaches only what generation needs (2026-10-27 review): the worker runs player text (a look brief, a change note) through
+# codex, and the service user's HOME holds the subscriptions' logins and the worker key. Image generation stays on (sprite-gen needs it):
+# codex 0.157 makes images inside code mode (its `exec` tool calls `tools.image_gen__imagegen`), so code_mode_host stays on — with it
+# off no image is ever made (2026-10-27, measured). Code mode reaches the session's tools only; with the shell tools off it reads no file.
+CODEX_OFF="shell_tool unified_exec browser_use browser_use_external computer_use apps multi_agent hooks plugins remote_plugin"
+CODEX_KEEP_ON="code_mode_host image_generation"
+HARDEN_MARK="# og harden:"
+codex_hardened() {
+  local f=$G/.codex/config.toml k
+  [ -f "$f" ] && grep -q '^\[features\]' "$f" || return 1
+  for k in $CODEX_OFF; do grep -Eq "^[[:space:]]*$k[[:space:]]*=[[:space:]]*false" "$f" || return 1; done
+  for k in $CODEX_KEEP_ON; do grep -Eq "^[[:space:]]*$k[[:space:]]*=[[:space:]]*false" "$f" && return 1; done
+  return 0
+}
+cmd_harden() {
+  local f=$G/.codex/config.toml k tmp
+  if codex_hardened; then echo "og: codex features already off"; return; fi
+  mkdir -p "$G/.codex"
+  # The block an earlier og harden appended is written again; any other [features] table is the operator's to edit.
+  if [ -f "$f" ] && grep -q "^$HARDEN_MARK" "$f"; then
+    tmp=$(mktemp)
+    awk -v mark="$HARDEN_MARK" 'index($0, mark) == 1 { skip = 1; next }
+      skip && ($0 == "[features]" || $0 ~ /^[a-z_]+ = (true|false)$/ || $0 ~ /^[[:space:]]*$/) { next }
+      { skip = 0; print }' "$f" >"$tmp" && cat "$tmp" >"$f"
+    rm -f "$tmp"
+  fi
+  grep -q '^\[features\]' "$f" 2>/dev/null && die "$f already has a [features] table — set $CODEX_OFF to false there by hand"
+  { echo; echo "$HARDEN_MARK the service codex reaches no shell, files, browser, computer, plugins or sub-agents."; echo "[features]"
+    for k in $CODEX_OFF; do echo "$k = false"; done; } >>"$f"
+  echo "og: codex features off: $CODEX_OFF"
+}
+
+# ---- the hosted generation worker (P1, 2026-10-27): generation-worker.mjs as a systemd user service of the service user.
+cmd_worker() {
+  local unit_dir=$UNIT_DIR base key
+  case ${1:-} in
+    run) shift; codex_hardened || die "og harden first — the worker runs player text through codex"
+      OG_ROOT=$G exec "$NODE" "$HERE/generation-worker.mjs" "$@" ;;
+    key)
+      # The API base on the command line, the worker key (afw_…, scope generation) on stdin — never in argv or the ledger.
+      base=${2:-}
+      [[ $base =~ ^https://[A-Za-z0-9.-]+(/[A-Za-z0-9._/-]*)?$ ]] || die "usage: og worker key <https://…/functions/v1/ai-fighter> < key-file"
+      key=$(tr -d '[:space:]')
+      [[ $key =~ ^afw_[a-f0-9]{64}$ ]] || die "the key on stdin must be afw_ and 64 hex"
+      (umask 077; printf 'ODDBOUT_GENERATION_API=%s\nODDBOUT_GENERATION_WORKER_KEY=%s\n' "${base%/}" "$key" >"$G/worker.env")
+      echo "og: worker.env written" ;;
+    install)
+      [ -f "$G/worker.env" ] || die "og worker key first"
+      mkdir -p "$unit_dir"
+      cat >"$unit_dir/$WORKER_UNIT" <<UNIT
+[Unit]
+Description=ODDBOUT hosted fighter generation worker
+After=network-online.target
+
+[Service]
+ExecStart=$G/bin/og worker run
+Restart=always
+RestartSec=30
+Slice=$SLICE
+
+[Install]
+WantedBy=default.target
+UNIT
+      systemctl --user daemon-reload && systemctl --user enable --now "$WORKER_UNIT" && echo "og: worker installed and started" ;;
+    uninstall)
+      systemctl --user disable --now "$WORKER_UNIT" 2>/dev/null || true
+      rm -f "$unit_dir/$WORKER_UNIT"
+      # A host's memory slice is this install's alone; the official host's also caps the operator's manual runs.
+      [ $MODE = service ] || rm -f "$unit_dir/$SLICE"
+      systemctl --user daemon-reload 2>/dev/null || true
+      echo "og: worker stopped and its unit removed" ;;
+    start | stop | restart | status) systemctl --user "$1" "$WORKER_UNIT" --no-pager ;;
+    log) tail -n "${2:-40}" "$G/worker.log" ;;
+    *) die "usage: og worker run [--once] | key <api-base> < key | install | uninstall | start | stop | restart | status | log [n]" ;;
+  esac
+}
+
+usage() {
+  cat <<'EOF'
+og setup | login codex|grok [--replace] | logout codex|grok | health | status | report [job]
+og new <slug> <discord-id> <oddbout-email> < description.txt
+og explain -- <command...>          what a command bills, its codex slots and ledger label
+og run <job> -- <command...>        every generation step goes through this
+og deliver <job> [package-dir] | close <job> <fighter-uuid> | purge <job> [--cancelled] | prune [days]
+og cat <job> <path> > file          read one file of a job (results are 600, service-only)
+og harden                           turn off the service codex's shell, file, browser and plugin features (the worker needs it)
+og rife torch|ncnn|status           the loop alignment's RIFE: PyTorch on an NVIDIA GPU (fast) or the ncnn binary (default)
+og worker key <api-base> < key | install | uninstall | start | stop | restart | status | log [n] | run [--once]
+og self-update                      (operator side) install this copy's files for the service user
+A community host's install runs the same commands through npm run host -- … (scripts/host.mjs); new, deliver, close
+and self-update are the official host's only.
+EOF
+}
+
+case ${1:-} in
+  setup | login | logout | health | new | explain | run | deliver | close | purge | prune | cat | status | report | worker | harden | rife) c=$1; shift; "cmd_$c" "$@" ;;
+  self-update) shift; cmd_self_update ;;
+  *) usage; exit 2 ;;
+esac

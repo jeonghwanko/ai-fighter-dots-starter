@@ -14,9 +14,14 @@ export async function createExample(destination, variant = 'sparring') {
   const fighter = {
     schemaVersion: 1, specVersion: spec.specVersion, localId: challenger ? 'challenger-bot' : 'sparring-bot',
     profile: { name: challenger ? 'Challenger Bot' : 'Sparring Bot', description: 'Original geometric format fixture. Not approved game art.',
+      language: 'en', concept: 'A training robot built from simple shapes. It exists to test the format, not to tell a story.',
+      moves: { combo: { name: 'Test Jabs', description: 'The standard combo under a fixture name.' },
+        slam: { name: 'Test Slam', description: 'The standard slam under a fixture name.' },
+        dash: { name: 'Test Dash', description: 'The standard dash under a fixture name.' },
+        block: { name: 'Test Guard', description: 'The standard block under a fixture name.' } },
       portrait: { assetId: 'idle', crop: { x: 32, y: 0, width: 192, height: 256 } },
       preview: { assetId: 'idle', crop: { x: 0, y: 0, width: 256, height: 512 } } },
-    combat: { kitId: 'standard-duel' },
+    combat: { kitId: 'standard-duel', stats: { power: 3, toughness: 3, speed: 3 } },
     appearance: { projection: 'orthographic', elevationDegrees: 16, sourceFacing: 'right', leftFacing: 'mirror', bodyHeight: 400, bodyScale: 1 },
     assets: [], clips: {},
   };

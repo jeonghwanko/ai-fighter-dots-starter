@@ -4,10 +4,15 @@ import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
+// The game's Edge deploy (crashbang-heroes `npm run fighter:edge`) stages this file alone, so it imports no other
+// repository module; scripts/import-graph.mjs reuses this parser for the plugin bundle (test/edge-bundle.test.mjs).
+const SPECIFIER = /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|(?:^|[\s;])import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
+/** Module specifiers a source imports: static, re-exported, side-effect and literal dynamic imports. */
+export const importSpecifiers = source => [...source.matchAll(SPECIFIER)].map(match => match[1] ?? match[2] ?? match[3]);
+
 const REPOSITORY = fileURLToPath(new URL('../', import.meta.url));
 const ENTRY = 'supabase/functions/ai-fighter/index.ts';
 const IMPORT_MAP = 'supabase/functions/ai-fighter/deno.json', LOCK = 'supabase/functions/ai-fighter/deno.lock';
-const STATIC_IMPORT = /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]/g;
 
 /**
  * Repository-relative files reachable from the Edge entry. A bare specifier must be in the Deno import map:
@@ -21,7 +26,7 @@ export async function edgeFiles({ root = REPOSITORY, entry = ENTRY, importMap = 
     if (seen.has(file)) continue;
     seen.add(file);
     if (file.endsWith('.json')) continue;
-    for (const [, specifier] of (await readFile(path.join(root, file), 'utf8')).matchAll(STATIC_IMPORT)) {
+    for (const specifier of importSpecifiers(await readFile(path.join(root, file), 'utf8'))) {
       if (!specifier.startsWith('.')) {
         if (!(specifier in mapped)) throw new Error(`${file} imports ${specifier}, which the Edge import map does not provide`);
         continue;
@@ -35,7 +40,10 @@ export async function edgeFiles({ root = REPOSITORY, entry = ENTRY, importMap = 
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const names = await edgeFiles();
-  const files = await Promise.all(names.map(async name => ({ name, content: await readFile(path.join(REPOSITORY, name), 'utf8') })));
-  console.log(JSON.stringify({ name: 'ai-fighter', entrypoint_path: ENTRY, import_map_path: IMPORT_MAP, verify_jwt: false, files }));
+  // This checkout carries a null duel engine. Emitting an upload payload here let a handler-only change
+  // erase the live game's engine. Only the game's planner may combine sources, engines and a live version.
+  if (process.argv.length !== 3 || process.argv[2] !== '--list') {
+    console.error('Direct Edge deploy payloads are disabled. Use the game repository: npm run fighter:edge -- plan, then deploy --plan <id>. Use --list only to inspect source paths.');
+    process.exitCode = 1;
+  } else console.log(JSON.stringify(await edgeFiles()));
 }

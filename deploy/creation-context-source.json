@@ -1,0 +1,6 @@
+{
+  "url": "https://raw.githubusercontent.com/jeonghwanko/ai-fighter-dots-starter/refs/heads/codex/game-context/creation-context.json",
+  "gameEndpoint": "https://oddbout.com/ai-fighter/creation-context.json",
+  "owner": "crashbang-heroes/kaito_web/tools/ai-fighter",
+  "distribution": "game-published-development-contract"
+}

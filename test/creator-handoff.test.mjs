@@ -3,15 +3,20 @@ import assert from 'node:assert/strict';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { PUBLIC_CREATOR_PAGE, creatorLink, creatorPage } from '../mcp/creator-handoff.mjs';
 
-const PUBLIC_ORIGIN = 'https://rupin.pryzm.gg';
+const PUBLIC_ORIGIN = new URL(PUBLIC_CREATOR_PAGE).origin;
 const HASH = 'b'.repeat(56);
 const EXPIRES = '2099-01-01T00:10:00.000Z';
 
 test('links open only the public creator homepage or a loopback development page', () => {
   assert.deepEqual(creatorPage(), { origin: PUBLIC_ORIGIN, href: PUBLIC_CREATOR_PAGE });
+  assert.deepEqual(creatorPage('https://rupin.pryzm.gg/creator.html'), creatorPage());
+  assert.deepEqual(creatorPage('https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html'), creatorPage());
   assert.equal(creatorPage('http://127.0.0.1:5190/creator.html').origin, 'http://127.0.0.1:5190');
   for (const page of ['https://evil.example/creator.html', 'http://rupin.pryzm.gg/creator.html', 'https://rupin.pryzm.gg/index.html',
-    'https://rupin.pryzm.gg/creator.html#x', 'https://user@rupin.pryzm.gg/creator.html', 'http://192.168.0.2:5190/creator.html'])
+    'https://rupin.pryzm.gg/creator.html#x', 'https://user@rupin.pryzm.gg/creator.html', 'http://192.168.0.2:5190/creator.html',
+    'https://jeonghwanko.github.io/another-project/creator.html',
+    `${PUBLIC_CREATOR_PAGE}?redirect=evil`, `${PUBLIC_CREATOR_PAGE}#token`,
+    'https://jeonghwanko.github.io.evil.example/ai-fighter-dots-starter/creator.html'])
     assert.throws(() => creatorPage(page), /creator-page-not-allowed/, page);
 });
 
@@ -21,6 +26,9 @@ test('the link carries only the server-issued token hash, in the fragment', asyn
   assert.deepEqual(calls, [{ route: 'creator-handoffs', options: { method: 'POST' } }]);
   assert.equal(link.loginUrl, `${PUBLIC_CREATOR_PAGE}#handoff=${HASH}`);
   assert.equal(link.expiresAt, EXPIRES);
+  const migrated = await creatorLink({ page: 'https://rupin.pryzm.gg/creator.html',
+    request: async () => ({ tokenHash: HASH, expiresAt: EXPIRES }) });
+  assert.equal(migrated.loginUrl, link.loginUrl);
   for (const reply of [{ tokenHash: 'not-hex', expiresAt: EXPIRES }, { tokenHash: HASH }, {}])
     await assert.rejects(creatorLink({ request: async () => reply }), /invalid-api-response/);
   await assert.rejects(creatorLink({ page: 'https://evil.example/creator.html', request: async () => ({ tokenHash: HASH, expiresAt: EXPIRES }) }), /creator-page-not-allowed/);

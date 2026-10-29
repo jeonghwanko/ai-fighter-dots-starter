@@ -1,22 +1,14 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
-import {readFile,readdir} from 'node:fs/promises';
-import {PGlite} from '@electric-sql/pglite';
 import {createHandler,sha256} from '../api/handler.mjs';
+import {applyMigration,migrationNames,supabasePlatform} from './helpers/fighter-database.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with {type:'json'};
 
 /** Two duel-approved fighters in a migrated PGlite, and a db adapter shaped like the Supabase client. */
 async function duelFixture() {
-  const sql=new PGlite();
-  await sql.exec(`create role anon; create role authenticated; create role service_role bypassrls;
-    create schema auth; create table auth.users(id uuid primary key);
-    create function auth.uid() returns uuid language sql as 'select null::uuid';
-    grant usage on schema auth to authenticated,service_role; create schema storage;
-    create table storage.buckets(id text primary key,name text,public boolean,file_size_limit bigint,allowed_mime_types text[]);
-    create table storage.objects(bucket_id text,name text,metadata jsonb,primary key(bucket_id,name));
-    grant usage on schema storage to service_role; grant select on storage.objects to service_role;`);
-  const dir=new URL('../supabase/migrations/',import.meta.url);
-  for(const file of (await readdir(dir)).filter(x=>x.endsWith('.sql')).sort()) await sql.exec(await readFile(new URL(file,dir),'utf8'));
+  // The shared platform stand-in, so a migration needing a new auth column (client_name) is added once.
+  const sql=await supabasePlatform();
+  for(const name of await migrationNames()) await applyMigration(sql,name);
   const ids=[]; const manifestText=JSON.stringify(example),hash=await sha256(new TextEncoder().encode(manifestText));
   for(const name of ['A','B']) {
     const owner=crypto.randomUUID(),sub=crypto.randomUUID(),id=crypto.randomUUID();ids.push(id);
@@ -24,7 +16,7 @@ async function duelFixture() {
     await sql.query(`insert into af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status)
       values($1,$2,$3,$4,$5,$6,1,'registered')`,[sub,owner,crypto.randomUUID(),manifestText,example,hash]);
     await sql.query(`insert into af_fighters(id,submission_id,owner_id,manifest_sha,profile,review_state,runtime_approved,runtime_scope,runtime_manifest_sha,review_evidence,duel_approved,duel_manifest_sha)
-      values($1,$2,$3,$4,$5,'approved',true,'arena-player-v1',$4,$6,true,$4)`,[id,sub,owner,hash,{name},{authorization:'test',validation:'test',duelValidation:'test'}]);
+      values($1,$2,$3,$4,$5,'approved',true,'arena-player-v1',$4,$6,true,$4)`,[id,sub,owner,hash,name==='A'?{name,names:{ko:'에이'}}:{name},{authorization:'test',validation:'test',duelValidation:'test'}]);
   }
   const functions={af_reserve_duel:['p_key','p_a','p_b','p_engine'],af_complete_duel:['p_id','p_engine','p_result'],af_fail_duel:['p_id','p_engine','p_code'],af_duel_rankings:[]};
   const db={rpc:async(name,args)=>{try {
@@ -35,6 +27,8 @@ async function duelFixture() {
     assert.ok(['af_fighters','af_submissions','af_duels'].includes(table));let filters=[],values=[];
     const q={select:()=>q,eq:(k,v)=>{assert.match(k,/^\w+$/);values.push(v);filters.push(`${k}=$${values.length}`);return q;},
       not:(k)=>{assert.equal(k,'completed_at');filters.push('completed_at is not null');return q;},
+      in:(k,v)=>{assert.match(k,/^\w+$/);values.push(v);filters.push(`${k}=any($${values.length})`);return q;},
+      then:(resolve,reject)=>sql.query(`select * from ${table} where ${filters.join(' and ')}`,values).then(r=>({data:r.rows}),error=>({error})).then(resolve,reject),
       maybeSingle:async()=>({data:(await sql.query(`select * from ${table} where ${filters.join(' and ')}`,values)).rows[0]??null})};return q;
   }};
   return {sql,db,ids};
@@ -61,6 +55,7 @@ test('server matches: immutable result, atomic pair records, retries, budgets, a
     assert.equal((await sql.query('select count(*)::int as n from af_duels')).rows[0].n,1);
     const rank=await (await handle(new Request('https://test/ai-fighter/rankings'))).json();
     assert.deepEqual(rank.rankings.map(x=>[x.name,Number(x.won),Number(x.lost),Number(x.points)]),[['A',1,0,3],['B',0,1,0]]);
+    assert.deepEqual(rank.rankings.map(x=>x.names??null),[{ko:'에이'},null]);
     const callsBefore=calls;assert.equal((await post()).status,200);assert.equal(calls,callsBefore);
     assert.equal((await post({...body,a:body.b,b:body.a})).status,409);
     const read=await (await handle(new Request(`https://test/ai-fighter/duels/${match.id}`))).json();assert.equal(read.match.id,match.id);
@@ -108,5 +103,43 @@ test('a failed run leaves the match budget, retries can finish it, and repeated 
     const braked=await post(crypto.randomUUID());
     assert.equal(braked.status,503); assert.equal((await braked.json()).code,'duels-failing');
     assert.equal((await post(first)).status,200); // A finished match is still returned.
+  } finally {await sql.close();}
+});
+
+test('a page plays the engine it names when the server keeps it; any other name plays the current engine',async()=>{
+  const {sql,db,ids}=await duelFixture();
+  try {
+    const result=engine=>({winner:0,how:'ko',ms:1000,hp:[0.5,0],contacts:[3,1],digest:engine==='test-v1'?'11111111':'00000000'});
+    const ran=[];
+    const engines={'test-v0':()=>{ran.push('test-v0');return result('test-v0');},'bad name!':()=>result('x'),'test-v2':'not a function'};
+    const handle=createHandler({db,engineVersion:'test-v1',simulateDuel:()=>{ran.push('test-v1');return result('test-v1');},engines,release:'rel-0123456789ab'});
+    const post=query=>handle(new Request(`https://test/ai-fighter/duels${query}`,{method:'POST',body:JSON.stringify({a:ids[0],b:ids[1],idempotencyKey:crypto.randomUUID()})}));
+    const engineOf=async response=>{assert.equal(response.status,200);return (await response.json()).match.engine;};
+    assert.equal(await engineOf(await post('?engine=test-v0')),'test-v0');
+    for(const query of ['','?engine=test-v1','?engine=test-v9','?engine=bad%20name!','?engine=test-v2']) assert.equal(await engineOf(await post(query)),'test-v1');
+    assert.deepEqual(ran,['test-v0','test-v1','test-v1','test-v1','test-v1','test-v1']);
+    const rank=await (await handle(new Request('https://test/ai-fighter/rankings'))).json();
+    assert.equal(rank.engine,'test-v1'); assert.deepEqual(rank.engines,['test-v1','test-v0']); assert.equal(rank.release,'rel-0123456789ab');
+    // A retry under another engine's name returns the stored match on its own engine (the page lets go of the key).
+    const key=crypto.randomUUID(),body=JSON.stringify({a:ids[0],b:ids[1],idempotencyKey:key});
+    await handle(new Request('https://test/ai-fighter/duels?engine=test-v0',{method:'POST',body}));
+    assert.equal(await engineOf(await handle(new Request('https://test/ai-fighter/duels',{method:'POST',body}))),'test-v0');
+  } finally {await sql.close();}
+});
+
+test('an abandoned reservation stops holding the duel budget; a recent unfinished one still counts',async t=>{
+  // The pair budget counts today's matches (UTC); a six-minute-old reservation is still today only after 00:06.
+  const now=new Date();
+  if(now.getUTCHours()===0 && now.getUTCMinutes()<6) return t.skip('within six minutes of UTC midnight');
+  const {sql,ids}=await duelFixture();
+  try {
+    const reserve=()=>sql.query('select (af_reserve_duel($1,$2,$3,$4)).id',[crypto.randomUUID(),ids[0],ids[1],'test-v1']);
+    // Twenty reservations whose Edge run was killed before it completed or failed.
+    for(let i=0;i<20;i++) await reserve();
+    await assert.rejects(reserve(),/duel-budget/,'in flight within five minutes: the pair budget is held');
+    await sql.query("update af_duels set created_at=now()-interval '6 minutes'");
+    await reserve(); // Abandoned after five minutes: no longer in flight.
+    assert.equal((await sql.query('select count(*)::int as n from af_duels where result is null and failed_at is null')).rows[0].n,21,
+      'abandoned rows are kept for their key retries, only uncounted');
   } finally {await sql.close();}
 });

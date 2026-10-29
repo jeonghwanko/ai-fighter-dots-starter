@@ -1,4 +1,7 @@
-# Supabase Free 베타 운영
+# 이전 초대 베타 운영 기록
+
+> 이 문서는 이전 설계·시험 기록이다. 2026-10-21부터 초대와 사전 승인은 폐지했다. 현재 설치·등록·사후 조치는 [공개 이용 정책](OPEN-REGISTRATION.md)을 따른다. 아래 초대·승인 절차를 신규 사용자에게 적용하지 않는다.
+
 
 v0.2는 초대된 사용자의 업로드 → 서버 파일 검사 → 선수 레지스트리 등록을 구현한다.
 2026-10-19 기존 Free 프로젝트에서 실제 MCP로 예제 선수 1명을 등록했다.
@@ -34,7 +37,7 @@ sequenceDiagram
 같은 키에 다른 JSON을 보내면 409다. 수정한 패키지는 새 키로 제출한다.
 24시간 안에 업로드를 끝내지 못한 제출은 같은 사용자의 다음 제출 생성 때 `rejected`(`upload-expired`)로 닫힌다.
 그 전까지 조회 응답은 `uploading`에 `code: "upload-expired"`와 빈 `pending`을 함께 보인다.
-사용자당 등록 선수는 1명이며 등록 후 교체 API는 아직 없다.
+현재 사용자당 등록 선수는 최대 3명이다. 새 선수는 `fighter` 없이 제출하며, 기존 선수 수정은 추가 등록 수를 차지하지 않는다. 등록한 선수는 `POST submissions?fighter=<id>`로 패키지를 제자리에서 교체한다. 선수 ID와 전적은 유지된다.
 
 ## 배포
 
@@ -51,18 +54,31 @@ Storage bucket은 비공개 `ai-fighter-beta`다. 기존 게임 테이블·로�
 기존 프로젝트를 CLI에 연결할 때는 **그 프로젝트의 기존 마이그레이션 이력도 먼저 가져와 대조**한다.
 이 샘플 하나만으로 기존 프로젝트에 `db reset` 또는 무검토 `db push`를 실행하지 않는다.
 
-Supabase CLI에서 계정 로그인·프로젝트 선택 후:
+새 마이그레이션 작성 규칙(`test/migration-rules.test.mjs`가 검사한다):
+
+- 함수를 바꾸면 `create or replace function` 전체를 다시 쓴다. `pg_get_functiondef` 결과를 `replace()`로 고치는
+  방식은 쓰지 않는다. 결과 본문이 파일에 남지 않아 앞의 마이그레이션을 모두 따라가야 읽을 수 있다.
+  이미 운영에 적용된 두 파일(`20261024022222`, `20261024104406`)만 예외다.
+- 버전(앞 14자리)은 파일마다 하나다. `20261021090000`을 두 파일이 함께 쓰던 것을 2026-10-27에
+  `20261021090001_ai_fighter_worker_dispatch.sql`로 바꿨다(순서 동일). 운영은 `db push`를 쓰지 않고 파일별로
+  적용하므로 운영 DB에는 영향이 없다. 운영 이력을 맞추려면 `migration repair --status applied 20261021090001`이 필요하다.
+- 함수 안의 `update`·`delete`는 `where`로 행을 고른다. 운영 API 역할(`authenticator`)은 `safeupdate`를 불러와 `where` 없는 문장을
+  거부한다. 이관은 postgres로 돌고 로컬 DB에는 `safeupdate`가 없어 둘 다 이 실패를 보이지 않는다. 한 행짜리 표도
+  `where singleton`처럼 적는다(2026-10-27 생성 워커 심장 박동이 모두 `database-unavailable`로 실패했다).
+
+운영 `ai-fighter`는 게임 저장소의 배포 도구로만 올린다. plan의 변경 파일·현재 및 보관 엔진·대체할 운영 버전을 확인한 뒤 같은 옵션으로 배포한다:
 
 ```sh
-supabase functions deploy ai-fighter --project-ref YOUR_PROJECT_REF --no-verify-jwt
+npm run fighter:edge -- plan
+npm run fighter:edge -- deploy --plan <id>
 ```
 
-함수 파일 목록은 `node scripts/edge-bundle.mjs`가 진입점의 import 그래프에서 만든다. 새 import가 배포에서 빠지지 않는다.
+함수 파일 목록은 `edgeFiles`가 진입점의 import 그래프에서 만든다. 게임 배포 도구가 이 함수를 가져와 실제 엔진과 보관 엔진을 포함한다. `node scripts/edge-bundle.mjs --list`는 경로 확인만 가능하며 배포 payload를 만들지 않는다.
 Deno import map에 없는 모듈(sharp, `node:` 모듈)을 Edge 코드가 import하면 목록 생성이 실패한다.
 마이그레이션을 먼저, Edge 함수를 다음에, 작업자를 마지막에 반영한다.
 
-**서버 대결을 운영할 때:** 먼저 `supabase/functions/ai-fighter/duel-engine.mjs`를 게임 원천에서 생성·검증한
-순수 엔진 번들로 교체하고 배포한다. 샘플에 있는 파일은 엔진 없는 설치에서 경기 저장을 503으로 막는 어댑터다.
+**서버 대결을 운영할 때:** 게임 배포 도구가 `supabase/functions/ai-fighter/duel-engine.mjs`를 게임 원천에서 생성·검증한
+순수 엔진 번들로 교체한다. 샘플에 있는 파일은 엔진 없는 설치에서 경기 저장을 503으로 막는 어댑터다. 이 체크아웃을 Supabase CLI/MCP나 수제 payload로 직접 배포하지 않는다.
 게임 소스·원화는 이 공개 스타터에 포함하지 않는다. 기존 운영 함수에 빈 어댑터를 덮어쓰지 않는다.
 게임의 `tools/ai-fighter/build-duel-engine.mjs`는 같은 공통 규칙·AI·타격 엔진을 번들로 만들며,
 `simulateDuel(a, manifestA, b, manifestB, seed)`와 `engineVersion`을 내보낸다.
@@ -244,7 +260,8 @@ Dot에서 첫 실제 등록:
 ## 제작자 홈페이지 연결 링크
 
 `open_creator_homepage`는 `POST /creator-handoffs`로 이 계정 전용 일회용 토큰을 받아
-`https://rupin.pryzm.gg/creator.html#handoff=<tokenHash>` 링크를 만든다. 어느 기기의 브라우저에서나 열린다.
+`https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html#handoff=<tokenHash>` 링크를 만든다. 어느 기기의 브라우저에서나 열린다.
+홈페이지는 무료 GitHub Pages에서 제공하고 기존 Supabase를 사용한다. [호스팅·재배포 안내](CREATOR-HOSTING.md)를 따른다.
 
 - 서버는 `auth.admin.generateLink({ type: 'magiclink' })`로 토큰을 만든다. 메일은 보내지 않으며 해시만 돌려준다.
   발급된 토큰의 사용자 ID가 요청한 사용자와 다르면 거부한다. 이메일이 없는 계정은 `handoff-email-required`(422).
@@ -265,8 +282,8 @@ Dot에서 첫 실제 등록:
 | 메서드·경로 | 인증 | 역할 |
 | --- | --- | --- |
 | GET /spec | 없음 | 서버 규격·베타 등록 가능 여부 |
-| GET /roster | 없음 | 출전 승인된 선수의 ID·이름·해시·범위. 최대 20명 |
-| GET /roster/:id | 없음 | 승인된 JSON 원문과 10분 만료 다운로드 URL |
+| GET /roster | 없음 | 출전 승인된 선수의 ID·이름·해시·범위. 최대 20명. 운영자가 목록에서 뺀 선수(`af_fighters.listed = false`)는 빠진다. 클라우드 MCP로 만든 선수는 `madeWith`(만든 에이전트) |
+| GET /roster/:id | 없음 | 승인된 JSON 원문과 10분 만료 다운로드 URL. 목록에서 뺀 선수도 준다 |
 | POST /duels | 공개 게스트 요청 | 승인된 두 선수의 서버 계산·저장. a, b, idempotencyKey만 허용 |
 | GET /duels/:id | 없음 | 확정된 경기의 ID·시드·해시·엔진 버전·결과 |
 | GET /rankings | 없음 | 승인 선수별 승패·점수·공동 순위. 최대 20명 |
@@ -278,6 +295,19 @@ Dot에서 첫 실제 등록:
 | GET /me | 사용자 JWT (초대 불필요) | 초대 여부·만료 시각·초대 요청 상태 |
 | POST /access-requests | 사용자 JWT (초대 불필요) | 베타 초대 요청. 선택 `note` 500자 이하, 사용자당 1건, 24시간 3회 |
 | POST /creator-handoffs | 사용자 JWT (초대 불필요) | 제작자 홈페이지 일회용 로그인 토큰 해시(`tokenHash`)와 만료 시각. 본문은 읽지 않는다 |
+| GET /story/:id | 없음 | 공방과 연대기(4단계): 공개 선수의 정본(지금 판, `?version=`), 판 목록, 공방 글 20개(`?before=`로 앞), 맺은 관계 |
+| PUT /fighters/:id/canon | 소유자 | 정본 다음 판 `{ base, sheet }`. 읽은 판이 아니면 409 `canon-changed` |
+| POST /notes · DELETE /notes/:id | 사용자 JWT | 공방 글 쓰기(공개 이름 필요)·거두기(글쓴이) |
+| POST /notes/:id/resolve | 소유자 | 제안 받기·거절 `{ decision }`(거절은 비평·경기평도 치운다). 정본 칸은 데이터베이스가 그때의 정본 위에 합친다 |
+| POST /relations · POST /relations/:id/answer · DELETE /relations/:id | 사용자 JWT | 관계 맺기·받기·끊기 |
+| GET /me/workshop · PUT /me/name | 사용자 JWT | 받은 공방 글(최근 100개)·관계(`otherKind`)·내 선수의 지금 정본(`canon`)과 공개 이름 |
+| GET /worlds · GET /worlds/:id | 없음 | 공개 세계 목록·표지, 세계 하나(진영·소속 선수·정사) |
+| POST /worlds · PATCH /worlds/:id · POST /worlds/:id/posts | 사용자 JWT | 세계 열기(계정당 둘)·고치기(진영·정사·선수 빼기)·라운지 글(그 사람으로) |
+| PUT /fighters/:id/world | 소유자 | 선수를 남이 연 세계·진영에 두기, `world: null`이면 빼기 |
+| GET /generations/capabilities | 없음 | 호스팅 생성(2026-10-27): 지금 신청을 받는지(`hosted`)와 이유·대기 작업 수 |
+| GET /generations · POST /generations · POST /generations/uploads | 사용자 JWT | 내 최근 생성 작업 다섯과 무료 사용 여부, 신청(`Idempotency-Key`, 설명·언어·그림 id·권리 확인), 참조 그림 올리기(PNG·JPG·WebP, 4 MB) |
+| GET·DELETE /generations/:id · POST /generations/:id/appearance·motions·register | 사용자 JWT | 작업 읽기(그림은 10분 서명 URL)·취소, 외형 고르기·수정, 동작 수정, 프로필 확인과 등록 |
+| POST /generation-worker/heartbeat·claim·progress·finish · PUT /generation-worker/jobs/:id/artifacts/:name · /generation-worker/jobs/:id/submission… | 생성 작업자(`scope = generation`) | 심장 박동·임대·연장·단계 결과, 후보·미리보기 그림, 신청자 계정으로 패키지 제출 |
 | POST /worker/claim | 작업자 | 큐 임대·일시 다운로드 URL 발급 |
 | POST /worker/finish | 작업자 | 동일 임대·manifest 해시로 검사 확정 |
 
@@ -309,14 +339,18 @@ npm run worker:watch
 
 **판정과 인프라 실패를 구분한다.** 패키지 결함(계약 위반·해시·디코딩·빈 프레임)만 `rejected`로 확정한다.
 다운로드 실패·저장소 바이트 불일치·작업 시간 초과·검사 프로세스 오류는 확정하지 않고 `retry-later`로 끝낸다.
-임대가 끝나면 다른 실행이 다시 가져간다. 세 번 모두 실패하면 서버가 `worker-attempt-limit`로 반려한다.
+작업자는 자기 임대로 `worker/release`(`af_release`)를 호출해 작업을 바로 대기열로 돌려준다. 이때 시도 횟수는
+돌려주고 `infra_failures`만 하나 늘린다. 인프라 실패가 연속 10번이면 검사기를 매번 멈추게 하는 패키지로 보고
+`worker-infrastructure-limit`로 반려한다. 돌려주기에 실패하면(옛 API·장애) 예전처럼 임대가 끝난 뒤 다시 가져가며
+시도를 센다. 세 번 모두 실패하면 서버가 `worker-attempt-limit`로 반려한다.
 따라서 일시적인 네트워크 오류가 제작자의 제출 횟수를 쓰지 않는다.
 
 **검사기 버전.** 작업자는 `VALIDATOR_VERSION`을 영수증에 적고 서버는 `af_settings.validator_versions`에 있는 값만 받는다.
 새 검사기를 배포할 때는 먼저 새 버전을 목록에 추가하고, 모든 작업자를 바꾼 뒤 옛 버전을 지운다.
 결과가 즉시 나타나지 않을 수 있다. PC에서 실행하면 PC가 꺼진 동안 제출은 대기한다.
-상시 운영은 [systemd 유닛 예시](../deploy/ai-fighter-worker.service)처럼 서버 서비스로 둔다.
-전용 사용자, 메모리 512 MB·CPU 50% 상한, 작업 폴더만 쓰기 가능, 비정상 종료 시 재시작이다.
+현재 운영은 [독립 무료 호스팅](CREATOR-HOSTING.md)의 Render Free 웹 작업자다.
+Supabase가 대기 제출이 있을 때만 인증된 HTTP 요청으로 깨우고, 중단된 임대는 다시 시도한다.
+기존 FindThem의 systemd 작업자는 중지·비활성화했다. [systemd 유닛](../deploy/ai-fighter-worker.service)은 별도 서버 운영을 위한 참고 예시다.
 작업자를 옮길 때는 새 토큰 해시를 먼저 등록하고, 새 작업자가 큐를 정상 조회하는지 확인한 뒤 옛 작업자를 멈추고 옛 토큰을 끈다.
 작업자 토큰은 큐를 검사·확정할 권한이다. 이를 Dot에 제공하지 않는다.
 
@@ -331,6 +365,30 @@ V8 힙·픽셀 예산은 네이티브 메모리의 OS 강제 격리를 대신하
 패키지 10 MB, 단일 파일 4 MB, 사용자 요청 120회/분이다.
 전체 제출 예약은 **100 MB**로 제한한다. 20명 모두 최대 10 MB를 제출할 수 있다는 보장은 아니다.
 반려·만료 파일도 예약 용량에 포함한다. 기존 프로젝트의 다른 사용량은 별도 합산한다.
+
+**호출자별 제한(2026-10-28).** 로그인 없는 경기 요청(`POST /duels`)과 기기 연결 시작(`POST /device-logins`)은
+전체 한도(하루 100경기, 10분에 120회)만 있어 한 사람이 모두의 몫을 쓸 수 있었다. 이제 호출자 주소의 키 해시로
+호출자별 제한(경기 하루 25회, 기기 연결 10분에 10회)을 둔다(`api/client-limit.mjs`, `af_rate_hits`).
+주소 원문은 저장하지 않는다. 서버 비밀로 만든 HMAC-SHA256(구분·UTC 날짜·주소)만 하루 보관하고, 날짜가 들어가 날마다 다른 키가 된다.
+첫 `X-Forwarded-For` 값은 클라이언트가 직접 쓸 수 있으므로 쓰지 않는다
+([Supabase discussion #34647](https://github.com/orgs/supabase/discussions/34647)).
+
+켜는 순서(모두 운영자 승인 후):
+
+1. 마이그레이션 `20261028090000_ai_fighter_client_rate_limits.sql`을 적용한다.
+2. 임시 함수 `client-ip-probe`를 배포하고 `node scripts/probe-client-ip.mjs https://<ref>.supabase.co/functions/v1/client-ip-probe`로
+   위조 헤더를 보낸다. `trusted: true`인 출처만 쓴다. 확인 후 함수를 삭제한다.
+3. Edge 비밀 `AI_FIGHTER_CLIENT_LIMIT_SECRET`(32자 이상 무작위)과 `AI_FIGHTER_CLIENT_IP_SOURCE`(`cf-connecting-ip` 또는
+   `forwarded-last`)를 넣고 `ai-fighter` 함수를 배포한다. 둘 중 하나라도 없으면 제한은 꺼진 채로 전체 한도만 동작한다.
+4. 개인정보 처리방침에 이 처리를 적는다(초안은 PR에 있다).
+
+제한 기록 조회가 실패하면 요청을 막지 않고 전체 한도로 넘긴다.
+
+2026-10-27 운영 반영: 마이그레이션 적용 뒤 프로브로 확인했다. 클라이언트가 보낸 `CF-Connecting-IP`는 Cloudflare가 403(`error code: 1000`)으로
+막아 함수에 닿지 않는다. 함수가 받는 `CF-Connecting-IP`는 호출자의 공인 IP와 같았다. `X-Forwarded-For`는 호출자 IP 두 번과 내부 프록시
+주소이고, 클라이언트가 보낸 값은 지워진다. 그래서 `forwarded-last`는 모든 호출자가 같은 키가 되어 쓸 수 없다.
+`AI_FIGHTER_CLIENT_IP_SOURCE=cf-connecting-ip`와 무작위 `AI_FIGHTER_CLIENT_LIMIT_SECRET`을 넣었다. 재배포 없이 적용되어 다음 기기 연결 시작이
+`af_rate_hits`에 한 줄을 남겼다. 프로브 함수는 지웠다. 비밀 값은 따로 보관하지 않는다. 잃으면 새 값으로 바꾸면 되고, 그날의 키만 새로 시작한다.
 
 자동 파일 정리는 아직 없다. 업로드 만료 후에도 기록과 용량 예약이 유지되며 운영자가 정리해야 한다.
 운영자는 `af_settings.paused`로 새 제출을 멈추고, 초대·작업자 `enabled`로 접근을 취소할 수 있다.
