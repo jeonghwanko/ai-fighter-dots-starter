@@ -125,7 +125,7 @@ export async function authenticateCloud(db, request, now = Date.now) {
 
 export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {} }) {
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
-    instructions: (hosted ? HOSTED_INSTRUCTIONS : '') + 'Create and register AI Fighter characters using the user’s own generation account. Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. Call this cloud connector’s check_creation_readiness before first generation, after a workspace restart and before registration. It checks account access; generation and display still require actual host evidence. Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. Require the user’s final registration request and preserve motion review boundaries. Use host file attachments for fighter.json and WebP assets. When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. A VM direct-network denial does not establish failure of the native connector; use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
+    instructions: (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. Call this cloud connector’s check_creation_readiness before first generation, after a workspace restart and before registration. It checks account access; generation and display still require actual host evidence. Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. Require the user’s final registration request and preserve motion review boundaries. Use host file attachments for fighter.json and WebP assets. When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. A VM direct-network denial does not establish failure of the native connector; use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
   // The existing API runs in-process with an identity bound to this verified request. The shim cannot be
   // selected from tool inputs and never receives/returns a privileged credential or another user's identity.
   const scoped = identity ? new Proxy(db, { get(target, key) {
@@ -145,10 +145,10 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     try { await db.rpc('af_record_submission_agent', { p_owner: identity.owner, p_submission: submissionId, p_client: identity.claims.client_id }); }
     catch { /* the maker is a label, not a gate */ }
   };
-  const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
+  const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, idempotent = true, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
     server.registerTool(name, { title, description, inputSchema,
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
-      annotations: { ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish },
+      annotations: { ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
       _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
         ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } }, async args => {
       if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
@@ -455,7 +455,7 @@ function registerWorkshopTools({ register, arena, invoke }) {
  * site's (`api/generations.mjs`); the state machine, quotas and the service switch are the database's. Listed only while the function is
  * configured for them (`ODDBOUT_HOSTED_GENERATION_TOOLS`), so a release of this code alone does not change the published tool list.
  */
-const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the fighter for him (no generation setup of his own), use request_hosted_fighter and follow each result\'s next. ';
+const HOSTED_INSTRUCTIONS = 'When the user wants ODDBOUT to make the fighter for him (no generation setup of his own), use request_hosted_fighter and follow each result\'s next. Save the verified get_profile account id, idempotencyKey and original arguments before sending, and the returned job.id. After a timeout or disconnection, verify get_profile still matches that account, then use get_hosted_fighter with jobId or, if the response was lost, idempotencyKey. With neither identifier, inspect the recent jobs without picking one arbitrarily. A key lookup never creates work; not-found may mean the original call has not saved its job yet. Preserve the unknown outcome and inspect the original call, rather than replaying request_hosted_fighter to recover it. Never create a new key or repeat a look/motion revision merely to recover an unknown outcome. Read the same job again for fresh preview URLs; a URL is not proof that the user saw the image. ';
 /** States the worker is on; an answer from the user is not awaited. */
 const HOSTED_WORKING = new Set(['queued', 'appearance', 'motions', 'submitting']);
 /** A submission still on its way to the registry (`af_submissions`). */
@@ -501,15 +501,19 @@ const withNext = result => result?.ok && result.job ? { ...result, next: hostedN
 function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }) {
   const JOB = UUID_ARG();
   const post = (path, body, headers = {}) => invoke(path, 'POST', JSON.stringify(body), { 'content-type': 'application/json', ...headers });
-  register('request_hosted_fighter', 'ODDBOUT에 선수 만들기 맡기기', 'ODDBOUT makes a fighter for the connected user on its own generation worker: two looks to choose from, then the eleven motions, then registration under his account. delegate: true when he leaves the choices to ODDBOUT ("알아서 해 줘", "just make it"): ODDBOUT picks the look itself (or asks him if neither suits) and he answers once, at the finished motions. host: oddbout (default, ODDBOUT\'s own worker), mine (his own PC as a host: no consent to give, approval not needed), any (any approved community host) or a host id from list_generation_hosts; any or another person\'s host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: true. Pass his words (what the fighter is and looks like) and, if he gave them, up to two of his own pictures with his confirmation that he has the rights to them. One hosted fighter per account is free. Requires the user\'s request. Returns the job; follow its next.',
+  const jobIdForKey = async key => {
+    const { data, error } = await db.from('af_generation_jobs').select('id').eq('owner_id', identity.owner).eq('idempotency_key', key.toLowerCase()).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    return data?.id ?? null;
+  };
+  register('request_hosted_fighter', 'ODDBOUT에 선수 만들기 맡기기', 'ODDBOUT makes a fighter for the connected user on its own generation worker: two looks to choose from, then the eleven motions, then registration under his account. delegate: true when he leaves the choices to ODDBOUT ("알아서 해 줘", "just make it"): ODDBOUT picks the look itself (or asks him if neither suits) and he answers once, at the finished motions. host: oddbout (default, ODDBOUT\'s own worker), mine (his own PC as a host: no consent to give, approval not needed), any (any approved community host) or a host id from list_generation_hosts; any or another person\'s host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: true. Pass his words (what the fighter is and looks like) and, if he gave them, up to two of his own pictures with his confirmation that he has the rights to them. One hosted fighter per account is free. Requires the user\'s request. Save the verified account id and idempotencyKey before calling, and the returned job.id. If the response is lost, recover with get_hosted_fighter using that key; do not replay this creation call while its outcome is unknown. A confirmed safe retry keeps the original key and arguments. Returns the job; follow its next.',
     { description: z.string().min(GENERATION_LIMITS.descriptionMin).max(GENERATION_LIMITS.description), language: z.enum(['ko', 'en']),
       picture: FILE.optional(), secondPicture: FILE.optional(), rightsConfirmed: z.boolean().optional(), delegate: z.boolean().optional(),
       host: z.union([z.enum(['oddbout', 'any', 'mine']), UUID_ARG()]).optional(), hostConsent: z.boolean().optional(), idempotencyKey: UUID_ARG() },
     async ({ description, language, picture, secondPicture, rightsConfirmed, delegate, host, hostConsent, idempotencyKey }) => {
-      // Sent again with its key it is the same request: its pictures are not uploaded twice.
-      const { data: existing, error } = await db.from('af_generation_jobs').select('id').eq('owner_id', identity.owner).eq('idempotency_key', idempotencyKey).maybeSingle();
-      if (error) throw new Problem(503, 'database-unavailable');
-      if (existing) return withNext(await invoke(`generations/${existing.id}`));
+      // Once saved, the same key returns its job without re-uploading pictures. Before that, use read-only recovery.
+      const existingId = await jobIdForKey(idempotencyKey);
+      if (existingId) return withNext(await invoke(`generations/${existingId}`));
       // Off (the service switch, the worker away or unwell) before any picture is kept.
       const { capabilities } = await invoke('generations/capabilities');
       if (!capabilities?.hosted) return { ok: false, code: 'generation-unavailable', reason: capabilities?.reason ?? null };
@@ -524,11 +528,16 @@ function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }
       }
       return withNext(await post('generations', { description, language, ...(refs.length ? { refs, rightsConfirmed: true } : {}), ...(delegate ? { delegate: true } : {}),
         ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}) }, { 'idempotency-key': idempotencyKey }));
-    }, { write: true, openWorld: true, files: ['picture', 'secondPicture'] });
+    }, { write: true, openWorld: true, idempotent: false, files: ['picture', 'secondPicture'] });
   register('list_generation_hosts', '선수 만드는 호스트', 'List who can make a fighter: ODDBOUT itself and the community hosts the operator approved (creators who run the generation worker on their own PC and subscription). For each: id, name, whether it is on now, whether it takes requests that name no host, and how many it can still take today. Pass an id as request_hosted_fighter\'s host.',
     {}, () => invoke('generations/hosts'), { publicTool: true });
-  register('get_hosted_fighter', 'ODDBOUT이 만드는 선수', `Read the connected user's hosted fighter: its state, the two looks or the motion previews as image URLs (ten minutes), the profile draft and next. No jobId: his latest requests and whether hosted generation is open. waitSeconds (up to ${HOSTED_WAIT_SECONDS}) waits here while ODDBOUT works, so one call returns the next thing to show.`,
-    { jobId: JOB.optional(), waitSeconds: z.number().int().min(0).max(HOSTED_WAIT_SECONDS).optional() }, async ({ jobId, waitSeconds = 0 }) => {
+  register('get_hosted_fighter', 'ODDBOUT이 만드는 선수', `Read or resume the connected user's hosted fighter after a timeout or disconnection: its state, the two looks or the motion previews as fresh image URLs (ten minutes), the profile draft and next. Supply either jobId or the original request's idempotencyKey, never both. Key lookup only reads an existing job under this account, even when new generation is disabled; not-found does not prove that an interrupted request never started. With neither identifier: his latest five requests and whether hosted generation is open. Read the same job again if a preview URL expired; do not regenerate. waitSeconds (up to ${HOSTED_WAIT_SECONDS}) is a bounded wait, not a completion guarantee; if still working, check this job again later.`,
+    { jobId: JOB.optional(), idempotencyKey: UUID_ARG().optional(), waitSeconds: z.number().int().min(0).max(HOSTED_WAIT_SECONDS).optional() }, async ({ jobId, idempotencyKey, waitSeconds = 0 }) => {
+      if (jobId && idempotencyKey) return { ok: false, code: 'invalid-selector' };
+      if (idempotencyKey) {
+        jobId = await jobIdForKey(idempotencyKey);
+        if (!jobId) return { ok: false, code: 'not-found', next: 'No saved job was found for this key in the connected account. The original request may still be running. Check the account and original call; do not submit again to recover it.' };
+      }
       if (!jobId) {
         const list = await invoke('generations');
         return list.ok ? { ...list, jobs: list.jobs.map(job => ({ ...job, next: hostedNext(job) })) } : list;
@@ -548,13 +557,13 @@ function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }
       }
       return withNext(await invoke(`generations/${jobId}`));
     });
-  register('choose_hosted_look', '외형 고르기', 'Answer the two looks of the connected user\'s hosted fighter with his words: choose a or b (ODDBOUT then makes the motions), or revise with one sentence (both looks are painted again). Requires the user\'s answer.',
+  register('choose_hosted_look', '외형 고르기', 'Answer the two looks of the connected user\'s hosted fighter with his words: choose a or b (ODDBOUT then makes the motions), or revise with one sentence (both looks are painted again). Requires the user\'s answer. Revisions are not idempotent: after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     { jobId: JOB, choose: z.enum(['a', 'b']).optional(), revise: z.string().min(2).max(GENERATION_LIMITS.note).optional() },
     ({ jobId, choose, revise }) => (choose === undefined) === (revise === undefined) ? { ok: false, code: 'invalid-answer' }
-      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(withNext), { write: true });
-  register('revise_hosted_motion', '동작 하나 고치기', 'Ask ODDBOUT to make one motion of the connected user\'s hosted fighter again with his sentence; the other motions stay. Requires the user\'s request.',
+      : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(withNext), { write: true, idempotent: false });
+  register('revise_hosted_motion', '동작 하나 고치기', 'Ask ODDBOUT to make one motion of the connected user\'s hosted fighter again with his sentence; the other motions stay. Requires the user\'s request. Not idempotent: after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     { jobId: JOB, clip: z.enum(Object.keys(spec.motions)), note: z.string().min(2).max(GENERATION_LIMITS.note) },
-    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(withNext), { write: true });
+    ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(withNext), { write: true, idempotent: false });
   register('register_hosted_fighter', '맡긴 선수 등록', 'Register the connected user\'s hosted fighter once he approved its motions: ODDBOUT packages it and submits it under his account, through the same server check as any fighter. profile holds only what he changed in the draft (name, description, names, bout lines, stats summing to 9). Requires the user\'s registration request.',
     { jobId: JOB, profile: z.object({ name: z.string().min(1).max(profileLimits.name), description: z.string().min(1).max(profileLimits.description),
       names: z.record(z.string(), z.string()), lines: z.record(z.string(), z.string()),

@@ -7,17 +7,22 @@ const HOSTED = ['request_hosted_fighter', 'get_hosted_fighter', 'choose_hosted_l
   'list_generation_hosts'];
 
 // The cloud MCP over the hosted generation API on a real (PGlite) database: the agent carries the user's words and answers, the worker the rest.
-async function connector(g, hosted) {
+async function connector(g, hosted, fetcher = async () => new Response(png(512, 512))) {
   const claims = { sub: g.owner, client_id: crypto.randomUUID(), session_id: crypto.randomUUID(), iss: CLOUD_ISSUER, aud: CLOUD_RESOURCE, role: 'af_mcp',
     af_mcp: 'registration-v1', is_anonymous: false, exp: Math.floor(Date.now() / 1000) + 600 };
   const downloads = [];
   const db = { ...g.db, auth: { getClaims: async () => ({ data: { claims } }) },
     rpc: (name, args) => name === 'af_mcp_session_active' ? { data: true } : g.db.rpc(name, args) };
-  const handle = createCloudHandler({ db, hosted, fetcher: async url => { downloads.push(url); return new Response(png(512, 512)); } });
-  const rpc = async (method, params) => (await (await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
+  const handle = createCloudHandler({ db, hosted, fetcher: async (...args) => { downloads.push(args[0]); return fetcher(...args); } });
+  let loseResponse = false;
+  const rpc = async (method, params) => {
+    const response = await handle(new Request(CLOUD_RESOURCE, { method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: 'Bearer signed-connector-token-for-test' },
-    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }))).json()).result;
-  return { downloads, tools: async () => (await rpc('tools/list', {})).tools,
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params }) }));
+    if (loseResponse) { loseResponse = false; await response.body?.cancel(); throw new Error('simulated lost response'); }
+    return (await response.json()).result;
+  };
+  return { downloads, loseNextResponse: () => { loseResponse = true; }, tools: async () => (await rpc('tools/list', {})).tools,
     call: async (name, args) => (await rpc('tools/call', { name, arguments: args })).structuredContent };
 }
 
@@ -31,6 +36,8 @@ test('hosted generation tools list only when configured', async () => {
     assert.deepEqual(on.find(t => t.name === 'request_hosted_fighter')._meta['openai/fileParams'], ['picture', 'secondPicture']);
     assert.equal(on.find(t => t.name === 'register_hosted_fighter').annotations.destructiveHint, true);
     assert.equal(on.find(t => t.name === 'get_hosted_fighter').annotations.readOnlyHint, true);
+    for (const name of ['request_hosted_fighter', 'choose_hosted_look', 'revise_hosted_motion'])
+      assert.equal(on.find(t => t.name === name).annotations.idempotentHint, false, name);
   } finally { await g.sql.close(); }
 });
 
@@ -90,6 +97,140 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     assert.deepEqual(held.profile, { name: '빨간 주먹', names: { ko: '빨간 주먹', en: 'Red Fist' }, description: '귀가 큰 고양이 복서.',
       lines: { challenge: '덤벼!', win: '또 와!', lose: '다음엔…' }, stats: { power: 4, toughness: 3, speed: 2 } });
     assert.equal((await call('cancel_hosted_fighter', { jobId })).code, 'generation-state');
+  } finally { await g.sql.close(); }
+});
+
+test('a lost request response resumes on a fresh connector with the same job and fresh previews, even while new requests are disabled', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    // Model Storage issuing a different short-lived URL on each read; this does not test actual host display.
+    const storageFrom = g.db.storage.from;
+    let signing = 0;
+    g.db.storage.from = bucket => ({ ...storageFrom(bucket), createSignedUrls: async (paths, seconds) => {
+      assert.equal(seconds, 600);
+      const version = ++signing;
+      return { data: paths.map(path => ({ path, signedUrl: `https://storage.test/${bucket}/${path}?token=fixture-${version}` })) };
+    } });
+    const original = await connector(g, {});
+    const ask = { description: '큰 귀와 빨간 글러브를 가진 고양이 복서', language: 'ko', idempotencyKey: crypto.randomUUID(),
+      picture: { download_url: 'https://files.oaiusercontent.com/fixture-reference', file_id: 'fixture-reference' }, rightsConfirmed: true };
+    original.loseNextResponse();
+    await assert.rejects(original.call('request_hosted_fighter', ask), /simulated lost response/);
+    // A new handler and OAuth session retain no in-process state from the lost call.
+    const resumed = await connector(g, { pollMs: 10 });
+    assert.equal((await resumed.call('get_profile', {})).id, g.owner);
+    const listed = await resumed.call('get_hosted_fighter', {});
+    assert.equal(listed.jobs.length, 1);
+    const jobId = listed.jobs[0].id;
+    const replay = await resumed.call('request_hosted_fighter', ask);
+    assert.equal(replay.job.id, jobId);
+    assert.equal((await resumed.call('get_hosted_fighter', { idempotencyKey: ask.idempotencyKey })).job.id, jobId);
+    const waiting = await resumed.call('get_hosted_fighter', { jobId, waitSeconds: 1 });
+    assert.equal(waiting.job.status, 'queued'); assert.match(waiting.next, /get_hosted_fighter/);
+
+    let held = (await g.work('POST', 'claim', {})).body.job;
+    const finish = (job, result) => g.work('POST', 'finish', { jobId: job.id, leaseToken: job.leaseToken, outcome: 'ok', result });
+    await finish(held, { brief: { profile: { name: 'Fixture Boxer' } } });
+    held = (await g.work('POST', 'claim', {})).body.job;
+    for (const name of ['look-a-0', 'look-b-0'])
+      await g.work('PUT', `jobs/${held.id}/artifacts/${name}`, webp(400, 600), { 'x-generation-lease': held.leaseToken, 'content-type': 'image/webp' });
+    await finish(held, { candidates: ['look-a-0', 'look-b-0'] });
+    const before = await resumed.call('get_hosted_fighter', { jobId });
+    assert.equal(before.job.status, 'appearance_ready');
+    await g.sql.query('update public.af_generation_settings set enabled = false');
+    const reconnected = await connector(g, {});
+    const after = await reconnected.call('request_hosted_fighter', ask);
+    assert.equal(after.job.id, jobId); assert.equal(after.job.status, 'appearance_ready');
+    assert.equal(after.job.updatedAt, before.job.updatedAt); assert.equal(after.next, before.next);
+    const refreshed = await reconnected.call('get_hosted_fighter', { jobId });
+    assert.equal((await reconnected.call('get_hosted_fighter', { idempotencyKey: ask.idempotencyKey })).job.id, jobId);
+    assert.equal(refreshed.job.updatedAt, before.job.updatedAt);
+    assert.notEqual(refreshed.job.candidates[0].url, before.job.candidates[0].url);
+    assert.equal(new URL(refreshed.job.candidates[0].url).pathname, new URL(before.job.candidates[0].url).pathname);
+    assert.deepEqual(refreshed.job.revisionsLeft, before.job.revisionsLeft);
+    assert.equal(refreshed.job.choice, null); assert.match(refreshed.next, /choose_hosted_look/);
+    assert.equal(original.downloads.length, 1); assert.equal(resumed.downloads.length, 0); assert.equal(reconnected.downloads.length, 0);
+    for (const table of ['af_generation_jobs', 'af_generation_uploads'])
+      assert.equal((await g.sql.query(`select count(*)::int as n from public.${table}`)).rows[0].n, 1);
+    // Recovery cannot create a request under a switched account, even with the service open.
+    await g.healthy();
+    const other = await connector({ ...g, owner: g.other }, {});
+    assert.equal((await other.call('get_profile', {})).id, g.other);
+    assert.deepEqual((await other.call('get_hosted_fighter', {})).jobs, []);
+    assert.equal((await other.call('get_hosted_fighter', { jobId })).code, 'not-found');
+    assert.equal((await other.call('get_hosted_fighter', { idempotencyKey: ask.idempotencyKey })).code, 'not-found');
+    assert.equal(other.downloads.length, 0);
+    for (const table of ['af_generation_jobs', 'af_generation_uploads'])
+      assert.equal((await g.sql.query(`select count(*)::int as n from public.${table}`)).rows[0].n, 1);
+  } finally { await g.sql.close(); }
+});
+
+test('key recovery finds an older job beyond the recent five without changing any job or upload', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const key = crypto.randomUUID(), jobId = crypto.randomUUID();
+    await g.sql.query(`insert into public.af_generation_jobs(id, owner_id, idempotency_key, description, language, status, created_at)
+      values ($1, $2, $3, 'An older cat boxer to recover', 'en', 'cancelled', now() - interval '1 day')`, [jobId, g.owner, key]);
+    for (let i = 0; i < 5; i++) await g.sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, status)
+      values ($1, $2, 'A newer unrelated cat boxer', 'en', 'cancelled')`, [g.owner, crypto.randomUUID()]);
+    const client = await connector(g, {});
+    const before = await g.sql.query('select * from public.af_generation_jobs order by id');
+    const recent = await client.call('get_hosted_fighter', {});
+    assert.equal(recent.jobs.length, 5); assert.ok(recent.jobs.every(j => j.id !== jobId));
+    const recovered = await client.call('get_hosted_fighter', { idempotencyKey: key.toUpperCase() });
+    assert.equal(recovered.job.id, jobId); assert.equal(recovered.job.status, 'cancelled');
+    assert.equal((await client.call('get_hosted_fighter', { idempotencyKey: crypto.randomUUID() })).code, 'not-found');
+    assert.equal((await client.call('get_hosted_fighter', { jobId, idempotencyKey: key })).code, 'invalid-selector');
+    assert.deepEqual((await g.sql.query('select * from public.af_generation_jobs order by id')).rows, before.rows);
+    assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n, 0);
+    assert.equal(client.downloads.length, 0);
+  } finally { await g.sql.close(); }
+});
+
+test('a recovery lookup while the original reference download is pending never dispatches a second request', async () => {
+  const g = await generation();
+  let release;
+  const gate = new Promise(resolve => { release = resolve; });
+  let pending;
+  try {
+    await g.healthy();
+    let started;
+    const downloading = new Promise(resolve => { started = resolve; });
+    const original = await connector(g, {}, async () => { started(); await gate; return new Response(png(512, 512)); });
+    const ask = { description: 'A cat boxer with red gloves and big ears', language: 'en', idempotencyKey: crypto.randomUUID(),
+      picture: { download_url: 'https://files.oaiusercontent.com/pending-reference', file_id: 'pending-reference' }, rightsConfirmed: true };
+    pending = original.call('request_hosted_fighter', ask);
+    await Promise.race([downloading, pending.then(() => assert.fail('the original call should wait for its reference download'))]);
+    const recovered = await connector(g, {});
+    assert.equal((await recovered.call('get_hosted_fighter', { idempotencyKey: ask.idempotencyKey })).code, 'not-found');
+    assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_jobs')).rows[0].n, 0);
+    assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n, 0);
+    release();
+    const saved = await pending;
+    assert.equal((await recovered.call('get_hosted_fighter', { idempotencyKey: ask.idempotencyKey })).job.id, saved.job.id);
+    assert.equal(original.downloads.length, 1); assert.equal(recovered.downloads.length, 0);
+    for (const table of ['af_generation_jobs', 'af_generation_uploads'])
+      assert.equal((await g.sql.query(`select count(*)::int as n from public.${table}`)).rows[0].n, 1);
+  } finally { release(); await pending; await g.sql.close(); }
+});
+
+test('key lookup database errors stay errors and never fall back to listing or creating work', async () => {
+  const g = await generation();
+  try {
+    await g.healthy();
+    const from = g.db.from;
+    g.db.from = table => {
+      const query = from(table);
+      if (table === 'af_generation_jobs') query.maybeSingle = async () => ({ error: { message: 'fixture lookup unavailable' } });
+      return query;
+    };
+    const client = await connector(g, {});
+    assert.deepEqual(await client.call('get_hosted_fighter', { idempotencyKey: crypto.randomUUID() }), { ok: false, code: 'database-unavailable' });
+    assert.equal(client.downloads.length, 0);
+    for (const table of ['af_generation_jobs', 'af_generation_uploads'])
+      assert.equal((await g.sql.query(`select count(*)::int as n from public.${table}`)).rows[0].n, 0);
   } finally { await g.sql.close(); }
 });
 

@@ -1,10 +1,17 @@
 # ODDBOUT 연결과 제작 준비
 
-일반 제작 사용자의 흐름은 **ODDBOUT 연결 → 본인 Google 로그인 → 공개 확인 코드 확인·연결 승인**이다.
-VM 설치와 호스트 종류에 맞는 네트워크 준비는 초기 환경 준비자가 처리하고 준비된 작업 공간을 재사용한다.
-등록 연결과 이미지 생성 접근, 결과 전달은 서로 다른 상태다. 하나가 성공했다고 나머지를 완료로 표시하지 않는다.
+먼저 현재 대화에 연결한 MCP 종류를 확인한다. **클라우드 OAuth 연결**과 **작업 공간의 로컬 stdio 기기 연결**은
+서로 다른 인증 경로이며, 도구 이름이 같아도 준비 응답의 구조가 다르다.
 
-## 사용자가 보는 연결
+| 사용 경로 | 연결과 첫 확인 | 중단 후 재개 |
+| --- | --- | --- |
+| Dots/Grok의 호스팅 ODDBOUT MCP (`mcp/cloud.mjs`) | [CLOUD-MCP.md](CLOUD-MCP.md)의 호스트별 주소로 OAuth 연결 → Google 로그인·승인 → `get_profile`과 클라우드 `check_creation_readiness(purpose: "connection")` | 같은 계정의 `get_hosted_fighter`로 저장된 작업 조회. 아래 클라우드 절과 [호스팅 복구](CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구) 참고 |
+| PC 또는 준비된 VM의 로컬 stdio MCP (`mcp/stdio.mjs`) | 로컬 `check_creation_readiness` → **ODDBOUT 연결** → 본인 Google 로그인·공개 기기 코드 확인·승인 | 기존 기기 요청과 로컬 제작 세션·작업 조회. 아래 로컬 절 참고 |
+
+클라우드 연결에 `connect_oddbout`, 로컬 로그인, PC 설치를 요구하지 않는다. 로컬 연결에서도 등록 계정, 생성 접근과
+결과 전달은 서로 다른 상태다. VM 설치와 네트워크 준비는 초기 환경 준비자가 처리하고 준비된 작업 공간을 재사용한다.
+
+## 로컬 stdio 사용자가 보는 연결
 
 1. 에이전트는 `check_creation_readiness(purpose: "connection")`으로 연결 상태만 읽는다.
    완성된 패키지를 등록할 때는 `purpose: "registration"`이다. 이 두 단계에서는 생성 구독을 묻거나 Python 설치·키트 업데이트를 하지 않는다.
@@ -35,28 +42,32 @@ VM 설치와 호스트 종류에 맞는 네트워크 준비는 초기 환경 준
 호스트 연결 자체가 없을 때의 조치는 다음 절과 다르다. VM 안에서 stdio 서버의 `tools/list`가 성공한 것만으로
 Dots 대화에 도구가 연결됐다고 보고하지 않는다.
 
-## Dots 클라우드의 MCP 연결 조건
+## Dots/Grok 클라우드의 MCP 연결 조건
 
-이 저장소의 `mcp/stdio.mjs`, 로컬/배포 플러그인은 **로컬 stdio MCP**다. PC의 설치·`config.toml`·로그인 세션은
-Dots 클라우드에 자동 설치되거나 공유되지 않는다. 현재 저장소에는 클라우드용 HTTPS MCP endpoint가 없다.
-`deploy/creator-site.json`의 등록 REST API는 MCP URL이 아니다. 그 주소에 임의로 `/mcp`를 붙이지 않는다.
-[공식 Desktop-only 안내](https://developers.openai.com/plugins/deploy/desktop-only)
+이 저장소에는 HTTPS MCP 구현(`mcp/cloud.mjs`)과 공개 주소 `https://mcp.oddbout.com/mcp`가 있다.
+클라우드 OAuth 연결 주소·Grok의 로그인 먼저 주소·플러그인 포함 여부는 [CLOUD-MCP.md](CLOUD-MCP.md)를 따른다.
+`deploy/creator-site.json`의 등록 REST API는 MCP URL이 아니므로 그 주소에 임의로 `/mcp`를 붙이지 않는다.
+PC의 stdio 설치·`config.toml`·로그인 세션은 Dots/Grok에 자동 설치되거나 공유되지 않는다.
+로컬 서버를 인증 없이 공개하거나 다른 사용자의 작업 공간으로 공유하는 방식은 이 클라우드 연결의 대안이 아니다.
 
-2026-10-24 실제 개인 계정 웹 UI에서 확인한 연결 경로는 다음과 같다.
+1. 현재 호스트에서 실제 ODDBOUT 커넥터를 선택하고 `get_profile`로 의도한 등록 계정인지 확인한다.
+   도구 목록·공개 `/spec`만 조회된 상태는 사용자 인증 완료가 아니다.
+2. 이 커넥터의 `check_creation_readiness(purpose: "connection")`를 읽는다. 응답은
+   `scope: "cloud-registration-connection"`, `account`, `registration`이며 아래 로컬 `items.*` 표와 다르다.
+   연결이 정상이더라도 `generation`, `delivery`, `package`는 실제 증거가 생기기 전까지 `unverified`다.
+3. 호스팅 생성을 이어갈 때는 저장된 `jobId`로 `get_hosted_fighter`를 호출한다. ID가 없으면 원래 `idempotencyKey`로 읽기만 하는 조회를 한다.
+   둘 다 없으면 최근 다섯 작업부터 확인한다. 키 조회의 `not-found`는 원래 신청이 아직 실행 중일 때도 나오므로 재신청 근거가 아니다.
+   도구는 서버의 `ODDBOUT_HOSTED_GENERATION_TOOLS=1` 설정이 있어야 노출된다. 목록에 있어도 서비스·워커 상태는 별개다.
+   도구가 안 보이면 실제 갱신 경로로 목록을 확인하고 운영자에게 설정·배포 확인을 요청한다. Google 로그인을 반복하거나
+   로컬 생성기로 자동 전환하지 않는다.
+4. 인증 만료라면 지원되는 OAuth 연결을 복구하고 `get_profile`을 다시 확인한다. 다른 계정이면 기존 작업이 안 보일 수 있다.
+   같은 계정으로 돌아온 뒤 기존 작업의 상태와 미리보기를 회수하며 새 신청·수정·취소를 자동 실행하지 않는다.
 
-1. [플러그인](https://chatgpt.com/plugins) → 오른쪽 위 **추가(+)** → **사용자 지정 MCP 서버 추가**.
-2. **이름**, **연결: 서버 URL 또는 터널**, **인증**을 지정한다.
-3. 준비자가 검증한 HTTPS MCP 주소 또는 공식 Secure MCP Tunnel ID가 있어야 한다. 연결 대상·계정 권한을 검토한 뒤 생성한다.
-4. 연결된 custom MCP가 이미 있을 때만 그 연결의 **Refresh**로 메타데이터를 갱신하고 새 대화에서 실제 도구를 확인한다.
-   버튼의 실제 제공 여부를 확인한다. 이 계정에는 AI Fighter 클라우드 연결이 없어 Refresh 적용은 검증하지 않았다.
+VM 셸의 CONNECT 403과 네이티브 커넥터 실패를 구분한다. VM에서 stdio `tools/list`가 성공한 것만으로
+대화의 커넥터 연결을 증명할 수도 없다. 실제 Dots/Grok 도구 호출·계정 확인·대화 표시를 각각 기록한다.
+[CLOUD-MCP.md](CLOUD-MCP.md)의 과거 Dots 검증 기록은 해당 시점의 증거이며 현재 Grok 연결·호스팅 생성·복구 성공을 대신하지 않는다.
 
-로컬 파일과 계정 세션에 의존하는 현재 서버를 인증 없이 공개하거나, 유지관리자의 PC를 다른 사용자의 실행 공간으로
-공유하지 않는다. 클라우드 MCP를 제공하려면 사용자 인증·작업 공간 격리·VM 파일 전달을 포함한 연결 구현이 먼저 필요하다.
-이는 일반 제작 사용자가 설정 값을 채워 해결할 문제가 아니다. 공식 터널도 명시적으로 선택·구성되어야 하며
-실제 제작 VM의 파일 접근과 사용자 계정 범위를 별도로 확인한다.
-[공식 MCP 연결 및 갱신 안내](https://developers.openai.com/plugins/deploy/connect-chatgpt)
-
-## 시스템이 분리해서 보고하는 상태
+## 로컬 준비 도구가 분리해서 보고하는 상태
 
 | 응답 | 의미와 한계 |
 | --- | --- |
@@ -77,7 +88,7 @@ Dots 클라우드에 자동 설치되거나 공유되지 않는다. 현재 저�
 생성 모델 문자열, 로그인, 도구 목록, `creation:delivery` 기록 검사로 라이브 생성이나 부모 화면 전달 성공을 만들지 않는다.
 기존 결과가 있으면 회수·표시하고, `pending`·`unknown`을 재생성 허가로 바꾸지 않는다.
 
-## 초기 환경 준비자 단계
+## 로컬/VM 실행 공간의 초기 환경 준비자 단계
 
 먼저 **어떤 클라우드 실행 환경인지** 확인한다. 아래 설정은 서로 대체하지 않는다.
 
@@ -123,7 +134,7 @@ NO_PROXY를 사용한다. Node 22.12에서도 동작하도록 Undici EnvHttpProx
 준비자는 필요한 허용과, 해당 환경에서 요구하는 재게시를 마친 뒤 같은 VM에서 다시 확인한다.
 일반 제작 사용자에게 캐릭터마다 허용목록·Republish·개발 도구 설치를 반복 요청하지 않는다.
 
-## 오류별 다음 행동과 복구
+## 로컬/VM 오류별 다음 행동과 복구
 
 | 관찰된 결과 | 담당자와 다음 행동 |
 | --- | --- |
@@ -134,9 +145,9 @@ NO_PROXY를 사용한다. Node 22.12에서도 동작하도록 Undici EnvHttpProx
 | `server-without-device-login` | `service-operator`: 기존 기기 로그인 API와 홈페이지 승인 화면의 배포 확인. 키트가 자동 배포하지 않음 |
 | `server-not-checked`, 잘못된 공개 설정·응답 | 미검증으로 유지하고 필요한 설정·읽기 전용 검사를 수행 |
 
-복구 후 새 작업 폴더를 만들지 않는다. `resume.sessionIds`와 `get_creation_session`, `get_creation_job`으로 기존 버전·선택·시도 기록을
+로컬/VM 복구 후 새 작업 폴더를 만들지 않는다. `resume.sessionIds`와 `get_creation_session`, `get_creation_job`으로 기존 버전·선택·시도 기록을
 읽고 중단한 단계에서 재개한다. 남은 기기 승인도 기존 요청에서 이어간다. readiness는 생성·업로드·등록을 자동 실행하지 않는다.
 
-이 저장소에서 구현·검증하는 것은 키트의 상태 응답, 기존 CLI 연결, 오류 분류와 복구 안내다.
+로컬 경로에서는 키트의 상태 응답, 기존 CLI 연결, 오류 분류와 복구 안내를 검증한다. 클라우드 구현·검증 범위는 [CLOUD-MCP.md](CLOUD-MCP.md)를 따른다.
 실서비스 기기 로그인 API·홈페이지 승인 화면 배포, Dots 버튼 렌더링, VM 네트워크 설정 변경은 각각 해당 서비스·호스트의 범위다.
 로컬 모의 응답 테스트를 그 배포나 라이브 사용자 연결 성공으로 보고하지 않는다.
