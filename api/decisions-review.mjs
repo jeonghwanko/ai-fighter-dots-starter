@@ -28,6 +28,7 @@ const RUBRICS = {
     alternation: 'Do identifiable physical feet visibly fail the intended left/right alternation? Hidden foot identity is unverified.',
     contact: 'Is there visible stance sliding or contradictory contact? Without sufficient visible feet and a stable ground reference, use unverified.' },
 };
+/** @type {() => never} */
 const invalid = () => { throw new Problem(422, 'invalid-review'); };
 function object(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !keys.includes(k))) invalid();
@@ -181,7 +182,8 @@ export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fet
           throw new Problem(409, 'review-binding-changed');
         return claimed.report;
       }
-      const started = performance.now(); let requestId = null, providerHttpStatus = null, usage = null, report;
+      const started = performance.now(); let requestId = /** @type {string | null} */ (null), providerHttpStatus = /** @type {number | null} */ (null),
+        usage = /** @type {Record<string, any> | null} */ (null), report;
       try {
         const response = await fetcher(ENDPOINT, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(sequenceConfig ? BENCHMARK_TIMEOUT_MS : DECISIONS.timeoutMs),
           headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, body: raw });

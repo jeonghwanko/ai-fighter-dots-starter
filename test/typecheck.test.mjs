@@ -16,8 +16,11 @@ test('every api module opts into type checking', async () => {
 test('Deno checks api/ at the same strictness as tsc', async () => {
   // Deno honours // @ts-check too: `deno check supabase/functions/ai-fighter/index.ts` reads these files with the Edge deno.json.
   const read = async file => JSON.parse(await readFile(new URL(`../${file}`, import.meta.url), 'utf8')).compilerOptions;
-  assert.equal((await read('tsconfig.json')).strict, false);
-  assert.equal((await read('supabase/functions/ai-fighter/deno.json')).strict, false);
+  // Stricter one flag at a time: strictNullChecks is on (2026-10-29); the rest of strict is not yet.
+  for (const file of ['tsconfig.json', 'supabase/functions/ai-fighter/deno.json']) {
+    const options = await read(file);
+    assert.equal(options.strict, false, file); assert.equal(options.strictNullChecks, true, file);
+  }
 });
 
 test('tsc finds no type errors in api/ (npm run typecheck)', () => {

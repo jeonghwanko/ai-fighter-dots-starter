@@ -28,6 +28,7 @@ function userCode(random) {
   return code;
 }
 
+/** @param {{ db: any, creatorLink?: import('./http.mjs').CreatorLink | null, limiter?: import('./http.mjs').Limiter | null, random?: (n: number) => Uint8Array }} options */
 export function createDeviceLoginHandler({ db, creatorLink = null, limiter = null, random = n => crypto.getRandomValues(new Uint8Array(n)) }) {
   async function call(name, args) {
     const { data, error } = await db.rpc(name, args);

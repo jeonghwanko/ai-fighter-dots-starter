@@ -16,7 +16,8 @@
       "node"
     ],
     "resolveJsonModule": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "strictNullChecks": true
   },
   "include": [
     "api/**/*.mjs"

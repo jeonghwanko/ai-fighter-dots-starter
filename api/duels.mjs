@@ -21,6 +21,7 @@ const ENGINE_NAME = /^[a-z0-9][a-z0-9.-]{0,63}$/;
  * `release` (2026-10-26): the deployed release's name (`release.mjs`, written by the game's Edge deploy), told by `GET rankings` so the deploy
  * sees its own upload answer — a change to this handler alone moves no engine name.
  */
+/** @param {{ db: any, simulateDuel: any, engineVersion: any, engines?: any, release?: any, limiter?: import('./http.mjs').Limiter | null }} options */
 export function createDuelHandler({db,simulateDuel,engineVersion,engines=null,release=null,limiter=null}) {
   const kept=new Map(Object.entries(engines??{}).filter(([name,run])=>ENGINE_NAME.test(name) && typeof run==='function' && name!==engineVersion));
   const pick=request=>{ const wanted=new URL(request.url).searchParams.get('engine');
