@@ -2,9 +2,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { chmod, cp, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { chmod, cp, mkdir, mkdtemp, rm, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { commandRoute, guardDotsExecution } from '../scripts/dots-provider.mjs';
 
 const exec = promisify(execFile), dots = { AI_FIGHTER_EXECUTION_HOST: 'dots' };
@@ -57,6 +58,11 @@ test('direct CLI reaches a mock engine for Grok, preserves non-Dots behavior and
   await mkdir(path.join(root, 'scripts'));
   for (const file of ['sprite-gen.mjs', 'sprite-tools.mjs', 'dots-provider.mjs', 'dots-safety.mjs'])
     await cp(new URL(`../scripts/${file}`, import.meta.url), path.join(root, 'scripts', file));
+  // sprite-tools fetches through api/runtime-fetch (cloud proxy settings), which imports undici.
+  await mkdir(path.join(root, 'api'));
+  for (const file of ['runtime-fetch.mjs', 'connection-errors.mjs'])
+    await cp(new URL(`../api/${file}`, import.meta.url), path.join(root, 'api', file));
+  await symlink(fileURLToPath(new URL('../node_modules', import.meta.url)), path.join(root, 'node_modules'), 'junction');
   await mkdir(path.join(root, 'contracts/ai-fighter/v1'), { recursive: true });
   await cp(new URL('../contracts/ai-fighter/v1/spec.json', import.meta.url), path.join(root, 'contracts/ai-fighter/v1/spec.json'));
   const vendor = path.join(root, 'vendor/sprite-gen');
