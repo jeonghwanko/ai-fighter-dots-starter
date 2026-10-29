@@ -3,7 +3,14 @@ import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/valid
 import { Problem, readBody, sha256, unstorableTextPath } from './http.mjs';
 
 const editable = new Set(['name', 'description', 'language', 'concept', 'moves', 'names', 'lines']);
-/** Reconstruct from the expected immutable version, including on an idempotent retry. */
+/**
+ * Whose fighter an edit changes, keyed for an idempotent retry. `rpc` calls a database function and resolves to its data.
+ * @typedef {{ owner: string, id: string, key: string, db: any, rpc: (name: string, args: Record<string, unknown>) => Promise<any> }} EditTarget
+ */
+/**
+ * Reconstruct from the expected immutable version, including on an idempotent retry.
+ * @param {EditTarget & { request: Request }} options
+ */
 export async function updateFighterProfile({ request, owner, id, key, db, rpc }) {
   let body;
   try {
@@ -14,7 +21,10 @@ export async function updateFighterProfile({ request, owner, id, key, db, rpc })
   return applyFighterEdit({ body, owner, id, key, db, rpc });
 }
 
-/** A parsed edit (the PATCH body). The workshop applies an accepted style proposal through it too, the note's id as its key. */
+/**
+ * A parsed edit (the PATCH body). The workshop applies an accepted style proposal through it too, the note's id as its key.
+ * @param {EditTarget & { body: any }} options  `body` is unchecked: this checks it.
+ */
 export async function applyFighterEdit({ body, owner, id, key, db, rpc }) {
   // `style` (2026-10-27): the fighting style (`combat.style`) — an object replaces it, null removes it. A body edits the profile, the style or both.
   const profileOk = body?.profile === undefined || body.profile && typeof body.profile === 'object' && !Array.isArray(body.profile)

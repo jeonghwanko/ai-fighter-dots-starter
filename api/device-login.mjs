@@ -12,15 +12,19 @@ export const DEVICE_POLL_INTERVAL_SECONDS = 5;
 const ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ';
 const DEVICE_CODE = /^afd_[a-f0-9]{64}$/;
 const APPROVE_CORS = { methods: 'POST, OPTIONS', headers: 'Authorization, Content-Type' };
+/** @type {Record<string, number>} */
 const errorStatus = { 'rate-limit': 429, 'slow-down': 429, 'device-login-not-found': 404 };
 
 /** Letters only, no vowels or look-alikes; dashes, spaces and case are ignored. Null when invalid. */
+/** @param {unknown} value */
 export function normalizeUserCode(value) {
   const code = typeof value === 'string' ? value.toUpperCase().replace(/[\s-]/g, '') : '';
   return new RegExp(`^[${ALPHABET}]{8}$`).test(code) ? code : null;
 }
+/** @type {(code: string) => string} */
 export const formatUserCode = code => `${code.slice(0, 4)}-${code.slice(4)}`;
 
+/** @param {(n: number) => Uint8Array} random */
 function userCode(random) {
   let code = '';
   // Rejection sampling keeps the 20 letters uniform.
@@ -28,8 +32,12 @@ function userCode(random) {
   return code;
 }
 
-/** @param {{ db: any, creatorLink?: import('./http.mjs').CreatorLink | null, limiter?: import('./http.mjs').Limiter | null, random?: (n: number) => Uint8Array }} options */
+/**
+ * @param {{ db: any, creatorLink?: import('./http.mjs').CreatorLink | null, limiter?: import('./http.mjs').Limiter | null, random?: (n: number) => Uint8Array }} options
+ * @returns {import('./http.mjs').Route}
+ */
 export function createDeviceLoginHandler({ db, creatorLink = null, limiter = null, random = n => crypto.getRandomValues(new Uint8Array(n)) }) {
+  /** @param {string} name @param {Record<string, unknown>} args */
   async function call(name, args) {
     const { data, error } = await db.rpc(name, args);
     if (error) {
@@ -39,6 +47,7 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
     if (!data || typeof data !== 'object') throw new Problem(503, 'device-login-unavailable');
     return data;
   }
+  /** @param {Request} request */
   async function body(request) {
     const bytes = await readBody(request, 1000);
     try {
@@ -47,6 +56,7 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
     } catch { /* below */ }
     throw new Problem(400, 'invalid-body');
   }
+  /** @param {Request} request */
   async function start(request) {
     // Unauthenticated: one caller is braked by a keyed hash of their address, under the global 120 per 10 minutes.
     const { bucket, limit, windowSeconds } = CLIENT_LIMITS.deviceLogin;
@@ -63,6 +73,7 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
       }
     }
   }
+  /** @param {Request} request */
   async function approve(request) {
     if (!bearerToken(request)) throw new Problem(401, 'authentication-required');
     const owner = await verifiedUserId(db, request);
@@ -72,7 +83,7 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
     const row = await call('af_device_login_approve', { p_owner: owner, p_user_code: code });
     return { ok: true, stage: 'device-login-approved', expiresAt: row.expiresAt };
   }
-  /** @returns {Promise<[Record<string, any>, number]>} */
+  /** @param {Request} request @returns {Promise<[Record<string, any>, number]>} */
   async function token(request) {
     const { deviceCode } = await body(request);
     if (typeof deviceCode !== 'string' || !DEVICE_CODE.test(deviceCode)) throw new Problem(400, 'invalid-device-code');
@@ -89,6 +100,7 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
   }
   return async (request, parts) => {
     const route = parts.join('/'), cors = route === 'device-logins/approve' ? APPROVE_CORS : undefined;
+    /** @type {(value: any, status?: number) => Response} */
     const reply = (value, status = 200) => jsonResponse(value, status, cors);
     try {
       if (!['device-logins', 'device-logins/approve', 'device-logins/token'].includes(route)) return reply({ ok: false, code: 'not-found' }, 404);
