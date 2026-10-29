@@ -71,7 +71,7 @@ export async function writeSessionFile(configPath, config) {
     // token refresh would lose the rotated refresh token, the only valid one (creation-store atomicJson does the same).
     for (let attempt = 0; ; attempt++) {
       try { await rename(temporary, configPath); break; }
-      catch (error) {
+      catch (/** @type {any} */ error) {
         if (process.platform !== 'win32' || !['EPERM', 'EACCES', 'EBUSY'].includes(error.code) || attempt >= 6) throw error;
         await new Promise(resolve => setTimeout(resolve, 25 * (attempt + 1)));
       }
@@ -95,7 +95,7 @@ export async function createRemoteClient(configPath, { createAuthClient = create
   async function adoptSaved() {
     let saved;
     try { saved = JSON.parse(await readFile(configPath, 'utf8')); }
-    catch (error) { throw new Error(error.code === 'ENOENT' ? 'client-sign-in-required' : 'invalid-client-config'); }
+    catch (/** @type {any} */ error) { throw new Error(error.code === 'ENOENT' ? 'client-sign-in-required' : 'invalid-client-config'); }
     if (!saved.accessToken || typeof saved.accessToken !== 'string' || !saved.refreshToken || typeof saved.refreshToken !== 'string')
       throw new Error('invalid-client-config');
     // Never keep using a logged-out account, or change the owner halfway through an upload.
@@ -144,7 +144,7 @@ export function createLazyRemoteClient(configPath, options = {}) {
     try {
       client ??= createRemoteClient(configPath, options).catch(error => { client = undefined; throw error; });
       return await (await client).request(route, requestOptions);
-    } catch (error) {
+    } catch (/** @type {any} */ error) {
       if (error.code === 'ENOENT') throw new Error('client-sign-in-required');
       throw error;
     }

@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
-    "strict": false,
-    "strictNullChecks": true
+    "strict": true
   },
   "imports": {
     "node:buffer": "node:buffer",
