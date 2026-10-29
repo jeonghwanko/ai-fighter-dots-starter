@@ -46,9 +46,10 @@ export async function readOutcome(file, { since = 0 } = {}) {
  * `retry` (every error says the same command may succeed) or `fix` the command or its input.
  */
 export function judgeOutcome({ code, report }) {
-  // A code written as a number is still an error: dropped, it left a failed run with no errors, which reads as nothing to retry.
-  const errors = (Array.isArray(report?.errors) ? report.errors : [])
-    .filter(e => e && (typeof e.code === 'string' || Number.isFinite(e.code))).map(e => ({ ...e, code: String(e.code) }));
+  // sprite-gen's codes are strings. An error with any other code is one no documented writer made: it still counts, but as an outcome
+  // nobody can read — its `retryable` is not trusted, so it never sends a paid request again (2026-10-30 review).
+  const errors = (Array.isArray(report?.errors) ? report.errors : []).filter(e => e && typeof e === 'object' && 'code' in e)
+    .map(e => typeof e.code === 'string' ? e : { ...e, code: 'outcome-unknown', retryable: false, written: String(e.code).slice(0, 40) });
   const charge = code === NOT_STARTED_EXIT || code === 2 ? 'not-charged'
     : report ? (report.provider_submitted ? 'request-sent' : 'not-charged') : 'unknown';
   const requestIds = [...new Set([report?.request_id, ...errors.map(e => e.request_id)].filter(id => typeof id === 'string' && id))];

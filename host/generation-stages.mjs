@@ -334,6 +334,11 @@ export const RUN_FROM_WALK_FIRST = true;
  */
 export const BEAT_LIMIT = Object.freeze({ run: 0.3 });
 const beatLimit = gait => BEAT_LIMIT[gait] ? ['--beat-limit', String(BEAT_LIMIT[gait])] : [];
+/**
+ * A video-loop refusal that names the PC rather than the clip (sprite-gen loop.py: RIFE to install, img2webp not on PATH, a GIF or WebP that
+ * failed its verification): the same clip filmed again is refused again, so the gait goes to an operator instead of buying takes.
+ */
+export const CUT_TOOL_REFUSAL = /install RIFE|img2webp|not found on PATH|failed verification/i;
 /** A take none of whose cuts aligned (the engine stopped) is aligned ALIGN_AGAIN more times, ALIGN_PAUSE_MS apart, before an operator. */
 export const ALIGN_AGAIN = 1;
 export const ALIGN_PAUSE_MS = 120_000;
@@ -409,6 +414,13 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
   // an 8 GB card out of memory (2026-10-28).
   let aligning = Promise.resolve();
   const align = command => { const run = aligning.then(() => og(command)); aligning = run.catch(() => {}); return run; };
+  // A wait ends early when the stage is stopped: the next run is refused then, and the stage ends at once instead of after the wait.
+  const pause = ms => new Promise(done => {
+    if (signal?.aborted) return done();
+    const timer = setTimeout(() => { signal?.removeEventListener('abort', stop); done(); }, ms);
+    const stop = () => { clearTimeout(timer); done(); };
+    signal?.addEventListener('abort', stop, { once: true });
+  });
   /**
    * A generating run that failed: tried again later only when its own report (written by this run, after `since`) says the
    * same command may succeed, or when og refused it before it started (exit 3 and no report). A run that ended without a
@@ -488,7 +500,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     // other one asked the codex question or may be retried. An operator's look wins, then the question, then a retry.
     const failed = made.filter(look => look.code !== 0 || !existsSync(look.png));
     if (failed.length) {
-      const said = await Promise.all(failed.map(look => look.code === 0 ? { retry: 'look-exit-0' } : look.code === 75 ? ASKED
+      const said = await Promise.all(failed.map(look => look.code === 0 ? { review: 'look-no-output' } : look.code === 75 ? ASKED
         : failedRun('look', look.code, look.report, since)));
       return asOutcome(said.find(r => r.review) ?? said.find(r => r.retry === ASKS) ?? said[0]);
     }
@@ -546,12 +558,16 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     const cut = path.dirname(walkLoop.strip).replace(/-(?:\d+|own1?)$/, '');
     const folder = path.join(m, `run-from-walk-${createHash('sha256').update(`${walkLoop.strip}\n${cut}`).digest('hex').slice(0, 8)}`);
     const strip = path.join(folder, path.basename(walkLoop.strip));
-    if ((await readJson(strip).catch(() => null))?.cycle_align?.to !== GAIT_FRAMES.run) {
+    // A walk that passed as one stride of a two-stride cut (`-own1`): the run takes that one stride out as well, or both strides were
+    // squeezed into the run's 12 frames and played at twice its pace (2026-10-30 review).
+    const oneStride = path.dirname(walkLoop.strip).endsWith('-own1');
+    const kept = (await readJson(strip).catch(() => null))?.cycle_align;
+    if (kept?.to !== GAIT_FRAMES.run || (oneStride && kept.cycles_given !== ONE_STRIDE_OF)) {
       await rm(folder, { recursive: true, force: true });
       await cp(cut, folder, { recursive: true });
       await rm(path.join(folder, 'judge'), { recursive: true, force: true });   // a verdict is the run's own, never one copied with the cut
       const args = ['video-cycle-align', '--loop-dir', folder, '--length', String(GAIT_FRAMES.run), '--view', 'side@right', '--start-foot', 'left',
-        ...beatLimit('run')];
+        ...(oneStride ? ['--cycles', `${folder}=${ONE_STRIDE_OF}`] : []), ...beatLimit('run')];
       if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
     }
     const meta = await readJson(strip).catch(() => null);
@@ -599,6 +615,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         if (existsSync(path.join(item, 'loop', `side-${gait}.strip.json`))) cuts.push(path.join(item, 'loop'));
         if (existsSync(keyed)) {
           if (!existsSync(path.join(auto, `side-${gait}.strip.json`))) {
+            // A refusal an earlier cut wrote never speaks for this one: a cut that stops now (no report) must not read as refused.
+            await rm(path.join(auto, `side-${gait}.loop.report.json`), { force: true });
             const fps = (await readJson(path.join(item, 'frames.report.json')).catch(() => ({}))).fps ?? 24;
             await og(sprite('video-loop', '--frames-dir', keyed, '--out-dir', auto, '--fps', String(fps), '--state', gait,
               '--anchor', 'motion-auto', '--facing', 'right', '--name', `side-${gait}`));
@@ -614,12 +632,18 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       // cut again ALIGN_AGAIN times, ALIGN_PAUSE_MS apart, then an operator. Filming another take there bought a second clip for one the
       // engine never read.
       for (let again = 0; !cuts.length; again++) {
-        if ((await readJson(path.join(auto, `side-${gait}.loop.report.json`)).catch(() => null))?.status === 'failed') {
+        const refused = await readJson(path.join(auto, `side-${gait}.loop.report.json`)).catch(() => null);
+        // A refusal that names this PC, not the clip (RIFE or img2webp missing, a WebP that failed its check): another take meets it too.
+        if (refused?.status === 'failed' && CUT_TOOL_REFUSAL.test(String(refused.error ?? ''))) {
+          tried.push({ take, cut: 'cut-auto', reasons: ['cut-tool'] });
+          return { review: `${gait}-cut`, tried };
+        }
+        if (refused?.status === 'failed') {
           tried.push({ take, cut: 'cut-auto', reasons: ['not-cut'] });
           break;
         }
         if (again >= ALIGN_AGAIN || !existsSync(keyed)) return { review: `${gait}-cut`, tried };
-        await new Promise(done => setTimeout(done, alignPauseMs));
+        await pause(alignPauseMs);
         cuts = await cutsOf();
       }
       for (let pass = 0; ; pass++) {
@@ -683,7 +707,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         // first two stage runs, the clips sound), so the cuts are aligned once more after ALIGN_PAUSE_MS (no provider call); still none:
         // stop rather than film another take (the stopped stage keeps its clips for an operator's retry).
         if (pass >= ALIGN_AGAIN) return { review: `${gait}-align`, tried };
-        await new Promise(done => setTimeout(done, alignPauseMs));
+        await pause(alignPauseMs);
       }
       // RUN_FROM_WALK_FIRST: the first take's beat broke and no judge saw it: another take films the same kind of cycle again.
       const first = tried.slice(seen);
@@ -805,8 +829,11 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
           const since = Date.now();
           const { code } = await og(sprite('gen-set', '--run-dir', showRows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '1'));
           if (code !== 0) {
-            const said = code === 75 ? ASKED : await failedRun('show', code, path.join(showRows, 'reports', 'gen-set', 'set.report.json'), since);
-            if (said.review) await writeFile(showLeftOut, JSON.stringify(said) + '\n');
+            const setReport = path.join(showRows, 'reports', 'gen-set', 'set.report.json');
+            const said = code === 75 ? ASKED : await failedRun('show', code, setReport, since);
+            // Left out only when a request may have left: a run refused before any (a preflight) is tried again on the next stage run.
+            const { charge } = judgeOutcome({ code, report: await readOutcome(setReport, { since }) });
+            if (said.review && charge !== 'not-charged') await writeFile(showLeftOut, JSON.stringify(said) + '\n');
             return null;
           }
           if ((await og(sprite('extract', '--run-dir', showRows))).code !== 0) return null;
@@ -857,6 +884,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       if ((await motionsPy(['video-still', look, still])).code !== 0) return { retry: 'video-still' };
       return readJson(still.replace(/\.png$/, '.json')).catch(() => ({ key: 'magenta' }));
     })();
+    // Awaited only later: a stage stopped meanwhile rejects it first, and an unhandled rejection would end the worker's process.
+    stillReady.catch(() => {});
     // The retakes' relaxed still: drawn once for the walk and the run, kept for a stage run again.
     const relaxed = path.join(m, 'gait-still.png'), relaxedLook = path.join(m, 'gait-still-look.png');
     let relaxedReady = null;
@@ -868,7 +897,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         const { code } = await og(appearanceCommand({ promptFile, out: relaxedLook, report, refs: [look] }));
         if (code === 75) return ASKED;
         if (code !== 0) return failedRun('gait-still', code, report, since);
-        if (!existsSync(relaxedLook)) return { retry: 'gait-still-exit-0' };
+        // gen said it finished and its picture is not there: a paid image may be somewhere — an operator looks, nothing is sent again.
+        if (!existsSync(relaxedLook)) return { review: 'gait-still-no-output' };
       }
       if ((await motionsPy(['video-still', relaxedLook, relaxed])).code !== 0) return { retry: 'gait-still' };
       const { key } = await readJson(relaxed.replace(/\.png$/, '.json')).catch(() => ({ key: 'magenta' }));
@@ -883,7 +913,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     const gaitBranch = (gait, delayMs, early = null) => async () => {
       const input = await stillReady;
       if (input.retry) return input;
-      if (delayMs) await new Promise(done => setTimeout(done, delayMs));
+      if (delayMs) await pause(delayMs);
       const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null, early, ranges?.[gait] ?? null);
       if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip);
       await Promise.resolve(api.progress?.(job, undefined, gaitEvent(gait, loop))).catch(() => {});

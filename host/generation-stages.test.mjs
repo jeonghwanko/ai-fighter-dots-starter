@@ -389,24 +389,35 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
 // `uncut[gait]`: its clip films frames but no cut — `crash` (video-loop stops with no report) or `refuse` (its report says why).
 // `showGenSet()`: the show row's gen-set exit (no report), or null for no show row.
 async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, alignFails = {}, job: change = {}, spec = null, ownFrames = { walk: 24, run: 14 },
-  uncut = {}, showGenSet = null }) {
+  uncut = {}, showGenSet = null, stop = null, alignPauseMs = 0, before = null, specDelayMs = 0 }) {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-scale-')), calls = [], events = [];
+  await before?.(dir);
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'look-a-0.png'), 'look');
   const flag = (args, name) => args[args.indexOf(name) + 1];
+  // `stop`: an AbortController the worker would hold; once aborted, og refuses every run as the worker's does (`stage-stopped`).
   const og = async args => {
+    if (stop?.signal.aborted) throw Object.assign(new Error('stage-stopped'), { code: 'stage-stopped' });
     calls.push(args);
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
     if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), '{}'); }
     if (tool === 'gen') await writeFile(flag(args, '--out'), 'relaxed');
-    if (tool === 'gen-set' && flag(args, '--run-dir').endsWith('show-rows')) return { code: showGenSet() };
+    if (tool === 'gen-set' && flag(args, '--run-dir').endsWith('show-rows')) {
+      // A number: that exit and no report. An object: { code, report } — the set report gen-set writes.
+      const step = showGenSet(), code = typeof step === 'object' ? step.code : step;
+      if (typeof step === 'object') { const file = path.join(flag(args, '--run-dir'), 'reports', 'gen-set', 'set.report.json');
+        await mkdir(path.dirname(file), { recursive: true }); await writeFile(file, JSON.stringify(step.report)); }
+      return { code };
+    }
     if (tool === 'video-set') { const gait = flag(args, '--states'), item = path.join(flag(args, '--out-dir'), `side-${gait}`), loop = path.join(item, 'loop');
       if (uncut[gait]) { await mkdir(path.join(item, 'frames', 'keyed'), { recursive: true }); return { code: 1 }; }
       await mkdir(loop, { recursive: true }); await writeFile(path.join(loop, `side-${gait}.strip.json`), '{}'); }
     if (tool === 'video-loop') { const gait = flag(args, '--state');
       if (uncut[gait] === 'crash') return { code: 137 };
       await mkdir(flag(args, '--out-dir'), { recursive: true });
-      await writeFile(path.join(flag(args, '--out-dir'), `side-${gait}.loop.report.json`), JSON.stringify({ status: 'failed', error: 'no cycle' }));
+      // `tool`: refused for this PC (sprite-gen loop.py's message when img2webp is missing); `refuse`: refused for the clip.
+      const error = uncut[gait] === 'tool' ? 'video-loop: `img2webp` not found on PATH — install libwebp' : 'video-loop: no periodic cycle';
+      await writeFile(path.join(flag(args, '--out-dir'), `side-${gait}.loop.report.json`), JSON.stringify({ status: 'failed', error }));
       return { code: 1 }; }
     if (tool === 'video-cycle-align') { const dirOf = flag(args, '--loop-dir'), gait = dirOf.includes('walk') ? 'walk' : 'run';
       // No --length (the server takes a gait at its own count): the cut keeps the frames it was filmed in.
@@ -415,7 +426,8 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
       const to = args.includes('--length') ? flag(args, '--length') : cycles ? Math.round(ownFrames[gait] / cycles) : ownFrames[gait];
       // alignFails[gait]: that many of the gait's alignments stop first (the GPU out of memory), leaving the cut unaligned.
       const failing = Object.keys(alignFails).find(gait => dirOf.includes(`video-${gait}`) && alignFails[gait] > 0);
-      if (failing) { alignFails[failing] -= 1; return { code: 1 }; }
+      // `stop` is aborted with the gait's last failing alignment: the stage stops just before it waits to align again.
+      if (failing) { alignFails[failing] -= 1; if (!alignFails[failing]) stop?.abort(); return { code: 1 }; }
       // brokenRun: every filmed run breaks its beat (the walk, and a run made from its cut, align clean).
       const retake = brokenRun && dirOf.includes('video-run') ? { reason: 'broken-beat', reasons: ['broken-beat'] } : undefined;
       await writeFile(path.join(dirOf, `side-${dirOf.includes('walk') ? 'walk' : 'run'}.strip.json`),
@@ -430,6 +442,7 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
   };
   let fits = 0;
   const motionsPy = async ([command, ...rest]) => {
+    if (stop?.signal.aborted) throw Object.assign(new Error('stage-stopped'), { code: 'stage-stopped' });
     calls.push(['motions.py', command, ...rest]);
     if (command === 'request' || (command === 'request-show' && showGenSet)) await writeFile(rest[1], JSON.stringify({ request: { states: {} }, description: 'a cat' }));
     if (command === 'assemble') { await mkdir(rest[2], { recursive: true });
@@ -443,8 +456,9 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
     return { code: 0 };
   };
   const api = { artifact: async () => ({ ok: true }), progress: async (j, value, event) => { if (event) events.push(event); return { ok: true }; },
-    ...(spec ? { spec: async () => spec } : {}) };
-  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs: 0 });
+    ...(spec || specDelayMs ? { spec: async () => { await new Promise(done => setTimeout(done, specDelayMs)); return spec; } } : {}) };
+  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs,
+    signal: stop?.signal ?? null });
   const job = { id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...change };
   const done = await stages.motions(job, dir);
   return { done, calls, events, dir, again: () => stages.motions(job, dir) };
@@ -568,6 +582,70 @@ test('a filmed clip the engine stopped cutting is cut again, then an operator; o
   assert.equal(refused.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1 + GAIT_RETAKES);
   const walkEvent = refused.events.find(e => e.kind === 'gait' && e.gait === 'walk');
   assert.deepEqual(walkEvent.tried.map(t => [t.take, t.reasons]), [[0, ['not-cut']], [1, ['not-cut']], [2, ['not-cut']]]);
+  // An earlier stage run's refusal left on disk: the cut that stops now is not read as refused, and no take is bought for it.
+  const stale = await scaleStage({ scaleFit: fitAll, uncut: { walk: 'crash' }, before: async dir => {
+    const auto = path.join(dir, 'motion', 'video-walk-0', 'cut-auto');
+    await mkdir(auto, { recursive: true });
+    await writeFile(path.join(auto, 'side-walk.loop.report.json'), JSON.stringify({ status: 'failed', error: 'no cycle' }));
+  } });
+  assert.deepEqual(stale.done, { outcome: 'review', result: { code: 'walk-cut' } });
+  assert.equal(stale.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1);
+});
+
+test('a cut refused for this PC (a tool missing) goes to an operator: another take would be refused the same way', async () => {
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const { done, calls, events } = await scaleStage({ scaleFit: fitAll, uncut: { walk: 'tool' } });
+  assert.deepEqual(done, { outcome: 'review', result: { code: 'walk-cut' } });
+  assert.equal(calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1);
+  assert.deepEqual(events.find(e => e.kind === 'gait' && e.gait === 'walk').tried.map(t => t.reasons), [['cut-tool']]);
+});
+
+test('a show row refused before any request (a preflight) is not left out: the next stage run draws it', async () => {
+  let runs = 0;
+  const preflight = { code: 3, report: { ok: 0, all_ok: false, provider_submitted: false,
+    errors: [{ state: 'show-a', code: 'preflight', retryable: false, message: 'a flag is wrong' }] } };
+  const unknown = { code: 1, report: { ok: 0, all_ok: false, provider_submitted: true,
+    errors: [{ state: 'show-a', code: 'outcome-unknown', retryable: false, message: 'the row ended after its request left' }] } };
+  const { done, dir, again } = await scaleStage({ scaleFit: fitAll, showGenSet: () => (runs += 1) === 1 ? preflight : unknown });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  assert.ok(!existsSync(path.join(dir, 'motion', 'show-left-out.json')));
+  await again();
+  assert.equal(runs, 2);
+  assert.ok(existsSync(path.join(dir, 'motion', 'show-left-out.json')), 'the second run, its outcome unknown, is left out');
+});
+
+test('a stage stopped before its still is drawn ends as stopped, not with an unhandled rejection', async () => {
+  const stop = new AbortController(); stop.abort();
+  const unhandled = [];
+  const seen = error => unhandled.push(error);
+  process.on('unhandledRejection', seen);
+  try {
+    const { done } = await scaleStage({ scaleFit: fitAll, stop, specDelayMs: 50 });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    assert.deepEqual(unhandled, []);
+    assert.equal(done.outcome, 'retry');
+  } finally { process.off('unhandledRejection', seen); }
+});
+
+test('a stage stopped during a wait ends at once: no wait sat out, no run started after the stop', async () => {
+  const stop = new AbortController(), started = Date.now();
+  // Both of the walk's alignments (a try and its --multi-cycle warn) fail, and the stage is stopped there: it would wait a minute to
+  // align again.
+  const { done, calls } = await scaleStage({ scaleFit: fitAll, alignFails: { walk: 2 }, stop, alignPauseMs: 60_000 });
+  assert.ok(Date.now() - started < 10_000, `the stage took ${Date.now() - started} ms`);
+  assert.equal(done.outcome, 'retry');
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  assert.equal(calls.filter(a => a.includes('video-cycle-align') && flag(a, '--loop-dir').includes('video-walk-0')).length, 2);
+});
+
+test('a run made from a walk that passed as one stride of two takes one stride as well', async () => {
+  const { done, calls } = await scaleStage({ scaleFit: fitAll, spec: ownSpec, brokenRun: true, ownFrames: { walk: 40, run: 14 } });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const derived = calls.find(a => a.includes('video-cycle-align') && path.basename(flag(a, '--loop-dir')).startsWith('run-from-walk-'));
+  assert.equal(flag(derived, '--length'), '12');
+  assert.equal(flag(derived, '--cycles'), `${flag(derived, '--loop-dir')}=${ONE_STRIDE_OF}`);
+  assert.ok(calls.some(a => a.includes('--cycles') && flag(a, '--loop-dir').endsWith('-own1')), 'the walk passed as one stride');
 });
 
 test('a take whose cuts did not align (the GPU out of memory) is aligned again after a pause, and no take is filmed again', async () => {
