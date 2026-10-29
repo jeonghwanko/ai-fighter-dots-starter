@@ -71,12 +71,12 @@ test('native base64 codec preserves legacy bytes, canonical content, and malform
   }
 });
 
-test('native evidence avoids per-byte JS string codecs while production keeps its existing route', async t => {
-  const legacy = await reviewEvidence(request(16));
+test('native and production evidence both avoid per-byte JS string codecs', async t => {
+  const expected = await reviewEvidence(request(16));
   t.mock.method(globalThis, 'atob', () => { throw Error('legacy decoder invoked'); });
   t.mock.method(globalThis, 'btoa', () => { throw Error('legacy encoder invoked'); });
-  assert.deepEqual(await nativeSequenceEvidence(request(16)), legacy);
-  await assert.rejects(reviewEvidence(request(16)));
+  assert.deepEqual(await nativeSequenceEvidence(request(16)), expected);
+  assert.deepEqual(await reviewEvidence(request(16)), expected);
 });
 
 test('paired independent questions preserve baseline prefix and isolate exact original seam images to improved questions', async () => {
