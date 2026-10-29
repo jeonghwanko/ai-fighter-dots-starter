@@ -282,12 +282,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const { data, error } = await db.from('af_generation_jobs').select('*').eq('owner_id', owner).order('created_at', { ascending: false }).limit(5);
       if (error) throw new Problem(503, 'database-unavailable');
       const jobs = await Promise.all((data ?? []).map(view));
-      // His one hosted fighter is taken by a job that is not over — a submitted package that failed its check frees it, as the database does.
-      // A fighter made on his own PC (his subscription) does not use it up (내 선수는 내 PC로, 2026-10-28).
-      const { data: own, error: ownError } = await db.from('af_generation_hosts').select('id').eq('owner_id', owner).maybeSingle();
-      if (ownError) throw new Problem(503, 'database-unavailable');
-      return { ok: true, jobs, used: jobs.some(job => !['rejected', 'failed', 'cancelled', 'expired'].includes(job.status)
-        && !(job.status === 'submitted' && job.submission?.stage === 'rejected') && !(own && job.host?.requested?.id === own.id)),
+      // Whether his one free hosted fighter is used, by the request check's own rule over all his jobs: read from the newest five, it
+      // fell out of view past five fighters made on his own PC (API 점검 2026-10-29).
+      return { ok: true, jobs, used: await call('af_generation_free_used', { p_owner: owner }) === true,
         capabilities: await call('af_generation_capabilities', {}) };
     }
     if (method === 'POST' && route === 'generations/uploads') {
