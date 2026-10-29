@@ -133,7 +133,7 @@ async function parseEvidence(body, native) {
   }
   if (references > 3 || (stage === 'input' && candidates !== 0) || (stage === 'pose' && candidates !== 1)
     || (stage === 'sequence' && (references !== 1 || (native ? candidates < 2 || candidates > 64 : !gaitCount(scope, candidates))))) invalid();
-  return { stage, scope, binding, content };
+  return { stage: /** @type {Stage} */ (stage), scope, binding, content }; // stage: a RUBRICS key, checked above
 }
 
 /**
