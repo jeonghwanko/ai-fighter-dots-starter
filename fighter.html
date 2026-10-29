@@ -102,14 +102,11 @@
         font-style: normal;
         font-display: block;
       }
-      /* 예고장 표제 전용. 3.4MB 통짜라 부팅을 막지 않고 늦게 도착한다. */
-      @font-face {
-        font-family: "ChosunGs";
-        src: url("./fonts/ChosunGs.woff") format("woff");
-        font-weight: 400;
-        font-style: normal;
-        font-display: block;
-      }
+      /*
+       * 예고장 표제 글꼴(ChosunGs, 3.6MB)은 싣지 않는다. 이 페이지에서 그 글꼴을 쓰는 곳은 일시정지·설정 제목뿐이라
+       * 휴대폰에서 받는 양만 늘렸다(2026-10-29 Lighthouse). 면이 없으면 표제 스택이 마루 부리로 넘어가고,
+       * 부팅의 startDisplayFontLoad 는 받을 면이 없어 곧바로 끝난다.
+       */
       html,
       body {
         margin: 0;
