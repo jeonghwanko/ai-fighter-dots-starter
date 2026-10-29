@@ -96,8 +96,24 @@ export async function runWithConfig(config, submissionId) {
   // Same lease receipt is retryable; a stale lease can never finalize a new worker's job.
   // Back off (1 s, then 3 s) so a brief outage does not discard a finished validation; both fit inside the lease.
   for (let attempt = 0; ; attempt++) {
-    try { return await send('worker/finish', finish); } catch (error) { if (attempt >= 2 || error.status < 500) throw error; }
+    try { return await send('worker/finish', finish); }
+    catch (error) {
+      if (error.status >= 400 && error.status < 500) return refused(error);
+      if (attempt >= 2) throw error;
+    }
     await delay(FINISH_RETRY_MS[attempt]);
+  }
+  /**
+   * A finish the server refuses (a validator version it does not take, …) says nothing about the package: hand the job back, as for an
+   * infrastructure failure. Left to expire, each lease spent one of the package's three attempts and a valid package was rejected
+   * (API 점검 2026-10-29). A lost lease is not this worker's to hand back, and a refused worker key stops the worker.
+   * @param {Error & { status?: number }} error
+   */
+  async function refused(error) {
+    if (error.status === 401 || error.status === 403 || error.message === 'stale-validation') throw error;
+    const code = `finish-refused-${error.message.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`.slice(0, 64);
+    const requeued = await send('worker/release', { submissionId: job.submissionId, leaseToken: job.leaseToken, code }).then(() => true, () => false);
+    return { ok: false, stage: 'retry-later', submissionId: job.submissionId, code, requeued };
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {

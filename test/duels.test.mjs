@@ -142,3 +142,33 @@ test('an abandoned reservation stops holding the duel budget; a recent unfinishe
       'abandoned rows are kept for their key retries, only uncounted');
   } finally {await sql.close();}
 });
+
+test('a retried unfinished match is admitted again, and runs refused for their fighters never trip the day\'s brake (API 점검 2026-10-29)',async()=>{
+  const {sql,db,ids}=await duelFixture();
+  try {
+    let runs=0;
+    const handle=createHandler({db,engineVersion:'test-v1',simulateDuel:()=>{runs++;return {winner:0,how:'ko',ms:1000,hp:[0.5,0],contacts:[3,1],digest:'11111111'};}});
+    const post=key=>handle(new Request('https://test/ai-fighter/duels',{method:'POST',body:JSON.stringify({a:ids[0],b:ids[1],idempotencyKey:key})}));
+    // A match reserved, then its fighter edited before it ran (the owner controls that window).
+    const key=crypto.randomUUID();
+    await sql.query('select public.af_reserve_duel($1,$2,$3,$4)',[key,ids[0],ids[1],'test-v1']);
+    const text=JSON.stringify({...example,profile:{...example.profile,name:'Edited'}}),hash=await sha256(new TextEncoder().encode(text)),sub=crypto.randomUUID();
+    const owner=(await sql.query('select owner_id from af_fighters where id=$1',[ids[0]])).rows[0].owner_id;
+    await sql.query(`insert into af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status) values($1,$2,$3,$4,$5,$6,1,'registered')`,
+      [sub,owner,crypto.randomUUID(),text,JSON.parse(text),hash]);
+    await sql.query('update af_fighters set submission_id=$2,manifest_sha=$3,runtime_manifest_sha=$3,duel_manifest_sha=$3 where id=$1',[ids[0],sub,hash]);
+    for(let i=0;i<21;i++) {
+      const retried=await post(key);
+      assert.deepEqual([retried.status,(await retried.json()).code],[409,'duel-not-approved']);
+    }
+    assert.equal(runs,0);
+    assert.deepEqual((await sql.query('select failures,failed_at from af_duels where request_key=$1',[key])).rows[0],{failures:0,failed_at:null});
+    // A new match on the edited fighter still runs.
+    assert.equal((await post(crypto.randomUUID())).status,200); assert.equal(runs,1);
+    // Runs refused for their fighters are the fighters' own; only the engine's failures count toward the brake.
+    await sql.query("update af_duels set failed_at=now(),failures=20,failure='package-mismatch' where request_key=$1",[key]);
+    assert.equal((await post(crypto.randomUUID())).status,200);
+    await sql.query("update af_duels set failure='engine-error' where request_key=$1",[key]);
+    assert.equal((await (await post(crypto.randomUUID())).json()).code,'duels-failing');
+  } finally {await sql.close();}
+});

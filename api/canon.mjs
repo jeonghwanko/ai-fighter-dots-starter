@@ -42,7 +42,8 @@ const invalid = (code, path) => new Problem(422, code, [{ path }]);
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
 
 /**
- * A trimmed text of `min`..`max` characters. `lines`: newlines allowed (a post's or note's body).
+ * A trimmed text of `min`..`max` characters. `lines`: newlines allowed (a post's or note's body). Windows (`\r\n`) and old Mac (`\r`)
+ * line ends are `\n`: a carriage return is a control character, and a multi-line text from Windows was refused (API 점검 2026-10-29).
  * @param {unknown} value
  * @param {number} max
  * @param {string} path
@@ -51,7 +52,7 @@ const isObject = value => value !== null && typeof value === 'object' && !Array.
  */
 export function text(value, max, path, { min = 1, lines = false, code = 'invalid-text' } = {}) {
   if (typeof value !== 'string' || !value.isWellFormed()) throw invalid(code, path);
-  const trimmed = value.trim(), length = [...trimmed].length;
+  const trimmed = value.replace(/\r\n?/g, '\n').trim(), length = [...trimmed].length;
   if (length < min || length > max || CONTROL.test(trimmed) || !lines && NEWLINE.test(trimmed)) throw invalid(code, path);
   return trimmed;
 }

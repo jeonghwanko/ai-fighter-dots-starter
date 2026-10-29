@@ -206,15 +206,16 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
         const patch = worldText(body, { partial: true });
         if (body.cover !== undefined) { if (!WORLD_COVERS.includes(body.cover)) throw new Problem(422, 'invalid-cover'); patch.cover = worldCover(body.cover); }
         if (body.factions !== undefined) patch.factions = factions(body.factions);
+        // The whole body is checked before the first write: a malformed canon or removal once came back refused after the text was saved
+        // (API 점검 2026-10-29).
+        const canon = body.canon === undefined ? null : fields(body.canon, ['post', 'on']);
+        if (canon && typeof canon.on !== 'boolean') throw new Problem(422, 'invalid-body');
+        const post = canon ? id(canon.post) : null, removed = body.remove === undefined ? null : id(body.remove);
+        if (!Object.keys(patch).length && !canon && !removed) throw new Problem(422, 'invalid-body');
         let result = null;
         if (Object.keys(patch).length) result = await call('af_world_update', { p_owner: owner, p_world: parts[1], p_patch: patch });
-        if (body.canon !== undefined) {
-          const canon = fields(body.canon, ['post', 'on']);
-          if (typeof canon.on !== 'boolean') throw new Problem(422, 'invalid-body');
-          await call('af_world_canon', { p_owner: owner, p_world: parts[1], p_post: id(canon.post), p_on: canon.on });
-        }
-        if (body.remove !== undefined) await call('af_world_remove_fighter', { p_owner: owner, p_world: parts[1], p_fighter: id(body.remove) });
-        if (!result && body.canon === undefined && body.remove === undefined) throw new Problem(422, 'invalid-body');
+        if (canon) await call('af_world_canon', { p_owner: owner, p_world: parts[1], p_post: post, p_on: canon.on });
+        if (removed) await call('af_world_remove_fighter', { p_owner: owner, p_world: parts[1], p_fighter: removed });
         return json({ ok: true, ...(result ? { world: result } : {}) });
       }
       if (method === 'PUT' && parts[0] === 'fighters' && parts[2] === 'world') {

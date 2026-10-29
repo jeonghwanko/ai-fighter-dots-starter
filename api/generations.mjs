@@ -9,7 +9,7 @@ import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 import { text } from './canon.mjs';
 import { probeImage } from './image-probe.mjs';
 import { Problem, UUID, jsonResponse, readBody, sha256 } from './http.mjs';
-import { checkedManifest, storeAsset } from './submissions.mjs';
+import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mjs';
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
 import { BENCHMARK_BODY_BYTES } from './sequence-benchmark.mjs';
@@ -44,9 +44,9 @@ const STATUS = { 'generation-unavailable': 409, 'generation-quota': 409, 'genera
   // 커뮤니티 호스트 (2026-10-28).
   'invalid-host': 422, 'host-consent-required': 422, 'host-offline': 409, 'host-capacity': 409, 'host-terms-required': 422,
   'host-not-approved': 403, 'host-key-limit': 409, 'host-not-found': 404, 'join-code-invalid': 410, 'invalid-join-code': 400, 'host-busy': 409,
-  // The submission path's own refusals (`af_create_submission`, `af_submit`), as the creator's routes name them.
-  'submission-quota': 409, 'open-submission-exists': 409, 'idempotency-conflict': 409, 'upload-closed': 409, 'assets-incomplete': 409,
-  'submissions-paused': 503, 'storage-budget-full': 503, 'beta-capacity': 503 };
+  'upload-closed': 409,
+  // The submission path's own refusals (`af_create_submission`, `af_submit`), with the statuses the creator's routes give them.
+  ...SUBMISSION_STATUS };
 /** Stats the contract takes: 1-5 each, summing to 9 (`contracts/ai-fighter/validate.mjs`). */
 export const STAT_TOTAL = 9;
 
