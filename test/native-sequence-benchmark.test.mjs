@@ -92,6 +92,8 @@ test('v2 scores matched original evidence in two separate frozen cohorts and sep
   const m = evaluate(labels, missing, { plan }).pairedComparison.partitions['held-out'];
   assert.equal(m.total.improvedUnavailable, 1); assert.equal(m.improved.byQuestion.continuity.defectAbstentions, 1);
   for (const mutate of [
+    r => { delete r.calls[0].requestSha256; },
+    r => { r.calls[0].requestSha256 = digest('changed-source-request'); },
     r => { r.calls[0].report.binding.sequenceBenchmark.sourceEvidenceSha256 = digest('other'); },
     r => { r.calls[0].report.binding.sequenceBenchmark.arms['ordered-native-v1'].presentationSha256 = digest('other'); },
     r => { r.calls[0].report.binding.requestSha256 = digest('other'); },

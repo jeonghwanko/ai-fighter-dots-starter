@@ -203,7 +203,7 @@ export function evaluate(manifest, results, { cutoff = null, plan = null } = {})
         const research = report.binding.sequenceBenchmark, method = frozen?.methods[row.cohort.method];
         if (!method || research.planSha256 !== plan.planSha256 || transport !== plan.protocol.transport
           || method.requestSha256 !== report.binding.requestSha256 || method.presentationSha256 !== research.presentationSha256
-          || (call.requestSha256 !== undefined && call.requestSha256 !== frozen.sourceRequestSha256)) fail('Report does not match frozen plan');
+          || call.requestSha256 !== frozen.sourceRequestSha256) fail('Report does not match frozen plan');
       }
       const key = JSON.stringify(row.cohort);
       if (!cohorts.has(key)) cohorts.set(key, { info: row.cohort, luna: row.luna, rows: new Map() });
