@@ -217,7 +217,7 @@ The worker supplies only the original request bytes. This config cannot combine 
 settings. The existing host authorization, one-call ledger and shared daily quota apply. Benchmark requests
 are bounded to 32 MiB, each source image to the existing 2 MiB, and the research timeout is fixed at 110 seconds;
 production remains 8 MiB and 25 seconds. Native binding storage requires the narrowly bounded
-`20261029065638_native_sequence_benchmark.sql` migration (16,000-byte metadata bound; no permission/quota change).
+`20261029071902_native_sequence_benchmark.sql` migration (16,000-byte metadata bound; no permission/quota change).
 
 Once the plan is frozen, import the independently recorded labels and evaluate saved calls with:
 

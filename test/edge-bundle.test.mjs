@@ -1,6 +1,6 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -20,6 +20,9 @@ test('the Edge bundle holds every module the entry imports and nothing Node-only
     assert.ok(files.includes(required), required);
   assert.ok(files.every(file => !/^(server|mcp|scripts|worker)\//.test(file)), JSON.stringify(files));
   for (const file of files) await access(path.join(repository, file));
+  const config = JSON.parse(await readFile(path.join(repository, 'supabase/functions/ai-fighter/deno.json'), 'utf8'));
+  // Deno supplies this builtin; it is explicitly mapped for the native research image codec.
+  assert.equal(config.imports['node:buffer'], 'node:buffer');
 });
 test('an import the Edge runtime cannot resolve fails before deploy', async () => {
   await mkdir(path.join(temporary, 'fn'));
