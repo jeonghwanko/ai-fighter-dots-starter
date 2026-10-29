@@ -5,12 +5,12 @@
 // lease renewals while the stage runs, artifacts and the package through the worker routes, the stage's outcome. Stages:
 // generation-stages.mjs. Config: `<root>/worker.env` (ODDBOUT_GENERATION_API, ODDBOUT_GENERATION_WORKER_KEY, optional
 // ODDBOUT_GENERATION_KEEP_DAYS), written by `og worker key`. Once a day it runs `og prune`: a finished job's request text and pictures go.
-import { spawn } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { createStages, ogJobId } from './generation-stages.mjs';
+import { MODELS, createStages, ogJobId } from './generation-stages.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
 const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -42,6 +42,45 @@ export async function unclosedJobs(output) {
       found.set(name, `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`);
   }
   return found;
+}
+
+const gitHead = dir => new Promise(resolve => execFile('git', ['-C', dir, 'rev-parse', 'HEAD'], { timeout: 10_000 },
+  (error, out) => resolve(error ? null : String(out).trim().slice(0, 40))));
+/**
+ * What made a stage's work (measurement, 2026-10-29): the kit and engine commits and the models, sent as a `versions` event when the
+ * stage starts, so each number in docs/MEASUREMENT.md can be read per release. A commit that cannot be read is null, never a failure.
+ */
+export async function versionsEvent(kit, head = gitHead) {
+  const [kitRef, engine] = await Promise.all([head(kit), head(path.join(kit, 'vendor', 'sprite-gen'))]);
+  return { kind: 'versions', kit: kitRef, engine, image: MODELS.image, text: MODELS.text };
+}
+
+/** `npm run sprite -- gen …` → `sprite gen`, `codex exec …` → `codex`: the command a stage ran through og, without its arguments. */
+export const toolName = args => {
+  if (args[0] !== 'npm') return String(args[0] ?? '').slice(0, 24);
+  const words = args.slice(1).filter(a => !a.startsWith('-')), i = args.indexOf('--');
+  return `${words[1] ?? ''}${i >= 0 && args[i + 1] ? ` ${args[i + 1]}` : ''}`.slice(0, 24);
+};
+export const CALL_TOOLS = 12;
+/**
+ * A stage's og runs by command as `{ tool: [runs, failed, seconds] }`, sent with its outcome as `calls`. The finished event that stores
+ * them holds at most 2000 bytes and a finish that does not fit is refused, so at most CALL_TOOLS commands are named and the rest summed.
+ */
+export function createTally() {
+  const by = new Map();
+  return {
+    add(args, code, ms) {
+      const name = toolName(args), t = by.get(name) ?? [0, 0, 0];
+      by.set(name, [t[0] + 1, t[1] + (code === 0 ? 0 : 1), t[2] + ms / 1000]);
+    },
+    get size() { return by.size; },
+    value() {
+      const sorted = [...by].sort((a, b) => b[1][0] - a[1][0]), kept = sorted.slice(0, CALL_TOOLS - 1), rest = sorted.slice(CALL_TOOLS - 1);
+      if (rest.length === 1) kept.push(rest[0]);
+      else if (rest.length) kept.push(['other', rest.reduce((sum, [, t]) => sum.map((v, i) => v + t[i]), [0, 0, 0])]);
+      return Object.fromEntries(kept.map(([name, [runs, failed, seconds]]) => [name, [runs, failed, Math.round(seconds)]]));
+    },
+  };
 }
 
 export function createApi({ base, key, fetcher = fetch }) {
@@ -138,13 +177,18 @@ export async function main({ once = false } = {}) {
     await mkdir(dir, { recursive: true });
     // og's job marker: `og run` refuses a folder without it. Who and what only; the description stays in the API.
     await writeFile(path.join(dir, 'request.json'), JSON.stringify({ id: ogId, api: { jobId: job.id, owner: job.owner }, createdAt: new Date().toISOString() }, null, 2) + '\n');
-    const controller = new AbortController();
+    await api.progress(job, undefined, await versionsEvent(kit)).catch(() => {});
+    const controller = new AbortController(), tally = createTally();
     // The lease runs five minutes: renew it every minute; a job cancelled meanwhile (lease lost) stops the stage's child.
     const renew = setInterval(() => {
       api.progress(job, undefined).then(reply => { if (!reply.ok && reply.code === 'lease-lost') controller.abort(); }).catch(() => {});
     }, TIMING.renewMs);
     const stages = createStages({
-      og: (args, { stdin } = {}) => run(og, ['run', ogId, '--', ...args], { cwd: kit, log, stdin, signal: controller.signal }).then(code => ({ code })),
+      og: (args, { stdin } = {}) => {
+        const started = Date.now();
+        return run(og, ['run', ogId, '--', ...args], { cwd: kit, log, stdin, signal: controller.signal })
+          .then(code => { tally.add(args, code, Date.now() - started); return { code }; });
+      },
       api, fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
       motionsPy: args => run(python, ['-I', path.join(ROOT, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal }).then(code => ({ code })),
       toWebp: async (from, to) => {
@@ -161,7 +205,7 @@ export async function main({ once = false } = {}) {
       await appendFile(log, `stage error: ${error.stack ?? error}\n`).catch(() => {});
     } finally { clearInterval(renew); }
     if (controller.signal.aborted) { await say(`job ${job.id} ${job.status} stopped (lease lost)`); return; }
-    const reply = await api.finish(job, outcome.outcome, outcome.result);
+    const reply = await api.finish(job, outcome.outcome, { ...outcome.result, ...(tally.size ? { calls: tally.value() } : {}) });
     await say(`job ${job.id} ${job.status} → ${outcome.outcome}${outcome.result?.code ? ` (${outcome.result.code})` : ''} ${reply.ok ? reply.status : `finish refused ${reply.code}`}`);
     if (['rejected', 'failed'].includes(outcome.outcome) || reply.status === 'submitted') await writeFile(path.join(dir, '.closed'), '').catch(() => {});
   }
