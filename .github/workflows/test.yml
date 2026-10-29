@@ -1,5 +1,6 @@
 # Every pull request to main and every push to main; main requires this check before a merge.
-# GitHub skips the run when a PR's last commit says [skip ci], and the required check then never reports.
+# GitHub skips the run when a PR's last commit message carries a skip-ci marker anywhere, body included (this PR's
+# first commit quoted it in an explanation and was skipped), and the required check then never reports.
 # GitHub-hosted runners only: this repository is public, and a fork's pull request must not reach a self-hosted machine.
 name: test
 on:
