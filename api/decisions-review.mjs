@@ -98,7 +98,7 @@ export async function nativeSequenceEvidence(body) {
 async function parseEvidence(body, native) {
   object(body, ['stage', 'scope', 'images']);
   const { stage, scope, images } = body;
-  if (!Object.hasOwn(RUBRICS, stage) || !({ input: ['design'], pose: ['look-a', 'look-b'], sequence: ['walk', 'run'] }[/** @type {Stage} */ (stage)]?.includes(scope))) invalid();
+  if (typeof stage !== 'string' || !Object.hasOwn(RUBRICS, stage) || !({ input: ['design'], pose: ['look-a', 'look-b'], sequence: ['walk', 'run'] }[/** @type {Stage} */ (stage)]?.includes(scope))) invalid();
   if (!Array.isArray(images) || images.length > (native ? 65 : 17)) invalid();
   const binding = /** @type {ImageBinding[]} */ ([]), content = /** @type {ContentPart[]} */ ([]); let candidates = 0, references = 0;
   for (const value of images) {
