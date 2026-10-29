@@ -70,6 +70,39 @@ test('the numbers read what users answered, how long stages and waits took, and 
   assert.deepEqual(k.decisions.byScope, { 'look-a': 1, walk: 2, run: 1, design: 1 });
 });
 
+test('stops for an operator count even when the job ends well, with the operator retries and their waits', () => {
+  // As the hosted jobs of 2026-10-28 went: D (delegated) stops twice at its walk and run gates, an operator retries it each time, and it
+  // registers; E (delegated) stops at its run gate and is cancelled; F predates the `delegate` field and once meets a codex question.
+  const D = '44444444-4444-4444-8444-444444444444', E = '55555555-5555-4555-8555-555555555555', F = '66666666-6666-4666-8666-666666666666';
+  const jobs = [
+    { id: D, status: 'submitted', createdAt: at(0), appearanceRevisions: 0, motionRevisions: 0, previewClips: ['walk'] },
+    { id: E, status: 'cancelled', createdAt: at(0), appearanceRevisions: 0, motionRevisions: 0, errorCode: 'run-not-clean', previewClips: [] },
+    { id: F, status: 'submitted', createdAt: at(0), appearanceRevisions: 0, motionRevisions: 0, previewClips: ['walk'] },
+  ];
+  const events = [
+    ev(D, 0, 'created', { delegate: true }), ev(D, 0, 'claimed', { status: 'appearance' }), ev(D, 1, 'finished', { outcome: 'ok', status: 'motions', choice: 'b' }),
+    ev(D, 1, 'claimed', { status: 'motions' }), ev(D, 10, 'finished', { outcome: 'review', status: 'needs_review', code: 'walk-not-clean' }),
+    ev(D, 20, 'operator', { action: 'retry', to: 'motions' }),
+    ev(D, 20, 'claimed', { status: 'motions' }), ev(D, 30, 'finished', { outcome: 'review', status: 'needs_review', code: 'run-not-clean' }),
+    ev(D, 35, 'operator', { action: 'retry', to: 'motions' }),
+    ev(D, 35, 'claimed', { status: 'motions' }), ev(D, 40, 'finished', { outcome: 'ok', status: 'motion_ready' }), ev(D, 42, 'register'),
+    ev(E, 0, 'created', { delegate: true }), ev(E, 0, 'claimed', { status: 'motions' }),
+    ev(E, 15, 'finished', { outcome: 'review', status: 'needs_review', code: 'run-not-clean' }), ev(E, 25, 'cancelled'),
+    ev(F, 0, 'claimed', { status: 'motions' }), ev(F, 3, 'finished', { outcome: 'retry', status: 'motions', code: 'provider-asks' }),
+    ev(F, 20, 'claimed', { status: 'motions' }), ev(F, 30, 'finished', { outcome: 'ok', status: 'motion_ready' }), ev(F, 31, 'register'),
+  ];
+  const k = kpis(jobs.map(job => timeline(job, events)));
+  assert.deepEqual(k.failureOrReviewRate, { rate: 0, of: 3 }, 'the end state alone shows none of it');
+  assert.deepEqual([k.stageReviews.total, k.stageReviews.jobs, k.stageReviews.jobRate], [3, 2, 2 / 3]);
+  assert.deepEqual(k.stageReviews.byCode, { 'walk-not-clean': 1, 'run-not-clean': 2 });
+  assert.deepEqual(k.stageReviews.byStage, { motions: 3 });
+  assert.deepEqual(k.stageRetries, { total: 1, byCode: { 'provider-asks': 1 } });
+  assert.equal(k.operatorRetries, 2);
+  assert.deepEqual([k.operatorWaitMinutes.n, k.operatorWaitMinutes.mean], [2, 7.5]);   // 10 and 5 minutes
+  assert.deepEqual(k.cancelledAfterReview, { n: 1, of: 2 });
+  assert.deepEqual(k.delegated, { rate: 1, of: 2, workerPicks: 1 });   // F is unknown, not counted either way
+});
+
 test('clip labels follow each clip version, and a review is matched to the version it saw', () => {
   const rows = clipLabels(db.jobs.map(job => timeline(job, db.events)), db.reviews);
   const pick = (scope, version) => rows.find(r => r.scope === scope && r.version === version);

@@ -23,7 +23,12 @@
 | `motionFirstAccept` | 첫 모션 미리보기 뒤 수정 없이 등록한 비율(분모: 첫 모션 미리보기에 답한 작업) |
 | `clipRevisions` | 클립별 수정 요청 수와, 모션 미리보기까지 간 작업당 비율 |
 | `revisionsPerRegistered` | 등록한 작업의 외형+모션 수정 횟수 |
-| `failureOrReviewRate`, `failureCodes` | `failed`·`needs_review`로 끝난 비율과 그 코드 |
+| `failureOrReviewRate`, `failureCodes` | `failed`·`needs_review`로 끝난 비율과 그 코드(최종 상태만 본다) |
+| `stageReviews` | 단계가 운영자 검토로 멈춘 횟수(`finished`의 `outcome: review`). 작업이 결국 등록돼도 센다. 코드별·단계별, 멈춘 작업 비율 |
+| `stageRetries` | 단계가 다시 시도로 끝난 횟수와 코드(`provider-asks` 등) |
+| `operatorRetries`, `operatorWaitMinutes` | 운영자가 다시 돌린 횟수와, 검토로 멈춘 뒤 운영자가 다시 돌리기까지 걸린 시간 |
+| `cancelledAfterReview` | 검토로 멈췄다가 취소된 작업 수 |
+| `delegated` | 맡기기 작업 비율(`created`에 `delegate`가 없는 오래된 작업은 분모에서 뺀다)과 워커가 외형을 고른 횟수 |
 | `abandonRate` | 미리보기까지 간 작업 중 취소·만료된 비율 |
 | `stageMinutes`, `claimsPerStage` | 단계별 기계 시간(claimed→finished)과 단계당 시도 수(재시도·임대 만료 포함) |
 | `userWaitMinutes`, `minutesToRegister` | 미리보기에서 답(또는 취소)까지, 신청에서 등록까지 |
