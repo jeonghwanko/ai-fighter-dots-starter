@@ -151,7 +151,9 @@ This repository lets each user create their own fighter through Dot. Read
   Submit only within the user's request, reuse the same idempotency key for retries, and distinguish
   validation failures from post-publication moderation. Validated registrations become usable automatically.
   Never overwrite a registered immutable package.
-- Preserve unrelated working-tree changes. Run only relevant tests. Do not run CI unless explicitly requested.
+- Preserve unrelated working-tree changes. Run only relevant tests locally. Pull requests to `main` and pushes to it run
+  the `test` workflow, and a pull request merges only when it passes. Never put `[skip ci]` in a pull request's last
+  commit: the required check then never reports. Do not dispatch extra runs unless asked.
 - `main` is the working branch: branch from it and open pull requests against it. `codex/creator-hosting` was the kit and
   service branch until 2026-10-29 and is frozen at the commit that moved everything to `main`; never push to it.
 - Every `api/` module starts with `// @ts-check`; `npm run typecheck` (also in `npm test`) runs tsc over them, non-strict.

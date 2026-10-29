@@ -1,12 +1,17 @@
-# Manual only: run from the Actions tab or `gh workflow run test.yml --ref <branch>`.
-# No push/PR trigger, so nothing runs (or bills) unless someone asks for it.
+# Every pull request to main and every push to main; main requires this check before a merge.
+# GitHub skips the run when a PR's last commit says [skip ci], and the required check then never reports.
+# GitHub-hosted runners only: this repository is public, and a fork's pull request must not reach a self-hosted machine.
 name: test
 on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
-  group: test-${{ github.ref }}
+  group: test-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 jobs:
   test:
