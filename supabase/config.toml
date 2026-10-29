@@ -3,7 +3,10 @@ project_id = "ai-fighter-dots-starter"
 [functions.ai-fighter]
 # The handler verifies Supabase Auth users and separately scoped worker credentials on every request.
 verify_jwt = false
-entrypoint = "./functions/ai-fighter/index.ts"
+# Deploy only from the game repository (npm run fighter:edge): this checkout carries a null duel engine. The missing
+# entrypoint makes `supabase functions deploy ai-fighter` fail here instead of erasing the live engine. The game tool
+# uploads through the Management API with its own entrypoint and does not read this file.
+entrypoint = "./functions/ai-fighter/DEPLOY-WITH-GAME-REPO-fighter-edge.ts"
 
 [functions.ai-fighter-mcp]
 # Public discovery; every private tool verifies a scoped OAuth JWT and its active grant/session itself.
