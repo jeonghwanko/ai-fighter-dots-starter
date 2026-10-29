@@ -101,8 +101,10 @@ function usageOf(usage) {
   if (!usage || typeof usage !== 'object') return null;
   const out = {};
   for (const k of ['input_tokens', 'output_tokens', 'total_tokens']) if (Number.isSafeInteger(usage[k]) && usage[k] >= 0) out[k] = usage[k];
-  if (Number.isSafeInteger(usage.input_tokens_details?.cached_tokens) && usage.input_tokens_details.cached_tokens >= 0)
-    out.input_tokens_details = { cached_tokens: usage.input_tokens_details.cached_tokens };
+  for (const k of ['cached_tokens', 'cache_write_tokens']) {
+    const n = usage.input_tokens_details?.[k];
+    if (Number.isSafeInteger(n) && n >= 0) (out.input_tokens_details ??= {})[k] = n;
+  }
   return Object.keys(out).length ? out : null;
 }
 
@@ -122,8 +124,9 @@ export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fet
       const rpc = async (name, args) => {
         const { data, error } = await db.rpc(name, args);
         if (error) {
-          const code = ['review-limit', 'lease-lost', 'worker-required', 'generation-state'].find(k => error.message?.includes(k));
-          throw new Problem(code === 'review-limit' ? 429 : code === 'worker-required' ? 403 : code ? 409 : 503, code ?? 'review-store-unavailable');
+          const code = ['review-limit', 'lease-lost', 'worker-required', 'generation-state', 'benchmark-expired', 'benchmark-evidence-changed'].find(k => error.message?.includes(k));
+          throw new Problem(code === 'review-limit' ? 429 : code === 'worker-required' ? 403 : code === 'benchmark-expired' ? 410
+            : code === 'benchmark-evidence-changed' ? 422 : code ? 409 : 503, code ?? 'review-store-unavailable');
         }
         return data;
       };
@@ -132,20 +135,22 @@ export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fet
         p_binding: { images: evidence.binding, requestSha256, model: DECISIONS.model, rubric: DECISIONS.rubric, threshold: DECISIONS.threshold } });
       // Persisted before dispatch. A crash or timeout never frees this fingerprint for another paid call.
       if (!claimed.started) return claimed.report;
-      const started = performance.now(); let requestId = null, report;
+      const started = performance.now(); let requestId = null, providerHttpStatus = null, usage = null, report;
       try {
         const response = await fetcher(ENDPOINT, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(DECISIONS.timeoutMs),
           headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, body: raw });
+        providerHttpStatus = response.status;
         const rid = response.headers.get('x-request-id');
         requestId = /^req_[A-Za-z0-9_-]{1,120}$/.test(rid ?? '') ? rid : null;
         if (!response.ok) { await response.body?.cancel(); throw Error('provider-refused'); }
         const value = JSON.parse(new TextDecoder().decode(await readBody(response, 128 * 1024)));
-        report = { status: 'completed', checks: checkedAnswers(value, qs), usage: usageOf(value.usage) };
+        usage = usageOf(value.usage);
+        report = { status: 'completed', checks: checkedAnswers(value, qs) };
       } catch {
         // No provider response bodies, exception strings, prompts or headers in reports/logs.
         report = { status: 'unverified', errorCode: 'provider-outcome-unverified', checks: Object.fromEntries(qs.map(q => [q.name, { status: 'unverified' }])) };
       }
-      report = { ...claimed.report, ...report, requestId, elapsedSeconds: (performance.now() - started) / 1000 };
+      report = { ...claimed.report, ...report, requestId, providerHttpStatus, usage, elapsedSeconds: (performance.now() - started) / 1000 };
       return rpc('af_decision_review_finish', { p_id: claimed.id, p_report: report });
     },
   };
