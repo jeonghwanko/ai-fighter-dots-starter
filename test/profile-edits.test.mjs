@@ -4,7 +4,7 @@ import { sha256 } from '../api/handler.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { profileFixture } from './helpers/profile-api-fixture.mjs';
 
-test('five initial attempts remain bounded; unlimited revisions reuse validated assets and preserve identity, history and admissions', async () => {
+test('five new-fighter attempts a day remain bounded; unlimited revisions reuse validated assets and preserve identity, history and admissions', async () => {
   const f = await profileFixture();
   try {
     // Use four failed first attempts and register on the fifth, just like the reported account.
@@ -40,14 +40,18 @@ test('five initial attempts remain bounded; unlimited revisions reuse validated 
     assert.equal(update.fighter_id,id); assert.equal(update.status,'registered');
     const next=await (await f.request(id,update.manifest_sha,{name:'After art update'})).json();
     assert.equal((await f.sql.query('select asset_source_submission from af_submissions where id=$1',[next.submissionId])).rows[0].asset_source_submission,update.id);
-    // An account with five failed first attempts cannot start a sixth.
+    // An account with five failed first attempts in a day cannot start a sixth that day.
     const other=crypto.randomUUID(); await f.sql.query('insert into auth.users(id) values($1)',[other]);
     await f.sql.query('update af_settings set max_reserved_bytes=100000000');
+    const attempt=()=>f.rpc('af_create_submission',{p_owner:other,p_key:crypto.randomUUID(),p_text:JSON.stringify(example),p_sha:first.manifest_sha,p_bytes:f.bytes});
     for(let i=0;i<5;i++) {
-      const s=await f.rpc('af_create_submission',{p_owner:other,p_key:crypto.randomUUID(),p_text:JSON.stringify(example),p_sha:first.manifest_sha,p_bytes:f.bytes});
+      const s=await attempt();
       assert.ok(s.data); await f.sql.query("update af_submissions set status='rejected' where id=$1",[s.data.id]);
     }
-    assert.equal((await f.rpc('af_create_submission',{p_owner:other,p_key:crypto.randomUUID(),p_text:JSON.stringify(example),p_sha:first.manifest_sha,p_bytes:f.bytes})).error.message,'submission-quota');
+    assert.equal((await attempt()).error.message,'submission-quota');
+    // The bound is per day, not for the account's life: once those attempts are a day old it may try again.
+    await f.sql.query("update af_submissions set created_at=now()-interval '25 hours' where owner_id=$1",[other]);
+    assert.ok((await attempt()).data);
   } finally { await f.sql.close(); }
 });
 
