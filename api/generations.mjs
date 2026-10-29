@@ -9,6 +9,7 @@ import { text } from './canon.mjs';
 import { probeImage } from './image-probe.mjs';
 import { Problem, UUID, jsonResponse, readBody, sha256 } from './http.mjs';
 import { checkedManifest, storeAsset } from './submissions.mjs';
+import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 
 export const GENERATION_BUCKET = 'af-generation';
 export const GENERATION_LIMITS = Object.freeze({ descriptionMin: 10, description: 600, refs: 2, refBytes: 4_000_000, refSide: Object.freeze([64, 4096]),
@@ -73,7 +74,7 @@ export function confirmedProfile(value) {
   return out;
 }
 
-export function createGenerationHandler({ db, authenticate, present }) {
+export function createGenerationHandler({ db, authenticate, present, decisionsReviewer = null }) {
   async function call(name, args) {
     const { data, error } = await db.rpc(name, args);
     if (!error) return data;
@@ -287,6 +288,17 @@ export function createGenerationHandler({ db, authenticate, present }) {
 
   async function worker(request, parts, host) {
     const method = request.method, route = parts.join('/');
+    if (method === 'POST' && parts[1] === 'jobs' && parts[3] === 'decisions' && parts.length === 4) {
+      const lease = id(request.headers.get('x-generation-lease'));
+      const row = await call('af_generation_held', { p_id: id(parts[2]), p_token: lease });
+      if (!row.lease_expires_at || Date.parse(row.lease_expires_at) <= Date.now()) throw new Problem(409, 'lease-lost');
+      const effectiveHost = host ?? await call('af_generation_official', {});
+      if (row.assigned_host !== effectiveHost) throw new Problem(403, 'worker-required');
+      if (!['appearance', 'motions'].includes(row.status)) throw new Problem(409, 'generation-state');
+      if (!decisionsReviewer?.enabled) return { ok: true, review: { mode: 'off', status: 'disabled', advisory: true, visualApproval: false } };
+      const evidence = await reviewEvidence(await readJson(request, DECISIONS.bodyBytes));
+      return { ok: true, review: await decisionsReviewer.review({ db, job: row, host, lease, evidence }) };
+    }
     if (method === 'PUT' && parts[1] === 'jobs' && parts[3] === 'artifacts' && parts.length === 5) {
       const row = await call('af_generation_held', { p_id: id(parts[2]), p_token: id(request.headers.get('x-generation-lease')) });
       if (!ARTIFACT.test(parts[4])) throw new Problem(422, 'invalid-artifact');
@@ -340,6 +352,7 @@ export function createGenerationHandler({ db, authenticate, present }) {
       const urls = await signed([...(refs ?? []).map(ref => ref.path), ...candidates.map(name => artifactPath(row.id, name))]);
       return { ok: true, job: { id: row.id, status: row.status, leaseToken: row.lease_token, owner: row.owner_id, createdAt: row.created_at, description: row.description,
         language: row.language, brief: row.brief ?? null, delegate: row.delegate === true, choice: row.choice ?? null, appearanceNote: row.appearance_note ?? null,
+        decisionsReview: { mode: decisionsReviewer?.enabled ? 'shadow' : 'off' },
         appearanceRound: row.appearance_revisions, motionNote: row.motion_note ?? null, motionRound: row.motion_revisions, profile: row.profile ?? null,
         refs: (refs ?? []).map(ref => ({ id: ref.id, contentType: ref.content_type, width: ref.width, height: ref.height, url: urls.get(ref.path) ?? null })),
         candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', name, url: urls.get(artifactPath(row.id, name)) ?? null })),
@@ -388,7 +401,14 @@ export function createGenerationHandler({ db, authenticate, present }) {
       }
       // The key names the worker's host; the stages it may take are his (the official host's when the key names none).
       if (isWorker) return json(await worker(request, parts, await authenticate(request, 'generation')));
-      return json(await creator(request, parts, await authenticate(request, false)));
+      const owner = await authenticate(request, false);
+      if (request.method === 'GET' && parts.length === 3 && parts[2] === 'reviews') {
+        const job = await ownJob(owner, parts[1]);
+        const { data, error } = await db.from('af_decision_reviews').select('id,created_at,report').eq('job_id', job.id).order('created_at', { ascending: true }).limit(100);
+        if (error) throw new Problem(503, 'review-store-unavailable');
+        return json({ ok: true, reviews: (data ?? []).map(r => ({ id: r.id, createdAt: r.created_at, report: r.report })) });
+      }
+      return json(await creator(request, parts, owner));
     } catch (error) {
       if (error instanceof Problem) return json({ ok: false, stage: 'generation', code: error.message, ...(error.errors ? { errors: error.errors } : {}) }, error.status);
       return json({ ok: false, stage: 'generation', code: 'service-unavailable' }, 503);

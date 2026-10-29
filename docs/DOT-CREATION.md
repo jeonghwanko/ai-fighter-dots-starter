@@ -214,7 +214,9 @@ walk 16/run 12개 프레임과 최종 시퀀스 검수 후 `asset.json`을 만�
   실패한 걷기를 정지 프레임 복제나 시간 조절로 통과시키지 않는다.
 - [보행 설계·검수 흐름](GAIT-REVIEW.md)을 따른다. 공통 좌표와 배율을 고정하고 프레임별 지지발을 계획한 뒤,
   실제 양발의 접지 구간을 `fighter:gait review`로 검사한다. 미검증 상태에서도 등록 전 미리보기를 먼저 보여준다.
-- 선택형 [Decisions 보조 검수](../vendor/sprite-gen/docs/decisions-review.md)는
+- **호스팅 제작의 Decisions 검수는 [서버 검수 경로](SERVER-DECISIONS-REVIEW.md)를 쓴다.** 서버가 비교 모드를 켜면
+  호스트가 기존 작업 인증으로 증거만 전달한다. OpenAI 키는 서버 Secrets에만 관리하고 사용자 PC나 생성 호스트에 설정하지 않는다.
+- 독립 연구 환경의 선택형 [Decisions 보조 검수](../vendor/sprite-gen/docs/decisions-review.md)는
   `npm run sprite -- review-decisions --spec <검수입력.json> --out-dir <별도결과폴더>`로 준비한다.
   기본 실행은 로컬 요청 준비이며 실제 API 호출이나 이미지 생성이 아니다. `--pose-run`의
   input/pose/sequence 단계도 지원한다. 사용자가 별도 API 과금을 선택한 경우에만 허용된 검수 환경에서

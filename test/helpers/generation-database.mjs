@@ -9,7 +9,7 @@ export const webp = (w, h) => { const b = new Uint8Array(64); b.set(new TextEnco
   b.set([(w - 1) & 255, (w - 1) >> 8 & 255, (w - 1) >> 16, (h - 1) & 255, (h - 1) >> 8 & 255, (h - 1) >> 16], 24); return b; };
 
 // One database, a creator with a token, another creator, the generation worker's key and a validation worker's key; Storage in memory.
-export async function generation() {
+export async function generation({ decisionsReviewer = null } = {}) {
   const sql = await migratedDatabase(), owner = crypto.randomUUID(), other = crypto.randomUUID();
   for (const user of [owner, other]) {
     await sql.query('insert into auth.users(id) values($1)', [user]);
@@ -41,7 +41,7 @@ export async function generation() {
     createSignedUrls: async paths => ({ data: paths.map(path => ({ path, signedUrl: `https://storage.test/${bucket}/${path}?token=t` })) }) }) };
   const users = { 'owner-token-0123456789': owner, 'other-token-0123456789': other };
   const db = { rpc, from, storage, auth: { getUser: async token => ({ data: { user: users[token] ? { id: users[token] } : null } }) } };
-  const handle = createHandler({ db });
+  const handle = createHandler({ db, decisionsReviewer });
   const call = async (method, path, body, token = 'owner-token-0123456789', headers = {}) => {
     const raw = body instanceof Uint8Array || typeof body === 'string';
     const response = await handle(new Request(`http://localhost/ai-fighter/${path}`, { method, headers: { ...(token ? { authorization: `Bearer ${token}` } : {}),
