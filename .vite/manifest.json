@@ -240,9 +240,9 @@
     "file": "assets/city-tournament-azouTl3-.js",
     "name": "city-tournament"
   },
-  "_creatorTheme-tm7IH9ly.css": {
-    "file": "assets/creatorTheme-tm7IH9ly.css",
-    "src": "_creatorTheme-tm7IH9ly.css"
+  "_creatorTheme-DAyVAkcD.css": {
+    "file": "assets/creatorTheme-DAyVAkcD.css",
+    "src": "_creatorTheme-DAyVAkcD.css"
   },
   "_dist-CuSK8MRy.js": {
     "file": "assets/dist-CuSK8MRy.js",
@@ -273,8 +273,12 @@
     "file": "assets/fighterLines-DQuiabXv.js",
     "name": "fighterLines"
   },
-  "_fighterProfile-BbO3jPyp.js": {
-    "file": "assets/fighterProfile-BbO3jPyp.js",
+  "_fighterProfile-0pLU9UnX.css": {
+    "file": "assets/fighterProfile-0pLU9UnX.css",
+    "src": "_fighterProfile-0pLU9UnX.css"
+  },
+  "_fighterProfile-DUocllzY.js": {
+    "file": "assets/fighterProfile-DUocllzY.js",
     "name": "fighterProfile",
     "imports": [
       "_Locale-BoqNfY5_.js",
@@ -289,12 +293,8 @@
       "_city-tournament-azouTl3-.js"
     ],
     "css": [
-      "assets/fighterProfile-BmTQO43S.css"
+      "assets/fighterProfile-0pLU9UnX.css"
     ]
-  },
-  "_fighterProfile-BmTQO43S.css": {
-    "file": "assets/fighterProfile-BmTQO43S.css",
-    "src": "_fighterProfile-BmTQO43S.css"
   },
   "_fileSave-EGPXJ61v.js": {
     "file": "assets/fileSave-EGPXJ61v.js",
@@ -345,21 +345,21 @@
       "src/platform/woniSample.ts"
     ]
   },
-  "_infoPage-DCPoijIz.css": {
-    "file": "assets/infoPage-DCPoijIz.css",
-    "src": "_infoPage-DCPoijIz.css"
-  },
-  "_infoPage-Gwa-Heye.js": {
-    "file": "assets/infoPage-Gwa-Heye.js",
+  "_infoPage-BeGI2qt_.js": {
+    "file": "assets/infoPage-BeGI2qt_.js",
     "name": "infoPage",
     "imports": [
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_siteChrome-1qUXOwh3.js",
+      "_siteChrome-WojVNqoX.js",
       "_siteLinks-Cb1kHGko.js"
     ],
     "css": [
       "assets/infoPage-DCPoijIz.css"
     ]
+  },
+  "_infoPage-DCPoijIz.css": {
+    "file": "assets/infoPage-DCPoijIz.css",
+    "src": "_infoPage-DCPoijIz.css"
   },
   "_league-BqkgClzO.css": {
     "file": "assets/league-BqkgClzO.css",
@@ -414,8 +414,12 @@
     "file": "assets/rolldown-runtime-B0Z9INg1.js",
     "name": "rolldown-runtime"
   },
-  "_siteChrome-1qUXOwh3.js": {
-    "file": "assets/siteChrome-1qUXOwh3.js",
+  "_siteChrome-By7DD5Rh.css": {
+    "file": "assets/siteChrome-By7DD5Rh.css",
+    "src": "_siteChrome-By7DD5Rh.css"
+  },
+  "_siteChrome-WojVNqoX.js": {
+    "file": "assets/siteChrome-WojVNqoX.js",
     "name": "siteChrome",
     "imports": [
       "_accountControl-jM9VodGn.js",
@@ -423,7 +427,7 @@
       "_OddboutCommunity-yZWAEfH9.js"
     ],
     "css": [
-      "assets/siteChrome-B50ImoPt.css"
+      "assets/siteChrome-By7DD5Rh.css"
     ],
     "assets": [
       "assets/Pretendard-Regular.subset.0-CLvkdWSe.woff2",
@@ -610,10 +614,6 @@
       "assets/Pretendard-Bold.subset.91-DoowpukH.woff2"
     ]
   },
-  "_siteChrome-B50ImoPt.css": {
-    "file": "assets/siteChrome-B50ImoPt.css",
-    "src": "_siteChrome-B50ImoPt.css"
-  },
   "_siteLinks-Cb1kHGko.js": {
     "file": "assets/siteLinks-Cb1kHGko.js",
     "name": "siteLinks"
@@ -627,17 +627,17 @@
     "name": "three.core"
   },
   "about.html": {
-    "file": "assets/about-DDEUFUNu.js",
+    "file": "assets/about-Vv1FPHuy.js",
     "name": "about",
     "src": "about.html",
     "isEntry": true,
     "imports": [
       "_accountControl-jM9VodGn.js",
-      "_infoPage-Gwa-Heye.js"
+      "_infoPage-BeGI2qt_.js"
     ]
   },
   "admin.html": {
-    "file": "assets/admin-DVkWoXvd.js",
+    "file": "assets/admin-BtEkB3gz.js",
     "name": "admin",
     "src": "admin.html",
     "isEntry": true,
@@ -645,11 +645,11 @@
       "_accountControl-jM9VodGn.js",
       "_oddboutSession-NBQq8WAg.js",
       "_fighterCreator-BYw7hBCS.js",
-      "_siteChrome-1qUXOwh3.js"
+      "_siteChrome-WojVNqoX.js"
     ],
     "css": [
       "assets/admin-BUUPTwTy.css",
-      "assets/creatorTheme-tm7IH9ly.css"
+      "assets/creatorTheme-DAyVAkcD.css"
     ]
   },
   "assets/coop-campaign/animations/female-lupin-actions-v3-20261014.webp": {
@@ -661,7 +661,7 @@
     "src": "assets/coop-campaign/animations/handsome-actions-v2-20261014.webp"
   },
   "creator.html": {
-    "file": "assets/creator-DeMQLaOQ.js",
+    "file": "assets/creator-BE4U50qB.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -670,13 +670,13 @@
       "_fighterLines-DQuiabXv.js",
       "_Locale-BoqNfY5_.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_fighterProfile-BbO3jPyp.js",
+      "_fighterProfile-DUocllzY.js",
       "_storageKeys-C-Eo7kME.js",
       "_preload-helper-Czpn1I53.js",
       "_oddboutSession-NBQq8WAg.js",
       "_registeredFighters-BaULuzl2.js",
       "_fighterCreator-BYw7hBCS.js",
-      "_siteChrome-1qUXOwh3.js",
+      "_siteChrome-WojVNqoX.js",
       "_OddboutCommunity-yZWAEfH9.js",
       "_siteLinks-Cb1kHGko.js",
       "_arenaRankings-C8XNVGrL.js",
@@ -689,19 +689,19 @@
       "src/creator/leagueContent.ts"
     ],
     "css": [
-      "assets/creator-CWO1GCy4.css",
-      "assets/creatorTheme-tm7IH9ly.css"
+      "assets/creator-DIIm4yAi.css",
+      "assets/creatorTheme-DAyVAkcD.css"
     ]
   },
   "credits.html": {
-    "file": "assets/credits-0gJlIRoN.js",
+    "file": "assets/credits-C3XpfJcT.js",
     "name": "credits",
     "src": "credits.html",
     "isEntry": true,
     "imports": [
       "_accountControl-jM9VodGn.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_siteChrome-1qUXOwh3.js",
+      "_siteChrome-WojVNqoX.js",
       "_leagueContent-BBlZZ2fn.js"
     ],
     "css": [
@@ -709,13 +709,13 @@
     ]
   },
   "docs.html": {
-    "file": "assets/docs-BwEnkRef.js",
+    "file": "assets/docs-CD5PNQ7K.js",
     "name": "docs",
     "src": "docs.html",
     "isEntry": true,
     "imports": [
       "_accountControl-jM9VodGn.js",
-      "_infoPage-Gwa-Heye.js"
+      "_infoPage-BeGI2qt_.js"
     ]
   },
   "fighter.html": {
@@ -744,17 +744,17 @@
     ]
   },
   "fighters.html": {
-    "file": "assets/fighters-BiRT08gL.js",
+    "file": "assets/fighters-DBd1zDUj.js",
     "name": "fighters",
     "src": "fighters.html",
     "isEntry": true,
     "imports": [
       "_accountControl-jM9VodGn.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_fighterProfile-BbO3jPyp.js",
+      "_fighterProfile-DUocllzY.js",
       "_storageKeys-C-Eo7kME.js",
       "_registeredFighters-BaULuzl2.js",
-      "_siteChrome-1qUXOwh3.js",
+      "_siteChrome-WojVNqoX.js",
       "_siteLinks-Cb1kHGko.js",
       "_leagueContent-BBlZZ2fn.js"
     ],
@@ -764,15 +764,15 @@
     ]
   },
   "league.html": {
-    "file": "assets/league-BxE7ulTg.js",
+    "file": "assets/league-Cjyz296t.js",
     "name": "league",
     "src": "league.html",
     "isEntry": true,
     "imports": [
       "_accountControl-jM9VodGn.js",
       "_fighterCreatorLocale-Bh29uOe8.js",
-      "_fighterProfile-BbO3jPyp.js",
-      "_siteChrome-1qUXOwh3.js",
+      "_fighterProfile-DUocllzY.js",
+      "_siteChrome-WojVNqoX.js",
       "_OddboutCommunity-yZWAEfH9.js",
       "_siteLinks-Cb1kHGko.js",
       "_leagueContent-BBlZZ2fn.js",
@@ -800,13 +800,13 @@
     "src": "node_modules/three/examples/jsm/libs/basis/basis_transcoder.wasm"
   },
   "privacy.html": {
-    "file": "assets/privacy-CQSIIjns.js",
+    "file": "assets/privacy-CWEm-Fv2.js",
     "name": "privacy",
     "src": "privacy.html",
     "isEntry": true,
     "imports": [
       "_accountControl-jM9VodGn.js",
-      "_siteChrome-1qUXOwh3.js"
+      "_siteChrome-WojVNqoX.js"
     ],
     "css": [
       "assets/privacy-BE0WRFam.css"
@@ -1839,18 +1839,18 @@
     ]
   },
   "world.html": {
-    "file": "assets/world-QD_4ABXm.js",
+    "file": "assets/world-iqnMW4q5.js",
     "name": "world",
     "src": "world.html",
     "isEntry": true,
     "imports": [
       "_accountControl-jM9VodGn.js",
-      "_fighterProfile-BbO3jPyp.js",
+      "_fighterProfile-DUocllzY.js",
       "_storageKeys-C-Eo7kME.js",
       "_oddboutSession-NBQq8WAg.js",
       "_registeredFighters-BaULuzl2.js",
       "_fighterCreator-BYw7hBCS.js",
-      "_siteChrome-1qUXOwh3.js",
+      "_siteChrome-WojVNqoX.js",
       "_arenaRankings-C8XNVGrL.js"
     ],
     "css": [
