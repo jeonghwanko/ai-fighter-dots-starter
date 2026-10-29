@@ -58,6 +58,7 @@ GPT는 자세마다 몸을 따로 그려 외형보다 2~20% 커지거나 작아�
 
 - `og run` 밖에서 `sprite-gen`·`codex`·`grok`을 부르지 않는다. 그러면 고정한 계정·칸·장부를 거치지 않는다.
 - 생성 단계가 실패하면 워커는 그 실행이 쓴 sprite-gen 리포트(`--report`, gen-set·video-set의 `set.report.json`)를 읽는다. 리포트가 같은 명령으로 다시 될 수 있다고 할 때만(`retryable`), 또는 og가 명령을 시작하기 전에 거절했을 때(종료 3, 리포트 없음)만 다시 시도한다. 그 밖에 리포트 없이 끝난 실행(강제 종료, 메모리 부족, 충돌)은 유료 요청이 이미 나갔을 수 있으므로 다시 보내지 않고 `*-outcome-unknown` 운영자 검토로 간다. `outcome-unknown`, xAI가 받은 영상 요청(`*-unfinished`, `requestIds` — `video-resume`으로 받는다), 종료 3(`*-not-started`), 고쳐야 할 오류는 운영자 검토로 간다. og 장부는 종료 코드만 읽는다: 리포트 경로를 아는 쪽은 워커다.
+- 워커는 단계마다 `versions` 이벤트(킷·엔진 커밋, 모델)를 보내고, 끝낼 때 og로 돈 명령별 실행 수를 `calls`로 남긴다. 측정은 [MEASUREMENT.md](../docs/MEASUREMENT.md)를, 장부의 데이터 형태는 `og report --json`을 본다.
 - 워커는 `og harden` 없이는 시작하지 않는다. 신청자의 글이 codex 입력이 되기 때문이다.
 - `og setup`(사용자 설치는 `npm run host:setup`)은 열린 작업이 있으면 아무것도 바꾸지 않는다. 키트·CLI 판은 `og` 맨 위에 고정한다.
 - 끝난 작업 폴더(신청 글·참조 그림·생성 그림)는 워커가 하루 한 번 지운다: 닫힌 지 7일(`ODDBOUT_GENERATION_KEEP_DAYS`, 1~90),
