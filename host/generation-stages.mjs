@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { judgeOutcome, readOutcome } from './sprite-outcome.mjs';
+import { NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mjs';
 // No OpenAI credentials or API calls on a generation host. Use its existing ODDBOUT worker identity.
 
 const reviewHash = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -326,13 +326,15 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
   const align = command => { const run = aligning.then(() => og(command)); aligning = run.catch(() => {}); return run; };
   /**
    * A generating run that failed: tried again later only when its own report (written by this run, after `since`) says the
-   * same command may succeed, or when there is no report at all (og stopped it before sprite-gen ran, as before). A report
-   * that says the request's outcome cannot be told, names a video request xAI took (resume it, never film again), asks the
-   * codex question, or names an error the same command will meet again goes to an operator instead (host/README.md).
+   * same command may succeed, or when og refused it before it started (exit 3 and no report). A run that ended without a
+   * report any other way (killed, out of memory, a crash) may have sent a paid request, so it is never run again unseen. A
+   * report that says the request's outcome cannot be told, names a video request xAI took (resume it, never film again),
+   * asks the codex question, or names an error the same command will meet again goes to an operator too (host/README.md).
    */
   async function failedRun(prefix, code, report, since) {
-    const verdict = judgeOutcome({ code, report: await readOutcome(report, { since }) });
-    if (verdict.next === 'retry' || (verdict.charge === 'unknown' && code !== 75)) return { retry: `${prefix}-exit-${code}` };
+    const said = await readOutcome(report, { since });
+    const verdict = judgeOutcome({ code, report: said });
+    if (verdict.next === 'retry' || (!said && code === NOT_STARTED_EXIT)) return { retry: `${prefix}-exit-${code}` };
     const review = { answer: 'provider-asks', resume: `${prefix}-unfinished`, inspect: `${prefix}-outcome-unknown` }[verdict.next]
       ?? (code === 3 ? `${prefix}-not-started` : `${prefix}-${verdict.codes[0] ?? `exit-${code}`}`);
     return { review, ...(verdict.requestIds.length ? { requestIds: verdict.requestIds } : {}) };

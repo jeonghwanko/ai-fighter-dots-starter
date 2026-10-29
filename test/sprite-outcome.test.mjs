@@ -31,6 +31,8 @@ test('a request that left is retried only when every error says so', () => {
   // retryable alone never reruns a request whose outcome cannot be told, or one stopped after it left
   assert.equal(judgeOutcome({ code: 1, report: report(true, [error('outcome-unknown', false)]) }).next, 'inspect');
   assert.equal(judgeOutcome({ code: 1, report: report(true, [error('provider-timeout', true), error('outcome-unknown', false)]) }).next, 'inspect');
+  // A codex timeout was stopped after its request left (sprite-gen: retryable false since it may have made a paid image).
+  assert.equal(judgeOutcome({ code: 1, report: report(true, [error('provider-timeout', false)]) }).next, 'inspect');
   assert.equal(judgeOutcome({ code: 143, report: report(true, [error('interrupted', true)]) }).next, 'inspect');
 });
 

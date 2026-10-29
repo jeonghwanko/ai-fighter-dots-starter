@@ -59,7 +59,7 @@ GROK_TOOLS=" video video-set video-resume video-extend video-edit sound "
 # Tools that reach a provider P0 does not use (pixel-draw draws with a Claude subscription or a billed API key).
 REFUSED_TOOLS=" pixel-draw "
 
-die() { echo "og: $*" >&2; exit 1; }
+die() { echo "og: $*" >&2; exit "${DIE_EXIT:-1}"; }
 now_ms() { date +%s%3N; }
 
 # The signed-in account of a login file, one per line, from one known field only: codex = the id_token's `email`,
@@ -455,6 +455,9 @@ cmd_run() {
   local job=${1:-} dir c k t1 rc=0; shift || true
   [ "${1:-}" = -- ] && shift
   [ $# -gt 0 ] || die "usage: og run <job> -- <command...>"
+  # A refusal from here until the command starts (job, account, slots, memory slice) exits 3, sprite-gen's own
+  # "nothing was sent": the worker may run it again, where a run that ended without a report is never re-sent unseen.
+  DIE_EXIT=3
   dir=$(job_dir "$job")
   c=$(classify "$@"); RUN_PROVIDER=${c% *}; k=${c#* }
   RUN_ACCOUNT=none

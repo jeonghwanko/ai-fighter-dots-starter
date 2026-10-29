@@ -74,6 +74,9 @@ test('a host install runs og as its own account: providers signed in inside the 
     assert.ok(existsSync(path.join(root, 'slots', 'slot0')));
     const end = (await readFile(path.join(root, 'ledger.jsonl'), 'utf8')).trim().split('\n').map(line => JSON.parse(line)).at(-1);
     assert.deepEqual([end.kind, end.phase, end.provider, end.account, end.exit], ['run', 'end', 'codex', 'host', 0]);
+    // Refused before its command started: exit 3, sprite-gen's "nothing was sent", which the worker may run again.
+    const refused = og(['run', '20261028-gen-missing0', '--', 'codex', 'exec', 'hello']);
+    assert.equal(refused.status, 3, refused.stderr); assert.match(refused.stderr, /no job 20261028-gen-missing0/);
 
     // The worker: its key on stdin (mode 600), codex locked first, a user unit in the host's own systemd.
     assert.notEqual(og(['worker', 'key', 'https://example.supabase.co/functions/v1/ai-fighter'], 'not-a-key').status, 0);
