@@ -112,6 +112,17 @@ npm run sprite:setup
 npm run sprite:status
 ```
 
+2026-10-29 이전에 `codex/creator-hosting`으로 설치했다면, 그 브랜치는 잠겼고 키트의 준비 검사가 다른 브랜치라며 멈춥니다.
+고친 파일이 있으면 먼저 커밋하거나 옮겨 두고, 다음 명령으로 `main`으로 옮기세요(그 방식으로 받은 폴더에서는 `git checkout main`만으로는 되지 않습니다).
+
+```sh
+git remote set-branches origin main
+git fetch origin
+git switch -C main origin/main
+npm ci --ignore-scripts
+npm run sprite:setup
+```
+
 설치 도구가 고정된 버전의 sprite-gen 소스를 받아 전용 Python 환경에 설치합니다. GitHub 소스 ZIP에는 서브모듈 파일이 없으므로 Git clone을 사용하세요. 상태 명령은 설치 상태를 확인하며, 생성 기능 접근이나 잔여 한도까지 확인하지는 않습니다.
 
 설치 도구는 sprite-gen이 쓰는 외부 도구도 sudo 없이 받습니다. `-exact`를 지원하는 `img2webp`(libwebp 1.6.0, SHA-256 고정 — 시스템에 없거나 Ubuntu 24.04의 1.3.x처럼 오래되면 키트 전용 환경에 넣습니다)와 걷기·달리기 루프를 매끄럽게 잇는 RIFE(`sprite-gen rife install`, 약 430MB 다운로드)입니다. `ffmpeg`는 먼저 직접 설치하세요: `sudo apt install ffmpeg`(Ubuntu·Debian), `brew install ffmpeg`(macOS), `winget install --id Gyan.FFmpeg -e`(Windows). 설치와 `sprite:status`가 도구마다 `ok`·`missing`·`broken`과 고치는 명령을 보여줍니다. GPU가 없는 Linux에서는 RIFE용으로 `sudo apt install libvulkan1 mesa-vulkan-drivers`도 필요합니다. RIFE가 없으면 루프는 촬영된 그대로 잘리고 경고가 남습니다. 캐릭터를 제작 중이라면 작업 폴더를 유지하고 저장소 업데이트를 받지 마세요.
@@ -133,6 +144,7 @@ npm run sprite:status
 설치·생성·로그인·등록·게임 이용 중 문제가 생기면 실패한 단계, 기대한 결과와 실제 결과, 오류 메시지, 도구 버전이나 커밋을 [이슈](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)에 남겨주세요. 인증 정보와 비공개 파일은 제외합니다. 생성이나 업로드가 시간 초과된 경우에는 기존 요청과 결과물부터 확인한 뒤 재시도합니다.
 
 버그 제보, 설치 안내 개선, 재현 가능한 예제를 환영합니다. AI와 함께 저장소를 수정할 때는 [AGENTS.md](AGENTS.md)를 먼저 읽어주세요.
+PR은 `main`으로 보내며, `test` 워크플로를 통과해야 머지됩니다. `npm test`로 같은 테스트(`api/` 엄격 타입 검사 포함)를 로컬에서 돌릴 수 있습니다.
 
 | 문서 | 내용 |
 | --- | --- |
