@@ -26,7 +26,7 @@ const minutes = list => spread(list.map(v => v / 60000));
 export function timeline(job, events) {
   const own = events.filter(e => e.jobId === job.id).sort((a, b) => (a.id ?? 0) - (b.id ?? 0) || a.at.localeCompare(b.at));
   const t = { job, events: own, stageMs: {}, claims: {}, waitsMs: [], calls: {}, kit: null, engine: null,
-    stageReviews: [], stageRetries: [], operatorRetries: 0, operatorWaitsMs: [], cancelledAfterReview: false, workerPicks: 0 };
+    stageReviews: [], stageRetries: [], operatorRetries: 0, operatorWaitsMs: [], cancelledAfterReview: false, workerPicks: 0, gaits: [] };
   let claimed = null, ready = null, reviewed = null;
   for (const e of own) {
     const data = e.data ?? {};
@@ -49,6 +49,7 @@ export function timeline(job, events) {
       if (reviewed) { t.operatorWaitsMs.push(ms(reviewed.at, e.at)); reviewed = null; }
     }
     if (e.kind === 'cancelled' && reviewed) { t.cancelledAfterReview = true; reviewed = null; }
+    if (e.kind === 'gait' && ['walk', 'run'].includes(data.gait)) t.gaits.push(data);   // how a walk or run ended, every cut tried
   }
   const first = kind => own.find(e => e.kind === kind);
   t.firstAppearance = first('appearance-answer') ?? null;
@@ -89,6 +90,22 @@ export function kpis(timelines, { reviews = [], ledger = null } = {}) {
     for (const r of t.stageRetries) count(retryCodes, r.code);
   }
   const reviewedJobs = timelines.filter(t => t.stageReviews.length), known = timelines.filter(t => t.delegated !== null);
+  // Walk and run (the `gait` events): how each branch ended, the take that passed, why each cut was refused, the frames filmed and delivered.
+  const gaits = {};
+  for (const t of timelines) for (const g of t.gaits) {
+    const row = gaits[g.gait] ??= { branches: 0, outcomes: {}, codes: {}, passedTake: {}, fromWalk: 0, cuts: 0, refusedBy: {}, judgeFailed: {}, filmedFrames: {}, deliveredFrames: {}, jolts: [] };
+    row.branches += 1; count(row.outcomes, g.outcome ?? 'unknown');
+    if (g.code) count(row.codes, g.code);
+    if (g.note === 'run-from-walk') row.fromWalk += 1; else if (g.outcome === 'ok') count(row.passedTake, String(g.take ?? 'unknown'));
+    for (const c of g.tried ?? []) {
+      row.cuts += 1;
+      for (const r of c.reasons ?? []) count(row.refusedBy, r.replace(/^frames-\d+$/, 'frames-out-of-range'));
+      for (const k of c.judge ?? []) count(row.judgeFailed, k);
+      if (Number.isInteger(c.from)) count(row.filmedFrames, String(c.from));
+      if (Number.isInteger(c.frames)) count(row.deliveredFrames, String(c.frames));
+      if (typeof c.jolt === 'number') row.jolts.push(c.jolt);
+    }
+  }
   const ownReviews = reviews.filter(r => ids.has(r.jobId)), reviewStatus = {}, reviewScopes = {};
   for (const r of ownReviews) { count(reviewStatus, r.status ?? 'unknown'); count(reviewScopes, r.scope ?? 'unknown'); }
   return {
@@ -109,6 +126,7 @@ export function kpis(timelines, { reviews = [], ledger = null } = {}) {
     cancelledAfterReview: { n: timelines.filter(t => t.cancelledAfterReview).length, of: reviewedJobs.length },
     delegated: { rate: rate(known.filter(t => t.delegated).length, known.length), of: known.length,
       workerPicks: timelines.reduce((s, t) => s + t.workerPicks, 0) },
+    gaits: Object.fromEntries(Object.entries(gaits).map(([gait, { jolts, ...row }]) => [gait, { ...row, jolt: spread(jolts) }])),
     abandonRate: { rate: rate(reachedReady.filter(t => ['cancelled', 'expired'].includes(t.job.status)).length, reachedReady.length), of: reachedReady.length },
     stageMinutes: Object.fromEntries(Object.entries(stageMs).map(([stage, list]) => [stage, minutes(list)])),
     claimsPerStage: Object.fromEntries(Object.entries(claims).map(([stage, list]) => [stage, spread(list)])),

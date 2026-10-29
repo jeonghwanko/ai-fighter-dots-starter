@@ -103,6 +103,26 @@ test('stops for an operator count even when the job ends well, with the operator
   assert.deepEqual(k.delegated, { rate: 1, of: 2, workerPicks: 1 });   // F is unknown, not counted either way
 });
 
+test('the gait events say how each walk and run ended and why each cut was refused', () => {
+  const G = '77777777-7777-4777-8777-777777777777';
+  const jobs = [{ id: G, status: 'submitted', createdAt: at(0), appearanceRevisions: 0, motionRevisions: 0, previewClips: ['walk', 'run'] }];
+  const events = [
+    ev(G, 0, 'claimed', { status: 'motions' }),
+    ev(G, 5, 'gait', { gait: 'walk', outcome: 'ok', take: 0, tried: [{ take: 0, cut: 'loop', passed: true, from: 24, frames: 24, jolt: 0, rife: 0 }] }),
+    ev(G, 9, 'gait', { gait: 'run', outcome: 'review', code: 'run-not-clean', tried: [
+      { take: 0, cut: 'loop', reasons: ['frames-26'], from: 26, frames: 26, jolt: 0, rife: 0 },
+      { take: 0, cut: 'cut-auto', judge: ['anatomy'], from: 13, frames: 13, jolt: 0, rife: 0 },
+      { take: 1, cut: 'cut-auto', reasons: ['feet-unnamed'], from: 14, frames: 14, jolt: 0, rife: 0 }] }),
+    ev(G, 10, 'gait', { gait: 'run', outcome: 'ok', take: null, note: 'run-from-walk', tried: [] }),
+    ev(G, 10, 'finished', { outcome: 'ok', status: 'motion_ready' }),
+  ];
+  const { gaits } = kpis(jobs.map(job => timeline(job, events)));
+  assert.deepEqual(gaits.walk.passedTake, { 0: 1 });
+  assert.deepEqual([gaits.run.branches, gaits.run.outcomes, gaits.run.codes, gaits.run.fromWalk], [2, { review: 1, ok: 1 }, { 'run-not-clean': 1 }, 1]);
+  assert.deepEqual(gaits.run.refusedBy, { 'frames-out-of-range': 1, 'feet-unnamed': 1 });
+  assert.deepEqual([gaits.run.judgeFailed, gaits.run.filmedFrames], [{ anatomy: 1 }, { 26: 1, 13: 1, 14: 1 }]);
+});
+
 test('clip labels follow each clip version, and a review is matched to the version it saw', () => {
   const rows = clipLabels(db.jobs.map(job => timeline(job, db.events)), db.reviews);
   const pick = (scope, version) => rows.find(r => r.scope === scope && r.version === version);

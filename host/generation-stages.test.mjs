@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ALIGN_AGAIN, BEAT_LIMIT, BRIEF_SCHEMA, GAIT_OWN_FEATURE, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
+import { ALIGN_AGAIN, BEAT_LIMIT, BRIEF_SCHEMA, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
   submissionOutcome, withProfile } from './generation-stages.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 
@@ -296,7 +296,11 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.ok(uploads.indexOf('draft-walk-0') < uploads.indexOf('motion-idle-0'));
   const drafts = events.filter(e => e.kind === 'drafts');
   assert.deepEqual(drafts.at(-1).clips.map(d => d.clip).sort(), ['combo', 'fightIdle', 'run', 'walk']);
-  assert.deepEqual(events.filter(e => e.kind !== 'drafts'), [{ kind: 'scale-check', corrected: 12, frames: 40, guessed: [] }]);
+  assert.deepEqual(events.filter(e => e.kind !== 'drafts' && e.kind !== 'gait'), [{ kind: 'scale-check', corrected: 12, frames: 40, guessed: [] }]);
+  // Each gait says how it ended and every cut tried: the walk's loop cut broke its beat, its auto cut passed the judge.
+  const walkEvent = events.find(e => e.kind === 'gait' && e.gait === 'walk');
+  assert.deepEqual([walkEvent.outcome, walkEvent.take, walkEvent.tried.map(t => [t.cut, t.reasons ?? (t.passed ? 'passed' : t.judge)])],
+    ['ok', 0, [['loop', ['broken-beat']], ['cut-auto', 'passed']]]);
   const tools = calls.map(c => c.args);
   assert.ok(tools.some(a => a.includes('gen-set') && flag(a, '--concurrency') === '2' && flag(a, '--provider') === 'codex'));
   assert.ok(tools.find(a => a.includes('prepare')).includes(path.join(dir, 'looks', 'look-b-0.png')));
@@ -472,6 +476,15 @@ test('a server that takes a gait at its own count gets the cut as filmed: nothin
   assert.equal(twice.done.outcome, 'ok', JSON.stringify(twice.done));
   assert.ok(!twice.calls.some(a => a[0] === 'motions.py' && a[1] === 'judge-request' && a[2] === 'run' && a[3].includes('video-run-0')));
   assert.deepEqual(twice.done.result.preview.filter(p => p.note).map(p => p.clip), ['run']);
+});
+
+test('a gait event keeps under the progress limit, the oldest cuts giving way first', () => {
+  const tried = Array.from({ length: 40 }, (_, i) => ({ take: i % 3, cut: `cut-auto-${i}`, reasons: ['broken-beat', 'feet-unnamed'], from: 14, frames: 12, jolt: 0.84, rife: 5 }));
+  const event = gaitEvent('run', { review: 'run-not-clean', tried });
+  assert.ok(JSON.stringify(event).length <= GAIT_EVENT_BYTES && event.more > 0 && event.tried.length + event.more === 40);
+  assert.equal(event.tried.at(-1).cut, 'cut-auto-39');
+  assert.deepEqual([event.kind, event.gait, event.outcome, event.code], ['gait', 'run', 'review', 'run-not-clean']);
+  assert.deepEqual(gaitEvent('run', { strip: 's', take: null, note: RUN_FROM_WALK, tried: [] }), { kind: 'gait', gait: 'run', outcome: 'ok', take: null, note: RUN_FROM_WALK, tried: [] });
 });
 
 test('the gait ranges are read off the server spec only where it lists the feature and gives both ranges', async () => {
