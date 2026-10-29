@@ -29,7 +29,7 @@ async function fixture(t) {
     if (text === 'rev-parse --show-toplevel') return { code: 0, text: options.cwd };
     if (text === 'rev-parse HEAD') return { code: 0, text: options.cwd === runtime ? commit : f.vendorPin };
     if (text === 'ls-tree HEAD vendor/sprite-gen') return { code: 0, text: `160000 commit ${pin}\tvendor/sprite-gen` };
-    if (text === 'branch --show-current') return { code: 0, text: 'codex/creator-hosting' };
+    if (text === 'branch --show-current') return { code: 0, text: 'main' };
     return { code: 0, text: '' };
   };
   f.options = { runtime, workspace, provider: 'codex' };

@@ -58,14 +58,14 @@ ODDBOUT의 생성 워커가 ODDBOUT 쪽 계정으로 만든다. 작업 공간·�
 ### 설치와 버전 고정
 
 ```sh
-git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run sprite:setup
 npm run sprite:status
 ```
 
-- 브랜치는 `codex/creator-hosting`이다. GitHub ZIP은 submodule이 빠지므로 쓰지 않는다.
+- 브랜치는 `main`이다. GitHub ZIP은 submodule이 빠지므로 쓰지 않는다.
 - `sprite:setup`은 sprite-gen 설치 뒤 생성에 필요한 외부 도구를 갖춘다. 모두 사용자 권한이며 sudo나 유료 API를 쓰지 않는다.
   - **img2webp:** 걷기·달리기 WebP 인코딩에 필수이고 `-exact`(libwebp 1.5 이상)가 있어야 한다.
     Ubuntu 24.04의 `apt install webp`는 1.3.x라 sprite-gen이 거부한다. PATH에 `-exact`를 지원하는 img2webp가 없으면

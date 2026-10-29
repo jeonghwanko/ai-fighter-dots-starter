@@ -152,6 +152,8 @@ This repository lets each user create their own fighter through Dot. Read
   validation failures from post-publication moderation. Validated registrations become usable automatically.
   Never overwrite a registered immutable package.
 - Preserve unrelated working-tree changes. Run only relevant tests. Do not run CI unless explicitly requested.
+- `main` is the working branch: branch from it and open pull requests against it. `codex/creator-hosting` was the kit and
+  service branch until 2026-10-29 and is frozen at the commit that moved everything to `main`; never push to it.
 - Every `api/` module starts with `// @ts-check`; `npm run typecheck` (also in `npm test`) runs tsc over them, non-strict.
   Satisfy it with JSDoc types or casts, not runtime changes. The Edge deno.json is non-strict too, so
   `deno check supabase/functions/ai-fighter/index.ts` agrees; the Edge deploy itself does not type-check.

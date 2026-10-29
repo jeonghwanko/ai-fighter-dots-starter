@@ -13,7 +13,8 @@ import { createEnvironmentStore } from './creation-environment.mjs';
 import { doctor as inspectDotsRuntime } from '../scripts/dots-workspace.mjs';
 import { readRecord, safePath } from '../scripts/dots-safety.mjs';
 
-export const KIT_BRANCH = 'codex/creator-hosting';
+// codex/creator-hosting was the kit branch until 2026-10-29; it is frozen there and a checkout on it is told to move.
+export const KIT_BRANCH = 'main';
 const kitRoot = fileURLToPath(new URL('../', import.meta.url));
 
 export const ACCOUNT_OPTIONS = [
@@ -115,7 +116,7 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
   result.engine = await readEngine();
   // A packaged plugin runtime is not a checkout: its version comes with the package, so report only.
   if (head.code !== 0) return { ...result, status: result.engine.motion ? 'ready' : 'action-required', reason: 'not-a-git-checkout' };
-  if (result.branch !== KIT_BRANCH) return { ...result, status: 'blocked', reason: 'wrong-branch' };
+  if (result.branch !== KIT_BRANCH) return { ...result, status: 'blocked', reason: 'wrong-branch', expectedBranch: KIT_BRANCH };
   // Edits inside the submodule are checked below; here only tracked edits in this checkout or a moved gitlink count.
   const dirty = (await git(['status', '--porcelain', '--untracked-files=no', '--ignore-submodules=dirty'], { cwd: root })).stdout;
   // A long-running MCP process re-checks the published branch at most every FETCH_INTERVAL_MS (real git only).

@@ -113,14 +113,14 @@ PC가 필요 없는 외형은 현재 호스트가 지원하는 직접 생성·�
 봇 서비스의 작업 VM으로 운영할 때의 계정·격리·보존 규칙은 [실행 환경 운영 지침](EXECUTION-HOST.md)에 있다.
 
 ```sh
-git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run sprite:setup
 npm run sprite:status
 ```
 
-홈페이지와 연결할 때는 `codex/creator-hosting` 브랜치를 사용한다. 공개 로그인 연결 설정은
+홈페이지와 연결할 때는 `main` 브랜치를 사용한다. 공개 로그인 연결 설정은
 이 브랜치의 `deploy/creator-site.json`에서 읽는다. 기본 `main`으로 대체하지 않는다.
 기존 설치를 재사용할 때도 브랜치와 파일을 확인하고, 사용자의 변경을 덮어쓰지 않는다.
 

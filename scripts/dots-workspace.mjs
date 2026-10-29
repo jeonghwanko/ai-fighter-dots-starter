@@ -77,7 +77,7 @@ async function metadata(runtime, run, expectedManifestSha256) {
     const vendorPin = pin.text.match(/^160000 commit ([a-f0-9]{40})\s/)?.[1];
     if (commit.code || !/^[a-f0-9]{40}$/.test(commit.text.trim()) || !vendorPin || dirty.code || branch.code) fail('source-metadata-unavailable');
     source = { distribution: 'source', commit: commit.text.trim(), vendorPin, dirty: Boolean(dirty.text.trim()),
-      publishedBranch: branch.text.trim() === 'codex/creator-hosting', versionPolicy: 'retain-this-commit-during-creation' };
+      publishedBranch: branch.text.trim() === 'main', versionPolicy: 'retain-this-commit-during-creation' };
     const vendorDir = await safePath('vendor/sprite-gen', { root: runtime });
     const installed = await run('git', ['rev-parse', '--show-toplevel'], { cwd: vendorDir });
     if (!installed.code && path.resolve(installed.text.trim()) === vendorDir) {

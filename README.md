@@ -8,6 +8,14 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 [Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Site guide](https://oddbout.com/docs.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
 
+## Gameplay preview
+
+[![ODDBOUT gameplay: two fighters in the arena](docs/media/oddbout-gameplay.gif)](docs/media/oddbout-gameplay.mp4)
+
+Existing ODDBOUT gameplay. The subscription-based character creation workflow is still experimental; this clip does not show a complete creation run.
+
+[Watch the 10-second clip](docs/media/oddbout-gameplay.mp4) · [Play ODDBOUT](https://oddbout.com/fighter.html) · [Questions and feedback](https://github.com/jeonghwanko/ai-fighter-dots-starter/discussions)
+
 ## What you can make
 
 - Start with a short idea, reference images, or both.
@@ -102,10 +110,10 @@ record its actual commit, and do not mistake an older main checkout for the curr
 The Dots workflow reports unsupported image-output contracts as blocked; it does not read protected
 Codex sessions or claim that login/installation proves image generation or parent delivery.
 
-Use the **codex/creator-hosting** branch, which contains the public service configuration. For a new installation:
+Use the **main** branch, which contains the public service configuration. For a new installation:
 
 ```sh
-git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run sprite:setup

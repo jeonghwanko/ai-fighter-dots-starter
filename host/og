@@ -267,13 +267,13 @@ cmd_setup() {
   mkdir -p "$G/tools" "$G/deliveries"
   PATH="$NODE_BIN:$PATH" npm install --prefix "$G/tools" --no-fund --no-audit --loglevel=error \
     "@openai/codex@$CODEX_VERSION" "@xai-official/grok@$GROK_VERSION"
-  [ -d "$KIT/.git" ] || git clone --quiet --branch codex/creator-hosting "$KIT_URL" "$KIT"
+  [ -d "$KIT/.git" ] || git clone --quiet --branch main "$KIT_URL" "$KIT"
   if [ "$(git -C "$KIT" rev-parse HEAD)" != "$KIT_REF" ]; then
     # sprite:setup patches the submodule's tracked files; drop the patch (not the venv) so the new gitlink checks out.
     git -C "$KIT" submodule foreach --quiet --recursive 'git checkout --quiet -- .'
     [ -z "$(git -C "$KIT" status --porcelain --untracked-files=no --ignore-submodules=dirty)" ] || die "kit has local changes"
     # Not into the submodule here: it would fetch the new engine commit from the URL the old checkout configured.
-    git -C "$KIT" fetch --quiet --no-recurse-submodules origin codex/creator-hosting
+    git -C "$KIT" fetch --quiet --no-recurse-submodules origin main
     git -C "$KIT" checkout --quiet --detach "$KIT_REF"
   fi
   # The engine submodule moved (sprite-gen → sprite-gen-agent, 2026-10-27): take the URL the checked-out .gitmodules names.

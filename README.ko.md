@@ -8,6 +8,14 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 [게임하기](https://oddbout.com/fighter.html) · [내 선수 관리](https://oddbout.com/creator.html?lang=ko) · [사이트 가이드](https://oddbout.com/docs.html?lang=ko) · [제작 시작 안내](docs/START-HERE.md) · [문제 제보](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
 
+## 플레이 미리보기
+
+[![ODDBOUT 대전 플레이: 경기장의 두 캐릭터](docs/media/oddbout-gameplay.gif)](docs/media/oddbout-gameplay.mp4)
+
+기존 ODDBOUT의 게임 플레이 영상입니다. 구독 기반 캐릭터 제작 과정은 아직 실험 중이며, 이 영상은 전체 제작 과정을 보여주는 데모는 아닙니다.
+
+[10초 영상 보기](docs/media/oddbout-gameplay.mp4) · [ODDBOUT 플레이](https://oddbout.com/fighter.html) · [질문과 피드백](https://github.com/jeonghwanko/ai-fighter-dots-starter/discussions)
+
 ## 무엇을 만들 수 있나요?
 
 - 짧은 설명이나 참고 이미지로 시작합니다. 둘을 함께 보내도 됩니다.
@@ -91,13 +99,13 @@ AI는 한 묶음이 끝날 때마다 실제 결과를 보여주고 의견을 기
 
 Dots VM 준비는 [bootstrap·doctor·resume 안내](docs/DOTS-QUICKSTART.md)와
 [저장된 환경 Start 지침](docs/DOTS-START.md)을 따른다. 기본 doctor는 무네트워크·무설치 검사이고,
-설치는 `bootstrap --install`로 분리된다. 일반 Git URL의 main과 `codex/creator-hosting`의 실제 버전을
-구분한다. Git 링크만 받은 것은 생성 승인이 아니며, 보호 Codex 세션을 요구하는 이미지 경로는 차단한다.
+설치는 `bootstrap --install`로 분리된다. `main`에서 시작하고 실제 커밋을
+기록한다. Git 링크만 받은 것은 생성 승인이 아니며, 보호 Codex 세션을 요구하는 이미지 경로는 차단한다.
 
-공개 서비스 연결 설정이 있는 **codex/creator-hosting** 브랜치를 사용합니다. 새로 설치할 때는 다음 명령을 실행하세요.
+공개 서비스 연결 설정이 있는 **main** 브랜치를 사용합니다. 새로 설치할 때는 다음 명령을 실행하세요.
 
 ```sh
-git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run sprite:setup
