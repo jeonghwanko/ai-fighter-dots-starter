@@ -3,6 +3,10 @@ import { createDecisionsReviewer } from './decisions-review.mjs';
 import { createSolFollowupReviewer, followupQuestions, SOL_FOLLOWUP } from './responses-benchmark.mjs';
 
 /** Both calls and credentials stay in the Edge function. Never changes an existing approval gate. */
+/**
+ * @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch }} [options]
+ * @returns {import('./http.mjs').Reviewer}
+ */
 export function createLunaSolReviewer(options = {}) {
   const luna = createDecisionsReviewer(options), sol = createSolFollowupReviewer(options);
   return { enabled: luna.enabled, async review(args) {

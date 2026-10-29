@@ -8,6 +8,10 @@ export const HANDOFF_TTL_SECONDS = 600;
  * One-use sign-in for the creator homepage. Auth's admin API makes a magic-link token for the verified user without
  * sending mail; only its hash leaves here. The browser redeems it at /auth/v1/verify, which also enforces one use.
  */
+/**
+ * @param {{ db: any, now?: () => number }} options
+ * @returns {import('./http.mjs').CreatorLink}
+ */
 export function createCreatorLink({ db, now = Date.now }) {
   return async owner => {
     const { data: found, error: lookup } = await db.auth.admin.getUserById(owner);

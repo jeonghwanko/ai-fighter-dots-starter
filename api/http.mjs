@@ -8,10 +8,16 @@ export { UUID, Problem, sha256, readBody } from './bytes.mjs';
  * @typedef {{ enabled: boolean, review: (args: any) => Promise<any> }} Reviewer
  * @typedef {(owner: string) => Promise<{ tokenHash: string, expiresAt: string }>} CreatorLink
  * @typedef {{ preflight: () => Response, context: (request: Request, owner: string) => Promise<Response>, registered: (row: any) => Promise<void> }} Analytics
+ * @typedef {(request: Request, parts: string[]) => Promise<Response>} Route  One route family of the Edge handler.
  */
 const BASE_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
 
-/** JSON response. `cors` opens a browser route: { methods, headers? }. */
+/**
+ * JSON response. `cors` opens a browser route: { methods, headers? }.
+ * @param {any} body
+ * @param {number} [status]
+ * @param {{ methods: string, headers?: string }} [cors]
+ */
 export function jsonResponse(body, status = 200, cors) {
   const headers = { ...BASE_HEADERS };
   if (cors) Object.assign(headers, { 'access-control-allow-origin': '*', 'access-control-allow-methods': cors.methods },
@@ -19,6 +25,7 @@ export function jsonResponse(body, status = 200, cors) {
   return new Response(JSON.stringify(body), { status, headers });
 }
 
+/** @type {(request: Request) => string | null} */
 export const bearerToken = request => request.headers.get('authorization')?.match(/^Bearer ([^\s]{16,4096})$/)?.[1] ?? null;
 
 /**
@@ -26,6 +33,9 @@ export const bearerToken = request => request.headers.get('authorization')?.matc
  * getClaims verifies an asymmetric JWT locally with the cached JWKS (no Auth round trip) and falls back
  * to the Auth server for symmetric keys. It does not see a sign-out before expiry; revoking the
  * af_creators account stops registration at once.
+ * @param {any} db
+ * @param {Request} request
+ * @returns {Promise<string | null>}
  */
 export async function verifiedUserId(db, request) {
   const token = bearerToken(request);
@@ -46,7 +56,12 @@ export async function verifiedUserId(db, request) {
   return !error && data?.user && !data.user.is_anonymous && UUID.test(data.user.id ?? '') ? data.user.id : null;
 }
 
-/** Postgres jsonb cannot store U+0000 or an unpaired surrogate. JSON.parse and the v1 schema accept both. */
+/**
+ * Postgres jsonb cannot store U+0000 or an unpaired surrogate. JSON.parse and the v1 schema accept both.
+ * @param {unknown} value
+ * @param {string} [at]
+ * @returns {string | null}
+ */
 export function unstorableTextPath(value, at = '') {
   if (typeof value === 'string') return value.includes('\0') || !value.isWellFormed() ? at : null;
   if (!value || typeof value !== 'object') return null;

@@ -2,17 +2,25 @@
 // A picture's kind and dimensions from its header bytes (PNG, JPEG, WebP), without decoding it. No Node-only imports: Deno and Node.
 // Null when the bytes are not one of the three kinds or their header does not read.
 
+/** @typedef {(b: Uint8Array, i: number) => number} Read */
+/** @type {Read} */
 const u16be = (b, i) => b[i] << 8 | b[i + 1];
+/** @type {Read} */
 const u32be = (b, i) => (b[i] << 24 >>> 0) + (b[i + 1] << 16) + (b[i + 2] << 8) + b[i + 3];
+/** @type {Read} */
 const u16le = (b, i) => b[i] | b[i + 1] << 8;
+/** @type {Read} */
 const u24le = (b, i) => b[i] | b[i + 1] << 8 | b[i + 2] << 16;
+/** @type {(b: Uint8Array, i: number, n: number) => string} */
 const ascii = (b, i, n) => String.fromCharCode(...b.subarray(i, i + n));
 
+/** @param {Uint8Array} b */
 function png(b) {
   if (b.length < 24 || b[0] !== 0x89 || ascii(b, 1, 3) !== 'PNG' || ascii(b, 12, 4) !== 'IHDR') return null;
   return { type: 'image/png', ext: 'png', width: u32be(b, 16), height: u32be(b, 20) };
 }
 
+/** @param {Uint8Array} b */
 function jpeg(b) {
   if (b.length < 4 || b[0] !== 0xff || b[1] !== 0xd8) return null;
   // Walk the segments to the first start-of-frame marker (SOF0-15 except DHT, JPG and DAC).
@@ -30,9 +38,10 @@ function jpeg(b) {
   return null;
 }
 
+/** @param {Uint8Array} b */
 function webp(b) {
   if (b.length < 30 || ascii(b, 0, 4) !== 'RIFF' || ascii(b, 8, 4) !== 'WEBP') return null;
-  const chunk = ascii(b, 12, 4), out = (width, height) => ({ type: 'image/webp', ext: 'webp', width, height });
+  const chunk = ascii(b, 12, 4), out = (/** @type {number} */ width, /** @type {number} */ height) => ({ type: 'image/webp', ext: 'webp', width, height });
   if (chunk === 'VP8X') return out(u24le(b, 24) + 1, u24le(b, 27) + 1);
   if (chunk === 'VP8 ' && b[23] === 0x9d && b[24] === 0x01 && b[25] === 0x2a) return out(u16le(b, 26) & 0x3fff, u16le(b, 28) & 0x3fff);
   if (chunk === 'VP8L' && b[20] === 0x2f) {
@@ -42,7 +51,11 @@ function webp(b) {
   return null;
 }
 
-/** `{ type, ext, width, height }` for a PNG, JPEG or WebP, else null. */
+/**
+ * `{ type, ext, width, height }` for a PNG, JPEG or WebP, else null.
+ * @param {ArrayBuffer | Uint8Array} bytes
+ * @returns {{ type: string, ext: string, width: number, height: number } | null}
+ */
 export function probeImage(bytes) {
   const b = bytes instanceof Uint8Array ? bytes : new Uint8Array(bytes);
   return png(b) ?? jpeg(b) ?? webp(b);

@@ -157,7 +157,9 @@ This repository lets each user create their own fighter through Dot. Read
 - `main` is the working branch: branch from it and open pull requests against it. `codex/creator-hosting` was the kit and
   service branch until 2026-10-29 and is frozen at the commit that moved everything to `main`; never push to it.
 - Every `api/` module starts with `// @ts-check`; `npm run typecheck` (also in `npm test`) runs tsc over them with
-  strict null checks (the rest of `strict` is not on yet).
+  strict null checks (the rest of `strict` is not on yet), then again with `noImplicitAny`. Every module meets that
+  except those still on `IMPLICIT_ANY_PENDING` in `scripts/typecheck.mjs`; a new module starts typed, and the check fails
+  until a fixed module is taken off the list.
   Satisfy it with JSDoc types or casts, not runtime changes. The Edge deno.json has the same settings, so
   `deno check supabase/functions/ai-fighter/index.ts` agrees; the Edge deploy itself does not type-check.
 - Deploy the production `ai-fighter` Edge function only from the game repository with `npm run fighter:edge -- plan`,
