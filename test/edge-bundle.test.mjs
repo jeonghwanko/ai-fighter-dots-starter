@@ -4,6 +4,7 @@ import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
 import { edgeFiles } from '../scripts/edge-bundle.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
@@ -32,4 +33,15 @@ test('edge-bundle.mjs stands alone: the game deploy stages only this file of scr
   const { importSpecifiers } = await import('../scripts/edge-bundle.mjs');
   const source = await (await import('node:fs/promises')).readFile(path.join(repository, 'scripts/edge-bundle.mjs'), 'utf8');
   assert.deepEqual(importSpecifiers(source).filter(specifier => !specifier.startsWith('node:')), []);
+});
+
+test('the CLI cannot emit a deployable payload with the starter null engine', async () => {
+  const script = path.join(repository, 'scripts/edge-bundle.mjs');
+  const blocked = spawnSync(process.execPath, [script], { encoding: 'utf8' });
+  assert.equal(blocked.status, 1);
+  assert.equal(blocked.stdout, '');
+  assert.match(blocked.stderr, /npm run fighter:edge -- plan/);
+  const listing = spawnSync(process.execPath, [script, '--list'], { encoding: 'utf8' });
+  assert.equal(listing.status, 0, listing.stderr);
+  assert.deepEqual(JSON.parse(listing.stdout), await edgeFiles());
 });

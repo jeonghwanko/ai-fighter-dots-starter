@@ -152,6 +152,11 @@ This repository lets each user create their own fighter through Dot. Read
   validation failures from post-publication moderation. Validated registrations become usable automatically.
   Never overwrite a registered immutable package.
 - Preserve unrelated working-tree changes. Run only relevant tests. Do not run CI unless explicitly requested.
+- Deploy the production `ai-fighter` Edge function only from the game repository with `npm run fighter:edge -- plan`,
+  review its source/engine/live-version changes, then use `deploy --plan <id>` with the same options.
+  Never upload this checkout directly through Supabase CLI/MCP or a hand-built payload: its duel engine is a null adapter.
+  `scripts/edge-bundle.mjs --list` is inspection only; the game planner imports `edgeFiles` and supplies the real and retained engines.
+  Verify the deployed release and served engines afterward. Do not overwrite a newer deployment from another session.
 
 `vendor/sprite-gen` pins a commit of [sprite-gen-agent](https://github.com/jeonghwanko/sprite-gen-agent),
 our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen) that carries the motion engine.

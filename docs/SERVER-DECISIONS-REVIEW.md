@@ -56,7 +56,7 @@ HTTP 오류 본문, 예외 문자열, 임의 제공자 메타데이터는 응답
 ## 배포와 확인
 
 1. `20261029015744_server_decisions_review.sql` 마이그레이션과 관련 테스트를 검토한다.
-2. 마이그레이션을 적용하고 `ai-fighter` Edge Function을 배포한다. 기존 서버 배포 소스와 비교해 다른 변경을 덮어쓰지 않는다.
+2. 마이그레이션을 적용한다. `ai-fighter`는 게임 저장소에서 `npm run fighter:edge -- plan`으로 변경 파일·대결 엔진·운영 버전을 확인한 뒤, 같은 옵션의 `npm run fighter:edge -- deploy --plan <id>`로만 배포한다. 이 제작 키트의 엔진 파일은 빈 어댑터이므로 Supabase CLI/MCP나 수제 번들로 직접 올리면 운영 엔진이 사라진다. 배포 후 release와 제공 엔진을 확인하며, 다른 세션이 먼저 배포했다면 새 plan을 검토한다.
 3. 캐릭터 작업이 끝난 호스트에 새 생성기 파일을 설치한다. 기존 설치·self-update 파일 목록을 그대로 사용한다.
 4. 서버 Secrets를 준비한 다음 비교 모드를 켠다. 끄려면 서버의 `ODDBOUT_DECISIONS_MODE`를 `off`로 바꾼다.
 5. 실제 실행에서는 보고서의 `completed`, 요청 ID, 사용량을 확인한다. 모의 응답 테스트를 실제 API 검수 성공으로 보고하지 않는다.
