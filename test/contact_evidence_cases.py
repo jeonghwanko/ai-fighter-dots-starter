@@ -200,6 +200,36 @@ class PaddedFootV2Tests(unittest.TestCase):
         self.assertIn(contact.LOBE_REASON,out['foot_evidence']['resolvedReasons'])
         self.assertEqual(before,[im.tobytes() for im in seq.frames])
 
+    def test_a_reworded_upstream_reason_resolves_by_its_code(self):
+        seq=make_paw();upstream=analyze_motion(seq,contacts='0:2',foot_box=PAW_BOX)
+        self.assertIn(contact.LOBE_CODE,upstream['contact_candidates'][0]['reason_codes'])
+        reworded=copy.deepcopy(upstream);c=reworded['contact_candidates'][0]
+        c['reasons']=[f'{r} (reworded)' for r in c['reasons']]
+        original=contact.analyze_motion
+        try:
+            contact.analyze_motion=lambda *a,**k:copy.deepcopy(reworded)
+            out=self.run2(seq,paw_evidence(seq))
+        finally:
+            contact.analyze_motion=original
+        self.assertTrue(out['stride_verified'],out['contact_candidates'][0]['reasons'])
+        self.assertIn(f'{contact.LOBE_REASON} (reworded)',out['foot_evidence']['resolvedReasons'])
+        self.assertNotIn('reason_codes',out['contact_candidates'][0])
+
+    def test_reasons_without_codes_fall_back_to_the_known_texts_and_an_unknown_code_fails(self):
+        self.assertEqual(contact.reason_codes({'reasons':[contact.LOBE_REASON,'something new']}),[contact.LOBE_CODE,None])
+        self.assertEqual(contact.reason_codes({'reasons':['x'],'reason_codes':['horizontal-reversal']}),['horizontal-reversal'])
+        seq=make_paw();upstream=analyze_motion(seq,contacts='0:2',foot_box=PAW_BOX)
+        unknown=copy.deepcopy(upstream);c=unknown['contact_candidates'][0]
+        c['reasons'].append('a reason added later');c['reason_codes'].append('added-later')
+        original=contact.analyze_motion
+        try:
+            contact.analyze_motion=lambda *a,**k:copy.deepcopy(unknown)
+            out=self.run2(seq,paw_evidence(seq))
+        finally:
+            contact.analyze_motion=original
+        self.assertFalse(out['stride_verified'])
+        self.assertIn('a reason added later',out['contact_candidates'][0]['reasons'])
+
     def test_v1_evidence_keeps_the_boot_only_rule(self):
         seq=make_paw();e=paw_evidence(seq);e['version']=1
         out=self.run2(seq,e)
