@@ -545,3 +545,30 @@ test('a stopped step that generates nothing (extract, packing) ends failed', asy
   const extracted = await runCreationJob(f.store, sessionId, extractId, { execute: untilStopped(), timeoutMs: 50 });
   assert.deepEqual([extracted.status, extracted.reason], ['failed', 'runner-timeout']);
 });
+
+test('gen-motion runs as a managed job: a pose preflight for --frame, local actions without one, exit 3 not charged', async t => {
+  const f = await fixture(t), work = `output/${sessionId}-work/artifacts/walk/v1`;
+  const motionPlan = extra => plan({ args: ['gen-motion', '--plan', `${work}/walk-pose-plan.json`, '--run-dir', `${work}/poses`, ...extra],
+    workflowArgs: ['workflow', '--kind', 'sprite', '--image-provider', 'codex', '--motion-method', 'pose-plan', '--confirmed-access', 'codex'],
+    outputs: [`${work}/poses/manifest.json`] });
+  // A pose generation needs the pose-plan preflight, not another motion method's or none.
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), { ...motionPlan(['--frame', 'contact-a']),
+    workflowArgs: ['workflow', '--kind', 'sprite', '--motion-method', 'gpt-rows'] }), /provider-preflight-mismatch/);
+  await assert.rejects(f.jobs.prepare(sessionId, 1, randomUUID(), { ...motionPlan(['--frame', 'contact-a']), workflowArgs: undefined }),
+    /generation-needs-workflow-preflight/);
+  // Preparing guides, measuring and reconciling send nothing: no preflight needed, and a failure is a plain failure.
+  const localId = randomUUID();
+  await f.jobs.prepare(sessionId, 1, localId, { ...motionPlan(['--prepare-only']), workflowArgs: undefined });
+  const local = await runCreationJob(f.store, sessionId, localId, { execute: async () => ({ code: 1 }) });
+  assert.equal(local.status, 'failed');
+  // A pose whose gen sent nothing (gen-motion exit 3) cost nothing; any other failure is unknown and points at --reconcile.
+  const g = await fixture(t), notSentId = randomUUID();
+  await g.jobs.prepare(sessionId, 1, notSentId, motionPlan(['--frame', 'contact-a']));
+  const notSent = await runCreationJob(g.store, sessionId, notSentId, { execute: async (_r, _e, argv) => ({ code: argv[0] === 'workflow' ? 0 : 3 }) });
+  assert.deepEqual([notSent.status, notSent.outcome.charge], ['failed', 'not-charged']);
+  const h = await fixture(t), unknownId = randomUUID();
+  await h.jobs.prepare(sessionId, 1, unknownId, motionPlan(['--frame', 'contact-a']));
+  const unknown = await runCreationJob(h.store, sessionId, unknownId, { execute: async (_r, _e, argv) => ({ code: argv[0] === 'workflow' ? 0 : 1 }) });
+  assert.equal(unknown.status, 'unknown');
+  assert.match((await h.jobs.inspect(sessionId, unknownId)).nextAction, /--reconcile/);
+});

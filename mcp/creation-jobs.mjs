@@ -11,8 +11,14 @@ import { judgeOutcome, outcomeReportPath, readOutcome } from '../host/sprite-out
 
 const generating = new Set(['gen', 'gen-set', 'video', 'video-set']);
 const recovering = new Set(['video-resume']);
-const spriteCommands = new Set([...generating, ...recovering, 'workflow', 'prepare', 'extract', 'compose-atlas', 'compose-gif',
+const spriteCommands = new Set([...generating, ...recovering, 'gen-motion', 'workflow', 'prepare', 'extract', 'compose-atlas', 'compose-gif',
   'game-pack', 'video-canvas', 'video-prompt', 'video-frames', 'video-loop', 'video-cycle-align', 'inspect-motion']);
+/** Whether a sprite command may send a provider request. gen-motion does only with `--frame` and without `--reconcile`
+ * (its other actions — prepare, measure, register, export, reconcile — read and write local files). */
+export function spends(argv) {
+  if (generating.has(argv[0]) || recovering.has(argv[0])) return true;
+  return argv[0] === 'gen-motion' && argv.some(a => a === '--frame' || a.startsWith('--frame=')) && !argv.includes('--reconcile');
+}
 const args = z.array(z.string().max(16000).refine(s => !s.includes('\0'))).min(1).max(128);
 export const jobPlanSchema = z.object({
   engine: z.enum(['sprite', 'fighter-pack']), args,
@@ -46,7 +52,7 @@ export function createJobStore(store) {
   function validatePlan(plan) {
     if (plan.engine === 'sprite') {
       if (!spriteCommands.has(plan.args[0])) fail('unsupported-sprite-command');
-      if (generating.has(plan.args[0]) || recovering.has(plan.args[0])) {
+      if (spends(plan.args)) {
         if (!plan.workflowArgs || plan.workflowArgs[0] !== 'workflow' || plan.workflowArgs.includes('--stage')) fail('generation-needs-workflow-preflight');
         const option = (argv, key) => {
           const matches = argv.flatMap((value, index) => value === key || value.startsWith(`${key}=`) ? [index] : []);
@@ -67,6 +73,9 @@ export function createJobStore(store) {
         }
         if (['video', 'video-set', 'video-resume'].includes(plan.args[0]) &&
             (kind !== 'sprite' || option(plan.workflowArgs, '--motion-method') !== 'grok-video')) fail('provider-preflight-mismatch');
+        // gen-motion runs codex only (it names no --provider): the preflight must have chosen the pose-plan method.
+        if (plan.args[0] === 'gen-motion' && (kind !== 'sprite' || option(plan.workflowArgs, '--motion-method') !== 'pose-plan'))
+          fail('provider-preflight-mismatch');
       }
     } else if (plan.args.length !== 1 || plan.args[0].startsWith('-') || plan.groupId !== 'final') fail('invalid-pack-plan');
     if (plan.workflowArgs && (plan.workflowArgs[0] !== 'workflow' || plan.engine !== 'sprite')) fail('invalid-workflow-preflight');
@@ -186,6 +195,8 @@ async function engineFile(root, relative) {
 function nextAction(job, observedStatus) {
   if (observedStatus !== 'unknown') return job.outcome?.next === 'retry' && job.status === 'failed'
     ? 'Every error the engine reported says the same command may succeed: prepare the job again.' : undefined;
+  if (job.plan?.args?.[0] === 'gen-motion') return 'gen-motion keeps the attempt: inspect its gen.log and provider records, then run the same '
+    + 'gen-motion command with --reconcile (no new generation); never repeat this job.';
   if (job.outcome?.next === 'resume') return `xAI took the video request${job.outcome.requestIds.length ? ` ${job.outcome.requestIds.join(', ')}` : ''}: `
     + "ask for it again with sprite-gen video-resume --request-id <id> (a video-set item's clip.report.json names it); never repeat this job.";
   return 'Inspect original provider records and outputs; never repeat this job.';
@@ -268,10 +279,10 @@ export async function runCreationJob(store, id, jobId, { execute = executeEngine
       stage = 'execute';
       const since = Date.now();
       result = await execute(store.root, job.plan.engine, job.plan.args, options);
-      const spends = job.plan.engine === 'sprite' && (generating.has(job.plan.args[0]) || recovering.has(job.plan.args[0]));
+      const spending = job.plan.engine === 'sprite' && spends(job.plan.args);
       job.status = result.notStarted ? 'failed' : result.code === 75 ? 'needs-input'
-        : result.code === 0 ? 'succeeded' : spends ? 'unknown' : 'failed';
-      if (spends && !result.notStarted && result.code !== 0) {
+        : result.code === 0 ? 'succeeded' : spending ? 'unknown' : 'failed';
+      if (spending && !result.notStarted && result.code !== 0) {
         // What the engine's own report says (exit 3, `provider_submitted`, the error codes), stopped runs included: a run
         // that sent nothing failed and cost nothing; one whose request left and failed for a reason the report names is
         // failed too; anything else stays `unknown` (it may have been billed: inspect, or resume a video request).

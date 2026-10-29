@@ -170,6 +170,11 @@ npm run sprite -- gen-motion --plan walk-pose-plan.json --run-dir output/walk-po
 검수한 원본 또는 명시적 몸 보정본의 좌표를 유지하며 내보내기 단계에서 바닥 정렬을 하지 않는다. 이 출력은 sprite-gen-asset 형식이며
 행 추출이나 bind-keyposes를 거치지 않는다. game-pack 및 아래 접지 검수는 여전히 필요하다.
 한 자세의 반복 실패는 두 회까지이며, 불명확한 실행은 결과를 확인한 뒤 --reconcile로 회수한다.
+하위 `gen`이 요청을 보내기 전에 실패하면(종료 3 또는 보고서 `provider_submitted: false`) 그 시도는 `not-started`이고
+`gen-motion`도 종료 3으로 끝난다. 과금이 없으므로 같은 `--frame`을 다시 실행하면 같은 시도 폴더에서 다시 만들며 두 회에 세지 않는다.
+크리에이터 플러그인의 관리형 작업(`prepare_creation_job`)으로 실행할 때 `--frame` 생성은 사전 검사
+`workflow --kind sprite --image-provider codex --motion-method pose-plan`이 필요하다. `--prepare-only`·`--measure`·`--register`·
+`--export`·`--reconcile`은 아무것도 보내지 않으므로 사전 검사 없이 실행된다. 결과를 알 수 없는 작업은 다시 실행하지 않고 `--reconcile`로 회수한다.
 재시도 프롬프트에는 fail 관찰만 간결하게 전달하고 전체 검수 JSON/해시/pass/unverified는 제외한다.
 해상도 등 구조 오류는 재생성을 차단한다. `gen-motion`은 하위 `gen`의 타임아웃 자동 재시도도 끈다.
 실제 도구 호출 입력은 `gen-report.json.extra.image_tool_trace`, 원본 실행은 보존된 세션에서 확인한다.
