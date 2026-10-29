@@ -581,6 +581,15 @@ function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }
     { jobId: JOB }, async ({ jobId }) => withNext(await invoke(`generations/${jobId}`, 'DELETE')), { write: true, publish: true });
 }
 
+/**
+ * Keep optional integrations typed at the TypeScript Edge entry boundary: a null default alone
+ * makes Deno infer that only null is accepted, even when the integration is configured.
+ * @param {object} options
+ * @param {import('@supabase/supabase-js').SupabaseClient} options.db
+ * @param {typeof fetch} [options.fetcher]
+ * @param {{url: string, key: string, fetcher?: typeof fetch, cupWaitMs?: number, pollMs?: number, pollTries?: number} | null} [options.arena]
+ * @param {{pollMs?: number} | null} [options.hosted]
+ */
 export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null }) {
   return async request => {
     const url = new URL(request.url);
