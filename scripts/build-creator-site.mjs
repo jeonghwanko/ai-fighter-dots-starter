@@ -39,9 +39,14 @@ const { creationContextPlugin } = await import(pathToFileURL(join(source, 'tools
 const boutShareModule = join(source, 'tools/ai-fighter/bout-share-pages.mjs');
 const boutSharePages = await readFile(boutShareModule).then(() => true, () => false)
   ? [(await import(pathToFileURL(boutShareModule).href)).boutSharePagesPlugin(new URL('.', config.gameUrl).href)] : [];
+// The plugins that shape the game's shipped bundle (2026-10-30 — the sound registry's game copy, without its source and rights records).
+// configFile: false keeps the game's vite.config.ts out, so the game lists them for both builds. Older sources have no list and build without.
+const gamePluginsModule = join(source, 'tools/ai-fighter/site-build-plugins.mjs');
+const gamePlugins = await readFile(gamePluginsModule).then(() => true, () => false)
+  ? (await import(pathToFileURL(gamePluginsModule).href)).siteBuildPlugins() : [];
 await build({
   configFile: false, root: source, envDir: false, base: config.base,
-  plugins: [creationContextPlugin(), ...boutSharePages, milestonePlugin(), youtubeChannelPlugin(config.youtubeChannelUrl), googleAnalyticsPlugin(config.analyticsMeasurementId, config.siteUrl, config.apiBase), {
+  plugins: [creationContextPlugin(), ...boutSharePages, ...gamePlugins, milestonePlugin(), youtubeChannelPlugin(config.youtubeChannelUrl), googleAnalyticsPlugin(config.analyticsMeasurementId, config.siteUrl, config.apiBase), {
     name: 'standalone-creator-origin',
     transformIndexHtml: { order: 'pre', handler(html, context) {
       const text = publicSiteText(html);
