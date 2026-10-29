@@ -13,6 +13,7 @@ test('only scoped, reviewed immutable packages are delivered to the browser; no 
   const unlisted = { ...approved, id: crypto.randomUUID(), listed: false };
   const row = { id: approved.submission_id, owner_id: crypto.randomUUID(), status: 'registered', manifest_sha: sha, manifest_text: text, manifest: example };
   let signCalls = 0;
+  const reads = [];
   const query = source => {
     let selected = source;
     const q = { select: () => q, order: () => q, limit: n => { selected = selected.slice(0, n); return q; },
@@ -21,18 +22,23 @@ test('only scoped, reviewed immutable packages are delivered to the browser; no 
       maybeSingle: async () => ({ data: selected[0] ?? null }), then: done => Promise.resolve({ data: selected }).then(done) };
     return q;
   };
-  const handle = createHandler({ db: { from: table => query(table === 'af_fighters' ? [approved, pending, changed, unlisted] : table === 'af_fighter_agents' ? [{ fighter_id: approved.id, client_name: 'ChatGPT' }] : [row]),
+  // af_roster_entries is af_fighters with each fighter's maker joined (made_with), read in one query.
+  const handle = createHandler({ db: { from: table => (reads.push(table), query)(table === 'af_roster_entries' ? [{ ...approved, made_with: 'ChatGPT' }, pending, changed, { ...unlisted, made_with: null }] : [row]),
     storage: { from: () => ({ createSignedUrls: async keys => { signCalls++;
       return { data: keys.map(key => ({ path: key, error: null, signedUrl: `https://example.supabase.co/storage/v1/object/sign/ai-fighter-beta/${key}?token=temporary` })) }; } }) } } });
   const get = id => handle(new Request(`https://test/ai-fighter/roster${id ? '/' + id : ''}`));
   const list = await get(); assert.equal(list.headers.get('access-control-allow-origin'), '*');
   const entries = (await list.json()).fighters;
+  // One query per page: the maker comes joined (af_roster_entries), not from a second read (2026-10-29).
+  assert.deepEqual(reads.splice(0), ['af_roster_entries']);
   assert.deepEqual(entries.map(f => f.id), [approved.id]);
   assert.equal('submission_id' in entries[0], false);
   assert.equal(entries[0].madeWith, 'ChatGPT'); // The agent that made him (af_fighter_agents).
   assert.equal((await get(pending.id)).status, 404);
   assert.equal((await get(changed.id)).status, 404);
+  reads.splice(0);
   const pkg = await (await get(approved.id)).json();
+  assert.deepEqual(reads.splice(0), ['af_roster_entries', 'af_submissions']); // The fighter with his maker, then his package.
   assert.equal(pkg.manifestText, text); assert.equal(pkg.runtimeApproved, true); assert.equal(pkg.files.length, example.assets.length);
   assert.equal(pkg.madeWith, 'ChatGPT');
   assert.equal(signCalls, 1); // One Storage round trip signs every asset.

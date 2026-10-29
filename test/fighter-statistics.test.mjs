@@ -35,7 +35,9 @@ test('owned statistics use all completed matches beyond top 20, preserve public 
     assert.deepEqual(await rankings(), before); // Top-20 behavior and ties stay backward compatible.
     for (const name of migrations.slice(target + 1)) await applyMigration(sql, name);
     await enforceSafeupdate(sql); // Migrated in steps, so migratedDatabase() cannot add it.
-    assert.deepEqual(await rankings(), before);
+    // Later the ranking also carries each fighter's per-language names (2026-10-29); the ranking itself stays as it was.
+    const after = await rankings();
+    assert.deepEqual(after.map(({ names, ...row }) => row), before); assert.ok(after.every(row => 'names' in row));
     await sql.exec('set role service_role');
     const calls = [];
     const db = { auth: { getUser: async token => token === 'fixture-owner-token' ? { data: { user: { id: owner } } }

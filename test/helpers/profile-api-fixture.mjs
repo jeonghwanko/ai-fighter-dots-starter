@@ -12,7 +12,7 @@ export async function profileFixture() {
     catch (error) { return { error: { message: error.message } }; }
   };
   const query = table => {
-    if (!['af_submissions','af_fighters','af_fighter_notes','af_fighter_canon','af_worlds'].includes(table)) throw Error('unsupported-test-table');
+    if (!['af_submissions','af_fighters','af_roster_entries','af_fighter_notes','af_fighter_canon','af_worlds'].includes(table)) throw Error('unsupported-test-table');
     const filters = [], values = []; let order = '', limit = '';
     const run = async () => {
       const { rows } = await sql.query(`select to_jsonb(t) as value from public.${table} t${filters.length ? ' where '+filters.join(' and ') : ''}${order}${limit}`,values);
