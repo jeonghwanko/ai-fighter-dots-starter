@@ -1,0 +1,1504 @@
+{
+  "version": 1,
+  "date": "2026-10-29",
+  "advisory": true,
+  "visualApproval": false,
+  "conclusion": "No demonstrated improvement at the frozen gate; do not promote the candidate to production.",
+  "planSha256": "c06759841c3303ff7536bb6e761c095614f7b167c26f588e9c20f18084b16c3d",
+  "protocol": {
+    "requestedModel": "gpt-6-luna",
+    "endpoint": "/v1/decisions",
+    "transport": "paired-independent-questions-v1",
+    "baseline": "ordered-native-v1",
+    "candidate": "timeline-loop-native-v1",
+    "questions": [
+      "anatomy",
+      "identity",
+      "continuity",
+      "alternation",
+      "contact"
+    ],
+    "threshold": {
+      "confidenceAtLeast": 0.8,
+      "chosenChoiceProbabilityAtLeast": 0.8
+    },
+    "primaryView": "recorded",
+    "secondaryView": "rawChoice-diagnostic-only",
+    "candidateAuthorsHadLabelAccessDuringDesign": false,
+    "operatorHadLabelAccess": true,
+    "postOutcomeTuning": false
+  },
+  "dataset": {
+    "cases": 20,
+    "sourceFamilies": 3,
+    "frames": 420,
+    "human": {
+      "clear": 76,
+      "defect": 19,
+      "unverified": 5
+    },
+    "frameCounts": {
+      "11": 1,
+      "12": 9,
+      "16": 4,
+      "18": 1,
+      "23": 1,
+      "49": 4
+    },
+    "motionCounts": {
+      "run": 12,
+      "walk": 8
+    },
+    "canonical": {
+      "cases": 13,
+      "sourceFamilies": 2,
+      "frames": 172,
+      "human": {
+        "clear": 63,
+        "defect": 2,
+        "unverified": 0
+      }
+    },
+    "extendedNative": {
+      "cases": 7,
+      "sourceFamilies": 2,
+      "frames": 248,
+      "human": {
+        "clear": 13,
+        "defect": 17,
+        "unverified": 5
+      }
+    },
+    "calibration": {
+      "cases": 16,
+      "sourceFamilies": 2,
+      "frames": 364,
+      "human": {
+        "clear": 56,
+        "defect": 19,
+        "unverified": 5
+      }
+    },
+    "heldOut": {
+      "cases": 4,
+      "sourceFamilies": 1,
+      "frames": 56,
+      "human": {
+        "clear": 20,
+        "defect": 0,
+        "unverified": 0
+      }
+    }
+  },
+  "coverage": {
+    "expectedCases": 20,
+    "completedPairedCases": 20,
+    "questionsPerArm": 100,
+    "completedPairedCaseRate": 1
+  },
+  "metrics": {
+    "all": {
+      "baseline": {
+        "recorded": {
+          "judgments": 100,
+          "human": {
+            "clear": 76,
+            "defect": 19,
+            "unverified": 5
+          },
+          "detectedDefects": 0,
+          "falseClear": 2,
+          "falseReject": 0,
+          "defectAbstentions": 17,
+          "abstentions": 80,
+          "definitiveCorrect": 18,
+          "definitiveDenominator": 95,
+          "confusion": {
+            "clear": {
+              "clear": 18,
+              "defect": 0,
+              "unverified": 58
+            },
+            "defect": {
+              "clear": 2,
+              "defect": 0,
+              "unverified": 17
+            },
+            "unverified": {
+              "clear": 0,
+              "defect": 0,
+              "unverified": 5
+            }
+          }
+        },
+        "rawChoice": {
+          "judgments": 100,
+          "human": {
+            "clear": 76,
+            "defect": 19,
+            "unverified": 5
+          },
+          "detectedDefects": 4,
+          "falseClear": 8,
+          "falseReject": 5,
+          "defectAbstentions": 7,
+          "abstentions": 40,
+          "definitiveCorrect": 45,
+          "definitiveDenominator": 95,
+          "confusion": {
+            "clear": {
+              "clear": 41,
+              "defect": 5,
+              "unverified": 30
+            },
+            "defect": {
+              "clear": 8,
+              "defect": 4,
+              "unverified": 7
+            },
+            "unverified": {
+              "clear": 1,
+              "defect": 1,
+              "unverified": 3
+            }
+          }
+        }
+      },
+      "candidate": {
+        "recorded": {
+          "judgments": 100,
+          "human": {
+            "clear": 76,
+            "defect": 19,
+            "unverified": 5
+          },
+          "detectedDefects": 0,
+          "falseClear": 2,
+          "falseReject": 0,
+          "defectAbstentions": 17,
+          "abstentions": 84,
+          "definitiveCorrect": 13,
+          "definitiveDenominator": 95,
+          "confusion": {
+            "clear": {
+              "clear": 13,
+              "defect": 0,
+              "unverified": 63
+            },
+            "defect": {
+              "clear": 2,
+              "defect": 0,
+              "unverified": 17
+            },
+            "unverified": {
+              "clear": 0,
+              "defect": 1,
+              "unverified": 4
+            }
+          }
+        },
+        "rawChoice": {
+          "judgments": 100,
+          "human": {
+            "clear": 76,
+            "defect": 19,
+            "unverified": 5
+          },
+          "detectedDefects": 8,
+          "falseClear": 4,
+          "falseReject": 9,
+          "defectAbstentions": 7,
+          "abstentions": 40,
+          "definitiveCorrect": 45,
+          "definitiveDenominator": 95,
+          "confusion": {
+            "clear": {
+              "clear": 37,
+              "defect": 9,
+              "unverified": 30
+            },
+            "defect": {
+              "clear": 4,
+              "defect": 8,
+              "unverified": 7
+            },
+            "unverified": {
+              "clear": 1,
+              "defect": 1,
+              "unverified": 3
+            }
+          }
+        }
+      }
+    },
+    "byQuestion": {
+      "anatomy": {
+        "baseline": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 4,
+              "unverified": 0
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 4,
+            "abstentions": 20,
+            "definitiveCorrect": 0,
+            "definitiveDenominator": 20,
+            "confusion": {
+              "clear": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 16
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 4
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 4,
+              "unverified": 0
+            },
+            "detectedDefects": 3,
+            "falseClear": 1,
+            "falseReject": 3,
+            "defectAbstentions": 0,
+            "abstentions": 0,
+            "definitiveCorrect": 16,
+            "definitiveDenominator": 20,
+            "confusion": {
+              "clear": {
+                "clear": 13,
+                "defect": 3,
+                "unverified": 0
+              },
+              "defect": {
+                "clear": 1,
+                "defect": 3,
+                "unverified": 0
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          }
+        },
+        "candidate": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 4,
+              "unverified": 0
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 4,
+            "abstentions": 19,
+            "definitiveCorrect": 1,
+            "definitiveDenominator": 20,
+            "confusion": {
+              "clear": {
+                "clear": 1,
+                "defect": 0,
+                "unverified": 15
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 4
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 4,
+              "unverified": 0
+            },
+            "detectedDefects": 3,
+            "falseClear": 1,
+            "falseReject": 2,
+            "defectAbstentions": 0,
+            "abstentions": 0,
+            "definitiveCorrect": 17,
+            "definitiveDenominator": 20,
+            "confusion": {
+              "clear": {
+                "clear": 14,
+                "defect": 2,
+                "unverified": 0
+              },
+              "defect": {
+                "clear": 1,
+                "defect": 3,
+                "unverified": 0
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          }
+        }
+      },
+      "identity": {
+        "baseline": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 3,
+              "unverified": 1
+            },
+            "detectedDefects": 0,
+            "falseClear": 2,
+            "falseReject": 0,
+            "defectAbstentions": 1,
+            "abstentions": 2,
+            "definitiveCorrect": 16,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 16,
+                "defect": 0,
+                "unverified": 0
+              },
+              "defect": {
+                "clear": 2,
+                "defect": 0,
+                "unverified": 1
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 1
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 3,
+              "unverified": 1
+            },
+            "detectedDefects": 0,
+            "falseClear": 3,
+            "falseReject": 0,
+            "defectAbstentions": 0,
+            "abstentions": 0,
+            "definitiveCorrect": 16,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 16,
+                "defect": 0,
+                "unverified": 0
+              },
+              "defect": {
+                "clear": 3,
+                "defect": 0,
+                "unverified": 0
+              },
+              "unverified": {
+                "clear": 1,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          }
+        },
+        "candidate": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 3,
+              "unverified": 1
+            },
+            "detectedDefects": 0,
+            "falseClear": 2,
+            "falseReject": 0,
+            "defectAbstentions": 1,
+            "abstentions": 6,
+            "definitiveCorrect": 12,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 12,
+                "defect": 0,
+                "unverified": 4
+              },
+              "defect": {
+                "clear": 2,
+                "defect": 0,
+                "unverified": 1
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 1
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 3,
+              "unverified": 1
+            },
+            "detectedDefects": 0,
+            "falseClear": 3,
+            "falseReject": 0,
+            "defectAbstentions": 0,
+            "abstentions": 0,
+            "definitiveCorrect": 16,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 16,
+                "defect": 0,
+                "unverified": 0
+              },
+              "defect": {
+                "clear": 3,
+                "defect": 0,
+                "unverified": 0
+              },
+              "unverified": {
+                "clear": 1,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          }
+        }
+      },
+      "continuity": {
+        "baseline": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 14,
+              "defect": 5,
+              "unverified": 1
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 5,
+            "abstentions": 18,
+            "definitiveCorrect": 2,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 2,
+                "defect": 0,
+                "unverified": 12
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 5
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 1
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 14,
+              "defect": 5,
+              "unverified": 1
+            },
+            "detectedDefects": 1,
+            "falseClear": 4,
+            "falseReject": 2,
+            "defectAbstentions": 0,
+            "abstentions": 0,
+            "definitiveCorrect": 13,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 12,
+                "defect": 2,
+                "unverified": 0
+              },
+              "defect": {
+                "clear": 4,
+                "defect": 1,
+                "unverified": 0
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 1,
+                "unverified": 0
+              }
+            }
+          }
+        },
+        "candidate": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 14,
+              "defect": 5,
+              "unverified": 1
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 5,
+            "abstentions": 19,
+            "definitiveCorrect": 0,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 14
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 5
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 1,
+                "unverified": 0
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 14,
+              "defect": 5,
+              "unverified": 1
+            },
+            "detectedDefects": 5,
+            "falseClear": 0,
+            "falseReject": 7,
+            "defectAbstentions": 0,
+            "abstentions": 0,
+            "definitiveCorrect": 12,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 7,
+                "defect": 7,
+                "unverified": 0
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 5,
+                "unverified": 0
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 1,
+                "unverified": 0
+              }
+            }
+          }
+        }
+      },
+      "alternation": {
+        "baseline": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 14,
+              "defect": 5,
+              "unverified": 1
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 5,
+            "abstentions": 20,
+            "definitiveCorrect": 0,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 14
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 5
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 1
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 14,
+              "defect": 5,
+              "unverified": 1
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 5,
+            "abstentions": 20,
+            "definitiveCorrect": 0,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 14
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 5
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 1
+              }
+            }
+          }
+        },
+        "candidate": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 14,
+              "defect": 5,
+              "unverified": 1
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 5,
+            "abstentions": 20,
+            "definitiveCorrect": 0,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 14
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 5
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 1
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 14,
+              "defect": 5,
+              "unverified": 1
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 5,
+            "abstentions": 20,
+            "definitiveCorrect": 0,
+            "definitiveDenominator": 19,
+            "confusion": {
+              "clear": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 14
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 5
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 1
+              }
+            }
+          }
+        }
+      },
+      "contact": {
+        "baseline": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 2,
+              "unverified": 2
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 2,
+            "abstentions": 20,
+            "definitiveCorrect": 0,
+            "definitiveDenominator": 18,
+            "confusion": {
+              "clear": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 16
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 2
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 2
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 2,
+              "unverified": 2
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 2,
+            "abstentions": 20,
+            "definitiveCorrect": 0,
+            "definitiveDenominator": 18,
+            "confusion": {
+              "clear": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 16
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 2
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 2
+              }
+            }
+          }
+        },
+        "candidate": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 2,
+              "unverified": 2
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 2,
+            "abstentions": 20,
+            "definitiveCorrect": 0,
+            "definitiveDenominator": 18,
+            "confusion": {
+              "clear": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 16
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 2
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 2
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 16,
+              "defect": 2,
+              "unverified": 2
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 2,
+            "abstentions": 20,
+            "definitiveCorrect": 0,
+            "definitiveDenominator": 18,
+            "confusion": {
+              "clear": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 16
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 2
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 2
+              }
+            }
+          }
+        }
+      }
+    },
+    "bySourceFormat": {
+      "canonical": {
+        "baseline": {
+          "recorded": {
+            "judgments": 65,
+            "human": {
+              "clear": 63,
+              "defect": 2,
+              "unverified": 0
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 2,
+            "abstentions": 50,
+            "definitiveCorrect": 15,
+            "definitiveDenominator": 65,
+            "confusion": {
+              "clear": {
+                "clear": 15,
+                "defect": 0,
+                "unverified": 48
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 2
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 65,
+            "human": {
+              "clear": 63,
+              "defect": 2,
+              "unverified": 0
+            },
+            "detectedDefects": 0,
+            "falseClear": 1,
+            "falseReject": 5,
+            "defectAbstentions": 1,
+            "abstentions": 26,
+            "definitiveCorrect": 33,
+            "definitiveDenominator": 65,
+            "confusion": {
+              "clear": {
+                "clear": 33,
+                "defect": 5,
+                "unverified": 25
+              },
+              "defect": {
+                "clear": 1,
+                "defect": 0,
+                "unverified": 1
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          }
+        },
+        "candidate": {
+          "recorded": {
+            "judgments": 65,
+            "human": {
+              "clear": 63,
+              "defect": 2,
+              "unverified": 0
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 2,
+            "abstentions": 54,
+            "definitiveCorrect": 11,
+            "definitiveDenominator": 65,
+            "confusion": {
+              "clear": {
+                "clear": 11,
+                "defect": 0,
+                "unverified": 52
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 2
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 65,
+            "human": {
+              "clear": 63,
+              "defect": 2,
+              "unverified": 0
+            },
+            "detectedDefects": 1,
+            "falseClear": 0,
+            "falseReject": 5,
+            "defectAbstentions": 1,
+            "abstentions": 26,
+            "definitiveCorrect": 34,
+            "definitiveDenominator": 65,
+            "confusion": {
+              "clear": {
+                "clear": 33,
+                "defect": 5,
+                "unverified": 25
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 1,
+                "unverified": 1
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          }
+        }
+      },
+      "extendedNative": {
+        "baseline": {
+          "recorded": {
+            "judgments": 35,
+            "human": {
+              "clear": 13,
+              "defect": 17,
+              "unverified": 5
+            },
+            "detectedDefects": 0,
+            "falseClear": 2,
+            "falseReject": 0,
+            "defectAbstentions": 15,
+            "abstentions": 30,
+            "definitiveCorrect": 3,
+            "definitiveDenominator": 30,
+            "confusion": {
+              "clear": {
+                "clear": 3,
+                "defect": 0,
+                "unverified": 10
+              },
+              "defect": {
+                "clear": 2,
+                "defect": 0,
+                "unverified": 15
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 5
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 35,
+            "human": {
+              "clear": 13,
+              "defect": 17,
+              "unverified": 5
+            },
+            "detectedDefects": 4,
+            "falseClear": 7,
+            "falseReject": 0,
+            "defectAbstentions": 6,
+            "abstentions": 14,
+            "definitiveCorrect": 12,
+            "definitiveDenominator": 30,
+            "confusion": {
+              "clear": {
+                "clear": 8,
+                "defect": 0,
+                "unverified": 5
+              },
+              "defect": {
+                "clear": 7,
+                "defect": 4,
+                "unverified": 6
+              },
+              "unverified": {
+                "clear": 1,
+                "defect": 1,
+                "unverified": 3
+              }
+            }
+          }
+        },
+        "candidate": {
+          "recorded": {
+            "judgments": 35,
+            "human": {
+              "clear": 13,
+              "defect": 17,
+              "unverified": 5
+            },
+            "detectedDefects": 0,
+            "falseClear": 2,
+            "falseReject": 0,
+            "defectAbstentions": 15,
+            "abstentions": 30,
+            "definitiveCorrect": 2,
+            "definitiveDenominator": 30,
+            "confusion": {
+              "clear": {
+                "clear": 2,
+                "defect": 0,
+                "unverified": 11
+              },
+              "defect": {
+                "clear": 2,
+                "defect": 0,
+                "unverified": 15
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 1,
+                "unverified": 4
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 35,
+            "human": {
+              "clear": 13,
+              "defect": 17,
+              "unverified": 5
+            },
+            "detectedDefects": 7,
+            "falseClear": 4,
+            "falseReject": 4,
+            "defectAbstentions": 6,
+            "abstentions": 14,
+            "definitiveCorrect": 11,
+            "definitiveDenominator": 30,
+            "confusion": {
+              "clear": {
+                "clear": 4,
+                "defect": 4,
+                "unverified": 5
+              },
+              "defect": {
+                "clear": 4,
+                "defect": 7,
+                "unverified": 6
+              },
+              "unverified": {
+                "clear": 1,
+                "defect": 1,
+                "unverified": 3
+              }
+            }
+          }
+        }
+      }
+    },
+    "bySplit": {
+      "calibration": {
+        "baseline": {
+          "recorded": {
+            "judgments": 80,
+            "human": {
+              "clear": 56,
+              "defect": 19,
+              "unverified": 5
+            },
+            "detectedDefects": 0,
+            "falseClear": 2,
+            "falseReject": 0,
+            "defectAbstentions": 17,
+            "abstentions": 66,
+            "definitiveCorrect": 12,
+            "definitiveDenominator": 75,
+            "confusion": {
+              "clear": {
+                "clear": 12,
+                "defect": 0,
+                "unverified": 44
+              },
+              "defect": {
+                "clear": 2,
+                "defect": 0,
+                "unverified": 17
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 5
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 80,
+            "human": {
+              "clear": 56,
+              "defect": 19,
+              "unverified": 5
+            },
+            "detectedDefects": 4,
+            "falseClear": 8,
+            "falseReject": 5,
+            "defectAbstentions": 7,
+            "abstentions": 32,
+            "definitiveCorrect": 33,
+            "definitiveDenominator": 75,
+            "confusion": {
+              "clear": {
+                "clear": 29,
+                "defect": 5,
+                "unverified": 22
+              },
+              "defect": {
+                "clear": 8,
+                "defect": 4,
+                "unverified": 7
+              },
+              "unverified": {
+                "clear": 1,
+                "defect": 1,
+                "unverified": 3
+              }
+            }
+          }
+        },
+        "candidate": {
+          "recorded": {
+            "judgments": 80,
+            "human": {
+              "clear": 56,
+              "defect": 19,
+              "unverified": 5
+            },
+            "detectedDefects": 0,
+            "falseClear": 2,
+            "falseReject": 0,
+            "defectAbstentions": 17,
+            "abstentions": 69,
+            "definitiveCorrect": 8,
+            "definitiveDenominator": 75,
+            "confusion": {
+              "clear": {
+                "clear": 8,
+                "defect": 0,
+                "unverified": 48
+              },
+              "defect": {
+                "clear": 2,
+                "defect": 0,
+                "unverified": 17
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 1,
+                "unverified": 4
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 80,
+            "human": {
+              "clear": 56,
+              "defect": 19,
+              "unverified": 5
+            },
+            "detectedDefects": 8,
+            "falseClear": 4,
+            "falseReject": 7,
+            "defectAbstentions": 7,
+            "abstentions": 32,
+            "definitiveCorrect": 35,
+            "definitiveDenominator": 75,
+            "confusion": {
+              "clear": {
+                "clear": 27,
+                "defect": 7,
+                "unverified": 22
+              },
+              "defect": {
+                "clear": 4,
+                "defect": 8,
+                "unverified": 7
+              },
+              "unverified": {
+                "clear": 1,
+                "defect": 1,
+                "unverified": 3
+              }
+            }
+          }
+        }
+      },
+      "heldOut": {
+        "baseline": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 20,
+              "defect": 0,
+              "unverified": 0
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 0,
+            "abstentions": 14,
+            "definitiveCorrect": 6,
+            "definitiveDenominator": 20,
+            "confusion": {
+              "clear": {
+                "clear": 6,
+                "defect": 0,
+                "unverified": 14
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 20,
+              "defect": 0,
+              "unverified": 0
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 0,
+            "abstentions": 8,
+            "definitiveCorrect": 12,
+            "definitiveDenominator": 20,
+            "confusion": {
+              "clear": {
+                "clear": 12,
+                "defect": 0,
+                "unverified": 8
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          }
+        },
+        "candidate": {
+          "recorded": {
+            "judgments": 20,
+            "human": {
+              "clear": 20,
+              "defect": 0,
+              "unverified": 0
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 0,
+            "defectAbstentions": 0,
+            "abstentions": 15,
+            "definitiveCorrect": 5,
+            "definitiveDenominator": 20,
+            "confusion": {
+              "clear": {
+                "clear": 5,
+                "defect": 0,
+                "unverified": 15
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          },
+          "rawChoice": {
+            "judgments": 20,
+            "human": {
+              "clear": 20,
+              "defect": 0,
+              "unverified": 0
+            },
+            "detectedDefects": 0,
+            "falseClear": 0,
+            "falseReject": 2,
+            "defectAbstentions": 0,
+            "abstentions": 8,
+            "definitiveCorrect": 10,
+            "definitiveDenominator": 20,
+            "confusion": {
+              "clear": {
+                "clear": 10,
+                "defect": 2,
+                "unverified": 8
+              },
+              "defect": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              },
+              "unverified": {
+                "clear": 0,
+                "defect": 0,
+                "unverified": 0
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "execution": {
+    "serverAttempts": 21,
+    "providerCalls": 20,
+    "uniqueProviderRequestIds": 20,
+    "httpStatuses": {
+      "200": 20,
+      "546": 1
+    },
+    "knownPreDispatchResourceLimitFailures": 1,
+    "failedAttemptHadNoLedgerReservation": true,
+    "paidRequestRetries": 0,
+    "requestedModels": {
+      "gpt-6-luna": 20
+    },
+    "returnedModelValues": {
+      "gpt-6-luna": 20
+    },
+    "datedSnapshotObserved": false,
+    "dailyCallCap": 50,
+    "dailyCallCapChanged": false,
+    "successfulSharedCallUsage": {
+      "input_tokens": 613264,
+      "output_tokens": 0,
+      "total_tokens": 613264,
+      "cached_tokens": 1349,
+      "cache_write_tokens": 184205
+    },
+    "successfulSharedCallServerElapsedSeconds": {
+      "count": 20,
+      "min": 0.585434,
+      "median": 1.346785,
+      "p95NearestRank": 4.698144,
+      "max": 4.720535,
+      "sum": 36.157193
+    },
+    "successfulSharedCallClientWallSeconds": {
+      "count": 20,
+      "min": 1.241038,
+      "median": 2.638137,
+      "p95NearestRank": 5.433859,
+      "max": 5.929592,
+      "sum": 58.865508
+    },
+    "perArmCost": null,
+    "perArmLatency": null,
+    "actualBilledCost": null
+  },
+  "limitations": [
+    "Three source families; clips and question judgments are correlated.",
+    "All human-defect labels are in calibration; held-out has no defects and cannot estimate defect recall.",
+    "Canonical versus extended native format is confounded with source and defect prevalence.",
+    "Human unverified labels are excluded from definitive accuracy and defect/clean rate denominators.",
+    "Model abstentions count against definitive-label accuracy; completion coverage is not decision coverage.",
+    "Paired arms share request latency and usage; cached/cache-write tokens are subsets of input tokens.",
+    "Returned model aliases do not identify a dated backend snapshot.",
+    "Descriptive pilot only; no statistical significance or population generalization."
+  ]
+}

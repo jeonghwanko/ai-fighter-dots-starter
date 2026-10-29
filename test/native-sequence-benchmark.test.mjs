@@ -51,6 +51,34 @@ test('native benchmark accepts original counts through 64 while production remai
   assert.equal(schema.properties.continuity.properties.frames.maxItems, 49);
 });
 
+test('native base64 codec preserves legacy bytes, canonical content, and malformed-tail rejection', async () => {
+  const body = request(16), canonical = png.toString('base64');
+  assert.ok(canonical.endsWith('='));
+  const unpadded = canonical.replace(/=+$/, '');
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+  const tailIndex = unpadded.length - 1;
+  const nonzeroPadBits = unpadded.slice(0, tailIndex) + alphabet[alphabet.indexOf(unpadded[tailIndex]) + 1] + canonical.slice(unpadded.length);
+  const expected = await reviewEvidence(body);
+  for (const encoded of [canonical, unpadded, nonzeroPadBits]) {
+    const variant = { ...body, images: body.images.map(image => ({ ...image, dataUrl: `data:image/png;base64,${encoded}` })) };
+    assert.deepEqual(await nativeSequenceEvidence(variant), expected);
+    assert.deepEqual(await reviewEvidence(variant), expected);
+  }
+  for (const encoded of ['A', 'AA=', 'AAA==', 'AAAA=', canonical + '=', canonical + '===', canonical + 'A', canonical + '\n', canonical.replace(/.$/, '-')]) {
+    const variant = { ...body, images: body.images.map(image => ({ ...image, dataUrl: `data:image/png;base64,${encoded}` })) };
+    await assert.rejects(reviewEvidence(variant));
+    await assert.rejects(nativeSequenceEvidence(variant));
+  }
+});
+
+test('native evidence avoids per-byte JS string codecs while production keeps its existing route', async t => {
+  const legacy = await reviewEvidence(request(16));
+  t.mock.method(globalThis, 'atob', () => { throw Error('legacy decoder invoked'); });
+  t.mock.method(globalThis, 'btoa', () => { throw Error('legacy encoder invoked'); });
+  assert.deepEqual(await nativeSequenceEvidence(request(16)), legacy);
+  await assert.rejects(reviewEvidence(request(16)));
+});
+
 test('paired independent questions preserve baseline prefix and isolate exact original seam images to improved questions', async () => {
   const { evidence, built, plan } = await prepared();
   assert.equal(plan.protocol.timeoutMs, 110_000);

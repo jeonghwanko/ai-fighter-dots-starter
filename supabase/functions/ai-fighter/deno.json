@@ -1,5 +1,6 @@
 {
   "imports": {
+    "node:buffer": "node:buffer",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.117.3",
     "ajv": "npm:ajv@6.15.0"
   }
