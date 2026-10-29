@@ -18,7 +18,7 @@ import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
-import { judgeOutcome, readOutcome } from '../mcp/sprite-outcome.mjs';
+import { judgeOutcome, readOutcome } from './sprite-outcome.mjs';
 
 /** The text model for the brief and the image model for the looks (the subscription's; `gpt-6.1-sol` is refused on a ChatGPT login). */
 export const MODELS = Object.freeze({ text: 'gpt-6-sol', image: 'gpt-6-sol' });

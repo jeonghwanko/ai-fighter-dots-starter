@@ -17,7 +17,7 @@ import { defaultSessionPath, login, startDeviceLogin, waitDeviceLogin } from './
 
 const KIT = fileURLToPath(new URL('../', import.meta.url));
 /** What a host's install runs; tests and the operator's installer stay in the checkout. */
-export const HOST_FILES = Object.freeze(['og', 'generation-worker.mjs', 'generation-stages.mjs', 'ledger-report.mjs', 'motions.py']);
+export const HOST_FILES = Object.freeze(['og', 'generation-worker.mjs', 'generation-stages.mjs', 'sprite-outcome.mjs', 'ledger-report.mjs', 'motions.py']);
 export const TERMS_DOC = 'docs/GENERATION-HOST.md#호스트-약속';
 const SYSTEM_DIRS = new Set(['/usr/local/bin', '/usr/bin', '/bin']);
 

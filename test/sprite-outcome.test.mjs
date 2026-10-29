@@ -3,7 +3,7 @@ import { mkdtemp, rm, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { judgeOutcome, outcomeReportPath, readOutcome } from '../mcp/sprite-outcome.mjs';
+import { judgeOutcome, outcomeReportPath, readOutcome } from '../host/sprite-outcome.mjs';
 
 const error = (code, retryable, extra = {}) => ({ state: null, code, retryable, message: code, ...extra });
 const report = (submitted, errors, extra = {}) => ({ ok: false, provider_submitted: submitted, errors, ...extra });

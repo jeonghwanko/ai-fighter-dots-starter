@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { atomicJson, digest, fail, localPath, readJson, unchanged } from './creation-store.mjs';
 import { reviewCreationProgress } from './creation-context.mjs';
 import { guardDotsExecution } from '../scripts/dots-provider.mjs';
-import { judgeOutcome, outcomeReportPath, readOutcome } from './sprite-outcome.mjs';
+import { judgeOutcome, outcomeReportPath, readOutcome } from '../host/sprite-outcome.mjs';
 
 const generating = new Set(['gen', 'gen-set', 'video', 'video-set']);
 const recovering = new Set(['video-resume']);

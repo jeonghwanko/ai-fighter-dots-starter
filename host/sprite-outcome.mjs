@@ -1,7 +1,9 @@
 // What a sprite-gen generation run ended with, read from its report rather than guessed from its exit code
 // (vendor/sprite-gen docs/gen.md "Outcome"). sprite-gen writes `ok`, `errors` ({state, code, retryable, message})
 // and `provider_submitted` on success, failure, the codex question and SIGTERM alike; exit 3 means it failed before
-// any provider request. Used by the creation jobs (mcp/creation-jobs.mjs) and the hosted worker (host/generation-stages.mjs).
+// any provider request. Used by the hosted worker (generation-stages.mjs) and the creation jobs (mcp/creation-jobs.mjs). It lives
+// in host/ because a host installs host/'s files flat into one bin folder (og self-update, scripts/host.mjs HOST_FILES): the
+// worker can import only its neighbours. The plugin bundle takes it through mcp/'s import closure.
 import { stat, readFile } from 'node:fs/promises';
 import path from 'node:path';
 
