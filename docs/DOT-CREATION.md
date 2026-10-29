@@ -185,7 +185,7 @@ API 과금 제공자로 임의 전환하지 않는다. 상위 도구의 종료 �
 
 사용자가 새 **관절 포즈 가이드 방식**을 선택한 GPT walk/run은
 [GAIT-REVIEW.md의 단일 포즈 경로](GAIT-REVIEW.md#관절-좌표를-전달하는-새-단일-포즈-경로)를 따른다.
-`npm run sprite -- gen-motion`이 실제 원화·관절 가이드·검수된 앞뒤 자세를 전달하며,
+`gen-motion`(관리형 작업으로는 사전 검사 `--motion-method pose-plan`)이 실제 원화·관절 가이드·검수된 앞뒤 자세를 전달하며,
 walk 16/run 12개 프레임과 최종 시퀀스 검수 후 `asset.json`을 만든다.
 이 선택에서는 아래의 기존 gen-set 행별 생성으로 임의 대체하지 않는다.
 
