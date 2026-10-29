@@ -1,4 +1,4 @@
-import{c as e}from"./palette-K7ZNRf3I.js";import{r as t,t as n}from"./native-city-art-finish-BZDHQ1na.js";import{a as r,o as i,r as a,t as o}from"./NativeCityBuildingGrade-CaC6Fb3n.js";import{Jt as s,O as c,Q as l,a as u,b as d,ft as f,i as p,q as m,rn as h,u as g,vn as _,yn as v}from"./three.core-Dt6LFlTl.js";import{c as y,n as b,s as x}from"./NativeCityWallRelief-DgaUovU8.js";import{a as S}from"./NativeCityPaintedFacePlan-Bd27WAXL.js";var C=`
+import{c as e}from"./palette-D63XinfX.js";import{r as t,t as n}from"./native-city-art-finish-BZDHQ1na.js";import{a as r,o as i,r as a,t as o}from"./NativeCityBuildingGrade-cFCbzaSo.js";import{Jt as s,O as c,Q as l,a as u,b as d,ft as f,i as p,q as m,rn as h,u as g,vn as _,yn as v}from"./three.core-Dt6LFlTl.js";import{c as y,n as b,s as x}from"./NativeCityWallRelief-DgaUovU8.js";import{a as S}from"./NativeCityPaintedFacePlan-Bd27WAXL.js";var C=`
  uniform sampler2D houseAmbient0;uniform sampler2D houseAmbient1;uniform float houseAmbientStrength;
  varying vec2 houseAt;varying float houseAtlas;
  float houseVisibility(){return houseAtlas<.5?texture2D(houseAmbient0,houseAt).r:texture2D(houseAmbient1,houseAt).r;}

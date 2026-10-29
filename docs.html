@@ -12,7 +12,7 @@ try {
   }
 } catch {}
 </script>
-  <script type="module" crossorigin src="/assets/docs-CD5PNQ7K.js"></script>
+  <script type="module" crossorigin src="/assets/docs-YFY5YPJl.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/storageKeys-C-Eo7kME.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
   <link rel="modulepreload" crossorigin href="/assets/oddboutSession-NBQq8WAg.js">
@@ -39,7 +39,11 @@ Let me review the final files before registration.</code></pre></div><p class="n
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run sprite:setup
-npm run sprite:status</code></pre></div><p>Use the <code>main</code> branch. A GitHub ZIP omits the submodule contents. <code>sprite:setup</code> fetches the pinned sprite-gen revision and creates its own Python environment. <code>sprite:status</code> checks installation, not subscription or sign-in status.</p><details class="advanced"><summary>Use the toolkit from Codex</summary><p>From the starter folder, build the ODDBOUT plugin and install it in Codex. The plugin carries the creation skill and the ODDBOUT connection (Google sign-in), so registration works from the same chat. The builder prints the paths and the exact commands.</p><div class="code-block"><p class="code-label">Build and install the plugin</p><button type="button" class="copy-button" data-copy-target="code-3" aria-label="Copy Build and install the plugin">Copy</button><pre id="code-3"><code>npm run plugin:build
+npm run sprite:status</code></pre></div><p>Use the <code>main</code> branch. A GitHub ZIP omits the submodule contents. <code>sprite:setup</code> fetches the pinned sprite-gen revision and creates its own Python environment. <code>sprite:status</code> checks installation, not subscription or sign-in status.</p><details class="advanced"><summary>Installed before 2026-10-29?</summary><p>The old <code>codex/creator-hosting</code> branch is frozen, and the kit's readiness check stops a checkout on it as the wrong branch. Commit or set aside any local changes, then move the checkout to <code>main</code>. A plain <code>git checkout main</code> fails in the single-branch clone the old instructions made.</p><div class="code-block"><p class="code-label">Move to main</p><button type="button" class="copy-button" data-copy-target="code-7" aria-label="Copy Move to main">Copy</button><pre id="code-7"><code>git remote set-branches origin main
+git fetch origin
+git switch -C main origin/main
+npm ci --ignore-scripts
+npm run sprite:setup</code></pre></div></details><details class="advanced"><summary>Use the toolkit from Codex</summary><p>From the starter folder, build the ODDBOUT plugin and install it in Codex. The plugin carries the creation skill and the ODDBOUT connection (Google sign-in), so registration works from the same chat. The builder prints the paths and the exact commands.</p><div class="code-block"><p class="code-label">Build and install the plugin</p><button type="button" class="copy-button" data-copy-target="code-3" aria-label="Copy Build and install the plugin">Copy</button><pre id="code-3"><code>npm run plugin:build
 codex plugin marketplace add &lt;path printed by the builder&gt;
 codex plugin add oddbout@ai-fighter-local</code></pre></div><p>Open a new chat and call <code>$create-fighter</code>, or describe the fighter you want. Restart the app if the plugin does not appear. If you move the folder, build again. The older <code>codex mcp add ai-fighter</code> (stdio) connection still works for compatibility.</p></details><h3>Confirm readiness</h3><div class="code-block"><p class="code-label">Read requirements and tool readiness</p><button type="button" class="copy-button" data-copy-target="code-4" aria-label="Copy Read requirements and tool readiness">Copy</button><pre id="code-4"><code>npm run creation:context
 npm run sprite -- workflow --kind sprite</code></pre></div><p>Your assistant reads the current game context and <code>get_fighter_spec</code> sections <code>overview</code>, <code>creation</code>, and <code>guide</code>. It reads the schema when packaging. A workflow result of <code>needs-input</code> (exit code 2) means an account or route choice is still needed. Start generation only when that stage is ready.</p></section>

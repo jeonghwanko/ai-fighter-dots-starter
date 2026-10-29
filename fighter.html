@@ -26,20 +26,6 @@
     <meta name="twitter:card" content="summary_large_image" />
     <link
       rel="preload"
-      href="./fonts/MaruBuri-Regular.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
-      href="./fonts/MaruBuri-Bold.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin
-    />
-    <link
-      rel="preload"
       href="./fonts/Pretendard-Regular.woff2"
       as="font"
       type="font/woff2"
@@ -65,21 +51,11 @@
        * 번들 글꼴. Phaser Canvas Text 는 생성 시점에 글자 폭을 재서 굳히므로,
        * 본문 글꼴은 부팅 전에 도착해야 한다(main.ts 의 loadUiFont). swap 으로 두면
        * 폴백으로 한 번 재고 끝나서 자간이 어긋난 채 남는다 — 그래서 block 이다.
+       *
+       * 본편의 본문 글꼴 마루 부리(0.87MB)와 표제 글꼴 ChosunGs(3.6MB)는 싣지 않는다(2026-10-29, 휴대폰 첫 접속).
+       * 면이 없으면 palette.ts 의 FONT 스택이 마루 부리 다음의 Pretendard 로 넘어가 메뉴·설정·대진표도 Pretendard 로 그린다.
+       * loadUiFont·startDisplayFontLoad 는 받을 면이 없는 글꼴을 곧바로 끝낸다.
        */
-      @font-face {
-        font-family: "MaruBuri";
-        src: url("./fonts/MaruBuri-Regular.woff2") format("woff2");
-        font-weight: 400;
-        font-style: normal;
-        font-display: block;
-      }
-      @font-face {
-        font-family: "MaruBuri";
-        src: url("./fonts/MaruBuri-Bold.woff2") format("woff2");
-        font-weight: 700;
-        font-style: normal;
-        font-display: block;
-      }
       @font-face {
         font-family: "Pretendard";
         src: url("./fonts/Pretendard-Regular.woff2") format("woff2");
@@ -102,11 +78,6 @@
         font-style: normal;
         font-display: block;
       }
-      /*
-       * 예고장 표제 글꼴(ChosunGs, 3.6MB)은 싣지 않는다. 이 페이지에서 그 글꼴을 쓰는 곳은 일시정지·설정 제목뿐이라
-       * 휴대폰에서 받는 양만 늘렸다(2026-10-29 Lighthouse). 면이 없으면 표제 스택이 마루 부리로 넘어가고,
-       * 부팅의 startDisplayFontLoad 는 받을 면이 없어 곧바로 끝난다.
-       */
       html,
       body {
         margin: 0;
@@ -193,7 +164,7 @@
       }
       html[data-boot-motion="reduce"] .boot-loading-ring { animation: none; }
     </style>
-  <script type="module" crossorigin src="/assets/fighter-Jg67EUB2.js"></script>
+  <script type="module" crossorigin src="/assets/fighter-CjlFFNOU.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/rolldown-runtime-B0Z9INg1.js">
   <link rel="modulepreload" crossorigin href="/assets/storageKeys-C-Eo7kME.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
@@ -206,15 +177,15 @@
   <link rel="modulepreload" crossorigin href="/assets/rankedDuels-DMGju-c-.js">
   <link rel="modulepreload" crossorigin href="/assets/Locale-BoqNfY5_.js">
   <link rel="modulepreload" crossorigin href="/assets/CityEnvironment-AhQf9g8O.js">
-  <link rel="modulepreload" crossorigin href="/assets/palette-K7ZNRf3I.js">
-  <link rel="modulepreload" crossorigin href="/assets/NativeCityOttoEncounter-BkwhVuz1.js">
+  <link rel="modulepreload" crossorigin href="/assets/palette-D63XinfX.js">
+  <link rel="modulepreload" crossorigin href="/assets/NativeCityOttoEncounter-CymamEcS.js">
   <link rel="modulepreload" crossorigin href="/assets/arena-concept-runtime-BHN1CmLz.js">
   <link rel="modulepreload" crossorigin href="/assets/VillagePathFacing-DTuOohAt.js">
   <link rel="modulepreload" crossorigin href="/assets/AttackMoves-B-lq5s5T.js">
   <link rel="modulepreload" crossorigin href="/assets/WebGl2Support-hZXjXmi-.js">
-  <link rel="modulepreload" crossorigin href="/assets/PauseMenuScene-Du7pMapA.js">
-  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-CDBQ0OA-.js">
-  <link rel="modulepreload" crossorigin href="/assets/TournamentBracketScene-DchwNMKH.js">
+  <link rel="modulepreload" crossorigin href="/assets/PauseMenuScene-DOVO7KW1.js">
+  <link rel="modulepreload" crossorigin href="/assets/ArenaGoldDropView-Rexojylj.js">
+  <link rel="modulepreload" crossorigin href="/assets/TournamentBracketScene-DMjlXZjC.js">
   <link rel="stylesheet" crossorigin href="/assets/accountControl-Ba1jbnnN.css">
   <link rel="stylesheet" crossorigin href="/assets/fighter-1IPMv0AM.css">
 </head>

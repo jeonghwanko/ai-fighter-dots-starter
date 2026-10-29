@@ -38,6 +38,8 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
       }
     } catch {}
   </script>
+  <!-- The hero's ring is a CSS background (league.css .hero-stage) and the page's largest paint; without this it starts only after the stylesheet arrives (2026-10-29 Lighthouse). -->
+  <link rel="preload" as="image" href="/art/arena/neon-ring-v1.webp" fetchpriority="high">
   <script type="module" crossorigin src="/assets/league-Cjyz296t.js"></script>
   <link rel="modulepreload" crossorigin href="/assets/storageKeys-C-Eo7kME.js">
   <link rel="modulepreload" crossorigin href="/assets/preload-helper-Czpn1I53.js">
@@ -80,9 +82,9 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
             </div>
             <div class="featured-bout" aria-labelledby="bout-names">
               <div class="bout-art" aria-hidden="true">
-                <img src="/art/ui/oddbout-roster-v1/typhoon.webp" alt="" width="1024" height="1536" fetchpriority="high">
+                <img src="/art/ui/oddbout-roster-v1/typhoon.webp" alt="" width="800" height="1200" fetchpriority="high">
                 <span class="versus">VS</span>
-                <img src="/art/ui/oddbout-roster-v1/elong-muscat.webp" alt="" width="1024" height="1536" fetchpriority="high">
+                <img src="/art/ui/oddbout-roster-v1/elong-muscat.webp" alt="" width="800" height="1200" fetchpriority="high">
               </div>
               <div class="bout-names" id="bout-names"><span data-copy="boutLeft">타이푼</span><span data-copy="boutRight">엘롱 머스캣</span></div>
             </div>
@@ -102,11 +104,11 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
       <div class="section-head"><h2 id="cup-title"><span data-copy="cupTitle">16강 컵</span></h2></div>
       <div class="cup-grid">
         <div class="cup-demo" role="img" aria-label="예시: 대표 타이푼이 16강에서 퀵캣, 8강에서 쿠마를 이기고 4강에서 엘롱 머스캣을 기다린다" data-label="cupDemo">
-          <div class="cup-champion"><img src="/art/ui/oddbout-roster-v1/typhoon.webp" alt="" width="1024" height="1536" loading="lazy"><span class="cup-champion-name"><span class="cup-star" aria-hidden="true">★</span><span data-copy="boutLeft">타이푼</span></span></div>
+          <div class="cup-champion"><img src="/art/ui/oddbout-roster-v1/typhoon.webp" alt="" width="800" height="1200" loading="lazy"><span class="cup-champion-name"><span class="cup-star" aria-hidden="true">★</span><span data-copy="boutLeft">타이푼</span></span></div>
           <ol class="cup-rounds">
             <li class="done"><span class="cup-face" style="--face-x:76%;--face-y:42%"><img src="/art/arena/concept/quickcat.webp" alt="" width="1116" height="600" loading="lazy"></span><span class="cup-round" data-copy="round16">16강</span><span class="cup-mark" data-copy="cupWon">KO승</span></li>
             <li class="done"><span class="cup-face"><img src="/art/arena/concept/kuma.webp" alt="" width="343" height="600" loading="lazy"></span><span class="cup-round" data-copy="round8">8강</span><span class="cup-mark" data-copy="cupWon">KO승</span></li>
-            <li class="next"><span class="cup-face" style="--face-x:58%"><img src="/art/ui/oddbout-roster-v1/elong-muscat.webp" alt="" width="1024" height="1536" loading="lazy"></span><span class="cup-round" data-copy="round4">4강</span><span class="cup-mark" data-copy="cupNext">다음 경기</span></li>
+            <li class="next"><span class="cup-face" style="--face-x:58%"><img src="/art/ui/oddbout-roster-v1/elong-muscat.webp" alt="" width="800" height="1200" loading="lazy"></span><span class="cup-round" data-copy="round4">4강</span><span class="cup-mark" data-copy="cupNext">다음 경기</span></li>
             <li class="ahead"><span class="cup-face unknown">?</span><span class="cup-round" data-copy="roundFinal">결승</span><span class="cup-mark">&nbsp;</span></li>
             <li class="cup-trophy"><span class="cup-trophy-mark"><svg viewBox="0 0 48 48" width="46" height="46" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linejoin="round" aria-hidden="true"><path d="M14 7h20v10c0 6.6-4.5 11.5-10 11.5S14 23.6 14 17Z"/><path d="M14 11H7.5c0 6 2.8 9.4 7.4 10M34 11h6.5c0 6-2.8 9.4-7.4 10"/><path d="M24 28.5V36M16 41h16l-2-5H18Z"/></svg></span><span class="cup-round" data-copy="cupTrophy">우승</span><span class="cup-mark">&nbsp;</span></li>
           </ol>
