@@ -10,6 +10,7 @@ import { probeImage } from './image-probe.mjs';
 import { Problem, UUID, jsonResponse, readBody, sha256 } from './http.mjs';
 import { checkedManifest, storeAsset } from './submissions.mjs';
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
+import { benchmarkReview } from './decisions-benchmark.mjs';
 
 export const GENERATION_BUCKET = 'af-generation';
 export const GENERATION_LIMITS = Object.freeze({ descriptionMin: 10, description: 600, refs: 2, refBytes: 4_000_000, refSide: Object.freeze([64, 4096]),
@@ -288,6 +289,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
 
   async function worker(request, parts, host) {
     const method = request.method, route = parts.join('/');
+    if (method === 'POST' && parts[1] === 'decision-benchmarks' && parts.length === 3)
+      return { ok: true, review: await benchmarkReview({ db, reviewer: decisionsReviewer, host, caseId: id(parts[2]),
+        body: await readJson(request, DECISIONS.bodyBytes) }) };
     if (method === 'POST' && parts[1] === 'jobs' && parts[3] === 'decisions' && parts.length === 4) {
       const lease = id(request.headers.get('x-generation-lease'));
       const row = await call('af_generation_held', { p_id: id(parts[2]), p_token: lease });
