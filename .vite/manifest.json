@@ -678,7 +678,7 @@
     "src": "assets/coop-campaign/animations/handsome-actions-v2-20261014.webp"
   },
   "creator.html": {
-    "file": "assets/creator-Cy0m3Kvl.js",
+    "file": "assets/creator-DQeRUIKB.js",
     "name": "creator",
     "src": "creator.html",
     "isEntry": true,
@@ -706,7 +706,7 @@
       "src/creator/leagueContent.ts"
     ],
     "css": [
-      "assets/creator-C719m6pF.css",
+      "assets/creator-_OGFR_u5.css",
       "assets/creatorTheme-DhPjjeiW.css"
     ]
   },
