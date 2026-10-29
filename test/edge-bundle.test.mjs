@@ -1,11 +1,11 @@
 import { after, before, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { access, mkdir, mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { edgeFiles } from '../scripts/edge-bundle.mjs';
+import { edgeFiles, importSpecifiers } from '../scripts/edge-bundle.mjs';
 
 const repository = fileURLToPath(new URL('../', import.meta.url));
 let temporary;
@@ -23,6 +23,23 @@ test('the Edge bundle holds every module the entry imports and nothing Node-only
   const config = JSON.parse(await readFile(path.join(repository, 'supabase/functions/ai-fighter/deno.json'), 'utf8'));
   // Deno supplies this builtin; it is explicitly mapped for the native base64 codec (api/base64.mjs).
   assert.equal(config.imports['node:buffer'], 'node:buffer');
+});
+test('every Edge function\'s import map provides what its bundle imports, not only ai-fighter\'s', async () => {
+  // ai-fighter-mcp lacked node:buffer for api/base64.mjs until #114 (2026-10-29): only the game's MCP deploy plan walked its bundle.
+  // A function without an import map may not import a bare specifier at all.
+  const functions = (await readdir(path.join(repository, 'supabase/functions'), { withFileTypes: true }))
+    .filter(entry => entry.isDirectory()).map(entry => entry.name);
+  assert.ok(['ai-fighter', 'ai-fighter-mcp'].every(name => functions.includes(name)), JSON.stringify(functions));
+  for (const name of functions) {
+    const base = `supabase/functions/${name}`;
+    if (await access(path.join(repository, base, 'deno.json')).then(() => true, () => false)) {
+      for (const file of await edgeFiles({ entry: `${base}/index.ts`, importMap: `${base}/deno.json`, lock: `${base}/deno.lock` }))
+        await access(path.join(repository, file));
+    } else {
+      const bare = importSpecifiers(await readFile(path.join(repository, base, 'index.ts'), 'utf8')).filter(specifier => !specifier.startsWith('.'));
+      assert.deepEqual(bare, [], name);
+    }
+  }
 });
 test('an import the Edge runtime cannot resolve fails before deploy', async () => {
   await mkdir(path.join(temporary, 'fn'));
