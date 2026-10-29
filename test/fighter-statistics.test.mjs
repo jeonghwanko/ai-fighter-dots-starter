@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { applyMigration, migrationNames, supabasePlatform } from './helpers/fighter-database.mjs';
+import { applyMigration, enforceSafeupdate, migrationNames, supabasePlatform } from './helpers/fighter-database.mjs';
 import { createHandler } from '../api/handler.mjs';
 
 test('owned statistics use all completed matches beyond top 20, preserve public ranking and enforce access', async () => {
@@ -34,6 +34,7 @@ test('owned statistics use all completed matches beyond top 20, preserve public 
     await applyMigration(sql, migrations[target]);
     assert.deepEqual(await rankings(), before); // Top-20 behavior and ties stay backward compatible.
     for (const name of migrations.slice(target + 1)) await applyMigration(sql, name);
+    await enforceSafeupdate(sql); // Migrated in steps, so migratedDatabase() cannot add it.
     assert.deepEqual(await rankings(), before);
     await sql.exec('set role service_role');
     const calls = [];
