@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createDecisionsReviewer, reviewEvidence, DECISIONS } from '../api/decisions-review.mjs';
+import { createDecisionsReviewer, reviewEvidence, DECISIONS, sameModel } from '../api/decisions-review.mjs';
 import { sha256 } from '../api/http.mjs';
 import { generation } from './helpers/generation-database.mjs';
 
@@ -96,6 +96,23 @@ test('a provider timeout/malformed response is unverified, never retried, and ca
     // Simulate an Edge termination after reservation. Even another instance cannot redispatch it.
     await ctx.sql.query("update public.af_decision_reviews set report = jsonb_set(report,'{status}','\"request_started\"') where scope='look-a'");
     assert.equal((await review(ctx, job, body)).body.review.status, 'request_started'); assert.equal(calls, 2);
+  } finally { await ctx.sql.close(); }
+});
+
+test('a dated snapshot of the requested model completes and is recorded; another model does not', async () => {
+  assert.equal(sameModel('gpt-6-luna'), true);
+  assert.equal(sameModel('gpt-6-luna-2026-10-01'), true);
+  assert.equal(sameModel('gpt-6-lunar'), false);
+  assert.equal(sameModel(undefined), false);
+  let answered = 'gpt-6-luna-2026-10-01';
+  const ctx = await generation({ decisionsReviewer: createDecisionsReviewer({ enabled: true, apiKey: 'secret-placeholder',
+    fetcher: async (_, init) => Response.json(goodResponse(JSON.parse(init.body), { model: answered })) }) });
+  try {
+    const job = await appearance(ctx), body = await pose();
+    const snapshot = (await review(ctx, job, body)).body.review;
+    assert.deepEqual([snapshot.status, snapshot.responseModel], ['completed', 'gpt-6-luna-2026-10-01']);
+    answered = 'gpt-6-lunar';
+    assert.equal((await review(ctx, job, { ...body, scope: 'look-b' })).body.review.status, 'unverified');
   } finally { await ctx.sql.close(); }
 });
 

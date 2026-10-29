@@ -23,15 +23,34 @@ import { NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mj
 
 const reviewHash = bytes => createHash('sha256').update(bytes).digest('hex');
 export const serverReviewEnabled = (job, api) => job.decisionsReview?.mode === 'shadow' && typeof api.decisions === 'function';
-export async function reviewOnServer({ api, job, dir, stage, scope, images }) {
+/** What the server takes for one review image (api/decisions-review.mjs DECISIONS): its bytes and its longest side. */
+export const EVIDENCE_LIMIT = Object.freeze({ bytes: 2 * 1024 * 1024, side: 2048 });
+/** A PNG's width and height from its header, or null for anything else. */
+export function pngSize(bytes) {
+  if (bytes.length < 24 || bytes.readUInt32BE(0) !== 0x89504e47 || bytes.toString('latin1', 12, 16) !== 'IHDR') return null;
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+}
+/** Whether an image is sent as it is: a PNG within both limits. Anything else (a reference JPEG or WebP, a large look) is fitted first. */
+export const fitsAsIs = bytes => {
+  const size = pngSize(bytes);
+  return bytes.length <= EVIDENCE_LIMIT.bytes && size !== null && Math.max(size.width, size.height) <= EVIDENCE_LIMIT.side;
+};
+
+export async function reviewOnServer({ api, job, dir, stage, scope, images, fit }) {
   if (!serverReviewEnabled(job, api)) return null;
   let body, fingerprint, out;
   try {
     const encoded = [];
     for (const image of images) {
-      const bytes = await readFile(image.file);
-      if (bytes.length > 2 * 1024 * 1024) throw Error('evidence-limit');
-      const type = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[path.extname(image.file).toLowerCase()];
+      let file = image.file, bytes = await readFile(file);
+      // An image past the server's limits used to end the review as unverified; it is fitted (lossless) when the worker can.
+      if (fit && !fitsAsIs(bytes)) {
+        const fitted = path.join(dir, 'decisions', 'evidence', `${reviewHash(bytes).slice(0, 24)}.webp`);
+        if (!existsSync(fitted)) { await mkdir(path.dirname(fitted), { recursive: true }); await fit(file, fitted); }
+        file = fitted; bytes = await readFile(file);
+      }
+      if (bytes.length > EVIDENCE_LIMIT.bytes) throw Error('evidence-limit');
+      const type = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[path.extname(file).toLowerCase()];
       if (!type) throw Error('evidence-type');
       encoded.push({ role: image.role, sha256: reviewHash(bytes), dataUrl: `data:${type};base64,${bytes.toString('base64')}`,
         ...(image.durationMs === undefined ? {} : { durationMs: image.durationMs }) });
@@ -48,7 +67,9 @@ export async function reviewOnServer({ api, job, dir, stage, scope, images }) {
     try { await writeFile(out, JSON.stringify(record) + '\n', { flag: 'wx' }); }
     catch (error) { if (error.code === 'EEXIST') return JSON.parse(await readFile(out, 'utf8')); throw error; }
     const reply = await api.decisions(job, body);
-    const report = reply.ok && reply.review ? reply.review : { ...record, status: 'unverified', errorCode: 'server-review-unavailable' };
+    // The server's daily or per-job review limit is not an outage: it is named, so the numbers can tell them apart.
+    const report = reply.ok && reply.review ? reply.review
+      : { ...record, status: 'unverified', errorCode: reply.code === 'review-limit' ? 'review-limit' : 'server-review-unavailable' };
     await writeFile(out, JSON.stringify(report) + '\n');
     return report;
   } catch {
@@ -202,6 +223,13 @@ export function lookPick(value) {
 }
 
 /** Artifact names of a look round (`look-a-0`, `look-b-0`; a revision round counts up) and of a motion preview round. */
+/**
+ * Exit 75, or a report that asks the codex question: codex cannot run on this host now (signed out, or its usage is used up). Nothing was
+ * made, so the stage is tried again; the worker marks its codex health down (generation-worker.mjs) and claims nothing until a health
+ * check passes. A job whose stage keeps meeting it still ends after the server's three leases (`stage-attempts`).
+ */
+export const ASKS = 'provider-asks';
+const ASKED = Object.freeze({ retry: ASKS });
 export const lookNames = round => [`look-a-${round}`, `look-b-${round}`];
 export const previewName = (clip, round) => `motion-${clip.toLowerCase()}-${round}`;
 
@@ -319,7 +347,7 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * worker's API client; `fetchBytes(url)`; `toWebp(png, webp)` re-encodes a still (at most 1024 px); `motionsPy(args)` runs motions.py
  * on the kit's sprite-gen venv (pixels only, no provider) and resolves `{ code }`. Calls may overlap: `og` waits for a free codex slot.
  */
-export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS }) {
+export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS }) {
   // One loop alignment at a time on this worker: RIFE on the GPU takes about 4 GB, and a walk and a run aligning at once (or two jobs) ran
   // an 8 GB card out of memory (2026-10-28).
   let aligning = Promise.resolve();
@@ -335,10 +363,19 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
     const said = await readOutcome(report, { since });
     const verdict = judgeOutcome({ code, report: said });
     if (verdict.next === 'retry' || (!said && code === NOT_STARTED_EXIT)) return { retry: `${prefix}-exit-${code}` };
-    const review = { answer: 'provider-asks', resume: `${prefix}-unfinished`, inspect: `${prefix}-outcome-unknown` }[verdict.next]
+    if (verdict.next === 'answer') return ASKED;
+    const review = { resume: `${prefix}-unfinished`, inspect: `${prefix}-outcome-unknown` }[verdict.next]
       ?? (code === 3 ? `${prefix}-not-started` : `${prefix}-${verdict.codes[0] ?? `exit-${code}`}`);
     return { review, ...(verdict.requestIds.length ? { requestIds: verdict.requestIds } : {}) };
   }
+  // Decisions screening only annotates (it never gates, selects or retries), so it runs beside the stage's own work instead of before
+  // it. The stage waits for it only before it returns: the review route needs the stage's lease, which ends with the stage.
+  let screening = [];
+  const screen = args => { screening.push(Promise.resolve().then(() => reviewOnServer({ api, fit: fitImage, ...args })).catch(() => null)); };
+  const screened = stage => async (job, dir) => {
+    screening = [];
+    try { return await stage(job, dir); } finally { await Promise.allSettled(screening); screening = []; }
+  };
   const asOutcome = r => r.retry ? { outcome: 'retry', result: { code: r.retry } }
     : { outcome: 'review', result: { code: r.review, ...(r.requestIds ? { requestIds: r.requestIds } : {}) } };
   async function brief(job, dir) {
@@ -379,15 +416,17 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
     const promptFile = path.join(dir, 'looks', `prompt-${round}.txt`);
     await mkdir(path.dirname(promptFile), { recursive: true });
     await writeFile(promptFile, appearancePrompt(job.brief, note));
-    await reviewOnServer({ api, job, dir, stage: 'input', scope: 'design', images: refs.slice(0, 3).map(file => ({ file, role: 'reference' })) });
+    screen({ job, dir, stage: 'input', scope: 'design', images: refs.slice(0, 3).map(file => ({ file, role: 'reference' })) });
     // Both looks at once (one codex slot each; og waits for a free one, and the engine finds each run's picture by its own session).
     const since = Date.now();
     const made = await Promise.all(names.map(async name => {
       const png = path.join(dir, 'looks', `${name}.png`), report = path.join(dir, 'looks', `${name}.report.json`);
+      // A look this round already made (the stage runs again because the other one failed) is kept: making it again pays twice.
+      if (existsSync(png) && await finishedLook(report)) return { name, png, report, code: 0 };
       const { code } = await og(appearanceCommand({ promptFile, out: png, report, refs }));
       return { name, png, report, code };
     }));
-    if (made.some(look => look.code === 75)) return { outcome: 'review', result: { code: 'provider-asks' } };
+    if (made.some(look => look.code === 75)) return asOutcome(ASKED);
     const failed = made.find(look => look.code !== 0 || !existsSync(look.png));
     if (failed) return failed.code === 0 ? { outcome: 'retry', result: { code: 'look-exit-0' } }
       : asOutcome(await failedRun('look', failed.code, failed.report, since));
@@ -395,12 +434,17 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       const webp = png.replace(/\.png$/, '.webp');
       await toWebp(png, webp);
       await api.artifact(job, name, await readFile(webp));
-      await reviewOnServer({ api, job, dir, stage: 'pose', scope: name.startsWith('look-a-') ? 'look-a' : 'look-b',
+      screen({ job, dir, stage: 'pose', scope: name.startsWith('look-a-') ? 'look-a' : 'look-b',
         images: [...refs.slice(0, 3).map(file => ({ file, role: 'reference' })), { file: png, role: 'candidate', durationMs: 100 }] });
     }
     // 맡기기: the first round is ours to pick. Once the creator wrote a change, the look is his to choose.
     const choice = job.delegate && !note ? await pickLook(job, dir, made) : null;
     return { outcome: 'ok', result: { candidates: names, ...(choice ? { choice } : {}) } };
+  }
+
+  /** Whether `gen` said it finished this look: its report's `ok`. A report that is missing or unreadable is not finished. */
+  async function finishedLook(report) {
+    try { return JSON.parse(await readFile(report, 'utf8')).ok === true; } catch { return false; }
   }
 
   /** 맡기기: the look judge's pick of the two candidates, or null when it picked none or could not answer (the creator is asked). */
@@ -475,7 +519,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       const since = Date.now();
       const { code } = await og(sprite('video-set', '--base', `side@right=${input.still}`, '--facing', 'right', '--states', gait, '--key', input.key,
         '--out-dir', clip, '--character', character, '--concurrency', '1', ...motion));
-      if (code === 75) return { review: 'provider-asks' };
+      if (code === 75) return ASKED;
       // No clip at all (a limit, an outage): try the stage later rather than film again with other words, unless the set report
       // says a request xAI took is unfinished (resume it), its outcome cannot be told, or the same run would fail again.
       if (code !== 0 && !existsSync(path.join(item, 'frames', 'keyed')) && !existsSync(path.join(item, 'loop')))
@@ -552,7 +596,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       }
       const since = Date.now();
       const { code } = await og(sprite('gen-set', '--run-dir', run, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '1'));
-      if (code === 75) return { review: 'provider-asks' };
+      if (code === 75) return ASKED;
       if (code !== 0) return failedRun('rows', code, path.join(run, 'reports', 'gen-set', 'set.report.json'), since);
       if ((await og(sprite('extract', '--run-dir', run))).code !== 0) return { review: 'rows-extract' };
       overrides.push({ run, row, cells });
@@ -659,7 +703,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       }
       const since = Date.now();
       const { code } = await og(sprite('gen-set', '--run-dir', rows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '2'));
-      if (code === 75) return { review: 'provider-asks' };
+      if (code === 75) return ASKED;
       if (code !== 0) return failedRun('rows', code, path.join(rows, 'reports', 'gen-set', 'set.report.json'), since);
       if ((await og(sprite('extract', '--run-dir', rows))).code !== 0) return { review: 'rows-extract' };
       // The creator's changes to action clips, in order: each remade row's named cells replace the first run's.
@@ -693,7 +737,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
         await writeFile(promptFile, gaitStillPrompt(job.brief));
         const since = Date.now(), report = path.join(m, 'gait-still-look.report.json');
         const { code } = await og(appearanceCommand({ promptFile, out: relaxedLook, report, refs: [look] }));
-        if (code === 75) return { review: 'provider-asks' };
+        if (code === 75) return ASKED;
         if (code !== 0) return failedRun('gait-still', code, report, since);
         if (!existsSync(relaxedLook)) return { retry: 'gait-still-exit-0' };
       }
@@ -773,7 +817,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
           const made = await motionsPy(['decision-frames', path.join(asm, 'pack', 'game-pack.json'), gait, evidenceDir]);
           if (made.code !== 0) throw Error('evidence-unavailable');
           const durations = await readJson(path.join(evidenceDir, 'durations.json'));
-          await reviewOnServer({ api, job, dir, stage: 'sequence', scope: gait,
+          screen({ job, dir, stage: 'sequence', scope: gait,
             images: [{ file: path.join(evidenceDir, 'identity.png'), role: 'reference' },
               ...durations.map((durationMs, i) => ({ file: path.join(evidenceDir, `frame-${i}.png`), role: 'candidate', durationMs }))] });
         } catch {
@@ -820,7 +864,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
     return { outcome: 'ok', result: { submissionId: created.submissionId } };
   }
 
-  return { queued: brief, appearance, motions, submitting };
+  return { queued: brief, appearance: screened(appearance), motions: screened(motions), submitting };
 }
 
 /** Files in a job folder, for a log line (never their contents). */

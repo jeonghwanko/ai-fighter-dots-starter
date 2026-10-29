@@ -121,10 +121,12 @@ function main(argv) {
     appendFileSync(argv[1], JSON.stringify(entry(fields)) + '\n', { mode: 0o600 });
     return 0;
   }
-  const runsOnly = argv.includes('--runs'), [file, job] = argv.filter(a => a !== '--runs');
-  if (!file) { console.error('usage: ledger-report.mjs <ledger> [job] [--runs]'); return 2; }
-  if (!existsSync(file)) { console.log('기록 없음'); return 0; }
+  // --json: the summary as data, for scripts/measure-export.mjs (docs/MEASUREMENT.md).
+  const runsOnly = argv.includes('--runs'), asJson = argv.includes('--json'), [file, job] = argv.filter(a => a !== '--runs' && a !== '--json');
+  if (!file) { console.error('usage: ledger-report.mjs <ledger> [job] [--runs | --json]'); return 2; }
+  if (!existsSync(file)) { console.log(asJson ? JSON.stringify({ jobs: [], providers: {}, warnings: [], skipped: 0 }) : '기록 없음'); return 0; }
   const { entries, skipped } = parse(readFileSync(file, 'utf8'));
+  if (asJson) { console.log(JSON.stringify({ ...summarize(entries, job), skipped })); return 0; }
   console.log(runsOnly ? renderRuns(entries, job) : render(summarize(entries, job), skipped));
   return 0;
 }

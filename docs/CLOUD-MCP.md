@@ -30,10 +30,10 @@ Grok은 `https://grok.com/connectors-oauth-exchange-code/`, Cursor의 Grok Bot(�
 "돌아가기" 링크도 그 에이전트를 따른다. xAI는 이 콜백을 문서로 내지 않아 사용자 보고에서 가져왔다. 실제 Grok 연결로 한 번 확인한다.
 MCP 함수의 브라우저 Origin 허용 목록에도 `grok.com`·`www.grok.com`·`cursor.com`·`www.cursor.com`이 있다.
 
-Claude 연결(2026-10-28): claude.ai → 설정 → 커넥터(`https://claude.ai/settings/connectors`) → 커스텀 커넥터 추가. 이름 `ODDBOUT`, 서버 URL은 위 주소다.
+Claude 연결(2026-10-28, 주소 2026-10-29): claude.ai → 사용자 지정 → 커넥터(`https://claude.ai/customize/connectors`) → 커스텀 커넥터 추가. 이름 `ODDBOUT`, 서버 URL은 위 주소다.
 추가한 뒤 연결을 누르고 Google로 로그인해 승인한다. 동의 화면은 Anthropic의 MCP 콜백 `https://claude.ai/api/mcp/auth_callback`·
 `https://claude.com/api/mcp/auth_callback`으로만 돌아간다. Claude 웹·데스크톱·모바일과 Claude Code는 이 커넥터 하나를 함께 쓴다.
-Claude Code의 직접 연결(`claude mcp add`)은 loopback 콜백이라 받지 않는다. 그림을 받는 도구(`prepare_fighter_registration`의 파일,
+Claude Code는 이 커넥터를 쓰거나, 아래 [터미널·편집기 에이전트](#터미널편집기-에이전트-2026-10-29)처럼 직접 연결한다. 그림을 받는 도구(`prepare_fighter_registration`의 파일,
 `upload_fighter_asset`, `request_hosted_fighter`의 그림)는 OpenAI 파일 호스트만 받으므로 Claude에서는 글로만 만든다.
 MCP 함수의 Origin 허용 목록에 `claude.ai`·`claude.com`이 있다. 2026-10-28 실제 연결로 확인했다: Claude가 이름 `Claude`, 돌아갈 주소
 `https://claude.ai/api/mcp/auth_callback`으로 클라이언트를 자동 등록했다. 그때 겪은 것:
@@ -46,6 +46,38 @@ MCP 함수의 Origin 허용 목록에 `claude.ai`·`claude.com`이 있다. 2026-
   클라이언트 ID·시크릿은 비워 둔다.
 - 추가할 때 "서버를 확인할 수 없습니다"가 나오면 `mcp.oddbout.com`의 Render 무료 서버가 잠들어 있던 것일 수 있다. 잠시 뒤 다시 시도한다
   (운영자 PC가 14분마다 깨운다).
+
+사이트의 Claude 안내(2026-10-29)는 위 공개 주소 대신 로그인 먼저 주소(`SIGN_IN_RESOURCE`)를 준다. 첫 요청이 401과 `WWW-Authenticate`를 받으므로
+Claude가 인증을 OAuth로 감지한다. 그래서 "로그인 없음"을 "지금 로그인"으로 바꾸는 단계가 없어진다. Grok에서 같은 주소로 실제 연결을 확인했다(2026-10-29).
+Claude에서는 아직 실제로 확인하지 않았다. 게시 뒤 한 번 연결해 확인한다(게임 `8bf1ed8e7`). OAuth 클라이언트는 그대로 "자동으로 등록"을 고른다.
+
+## 터미널·편집기 에이전트 (2026-10-29)
+
+Claude Code, Codex(CLI·앱·IDE 확장이 설정을 함께 쓴다), Gemini CLI는 자기 PC의 loopback 콜백(`http://127.0.0.1:<포트>/…`,
+`http://localhost:<포트>/…`)으로 클라이언트를 동적 등록한다. Supabase Auth의 동적 등록은 http를 loopback에만 받는다(supabase/auth PR #2298).
+MCP 인가 명세(2025-11-25)는 redirect를 `localhost` 또는 https로 정하고, 동의 화면에 redirect 호스트를 보이고 loopback이면 경고하라고 한다.
+
+- 동의 화면(`web/cloud-connect/connect.mjs`의 `agentOf`)은 loopback 주소(`127.0.0.1`·`[::1]`·`localhost`, http, 아무 포트·경로)를 `local`로 받는다.
+  그 밖의 127/8 주소, `0.0.0.0`, 닮은 호스트, 계정 정보가 든 주소, 앱 스킴(`cursor://`)은 받지 않는다.
+- `local` 요청은 "이 컴퓨터의 앱"으로 부른다. 클라이언트 이름은 클라이언트가 스스로 정한 값이라 믿지 않는다. 이름 옆에 돌아갈 호스트와 포트를 보이고,
+  승인 버튼 위에 경고(`localWarning`)를 둔다. 오류 때 링크는 사이트의 내 에이전트(`creator.html#view=agents`)다.
+- 서버 주소는 로그인 먼저 주소다. 공개 주소는 로그인 없이 답하므로 CLI가 인증이 필요 없다고 본다. 로그인 먼저 주소는 POST·GET·HEAD에 401을 준다.
+  Gemini CLI는 연결 전에 HEAD로 묻는다.
+- MCP 함수의 Origin 허용 목록은 바꾸지 않는다. 이 CLI들은 브라우저가 아니라 Origin을 보내지 않는다.
+
+```bash
+# Claude Code: 추가한 뒤 Claude Code에서 /mcp → oddbout → Authenticate
+claude mcp add --transport http --scope user oddbout https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin
+# Codex: 추가한 뒤 로그인(브라우저가 열린다)
+codex mcp add oddbout --url https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin
+codex mcp login oddbout
+# Gemini CLI: 추가한 뒤 Gemini CLI에서 /mcp auth oddbout
+gemini mcp add --transport http --scope user oddbout https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin
+```
+
+로그인은 같은 PC의 브라우저가 loopback 콜백에 닿아야 한다. SSH로 접속한 원격 PC·컨테이너에서는 브라우저가 그 PC의 loopback에 닿지 않는다.
+사이트의 내 에이전트는 등록 이름으로 칸을 고른다: `Codex` → Codex, `Claude Code` → Claude, `Gemini CLI MCP Client` → Gemini.
+그림을 받는 도구는 OpenAI 파일 호스트만 받으므로 이 에이전트들은 글로 만든다.
 
 사이트에서 보기(2026-10-28): oddbout.com 제작자 페이지의 My agents(`creator.html#view=agents`)가 Codex(ChatGPT·Dots)·Grok·Claude 카드에 연결을 보이고,
 연결을 끊는다(Supabase Auth의 `auth.oauth.listGrants`·`revokeGrant`). 카드 목록은 `af_account_agents`가 계정에 둔다.

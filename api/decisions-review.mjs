@@ -87,8 +87,10 @@ export function questions(stage) {
       { value: 'defect', description: 'A visible contradiction or defect for this criterion.' },
       { value: 'unverified', description: 'Missing, hidden, ambiguous or insufficient evidence.' }] }));
 }
+/** The requested model, or a dated snapshot of it (`gpt-6-luna-2026-10-01`): the API may answer with the snapshot it ran. */
+export const sameModel = model => typeof model === 'string' && (model === DECISIONS.model || model.startsWith(`${DECISIONS.model}-`));
 function checkedAnswers(response, expected) {
-  if (response?.model !== DECISIONS.model || !Array.isArray(response.answers) || response.answers.length !== expected.length) throw Error('invalid-response');
+  if (!sameModel(response?.model) || !Array.isArray(response.answers) || response.answers.length !== expected.length) throw Error('invalid-response');
   const checks = {};
   for (const a of response.answers) {
     if (!a || !expected.some(q => q.name === a.name) || Object.hasOwn(checks, a.name)) throw Error('invalid-response');
@@ -186,7 +188,7 @@ export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fet
         if (!response.ok) { await response.body?.cancel(); throw Error('provider-refused'); }
         const value = JSON.parse(new TextDecoder().decode(await readBody(response, 128 * 1024)));
         usage = usageOf(value.usage);
-        report = { status: 'completed', checks: checkedAnswers(value, qs) };
+        report = { status: 'completed', responseModel: String(value.model).slice(0, 64), checks: checkedAnswers(value, qs) };
       } catch {
         // No provider response bodies, exception strings, prompts or headers in reports/logs.
         report = { status: 'unverified', errorCode: 'provider-outcome-unverified', checks: Object.fromEntries(qs.map(q => [q.name, { status: 'unverified' }])) };

@@ -56,8 +56,10 @@ function usageOf(value) {
       (out[group] ??= {})[name] = value[group][name];
   return Object.keys(out).length ? out : null;
 }
+// The requested model, or a dated snapshot of it: the Responses API answers with the snapshot it ran (`gpt-6.1-sol-2026-10-01`).
+const sameModel = (answered, model) => typeof answered === 'string' && (answered === model || answered.startsWith(`${model}-`));
 function checksOf(value, model, names, count) {
-  if (value.model !== model || value.status !== 'completed' || !Array.isArray(value.output)) throw Error('invalid-response');
+  if (!sameModel(value.model, model) || value.status !== 'completed' || !Array.isArray(value.output)) throw Error('invalid-response');
   const parts = value.output.filter(o => o.type === 'message').flatMap(o => o.content ?? []);
   if (parts.length !== 1 || parts[0].type !== 'output_text') throw Error('invalid-response');
   const answers = JSON.parse(parts[0].text);

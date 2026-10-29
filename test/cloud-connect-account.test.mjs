@@ -91,11 +91,49 @@ test('each agent comes back only to its own callback addresses', () => {
   assert.equal(agentOf('https://claude.com/api/mcp/auth_callback'), 'claude');
   for (const refused of ['https://grok.com/', 'https://grok.com/connectors-oauth-exchange-code-evil', 'http://grok.com/connectors-oauth-exchange-code/',
     'https://www.cursor.com/settings', 'https://cursor.com/agents/mcp/oauth/callback', 'https://grok.com:8443/connectors-oauth-exchange-code/',
-    'https://user@grok.com/connectors-oauth-exchange-code/', 'http://localhost:8787/callback', 'cursor://anysphere.cursor-mcp/oauth/callback', 'not a url',
+    'https://user@grok.com/connectors-oauth-exchange-code/', 'cursor://anysphere.cursor-mcp/oauth/callback', 'not a url',
     'https://claude.ai/', 'https://claude.ai/settings/connectors', 'https://claude.ai/api/mcp/auth_callback-evil', 'http://claude.ai/api/mcp/auth_callback',
-    'https://www.claude.ai/api/mcp/auth_callback', 'https://claude.ai.evil.example/api/mcp/auth_callback', 'http://localhost:33418/callback',
+    'https://www.claude.ai/api/mcp/auth_callback', 'https://claude.ai.evil.example/api/mcp/auth_callback',
     'https://claude.ai/api/mcp/auth_callback/x', 'https://claude.ai/api/mcp/auth_callback/..%2f..%2fx', 'https://claude.com/api/mcp/auth_callback/'])
     assert.equal(agentOf(refused), null, refused);
+});
+
+// An app on this computer (2026-10-29): Claude Code, Codex and Gemini CLI register a loopback callback on a port of their own. Only the loopback
+// literals and localhost over http, any port and path; a look-alike host, credentials, another 127/8 address, https or an app scheme are refused.
+test('an app on this computer comes back on a loopback callback, nowhere else', () => {
+  for (const local of ['http://127.0.0.1:52381/callback', 'http://127.0.0.1:52381/callback/b7f1c0de?code=x&state=y', 'http://localhost:7777/oauth/callback',
+    'http://localhost:3118/callback', 'http://[::1]:8080/cb', 'http://127.0.0.1/callback', 'http://LOCALHOST:7777/oauth/callback'])
+    assert.equal(agentOf(local), 'local', local);
+  for (const refused of ['http://127.0.0.1.evil.example:7777/callback', 'http://localhost.evil.example/callback', 'http://user@127.0.0.1:7777/callback',
+    'http://user:pass@localhost:7777/callback', 'http://127.0.0.2:7777/callback', 'http://0.0.0.0:7777/callback', 'http://192.168.0.10:7777/callback',
+    'https://localhost:7777/callback', 'http://localhost.:7777/callback', 'cursor://anysphere.cursor-mcp/oauth/callback', 'vscode://callback',
+    'javascript://localhost/%0aalert(1)', 'file://localhost/etc/passwd'])
+    assert.equal(agentOf(refused), null, refused);
+});
+
+test('a local app is consented as an app on this computer, with its host and port, a warning, and its approval goes back to it', async () => {
+  const h = harness({ language: 'ko', details: { redirect_uri: 'http://localhost:7777/oauth/callback', client: { name: 'Gemini CLI MCP Client' } },
+    approved: 'http://localhost:7777/oauth/callback?code=abc&state=xyz' });
+  await start(h.env);
+  assert.equal(h.element('local-warning').hidden, true);
+  await h.element('continue-account').onclick();
+  assert.equal(h.element('consent').hidden, false);
+  assert.equal(h.element('panel-title').textContent, '이 컴퓨터의 앱에 연결할까요?');
+  // The name is the client's own claim; the host and port are where the code goes.
+  assert.equal(h.element('client').textContent, 'Gemini CLI MCP Client · localhost:7777');
+  assert.equal(h.element('local-warning').hidden, false);
+  assert.equal(h.element('retry-link').href, 'https://oddbout.com/creator.html#view=agents');
+  await h.element('approve').onclick();
+  assert.deepEqual(h.redirects, ['http://localhost:7777/oauth/callback?code=abc&state=xyz']);
+});
+
+test('a web agent shows no local warning', async () => {
+  const h = harness({ details: { redirect_uri: 'https://claude.ai/api/mcp/auth_callback', client: { name: 'Claude' } } });
+  await start(h.env); await h.element('continue-account').onclick();
+  assert.equal(h.element('consent').hidden, false); assert.equal(h.element('local-warning').hidden, true);
+  assert.equal(h.element('client').textContent, 'Claude · claude.ai');
+  // Claude keeps its connectors under Customize (2026-10-29); settings/connectors only says they moved.
+  assert.equal(h.element('retry-link').href, 'https://claude.ai/customize/connectors');
 });
 
 test('the copy names the agent with the particles its sound takes', () => {
@@ -105,6 +143,8 @@ test('the copy names the agent with the particles its sound takes', () => {
   assert.equal(fillAgent(copy.ko.consentTitle, agentWords.ko.claude), 'Claude에 연결할까요?');
   assert.equal(fillAgent(copy.ko.returnDots, agentWords.ko.claude), 'Claude로 돌아가기');
   assert.equal(fillAgent(copy.en.consentTitle, agentWords.en.any), 'Connect to your agent?');
+  assert.equal(fillAgent(copy.ko.consentTitle, agentWords.ko.local), '이 컴퓨터의 앱에 연결할까요?');
+  assert.equal(fillAgent(copy.en.consentTitle, agentWords.en.local), 'Connect to an app on this computer?');
   for (const language of ['ko', 'en']) for (const text of Object.values(copy[language])) {
     for (const words of Object.values(agentWords[language])) assert.doesNotMatch(fillAgent(text, words), /[{}]/);
   }

@@ -308,6 +308,10 @@ test('the sign-in-first address asks every request for a sign-in; mcp.oddbout.co
   }
   const probe = await handle(new Request(SIGN_IN_RESOURCE, { headers: { accept: 'text/event-stream' } }));
   assert.equal(probe.status, 401); assert.match(probe.headers.get('www-authenticate'), /signin\/\.well-known/);
+  // Gemini CLI probes with HEAD before it connects (2026-10-29): there too, a sign-in is asked; the public address keeps its 405.
+  const head = await handle(new Request(SIGN_IN_RESOURCE, { method: 'HEAD' }));
+  assert.equal(head.status, 401); assert.equal(head.headers.get('www-authenticate'), `Bearer resource_metadata="${metadataUrl}", scope="openid email profile"`);
+  assert.equal((await handle(new Request(CLOUD_RESOURCE, { method: 'HEAD' }))).status, 405);
   const metadata = await (await handle(new Request(metadataUrl))).json();
   assert.equal(metadata.resource, SIGN_IN_RESOURCE); assert.deepEqual(metadata.authorization_servers, [CLOUD_ISSUER]);
   // Signed in, the same server and tools.

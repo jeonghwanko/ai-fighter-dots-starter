@@ -43,6 +43,7 @@ KIT_REF=${OG_KIT_REF:-d5ad7bf6649dfa0220b48a413b6fe273691a32a4}
 CODEX_VERSION=0.165.0
 GROK_VERSION=1.0.52
 RUN_TIMEOUT=${OG_RUN_TIMEOUT:-5400}
+SLOT_WAIT=${OG_SLOT_WAIT:-1800}
 LEDGER=$G/ledger.jsonl
 PINS=$G/accounts.json
 # sprite-gen-agent 3.4 tools that never reach a provider, and the Grok video/audio ones. Any other sprite tool may call
@@ -146,6 +147,9 @@ acquire_slots() {
   [ "$k" -gt 0 ] || return 0
   [ "$k" -le "$SLOTS" ] || die "needs $k codex slots, only $SLOTS exist"
   if [ ! -d "$SLOT_DIR" ]; then (umask 000; mkdir -p "$SLOT_DIR"; chmod 1777 "$SLOT_DIR"); fi
+  # Bounded (2026-10-29): a run needing two slots could wait forever behind single-slot runs. Past SLOT_WAIT this fails, and og run
+  # refuses the run before it starts (exit 3), so the worker runs the stage again later.
+  local until=$((SECONDS + SLOT_WAIT))
   while :; do
     HELD=()
     for ((i = 0; i < SLOTS && ${#HELD[@]} < k; i++)); do
@@ -156,6 +160,7 @@ acquire_slots() {
     done
     [ ${#HELD[@]} -ge "$k" ] && return 0
     release_slots   # all or nothing: two runs holding half each would wait forever
+    [ "$SECONDS" -lt "$until" ] || return 1
     sleep 4
   done
 }
@@ -351,7 +356,7 @@ cmd_health() {
     if ! (guard_account $p) 2>"$err"; then echo "og: $p NOT READY — $(sed 's/^og: //' "$err")"; continue; fi
     t=$(now_ms); rc=0
     if [ $p = codex ]; then
-      acquire_slots 1
+      if ! acquire_slots 1; then echo "og: codex NOT READY — no free codex slot within ${SLOT_WAIT}s"; continue; fi
       out=$(in_slice "${SVC_ENV[@]}" timeout 180 codex exec --skip-git-repo-check --sandbox read-only \
         "Reply with the single word ok." 2>"$err") || rc=$?
       release_slots
@@ -471,7 +476,11 @@ cmd_run() {
   trap 'finish_run 143; exit 143' TERM
   ledger --job "$job" --kind run --phase start --run "$RUN_ID" --tool "$RUN_TOOL" --provider "$RUN_PROVIDER" --account "$RUN_ACCOUNT"
   t1=$(now_ms)
-  acquire_slots "$k"
+  if ! acquire_slots "$k"; then
+    RUN_WAIT=$(($(now_ms) - t1)); finish_run 3; trap - HUP INT TERM
+    echo "og: no $k free codex slot(s) within ${SLOT_WAIT}s — not started" >&2
+    return 3
+  fi
   RUN_WAIT=$(($(now_ms) - t1)); RUN_T0=$(now_ms)
   (cd "$KIT" && in_slice "${SVC_ENV[@]}" TMPDIR="$dir/.tmp" timeout --kill-after=30 "$RUN_TIMEOUT" "$@") || rc=$?
   finish_run $rc
