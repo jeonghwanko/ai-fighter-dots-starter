@@ -14,6 +14,12 @@ import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 export const CLOUD_RESOURCE = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
 export const LEGACY_PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
 export const PUBLIC_RESOURCE = 'https://mcp.oddbout.com/mcp';
+/**
+ * Sign-in first (2026-10-28): the same server at `<function>/signin` asks every request for a sign-in, not only the account tools. Grok's custom
+ * connector has no option for it: it decides at its first request whether a server needs one. At mcp.oddbout.com the public tools answer signed
+ * out (ChatGPT relies on that), so Grok connected without an account and never offered the sign-in. Its tokens carry the same audience.
+ */
+export const SIGN_IN_RESOURCE = `${CLOUD_RESOURCE}/signin`;
 export function validCloudAudience(aud) {
   const current = [CLOUD_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_RESOURCE];
   if (typeof aud === 'string') return current.includes(aud);
@@ -571,9 +577,11 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     const url = new URL(request.url);
     // The Edge gateway may strip /functions/v1 and replace the origin before forwarding.
     const segments = url.pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter-mcp');
-    const route = (prefix < 0 ? segments : segments.slice(prefix + 1)).join('/');
+    const path = prefix < 0 ? segments : segments.slice(prefix + 1), signInFirst = path[0] === 'signin';
+    const route = (signInFirst ? path.slice(1) : path).join('/');
     const requestedResource = request.headers.get('x-oddbout-public-resource');
-    const resource = [PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE].includes(requestedResource) ? requestedResource : CLOUD_RESOURCE;
+    const resource = signInFirst ? SIGN_IN_RESOURCE
+      : [PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE].includes(requestedResource) ? requestedResource : CLOUD_RESOURCE;
     const metadataUrl = `${resource}/.well-known/oauth-protected-resource`;
     if (route === '.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource,
       authorization_servers: [CLOUD_ISSUER], scopes_supported: ['openid', 'email', 'profile'],
@@ -585,15 +593,20 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       'access-control-allow-origin': request.headers.get('origin') ?? 'https://chatgpt.com',
       'access-control-allow-methods': 'POST, GET, OPTIONS', 'access-control-allow-headers': 'Authorization, Content-Type, MCP-Protocol-Version',
       'access-control-expose-headers': 'WWW-Authenticate' } });
-    if (request.method !== 'POST') return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+    const unauthorized = () => json({ error: 'invalid_token' }, 401, { 'www-authenticate': `Bearer resource_metadata="${metadataUrl}", scope="openid email profile"` });
+    if (request.method !== 'POST') {
+      // A client that probes the sign-in-first address with GET learns there that it needs a sign-in.
+      if (signInFirst && request.method === 'GET' && !(await authenticateCloud(db, request).catch(() => null))) return unauthorized();
+      return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
+    }
     let body;
     try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 65536))); }
     catch { return json({ error: 'invalid_request' }, 400); }
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
     let identity = null;
-    if (body.method === 'tools/call' && !PUBLIC_TOOLS.has(body.params?.name)) {
+    if (signInFirst || (body.method === 'tools/call' && !PUBLIC_TOOLS.has(body.params?.name))) {
       try { identity = await authenticateCloud(db, request); } catch { /* fail closed */ }
-      if (!identity) return json({ error: 'invalid_token' }, 401, { 'www-authenticate': `Bearer resource_metadata="${metadataUrl}", scope="openid email profile"` });
+      if (!identity) return unauthorized();
     } else if (body.method === 'tools/call' && OWNER_BUDGET_TOOLS.has(body.params?.name) && request.headers.has('authorization')) {
       // A public tool whose budget is the caller's: a valid token counts it on its owner; anything else on every signed-out agent.
       try { identity = await authenticateCloud(db, request); } catch { identity = null; }

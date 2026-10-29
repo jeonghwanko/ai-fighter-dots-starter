@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudHandler, authenticateCloud, allowedFileUrl, downloadHostFile, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE } from '../mcp/cloud.mjs';
+import { createCloudHandler, authenticateCloud, allowedFileUrl, downloadHostFile, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE } from '../mcp/cloud.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { safeClientRedirect, authorizationId } from '../web/cloud-connect/connect.mjs';
 import { migratedDatabase } from './helpers/fighter-database.mjs';
@@ -290,4 +290,37 @@ test('browser calls are taken from the agents that connect (ChatGPT, Grok, Grok 
     assert.equal(response.status, 204, origin); assert.equal(response.headers.get('access-control-allow-origin'), origin);
   }
   for (const origin of ['https://evil.example', 'https://grok.com.evil.example', 'http://grok.com', 'https://claude.ai.evil.example']) assert.equal((await preflight(origin)).status, 403, origin);
+});
+
+// Grok's custom connector (2026-10-28) has no sign-in option: it signs in only when the server asks at its first request. At mcp.oddbout.com
+// the public tools answer signed out, so Grok connected without an account. The same server at `<function>/signin` asks every request.
+test('the sign-in-first address asks every request for a sign-in; mcp.oddbout.com still answers its public tools signed out', async () => {
+  const handle = createCloudHandler({ db: dbFor() });
+  const post = (url, method, auth = false, headers = {}) => handle(new Request(url, { method: 'POST', headers: { 'content-type': 'application/json',
+    accept: 'application/json, text/event-stream', ...(auth ? { authorization: `Bearer ${token}` } : {}), ...headers },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method, params: method === 'initialize'
+      ? { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'grok', version: '1' } } : {} }) }));
+  const metadataUrl = `${SIGN_IN_RESOURCE}/.well-known/oauth-protected-resource`;
+  for (const method of ['initialize', 'tools/list']) {
+    const denied = await post(SIGN_IN_RESOURCE, method);
+    assert.equal(denied.status, 401, method);
+    assert.equal(denied.headers.get('www-authenticate'), `Bearer resource_metadata="${metadataUrl}", scope="openid email profile"`);
+  }
+  const probe = await handle(new Request(SIGN_IN_RESOURCE, { headers: { accept: 'text/event-stream' } }));
+  assert.equal(probe.status, 401); assert.match(probe.headers.get('www-authenticate'), /signin\/\.well-known/);
+  const metadata = await (await handle(new Request(metadataUrl))).json();
+  assert.equal(metadata.resource, SIGN_IN_RESOURCE); assert.deepEqual(metadata.authorization_servers, [CLOUD_ISSUER]);
+  // Signed in, the same server and tools.
+  assert.equal((await (await post(SIGN_IN_RESOURCE, 'initialize', true)).json()).result.serverInfo.name, 'oddbout-cloud');
+  assert.ok((await (await post(SIGN_IN_RESOURCE, 'tools/list', true)).json()).result.tools.some(tool => tool.name === 'get_profile'));
+  // A revoked connection is asked again.
+  assert.equal((await createCloudHandler({ db: dbFor(claims(), false) })(new Request(SIGN_IN_RESOURCE, { method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) }))).status, 401);
+  // mcp.oddbout.com (and the function's own address) keep answering their public tools signed out.
+  for (const headers of [{ 'x-oddbout-public-resource': PUBLIC_RESOURCE }, {}]) {
+    assert.equal((await post(CLOUD_RESOURCE, 'initialize', false, headers)).status, 200);
+    assert.equal((await post(CLOUD_RESOURCE, 'tools/list', false, headers)).status, 200);
+  }
+  assert.equal((await handle(new Request(`${SIGN_IN_RESOURCE}/elsewhere`, { method: 'POST' }))).status, 404);
 });
