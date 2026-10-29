@@ -30,7 +30,7 @@ Grok은 `https://grok.com/connectors-oauth-exchange-code/`, Cursor의 Grok Bot(�
 "돌아가기" 링크도 그 에이전트를 따른다. xAI는 이 콜백을 문서로 내지 않아 사용자 보고에서 가져왔다. 실제 Grok 연결로 한 번 확인한다.
 MCP 함수의 브라우저 Origin 허용 목록에도 `grok.com`·`www.grok.com`·`cursor.com`·`www.cursor.com`이 있다.
 
-Claude 연결(2026-10-28): claude.ai → 설정 → 커넥터(`https://claude.ai/settings/connectors`) → 커스텀 커넥터 추가. 이름 `ODDBOUT`, 서버 URL은 위 주소다.
+Claude 연결(2026-10-28, 주소 2026-10-29): claude.ai → 사용자 지정 → 커넥터(`https://claude.ai/customize/connectors`) → 커스텀 커넥터 추가. 이름 `ODDBOUT`, 서버 URL은 위 주소다.
 추가한 뒤 연결을 누르고 Google로 로그인해 승인한다. 동의 화면은 Anthropic의 MCP 콜백 `https://claude.ai/api/mcp/auth_callback`·
 `https://claude.com/api/mcp/auth_callback`으로만 돌아간다. Claude 웹·데스크톱·모바일과 Claude Code는 이 커넥터 하나를 함께 쓴다.
 Claude Code는 이 커넥터를 쓰거나, 아래 [터미널·편집기 에이전트](#터미널편집기-에이전트-2026-10-29)처럼 직접 연결한다. 그림을 받는 도구(`prepare_fighter_registration`의 파일,
