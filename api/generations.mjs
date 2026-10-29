@@ -13,6 +13,16 @@ import { checkedManifest, storeAsset } from './submissions.mjs';
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
 import { BENCHMARK_BODY_BYTES } from './sequence-benchmark.mjs';
+/**
+ * A row of af_generation_jobs, as `select('*')` or a generation function returns it. Its jsonb columns are as the worker and the creator
+ * wrote them: `candidates` and `preview` are checked where they are read, the others passed on.
+ * @typedef {{ id: string, owner_id: string, status: string, description: string, language: string, brief: any, candidates: unknown,
+ *   choice: string | null, appearance_note: string | null, appearance_revisions: number, motion_note: any, motion_revisions: number,
+ *   preview: unknown, profile: any, submission_id: string | null, progress: number, error_code: string | null, lease_token: string | null,
+ *   lease_expires_at: string | null, created_at: string, updated_at: string, delegate: boolean, host_choice: string,
+ *   requested_host: string | null, assigned_host: string | null }} Job
+ * @typedef {{ id: string, path: string, content_type: string, width: number, height: number }} Upload  A job's reference picture (af_generation_uploads).
+ */
 
 export const GENERATION_BUCKET = 'af-generation';
 export const GENERATION_LIMITS = Object.freeze({ descriptionMin: 10, description: 600, refs: 2, refBytes: 4_000_000, refSide: Object.freeze([64, 4096]),
@@ -24,8 +34,10 @@ export const PREVIEW_NOTES = Object.freeze(['run-from-walk']);
 const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
 // A join code (내 PC 붙이기): made by the site for a signed-in host, copied into his PC's terminal once; 160 bits, so nobody guesses one.
 export const JOIN_CODE = /^ohj_[a-f0-9]{40}$/;
+/** @type {(bytes: Uint8Array) => string} */
 const hex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
 const workerToken = () => `afw_${hex(crypto.getRandomValues(new Uint8Array(32)))}`;
+/** @type {Record<string, number>} */
 const STATUS = { 'generation-unavailable': 409, 'generation-quota': 409, 'generation-capacity': 409, 'generation-state': 409, 'revision-limit': 409,
   'fighter-quota': 409, 'lease-lost': 409, 'rate-limit': 429, 'invalid-refs': 422, 'rights-required': 422, 'invalid-answer': 422,
   'invalid-result': 422, 'not-found': 404, 'account-disabled': 403, 'invite-required': 403,
@@ -38,32 +50,39 @@ const STATUS = { 'generation-unavailable': 409, 'generation-quota': 409, 'genera
 /** Stats the contract takes: 1-5 each, summing to 9 (`contracts/ai-fighter/validate.mjs`). */
 export const STAT_TOTAL = 9;
 
-/** Is this path the hosted generation's? */
+/** @type {(parts: string[]) => boolean} Is this path the hosted generation's? */
 export const generationRoute = parts => parts[0] === 'generations' || parts[0] === 'generation-worker';
 
+/** @type {(value: any) => string} An id from the path, a header or a body, checked here. */
 const id = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value.toLowerCase(); };
+/** @type {(value: unknown) => boolean} */
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+/** @type {(body: any, allowed: string[]) => Record<string, any>} A JSON object with only the allowed keys, checked here. */
 const fields = (body, allowed) => {
   if (!isObject(body) || Object.keys(body).some(key => !allowed.includes(key))) throw new Problem(422, 'invalid-body');
   return body;
 };
+/** @param {Request} request @param {number} limit */
 async function readJson(request, limit) {
   try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, limit))); }
   catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
 }
+/** @type {(job: string, name: string) => string} */
 export const artifactPath = (job, name) => `jobs/${job}/${name}.webp`;
 
 /**
  * The profile the creator confirms before registering: name and description (required), his fighter's names, bout lines and stats — each
  * within the v1 contract's limits. Null fields are left out; the worker fills the rest from the brief.
+ * @param {any} value  Unchecked: this checks it.
  */
 export function confirmedProfile(value) {
   const body = fields(value, ['name', 'description', 'names', 'lines', 'stats']);
+  /** @type {{ name: string, description: string, names?: Record<string, string>, lines?: Record<string, string>, stats?: { power: number, toughness: number, speed: number } }} */
   const out = { name: text(body.name, profileLimits.name, '/profile/name', { code: 'invalid-profile' }),
     description: text(body.description, profileLimits.description, '/profile/description', { lines: true, code: 'invalid-profile' }) };
-  for (const [key, allowed, max] of /** @type {[string, string[], number][]} */ ([['names', profileLimits.languages, profileLimits.displayName], ['lines', profileLimits.lineKeys, profileLimits.line]])) {
+  for (const [key, allowed, max] of /** @type {['names' | 'lines', string[], number][]} */ ([['names', profileLimits.languages, profileLimits.displayName], ['lines', profileLimits.lineKeys, profileLimits.line]])) {
     if (body[key] === undefined || body[key] === null) continue;
-    const part = fields(body[key], allowed), kept = {};
+    const part = fields(body[key], allowed), kept = /** @type {Record<string, string>} */ ({});
     for (const name of allowed) if (part[name] !== undefined && part[name] !== null && part[name] !== '')
       kept[name] = text(part[name], max, `/profile/${key}/${name}`, { code: 'invalid-profile' });
     if (Object.keys(kept).length) out[key] = kept;
@@ -78,11 +97,16 @@ export function confirmedProfile(value) {
 }
 
 /**
- * @param {{ db: any, authenticate: any, present: any, decisionsReviewer?: import('./http.mjs').Reviewer | null, responsesReviewer?: import('./http.mjs').Reviewer | null,
+ * @param {{ db: any, authenticate: { (request: Request, worker: false): Promise<string>, (request: Request, worker: 'generation'): Promise<string | null> },
+ *   present: (row: any) => Promise<object>, decisionsReviewer?: import('./http.mjs').Reviewer | null, responsesReviewer?: import('./http.mjs').Reviewer | null,
  *   cascadeReviewer?: import('./http.mjs').Reviewer | null }} options
+ *   `authenticate` resolves to the signed-in creator's id, or for a generation worker key to its host's id (null: the official host); it
+ *   throws a Problem for any other caller. `present` shows a submission row (as the database returns it) the way its creator reads it.
+ * @returns {import('./http.mjs').Route}
  */
 export function createGenerationHandler({ db, authenticate, present, decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null }) {
   const productionReviewer = cascadeReviewer ?? decisionsReviewer;
+  /** @param {string} name @param {Record<string, unknown>} args */
   async function call(name, args) {
     const { data, error } = await db.rpc(name, args);
     if (!error) return data;
@@ -91,33 +115,38 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     throw new Problem(503, 'database-unavailable');
   }
   const bucket = () => db.storage.from(GENERATION_BUCKET);
+  /** @param {string[]} paths @returns {Promise<Map<string, string>>} */
   async function signed(paths) {
     if (!paths.length) return new Map();
     const { data, error } = await bucket().createSignedUrls(paths, GENERATION_LIMITS.signedSeconds);
     if (error || !Array.isArray(data)) throw new Problem(503, 'storage-unavailable');
     return new Map(data.filter(item => !item.error && typeof item.signedUrl === 'string').map(item => [item.path, item.signedUrl]));
   }
+  /** @type {(row: Job) => string[]} */
   const candidatesOf = row => Array.isArray(row.candidates) ? row.candidates.filter(name => ARTIFACT.test(name ?? '')) : [];
+  /** @type {(row: Job) => Record<string, any>[]} The worker's preview clips whose clip and name check out. */
   const previewOf = row => Array.isArray(row.preview) ? row.preview.filter(p => isObject(p) && MOTIONS.includes(p.clip) && ARTIFACT.test(p.name ?? '')) : [];
-  /** The hosts a job names, by id: their names (and whether official) for its creator. */
+  /** The hosts a job names, by id: their names (and whether official) for its creator. @param {(string | null)[]} ids */
   async function hostsOf(ids) {
     const wanted = [...new Set(ids.filter(Boolean))];
     if (!wanted.length) return new Map();
     const { data, error } = await db.from('af_generation_hosts').select('id,name,official').in('id', wanted);
     if (error) throw new Problem(503, 'database-unavailable');
-    return new Map((data ?? []).map(h => [h.id, { id: h.id, name: h.name, official: h.official === true }]));
+    return new Map((data ?? []).map(/** @param {{ id: string, name: string, official: boolean }} h */ h => [h.id, { id: h.id, name: h.name, official: h.official === true }]));
   }
   // A job as its creator reads it: no lease, no prompt, no brief beyond its profile draft; pictures as signed URLs.
   // While the motions are made: the previews the worker put up as its branches passed (its latest `drafts` event, this round's).
+  /** @param {Job} row */
   async function draftsOf(row) {
     if (row.status !== 'motions') return [];
     const { data, error } = await db.from('af_generation_events').select('data').eq('job_id', row.id).eq('kind', 'drafts')
       .order('at', { ascending: false }).limit(1).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
     const round = `-${row.motion_revisions}`;
-    return (Array.isArray(data?.data?.clips) ? data.data.clips : []).filter(d => isObject(d) && MOTIONS.includes(d.clip)
+    return /** @type {any[]} */ (Array.isArray(data?.data?.clips) ? data.data.clips : []).filter(d => isObject(d) && MOTIONS.includes(d.clip)
       && ARTIFACT.test(d.name ?? '') && d.name.startsWith('draft-') && d.name.endsWith(round)).slice(0, MOTIONS.length);
   }
+  /** @param {Job} row */
   async function view(row) {
     const candidates = candidatesOf(row), preview = previewOf(row), drafts = await draftsOf(row);
     const hosts = await hostsOf([row.requested_host, row.assigned_host]);
@@ -138,6 +167,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       drafts: drafts.map(d => ({ clip: d.clip, url: urls.get(artifactPath(row.id, d.name)) ?? null })),
       host: { choice: row.host_choice ?? 'oddbout', requested: hosts.get(row.requested_host) ?? null, assigned: hosts.get(row.assigned_host) ?? null } };
   }
+  /** @param {string} owner @param {string} jobId @returns {Promise<Job>} */
   async function ownJob(owner, jobId) {
     const { data, error } = await db.from('af_generation_jobs').select('*').eq('id', id(jobId)).eq('owner_id', owner).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
@@ -145,11 +175,13 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     return data;
   }
   // The job the worker holds for its submission routes: his lease, and the job registering.
+  /** @param {Request} request @param {string} jobId @returns {Promise<Job>} */
   async function heldForSubmission(request, jobId) {
     const row = await call('af_generation_held', { p_id: id(jobId), p_token: id(request.headers.get('x-generation-lease')) });
     if (row.status !== 'submitting') throw new Problem(409, 'generation-state');
     return row;
   }
+  /** @param {Job} row */
   async function jobSubmission(row) {
     const { data, error } = await db.from('af_submissions').select('*').eq('owner_id', row.owner_id).eq('idempotency_key', row.id).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
@@ -160,6 +192,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   /**
    * A creator's own host (커뮤니티 호스트): his settings, whether he is on now, today's jobs and live keys, and his subscriptions as his worker
    * last checked them (`health` — the site's My agents shows them on his Codex and Grok cards). A removed host is none.
+   * @param {string} owner
    */
   async function ownHost(owner) {
     const { data, error } = await db.from('af_generation_hosts').select('*').eq('owner_id', owner).maybeSingle();
@@ -174,11 +207,13 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       dailyLimit: data.daily_limit, online: live, todayLeft: Math.max(data.daily_limit - (Number(today) || 0), 0), lastSeenAt: data.worker_seen_at ?? null,
       health: { codex: data.worker_health?.codex === true, grok: data.worker_health?.grok === true,
         checkedAt: typeof data.worker_health?.at === 'string' ? data.worker_health.at : null },
-      keys: (keys ?? []).filter(k => k.enabled && Date.parse(k.expires_at) > Date.now()).map(k => ({ expiresAt: k.expires_at })) };
+      keys: /** @type {{ expires_at: string, enabled: boolean }[]} */ (keys ?? []).filter(k => k.enabled && Date.parse(k.expires_at) > Date.now()).map(k => ({ expiresAt: k.expires_at })) };
   }
+  /** @type {(row: { id: string, name: string, approved: boolean, enabled: boolean, accepts_any: boolean, billing: string, daily_limit: number }) => object} */
   const hostView = row => ({ id: row.id, name: row.name, approved: row.approved, enabled: row.enabled, acceptsAny: row.accepts_any,
     billing: row.billing, dailyLimit: row.daily_limit });
 
+  /** @param {Request} request @param {string[]} parts @param {string} owner */
   async function creator(request, parts, owner) {
     const method = request.method, route = parts.join('/');
     if (route === 'generations/host') {
@@ -294,6 +329,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     throw new Problem(404, 'route-not-found');
   }
 
+  /** @param {Request} request @param {string[]} parts @param {string | null} host  The worker key's host (null: the official one). */
   async function worker(request, parts, host) {
     const method = request.method, route = parts.join('/');
     if (method === 'POST' && parts[1] === 'decision-benchmarks' && parts.length === 3)
@@ -350,8 +386,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const ids = jobs.map(id), official = host ? null : await call('af_generation_official', {});
       const { data, error } = await db.from('af_generation_jobs').select('id,status,assigned_host').in('id', ids);
       if (error) throw new Problem(503, 'database-unavailable');
+      /** @type {(row: { status: string }) => boolean} */
       const over = row => ['cancelled', 'expired', 'rejected', 'failed', 'submitted'].includes(row.status);
-      return { ok: true, ended: (data ?? []).filter(row => host ? row.assigned_host === host && over(row)
+      return { ok: true, ended: /** @type {Pick<Job, 'id' | 'status' | 'assigned_host'>[]} */ (data ?? []).filter(row => host ? row.assigned_host === host && over(row)
         : over(row) || (row.assigned_host !== null && row.assigned_host !== official)).map(row => row.id) };
     }
     if (route === 'generation-worker/claim') {
@@ -360,12 +397,12 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const { data: refs, error } = await db.from('af_generation_uploads').select('id,path,content_type,width,height').eq('job_id', row.id);
       if (error) throw new Problem(503, 'database-unavailable');
       const candidates = candidatesOf(row);
-      const urls = await signed([...(refs ?? []).map(ref => ref.path), ...candidates.map(name => artifactPath(row.id, name))]);
+      const urls = await signed([...(refs ?? []).map(/** @param {Upload} ref */ ref => ref.path), ...candidates.map(name => artifactPath(row.id, name))]);
       return { ok: true, job: { id: row.id, status: row.status, leaseToken: row.lease_token, owner: row.owner_id, createdAt: row.created_at, description: row.description,
         language: row.language, brief: row.brief ?? null, delegate: row.delegate === true, choice: row.choice ?? null, appearanceNote: row.appearance_note ?? null,
         decisionsReview: { mode: productionReviewer?.enabled ? 'shadow' : 'off' },
         appearanceRound: row.appearance_revisions, motionNote: row.motion_note ?? null, motionRound: row.motion_revisions, profile: row.profile ?? null,
-        refs: (refs ?? []).map(ref => ({ id: ref.id, contentType: ref.content_type, width: ref.width, height: ref.height, url: urls.get(ref.path) ?? null })),
+        refs: (refs ?? []).map(/** @param {Upload} ref */ ref => ({ id: ref.id, contentType: ref.content_type, width: ref.width, height: ref.height, url: urls.get(ref.path) ?? null })),
         candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', name, url: urls.get(artifactPath(row.id, name)) ?? null })),
         preview: previewOf(row) } };
     }
@@ -378,6 +415,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     }
     if (route === 'generation-worker/finish') {
       if (!['ok', 'rejected', 'review', 'failed', 'retry'].includes(lease.outcome)) throw new Problem(422, 'invalid-result');
+      /** @type {Record<string, any>} The worker's result, checked here. */
       const result = lease.result ?? {};
       if (!isObject(result) || JSON.stringify(result).length > GENERATION_LIMITS.result) throw new Problem(422, 'invalid-result');
       if (result.candidates !== undefined && (!Array.isArray(result.candidates) || result.candidates.some(name => !ARTIFACT.test(name ?? ''))))
@@ -394,6 +432,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
 
   return async (request, parts) => {
     const isWorker = parts[0] === 'generation-worker';
+    /** @type {(body: any, status?: number) => Response} */
     const json = (body, status = 200) => jsonResponse(body, status, isWorker ? undefined : CORS);
     try {
       if (request.method === 'OPTIONS' && !isWorker) return json({ ok: true });
@@ -417,7 +456,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
         const job = await ownJob(owner, parts[1]);
         const { data, error } = await db.from('af_decision_reviews').select('id,created_at,report').eq('job_id', job.id).order('created_at', { ascending: true }).limit(100);
         if (error) throw new Problem(503, 'review-store-unavailable');
-        return json({ ok: true, reviews: (data ?? []).map(r => ({ id: r.id, createdAt: r.created_at, report: r.report })) });
+        return json({ ok: true, reviews: (data ?? []).map(/** @param {{ id: string, created_at: string, report: unknown }} r */ r => ({ id: r.id, createdAt: r.created_at, report: r.report })) });
       }
       return json(await creator(request, parts, owner));
     } catch (error) {

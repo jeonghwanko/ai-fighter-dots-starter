@@ -5,9 +5,7 @@ import { spawnSync } from 'node:child_process';
 import { readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
-export const IMPLICIT_ANY_PENDING = [
-  'generations.mjs', 'handler.mjs', 'workshop.mjs',
-];
+export const IMPLICIT_ANY_PENDING = [];
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const tsc = (...flags) => spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json', '--pretty', 'false', ...flags],

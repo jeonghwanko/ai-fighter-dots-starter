@@ -16,9 +16,27 @@ export { BUCKET, objectKey } from './submissions.mjs';
 // The worker stamps this on every receipt. af_settings.validator_versions lists the versions af_finish accepts.
 export const VALIDATOR_VERSION = 'ai-fighter-validator-0.2.0';
 const ROSTER_CORS = { methods: 'GET, OPTIONS' };
+/**
+ * A row of af_submissions, as `select('*')` or a submission function returns it. `validation` is the worker's result as af_finish stored it.
+ * @typedef {{ id: string, owner_id: string, status: string, manifest_text: string, manifest_sha: string, expires_at: string,
+ *   fighter_id: string | null, validation: unknown, lease_token: string | null, asset_source_submission?: string | null,
+ *   manifest: { assets: { id: string, bytes: number, sha256: string }[] } }} Submission
+ */
+/**
+ * A registered fighter's admission, as present() reads it from af_fighters.
+ * @typedef {{ runtime_approved: boolean, runtime_scope: string | null, moderation_reason: string }} Admission
+ */
+/**
+ * An af_fighters row as the roster lists it; `profile` is the registered package's.
+ * @typedef {{ id: string, created_at: string, manifest_sha: string, profile: { name: string, names?: Record<string, string> },
+ *   runtime_scope: string | null, runtime_manifest_sha: string | null, duel_approved: boolean, duel_manifest_sha: string | null }} RosterFighter
+ */
+/** @type {(value: any) => string} An id from the path, a header or a body, checked here. */
 const requireId = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value; };
 // rejected and expired uploads are final: nothing remains to wait for, so pending is empty.
+/** @type {(row: { status: string, expires_at: string }) => boolean} */
 const uploadExpired = row => row.status === 'uploading' && Date.parse(row.expires_at) <= Date.now();
+/** @type {(row: Submission, admission?: Admission | null) => object} */
 const view = (row, admission) => ({ ok: true, stage: row.status, submissionId: row.id, manifestSha256: row.manifest_sha,
   fighterId: row.fighter_id ?? null, validation: row.validation ?? null, ...(uploadExpired(row) ? { code: 'upload-expired' } : {}),
   runtimeApproved: admission?.runtime_approved === true, runtimeScope: admission?.runtime_scope ?? null,
@@ -26,6 +44,7 @@ const view = (row, admission) => ({ ok: true, stage: row.status, submissionId: r
   pending: row.status === 'registered' ? []
     : row.status === 'rejected' || uploadExpired(row) ? [] : ['server-validation', 'registration'] });
 const conflictCodes = ['idempotency-conflict','fighter-quota','fighter-removed','fighter-unchanged','fighter-changed','profile-not-editable','open-submission-exists','submission-quota','storage-budget-full','assets-incomplete','upload-expired','stale-validation','submissions-paused','beta-capacity'];
+/** @param {{ message: string } | null} error  A database call's error, if any. */
 function check(error) {
   if (!error) return;
   if (conflictCodes.includes(error.message)) throw new Problem(409, error.message);
@@ -44,6 +63,7 @@ function check(error) {
  * @param {{ db: any, simulateDuel?: any, engineVersion?: any, engines?: any, release?: any, creatorLink?: import('./http.mjs').CreatorLink | null,
  *   analytics?: import('./http.mjs').Analytics | null, agentClient?: any, limiter?: import('./http.mjs').Limiter | null, decisionsReviewer?: import('./http.mjs').Reviewer | null,
  *   responsesReviewer?: import('./http.mjs').Reviewer | null, cascadeReviewer?: import('./http.mjs').Reviewer | null }} options
+ * @returns {(request: Request) => Promise<Response>}
  */
 export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null, limiter = null, decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null }) {
   const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release,limiter});
@@ -51,14 +71,16 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
   const accountHandler = createAccountHandler({ db, creatorLink });
   const deviceLoginHandler = createDeviceLoginHandler({ db, creatorLink, limiter });
   const adminHandler = createAdminHandler({ db });
+  /** @param {string} name @param {Record<string, unknown>} args */
   async function rpc(name, args) { const { data, error } = await db.rpc(name, args); check(error); return data; }
+  /** @param {Submission} row */
   async function present(row) {
     if (row.status !== 'registered') return view(row);
     const { data, error } = await db.from('af_fighters').select('runtime_approved,runtime_scope,moderation_reason').eq('submission_id', row.id).maybeSingle();
     check(error); return view(row, data);
   }
-  /** One Storage call signs every asset of a submission, in manifest order. */
   // The agent that made each fighter (`af_fighter_agents`, 2026-10-27). Not knowing it never fails a roster read.
+  /** @param {string[]} ids @returns {Promise<Map<string, string>>} */
   async function madeWith(ids) {
     if (!ids.length) return new Map();
     try {
@@ -66,6 +88,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       return error || !Array.isArray(data) ? new Map() : new Map(data.map(row => [row.fighter_id, row.client_name]));
     } catch { return new Map(); }
   }
+  /** One Storage call signs every asset of a submission, in manifest order. @param {Submission} row @param {number} seconds @returns {Promise<string[]>} */
   async function signedUrls(row, seconds) {
     const paths = row.manifest.assets.map(asset => objectKey(row, asset));
     const { data, error } = await db.storage.from(BUCKET).createSignedUrls(paths, seconds);
@@ -77,6 +100,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
     });
   }
   // `worker`: false for a creator; 'validation' or 'generation' for a worker key of that scope (2026-10-27 — the generation worker has its own).
+  /** @param {Request} request @param {false | 'validation' | 'generation'} worker */
   async function authenticate(request, worker) {
     const token = bearerToken(request);
     if (!token) throw new Problem(401, 'authentication-required');
@@ -96,12 +120,15 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
   }
   const workshopHandler = createWorkshopHandler({ db, authenticate: request => authenticate(request, false), rpc, agentClient });
   const generationHandler = createGenerationHandler({ db, authenticate, present, decisionsReviewer, responsesReviewer, cascadeReviewer });
+  /** @param {string} owner @param {string} id @returns {Promise<Submission>} */
   async function ownSubmission(owner, id) {
     const { data, error } = await db.from('af_submissions').select('*').eq('id', requireId(id)).eq('owner_id', owner).maybeSingle();
     check(error); if (!data) throw new Problem(404, 'not-found'); return data;
   }
   return async request => {
+    /** @type {{ methods: string, headers?: string } | undefined} */
     let cors;
+    /** @type {(body: any, status?: number) => Response} */
     const json = (body, status = 200) => jsonResponse(body, status, cors);
     try {
       const segments = new URL(request.url).pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter');
@@ -131,6 +158,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
           approvalRequired: false, publication: 'automatic-after-file-validation', moderation: 'post-publication', deviceLogin: 'v1', profileUpdate: 'v1', dailySubmissionLimit: 5, revisionsCountTowardLimit: false } } });
       // Validated, active packages are public; uploads and removed packages remain private.
       if (parts[0] === 'roster' && (method === 'GET' || method === 'OPTIONS')) {
+        /** @type {(body: any, status?: number) => Response} */
         const reply = (body, status = 200) => jsonResponse(body, status, ROSTER_CORS);
         if (method === 'OPTIONS') return reply({ ok: true });
         let query = db.from('af_fighters').select('id,created_at,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha')
@@ -148,7 +176,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
           }
           query = query.order('created_at', { ascending: false }).order('id');
           const { data, error } = await query.limit(21); check(error);
-          const last = data[19], hasMore = data.length > 20, shown = data.slice(0, 20).filter(f => f.runtime_manifest_sha === f.manifest_sha);
+          const last = data[19], hasMore = data.length > 20, shown = /** @type {RosterFighter[]} */ (data.slice(0, 20)).filter(f => f.runtime_manifest_sha === f.manifest_sha);
           const makers = await madeWith(shown.map(f => f.id));
           return reply({ ok: true, hasMore, nextCursor: hasMore ? `${last.created_at}|${last.id}` : null,
             fighters: shown.map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, ...(f.profile.names ? { names: f.profile.names } : {}), runtimeScope: f.runtime_scope,
@@ -161,7 +189,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         check(readError);
         if (!row || row.manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
         const urls = await signedUrls(row, 600), maker = (await madeWith([fighter.id])).get(fighter.id);
-        const files = row.manifest.assets.map((asset, index) => ({ id: asset.id, downloadUrl: urls[index] }));
+        const files = row.manifest.assets.map(/** @param {{ id: string }} asset @param {number} index */ (asset, index) => ({ id: asset.id, downloadUrl: urls[index] }));
         return reply({ ok: true, fighterId: fighter.id, manifestSha256: fighter.manifest_sha, runtimeApproved: true,
           runtimeScope: fighter.runtime_scope, duelApproved: fighter.duel_approved === true && fighter.duel_manifest_sha === fighter.manifest_sha,
           manifestText: row.manifest_text, files, ...(maker ? { madeWith: maker } : {}) });
@@ -208,6 +236,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
         if (parts.join('/') === 'worker/claim') {
           if (body.submissionId) requireId(body.submissionId);
+          /** @type {Submission | null} */
           const row = await rpc('af_claim', { p_id: body.submissionId ?? null });
           if (!row?.id) return json({ ok: true, stage: 'idle' });
           // The lease is five minutes; the URLs outlive it so a slow job fails on its deadline, not on a dead link.
