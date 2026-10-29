@@ -8,7 +8,7 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 import { text } from './canon.mjs';
 import { probeImage } from './image-probe.mjs';
-import { Problem, UUID, jsonResponse, readBody, sha256 } from './http.mjs';
+import { Problem, UUID, jsonResponse, readBody, rpcCaller, sha256 } from './http.mjs';
 import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mjs';
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
@@ -106,14 +106,7 @@ export function confirmedProfile(value) {
  */
 export function createGenerationHandler({ db, authenticate, present, decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null }) {
   const productionReviewer = cascadeReviewer ?? decisionsReviewer;
-  /** @param {string} name @param {Record<string, unknown>} args */
-  async function call(name, args) {
-    const { data, error } = await db.rpc(name, args);
-    if (!error) return data;
-    const known = Object.keys(STATUS).sort((x, y) => y.length - x.length).find(code => error.message?.includes(code));
-    if (known) throw new Problem(STATUS[known], known);
-    throw new Problem(503, 'database-unavailable');
-  }
+  const call = rpcCaller(db, STATUS, { contains: true });
   const bucket = () => db.storage.from(GENERATION_BUCKET);
   /** @param {string[]} paths @returns {Promise<Map<string, string>>} */
   async function signed(paths) {

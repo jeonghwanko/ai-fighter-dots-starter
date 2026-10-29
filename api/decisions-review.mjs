@@ -1,10 +1,13 @@
 // @ts-check
 // Server-only advisory review. The caller supplies evidence, never a model, prompt, endpoint or credential.
 import { decodeBase64, encodeBase64 } from './base64.mjs';
-import { Problem, readBody, sha256 } from './http.mjs';
+import { Problem, readBody, rpcCaller, sha256 } from './http.mjs';
 import { probeImage } from './image-probe.mjs';
 import { sequencePresentation, SEQUENCE_METHODS, PAIRED_SEQUENCE_METHOD, BENCHMARK_TIMEOUT_MS } from './sequence-benchmark.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+/** The review store's refusals (the decision review and benchmark functions), shared with the responses benchmark. */
+export const REVIEW_STATUS = Object.freeze({ 'review-limit': 429, 'worker-required': 403, 'benchmark-expired': 410, 'benchmark-evidence-changed': 422,
+  'lease-lost': 409, 'generation-state': 409 });
 
 /**
  * Checked evidence as a review binds it. Each image keeps its role, digest and size; a candidate also its order and display time.
@@ -241,16 +244,7 @@ export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fet
       if (!active) return { mode: 'off', status: 'disabled', advisory: true, visualApproval: false };
       const { request, raw, binding, fingerprint } = await decisionsRequest({ job, evidence, sequenceConfig });
       const qs = request.questions;
-      /** @type {(name: string, args: Record<string, unknown>) => Promise<any>} */
-      const rpc = async (name, args) => {
-        const { data, error } = await db.rpc(name, args);
-        if (error) {
-          const code = ['review-limit', 'lease-lost', 'worker-required', 'generation-state', 'benchmark-expired', 'benchmark-evidence-changed'].find(k => error.message?.includes(k));
-          throw new Problem(code === 'review-limit' ? 429 : code === 'worker-required' ? 403 : code === 'benchmark-expired' ? 410
-            : code === 'benchmark-evidence-changed' ? 422 : code ? 409 : 503, code ?? 'review-store-unavailable');
-        }
-        return data;
-      };
+      const rpc = rpcCaller(db, REVIEW_STATUS, { contains: true, unavailable: 'review-store-unavailable' });
       const claimed = await rpc('af_decision_review_start', { p_job: job.id, p_host: host, p_lease: lease,
         p_fingerprint: fingerprint, p_stage: evidence.stage, p_scope: evidence.scope,
         p_binding: binding });

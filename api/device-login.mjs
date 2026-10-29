@@ -1,5 +1,5 @@
 // @ts-check
-import { Problem, bearerToken, jsonResponse, readBody, sha256, verifiedUserId } from './http.mjs';
+import { Problem, bearerToken, jsonResponse, readBody, rpcCaller, sha256, verifiedUserId } from './http.mjs';
 import { CLIENT_LIMITS } from './client-limit.mjs';
 
 // Device-connection sign-in (RFC 8628 style) for a workspace the user's browser cannot reach.
@@ -13,7 +13,7 @@ const ALPHABET = 'BCDFGHJKLMNPQRSTVWXZ';
 const DEVICE_CODE = /^afd_[a-f0-9]{64}$/;
 const APPROVE_CORS = { methods: 'POST, OPTIONS', headers: 'Authorization, Content-Type' };
 /** @type {Record<string, number>} */
-const errorStatus = { 'rate-limit': 429, 'slow-down': 429, 'device-login-not-found': 404 };
+const errorStatus = { 'rate-limit': 429, 'slow-down': 429, 'device-login-not-found': 404, 'user-code-collision': 409 };
 
 /** Letters only, no vowels or look-alikes; dashes, spaces and case are ignored. Null when invalid. */
 /** @param {unknown} value */
@@ -37,13 +37,10 @@ function userCode(random) {
  * @returns {import('./http.mjs').Route}
  */
 export function createDeviceLoginHandler({ db, creatorLink = null, limiter = null, random = n => crypto.getRandomValues(new Uint8Array(n)) }) {
+  const rpc = rpcCaller(db, errorStatus, { unavailable: error => error.code === 'PGRST202' ? 'device-login-not-ready' : 'device-login-unavailable' });
   /** @param {string} name @param {Record<string, unknown>} args */
   async function call(name, args) {
-    const { data, error } = await db.rpc(name, args);
-    if (error) {
-      if (errorStatus[error.message] || error.message === 'user-code-collision') throw new Problem(errorStatus[error.message] ?? 409, error.message);
-      throw new Problem(503, error.code === 'PGRST202' ? 'device-login-not-ready' : 'device-login-unavailable');
-    }
+    const data = await rpc(name, args);
     if (!data || typeof data !== 'object') throw new Problem(503, 'device-login-unavailable');
     return data;
   }

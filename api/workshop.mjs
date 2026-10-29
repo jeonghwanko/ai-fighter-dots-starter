@@ -5,7 +5,7 @@
 // `20261027210000_oddbout_open_worlds.sql`). Another person's text is returned as data in its own field, never mixed into instructions.
 import { validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { applyFighterEdit } from './fighter-profile.mjs';
-import { Problem, UUID, jsonResponse, readBody } from './http.mjs';
+import { Problem, UUID, jsonResponse, readBody, rpcCaller } from './http.mjs';
 import { WORLD_COVERS, canonSheet, factionId, factions, nickname, note, text, worldCover, worldId, worldText, WORLD_LIMITS,
   RELATION_KINDS } from './canon.mjs';
 
@@ -18,6 +18,14 @@ const STATUS = { 'nickname-required': 409, 'nickname-taken': 409, 'canon-changed
   'invalid-canon': 422, 'post-exists': 409, 'world-full': 409 };
 // A unique key two writers raced for, by its name (any other is a plain conflict).
 const UNIQUE = /** @type {[RegExp, string][]} */ ([[/af_creator_names_nickname/, 'nickname-taken'], [/af_fighter_relations_pair/, 'relation-exists'], [/af_world_posts_pkey|af_world_posts_world_id_id_key/, 'post-exists']]);
+/** A unique or check constraint's refusal (a name taken, a pair already related, text the table refuses), or null. @param {any} error */
+function constraintProblem(error) {
+  const unique = UNIQUE.find(([name]) => name.test(error.message ?? ''));
+  if (unique) return new Problem(409, unique[1]);
+  if (error.code === '23505') return new Problem(409, 'conflict');
+  if (error.code === '23514' || /violates check constraint/.test(error.message ?? '')) return new Problem(422, 'invalid-text');
+  return null;
+}
 // A story's cursor: the time a page's last note was written, as the story gave it.
 const CURSOR = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
@@ -36,18 +44,8 @@ export function workshopRoute(parts) {
 export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agentClient = null }) {
   const client = UUID.test(agentClient ?? '') ? agentClient : null;
   /** @param {string} name @param {Record<string, unknown>} args */
-  async function call(name, args) {
-    const { data, error } = await db.rpc(name, args);
-    if (!error) return data;
-    // The longest code a message names (`faction-not-found` before `not-found`).
-    const known = Object.keys(STATUS).sort((x, y) => y.length - x.length).find(code => error.message?.includes(code));
-    if (known) throw new Problem(STATUS[known], known);
-    const unique = UNIQUE.find(([name]) => name.test(error.message ?? ''));
-    if (unique) throw new Problem(409, unique[1]);
-    if (error.code === '23505') throw new Problem(409, 'conflict');
-    if (error.code === '23514' || /violates check constraint/.test(error.message ?? '')) throw new Problem(422, 'invalid-text');
-    throw new Problem(503, 'database-unavailable');
-  }
+  // The longest code a message names (`faction-not-found` before `not-found`), then a constraint's refusal.
+  const call = rpcCaller(db, STATUS, { contains: true, otherwise: constraintProblem });
   /** @param {Request} request @param {number} [limit] */
   async function readJson(request, limit = 24000) {
     try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, limit))); }

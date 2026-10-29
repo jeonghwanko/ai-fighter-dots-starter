@@ -1,5 +1,5 @@
 // @ts-check
-import { Problem, bearerToken, jsonResponse, readBody, verifiedUserId } from './http.mjs';
+import { Problem, bearerToken, jsonResponse, readBody, rpcCaller, verifiedUserId } from './http.mjs';
 
 const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };
 /** @type {(body: any, status?: number) => Response} */
@@ -20,13 +20,10 @@ const ROUTES = { me: 'GET', 'access-requests': 'POST', 'creator-handoffs': 'POST
  * @returns {import('./http.mjs').Route}
  */
 export function createAccountHandler({ db, creatorLink = null }) {
+  const rpc = rpcCaller(db, errorStatus, { unavailable: error => error.code === 'PGRST202' ? 'account-not-ready' : 'account-unavailable' });
   /** @param {string} name @param {Record<string, unknown>} args */
   async function call(name, args) {
-    const { data, error } = await db.rpc(name, args);
-    if (error) {
-      if (errorStatus[error.message]) throw new Problem(errorStatus[error.message], error.message);
-      throw new Problem(503, error.code === 'PGRST202' ? 'account-not-ready' : 'account-unavailable');
-    }
+    const data = await rpc(name, args);
     if (!data || typeof data !== 'object' || typeof data.invited !== 'boolean') throw new Problem(503, 'account-unavailable');
     return { invited: data.invited, expiresAt: data.invited ? data.expiresAt ?? null : null, request: data.request ?? null,
       ...(data.accessMode === 'open' ? { accessMode: 'open', canSubmit: data.canSubmit === true } : {}),
