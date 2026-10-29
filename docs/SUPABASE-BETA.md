@@ -61,7 +61,12 @@ Storage bucket은 비공개 `ai-fighter-beta`다. 기존 게임 테이블·로�
   이미 운영에 적용된 두 파일(`20261024022222`, `20261024104406`)만 예외다.
 - 버전(앞 14자리)은 파일마다 하나다. `20261021090000`을 두 파일이 함께 쓰던 것을 2026-10-27에
   `20261021090001_ai_fighter_worker_dispatch.sql`로 바꿨다(순서 동일). 운영은 `db push`를 쓰지 않고 파일별로
-  적용하므로 운영 DB에는 영향이 없다. 운영 이력을 맞추려면 `migration repair --status applied 20261021090001`이 필요하다.
+  적용하므로 운영 DB에는 영향이 없다. 운영 이력에도 `20261021090001`이 있다.
+- 운영 이력의 버전은 파일 버전과 같다. 2026-10-29에 적용 시각으로 남아 있던 38개를 파일 버전으로 바꿨다(이름·SQL 기록·작성자는
+  그대로, 이전 이력은 운영 PC의 `~/.local/state/oddbout/migration-history/`). 파일별 적용(MCP `apply_migration` 등)은 적용 시각을
+  버전으로 남기므로, 적용한 뒤 `update supabase_migrations.schema_migrations set version = '<파일 버전>' where version =
+  '<남은 버전>' and name = '<이름>'`으로 맞춘다. 운영에만 있는 23개는 같은 프로젝트를 쓰는 다른 서비스의 22개와 먼저 적용된
+  `ai_fighter_worker_dispatch`(`20261020153013`)다. 그래서 `db push`는 아무것도 적용하기 전에 멈춘다.
 - 함수 안의 `update`·`delete`는 `where`로 행을 고른다. 운영 API 역할(`authenticator`)은 `safeupdate`를 불러와 `where` 없는 문장을
   거부한다. 이관은 postgres로 돌아 이 실패를 보이지 않는다. 테스트의 PGlite는 확장을 불러올 수 없어 `migratedDatabase()`가
   Postgres의 구문 트리(`debug_print_parse`)로 같은 규칙을 함수·트리거 안에서 실제로 실행된 문장에 적용하고, 어긴 뒤로는
