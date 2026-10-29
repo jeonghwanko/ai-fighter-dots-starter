@@ -140,8 +140,8 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 
 | 도구 | 하는 일 |
 | --- | --- |
-| `request_hosted_fighter` | 설명·언어와 선택 그림 둘(`picture`·`secondPicture`, 파일 인자, 권리 확인 `rightsConfirmed`)로 신청. `delegate: true`는 맡기기다(아래). 같은 `idempotencyKey`는 같은 작업이고 그림을 다시 올리지 않는다 |
-| `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId`가 없으면 최근 신청과 열림 여부. `waitSeconds`(25초까지)는 워커가 일하는 동안 이 호출에서 기다린다 |
+| `request_hosted_fighter` | 설명·언어와 선택 그림 둘(`picture`·`secondPicture`, 파일 인자, 권리 확인 `rightsConfirmed`)로 신청. `delegate: true`는 맡기기다(아래). 같은 계정·`idempotencyKey`로 **이미 저장된 작업**이 있으면 그림을 다시 올리지 않고 반환한다. 결과가 불명확할 때는 조회 도구로 복구한다 |
+| `get_hosted_fighter` | 작업 상태, 외형 후보 둘·동작 미리보기의 서명 URL(10분), 프로필 초안, `next`. `jobId` 또는 원래 `idempotencyKey` 하나로 조회하며 둘 다 없으면 최근 다섯 신청과 열림 여부. 키 조회는 새 신청·업로드를 하지 않는다. `waitSeconds`(25초까지)는 찾은 작업의 상태를 기다린다 |
 | `choose_hosted_look` | 후보 `a`·`b` 고르기, 또는 한 문장 수정(두 장을 다시 그린다) |
 | `revise_hosted_motion` | 동작 하나를 한 문장으로 다시. 나머지 동작은 그대로 |
 | `register_hosted_fighter` | 사용자가 동작을 승인한 뒤 등록. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
@@ -152,19 +152,25 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 
 ### 호스팅 작업의 중단과 미리보기 복구
 
-1. 신청 전에 UUID `idempotencyKey`와 원래 인자를 보존하고 응답의 `job.id`를 기록한다. 연결 직후에는
-   `get_profile`로 계정을 확인하고 `check_creation_readiness(purpose: "connection")`로 계정 접근을 읽는다.
+1. 신청 전에 `get_profile`로 확인한 계정 ID, UUID `idempotencyKey`와 원래 인자를 보존하고 응답의 `job.id`를 기록한다.
+   연결 직후에는 `get_profile`로 계정을 확인하고 `check_creation_readiness(purpose: "connection")`로 계정 접근을 읽는다.
    호스팅 경로에 로컬 stdio 로그인이나 사용자 PC 생성기 설치를 요구하지 않는다.
 2. 시간 초과·대화 중단·연결 재설정은 작업 실패의 증거가 아니다. 재연결 후 같은 계정인지 확인하고
-   `get_hosted_fighter({jobId})`로 기존 상태부터 읽는다. ID를 잃었다면 인자 없이 최근 **다섯** 작업을 확인한다.
+   `get_hosted_fighter({jobId})`로 기존 상태부터 읽는다. ID를 잃었다면 원래 `idempotencyKey`로 조회한다.
+   둘 다 없으면 인자 없이 최근 **다섯** 작업을 확인한다.
    여러 작업 중 어느 것인지 불명확하면 사용자에게 확인하며, 최신 작업을 임의로 수정하지 않는다.
-3. 최초 신청 응답을 잃어 작업 ID를 모르면 원래 인자와 **같은 키**로 `request_hosted_fighter`를 재호출할 수 있다.
-   이미 저장된 작업은 서비스가 신규 접수를 중지했어도 그대로 반환하며 그림도 다시 올리지 않는다.
-   최근 목록에 없는 오래된 작업은 저장한 ID 또는 원래 신청 키로 회수한다. 키·ID·목록으로 특정할 수 없으면
-   미확인 상태를 설명하고 새 키로 대체 신청하지 않는다. 바뀐 설명을 같은 키에 넣어도 기존 작업을 편집하는 것은 아니다.
-4. `waitSeconds`는 최대 25초의 상태 대기다. 종료 때 아직 `queued`·`appearance`·`motions`이면 같은 ID를 나중에 조회한다.
+3. `get_hosted_fighter({idempotencyKey})`는 최근 목록에 없는 오래된 작업도 **현재 계정 범위에서 읽기만** 한다.
+   이미 저장된 작업은 서비스가 신규 접수를 중지했어도 회수하며, 원본 그림의 만료된 URL이나 파일 인자도 필요 없다.
+   `jobId`와 키를 함께 주면 `invalid-selector`다. `not-found`는 최초 호출이 아직 그림을 받는 중이거나 계정이 다른 경우에도
+   나올 수 있으므로 실패 확정이 아니다. 원래 호출·계정을 확인하고 필요하면 같은 키로 다시 **조회**한다.
+   DB 조회 오류도 작업 부재로 바꾸지 않는다. 키·ID·목록으로 특정할 수 없으면 미확인 상태를 설명한다.
+   복구를 위해 `request_hosted_fighter`를 반복하거나 새 키로 대체 신청하지 않는다. 최초 작업 저장 전의 병렬 재신청·부분 업로드는
+   같은 키만으로 중복 업로드가 방지되지 않아 신청 도구의 `idempotentHint`는 `false`다.
+   원래 실행이 종료됐고 재시도해도 안전함을 확인한 경우에만 같은 키·원래 인자를 재사용한다.
+4. `waitSeconds`는 최대 25초의 상태 대기다. 종료 때 아직 `queued`·`appearance`·`motions`·`submitting`이거나 제출 검사 중이면 같은 ID를 나중에 조회한다.
    `choose_hosted_look`·`revise_hosted_motion`·등록 호출의 결과가 불명확할 때도 우선 상태를 읽는다.
    새 외형/동작 수정은 생성량과 수정 횟수를 소비하므로 같은 요청을 무조건 재전송하지 않는다.
+   두 수정 도구의 `idempotentHint`도 `false`다. 수정이 완료되어 다시 검토 상태가 됐어도 이전 호출을 반복하면 새 수정으로 처리된다.
 5. 외형·동작 URL은 10분짜리다. 만료되거나 표시가 실패하면 같은 `jobId`를 다시 조회하여 새 URL로 실제 이미지를 표시한다.
    `null` URL이나 저장소 오류가 계속되면 전달 문제로 보고한다. 새 키·외형 수정·동작 재생성으로 해결하지 않는다.
    URL 발급, 대화의 실제 이미지 표시, 사용자의 해당 버전 검토는 각각 별개다.
@@ -173,7 +179,8 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 
 구현 근거는 `mcp/cloud.mjs`의 소유자별 기존 키 조회와 `get_hosted_fighter`, `api/generations.mjs`의 작업 조회·서명 URL 발급이다.
 `test/hosted-generation-mcp.test.mjs`는 오프라인 DB와 모의 Storage로 응답 유실 뒤 새 커넥터의 같은 작업 회수,
-중복 신청·그림 업로드 방지, URL 재발급과 다른 계정의 접근 차단을 검사한다. 이 테스트는 실제 Dots/Grok 로그인,
+작업 저장 전 조회·최근 다섯 개 밖의 키 조회·저장된 작업의 재호출에서 추가 신청·업로드가 없음을 검사한다.
+URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조회 차단도 검사한다. 이 테스트는 실제 Dots/Grok 로그인,
 네트워크 단절, 이미지 표시나 생성 워커의 성공을 증명하지 않는다. 플랫폼 검증 시 이 단계를 각각 관찰해 기록한다.
 
 **맡기기**(`delegate`, 2026-10-28): 사용자가 "알아서 해 줘"라고 하면 외형 고르기를 ODDBOUT이 한다. 워커가 두 장을 그린 뒤 codex 판정(도구 끔)이

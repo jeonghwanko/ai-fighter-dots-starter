@@ -55,7 +55,8 @@ PC의 stdio 설치·`config.toml`·로그인 세션은 Dots/Grok에 자동 설�
 2. 이 커넥터의 `check_creation_readiness(purpose: "connection")`를 읽는다. 응답은
    `scope: "cloud-registration-connection"`, `account`, `registration`이며 아래 로컬 `items.*` 표와 다르다.
    연결이 정상이더라도 `generation`, `delivery`, `package`는 실제 증거가 생기기 전까지 `unverified`다.
-3. 호스팅 생성을 이어갈 때는 저장된 `jobId`로 `get_hosted_fighter`를 호출한다. ID가 없으면 최근 목록부터 확인한다.
+3. 호스팅 생성을 이어갈 때는 저장된 `jobId`로 `get_hosted_fighter`를 호출한다. ID가 없으면 원래 `idempotencyKey`로 읽기만 하는 조회를 한다.
+   둘 다 없으면 최근 다섯 작업부터 확인한다. 키 조회의 `not-found`는 원래 신청이 아직 실행 중일 때도 나오므로 재신청 근거가 아니다.
    도구는 서버의 `ODDBOUT_HOSTED_GENERATION_TOOLS=1` 설정이 있어야 노출된다. 목록에 있어도 서비스·워커 상태는 별개다.
    도구가 안 보이면 실제 갱신 경로로 목록을 확인하고 운영자에게 설정·배포 확인을 요청한다. Google 로그인을 반복하거나
    로컬 생성기로 자동 전환하지 않는다.

@@ -48,8 +48,8 @@ MCP server (adding both shows ODDBOUT twice). Grok and Claude connect the same s
 file transfer and registration; no local MCP installation, API key or callback copying is needed.
 See [cloud connection instructions](docs/CLOUD-MCP.md) for each host's endpoint and first-time setup.
 When the hosted generation tools are available, ODDBOUT can make the fighter on its worker at your request.
-Save the request key and job ID; after a timeout or disconnect, follow [hosted job recovery](docs/CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구)
-to read the same job and refresh preview URLs. A connection or a returned URL does not prove that an image was displayed and reviewed.
+Save the verified account ID, request key and job ID; after a timeout or disconnect, follow [hosted job recovery](docs/CLOUD-MCP.md#호스팅-작업의-중단과-미리보기-복구)
+to look up the same job by its ID or original key and refresh preview URLs without resubmitting. A connection or a returned URL does not prove that an image was displayed and reviewed.
 Creation in your own workspace still uses your selected generation account.
 The setup below is for running the creation kit in a workspace; it is not required to authenticate the cloud connector.
 
