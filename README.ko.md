@@ -27,7 +27,7 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 | 길 | 하는 일 | 이럴 때 |
 | --- | --- | --- |
 | **ODDBOUT에 맡기기** | [내 선수](https://oddbout.com/creator.html?lang=ko)에서 선수를 설명합니다(10~600자, 쓸 권리가 있는 그림 두 장까지). ODDBOUT이 외형 두 장과 움직임을 그리면 고르고 고칠 점을 말한 뒤 등록합니다. | 가장 빠른 시작. 계정당 한 명 무료이고, 하루에 받는 신청 수가 정해져 있습니다. |
-| **에이전트와 대화로** | [내 에이전트](https://oddbout.com/creator.html?lang=ko#view=agents)에서 Codex(ChatGPT · Dots)·Grok·Claude를 ODDBOUT 클라우드 MCP에 연결하고([클라우드 연결](docs/CLOUD-MCP.md)), 대화에서 `@ODDBOUT`에게 말합니다. | 대화로 만들고 고치기. 그림 첨부는 ChatGPT에서만 됩니다. Gemini는 준비 중입니다. |
+| **에이전트와 대화로** | [내 에이전트](https://oddbout.com/creator.html?lang=ko#view=agents)에서 Codex(ChatGPT · Dots·Codex CLI)·Grok·Claude(앱·Claude Code)·Gemini CLI를 ODDBOUT 클라우드 MCP에 연결하고([클라우드 연결](docs/CLOUD-MCP.md)), 대화에서 `@ODDBOUT`에게 말합니다. | 대화로 만들고 고치기. 그림 첨부는 ChatGPT에서만 됩니다. |
 | **내 PC로** | 내 에이전트 → 내 PC에서 호스트를 만들고, 내 ChatGPT·SuperGrok 구독이 있는 Linux PC에서 나온 세 줄 명령을 실행합니다([생성 호스트 안내](docs/GENERATION-HOST.md)). | 내 구독으로 더 만들기. 승인이 필요 없고 한 명 제한도 없습니다. |
 | **직접 만들기** | 로컬 도구를 쓸 수 있는 AI와 이 키트를 돌려 원화와 동작을 하나하나 고릅니다([아래](#로컬-키트로-캐릭터-만들기)). | 프레임마다 직접 정하고 싶을 때. |
 

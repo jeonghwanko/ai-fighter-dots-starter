@@ -28,7 +28,7 @@ walks through each.
 | Way | What you do | Good for |
 | --- | --- | --- |
 | **Leave it to ODDBOUT** | On [My fighters](https://oddbout.com/creator.html?lang=en), describe the fighter (10–600 characters, up to two pictures you may use). ODDBOUT draws two looks, then the motions; you pick, ask for changes and register. | The quickest start. One fighter per account is free; ODDBOUT takes a limited number of requests a day. |
-| **Talk to your agent** | On [My agents](https://oddbout.com/creator.html?lang=en#view=agents), connect Codex (ChatGPT · Dots), Grok or Claude to the hosted ODDBOUT MCP ([cloud connection](docs/CLOUD-MCP.md)), then ask `@ODDBOUT` in your chat. | Making and editing fighters from a conversation. Pictures can be attached from ChatGPT only. Gemini is coming soon. |
+| **Talk to your agent** | On [My agents](https://oddbout.com/creator.html?lang=en#view=agents), connect Codex (ChatGPT · Dots · Codex CLI), Grok, Claude (apps · Claude Code) or Gemini CLI to the hosted ODDBOUT MCP ([cloud connection](docs/CLOUD-MCP.md)), then ask `@ODDBOUT` in your chat. | Making and editing fighters from a conversation. Pictures can be attached from ChatGPT only. |
 | **Your own PC** | On My agents → My PC, create a host and run the three-line command it gives on a Linux PC with your ChatGPT and SuperGrok subscriptions ([generation host guide](docs/GENERATION-HOST.md)). | More fighters on your own subscriptions: no approval and no limit of one. |
 | **Make it yourself** | Run this kit with an assistant that can use local tools, and choose every concept and motion ([below](#create-with-the-local-kit)). | Full control over each frame. |
 
