@@ -20,6 +20,7 @@ ODDBOUT 제작자 페이지·에이전트의 **호스팅 생성 신청**(글과 
 | `og` | 모든 제공자 호출의 관문: 계정 고정(`login`), codex 칸, 메모리 상한(systemd 슬라이스), 장부, codex 기능 끄기(`harden`), 워커 서비스(`worker key·install·uninstall·start·stop·log`), 정리(`prune`), 고리 정렬의 RIFE(`rife torch|ncnn` — NVIDIA GPU면 PyTorch로 약 2배). 서비스 설치만: 운영자 수동 흐름(`new·deliver·close`)과 `self-update` |
 | `generation-worker.mjs` | 워커: 1분마다 심장 박동, 1시간마다 `og health`, 하루 한 번 `og prune`, 한 번에 한 작업의 한 단계를 임대해 돌리고 결과를 올린다 |
 | `generation-stages.mjs` | 단계: 브리프·외형·동작·제출의 명령과 프롬프트, 결과 검사 |
+| `sprite-outcome.mjs` | sprite-gen 보고서로 실패한 실행의 과금 여부와 다음 할 일을 판정. 크리에이터 작업(`mcp/creation-jobs.mjs`)도 같은 파일을 쓴다. 호스트는 `host/`의 파일을 bin 한 폴더에 평평하게 설치하므로 워커가 부르는 파일은 모두 여기 있어야 한다 |
 | `motions.py` | 동작 단계의 픽셀 일(키트 sprite-gen venv의 NumPy·Pillow) |
 | `ledger-report.mjs` | 장부 한 줄 쓰기와 요약. 신청 글·프롬프트·경로는 남기지 않는다. 종료 3은 `notStarted`(sprite-gen이 provider 요청 전에 실패: 만든 것도 과금도 없음), 2·75는 `needsInput`, 129·130·143은 `interrupted` |
 | `install-service-user.sh` | 서비스 설치의 처음 한 번(root) |
