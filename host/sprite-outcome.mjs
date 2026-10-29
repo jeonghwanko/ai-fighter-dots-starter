@@ -10,7 +10,8 @@ import path from 'node:path';
 export const NOT_STARTED_EXIT = 3;
 export const ASK_EXIT = 75;
 // Codes after which the same command must not simply run again: the request may have been taken and billed.
-const UNSEEN = new Set(['outcome-unknown', 'internal-error']);
+// A codex timeout (`provider-timeout`) was stopped after its request left, so it may have made a paid image.
+const UNSEEN = new Set(['outcome-unknown', 'internal-error', 'provider-timeout']);
 
 const option = (argv, key) => {
   const index = argv.findIndex(value => value === key || value.startsWith(`${key}=`));

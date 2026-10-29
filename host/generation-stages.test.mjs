@@ -173,16 +173,24 @@ test('a gait whose cuts never align stops for an operator without filming anothe
 
 test('a failed look is tried again only when its report says so; otherwise an operator looks', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-look-fail-'));
-  let answer = null;   // what the failing `gen` leaves at --report; null: no report (og stopped it before sprite-gen ran)
+  let answer = null;   // what the failing `gen` leaves at --report; null: no report, ending with `bare`
+  let bare = 3;        // og refused it before it started
   const og = async args => {
     const report = args[args.indexOf('--report') + 1];
     if (answer) await writeFile(report, JSON.stringify({ ok: false, ...answer.report }));
-    return { code: answer?.code ?? 1 };
+    return { code: answer?.code ?? bare };
   };
   const stages = createStages({ og, api: { artifact: async () => ({ ok: true }) }, fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
   const job = { id: 'j', brief, refs: [], candidates: [], appearanceRound: 0, appearanceNote: null };
   const error = (code, retryable, extra = {}) => ({ state: null, code, retryable, message: code, ...extra });
-  assert.deepEqual(await stages.appearance(job, dir), { outcome: 'retry', result: { code: 'look-exit-1' } });
+  assert.deepEqual(await stages.appearance(job, dir), { outcome: 'retry', result: { code: 'look-exit-3' } });
+  // Killed (SIGKILL after og's timeout, out of memory) or crashed with no report: its request may have left and been
+  // charged, so it is never sent again unseen.
+  for (bare of [1, 137]) {
+    assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-outcome-unknown' } });
+  }
+  answer = { code: 1, report: { provider_submitted: true, errors: [error('provider-timeout', false)] } };
+  assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-outcome-unknown' } });
   answer = { code: 1, report: { provider_submitted: true, errors: [error('provider-rate-limited', true)] } };
   assert.deepEqual(await stages.appearance(job, dir), { outcome: 'retry', result: { code: 'look-exit-1' } });
   answer = { code: 1, report: { provider_submitted: true, errors: [error('outcome-unknown', false)] } };
