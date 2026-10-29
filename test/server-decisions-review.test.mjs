@@ -134,7 +134,10 @@ test('evidence validation refuses URLs, changed hashes, caller prompts/models, i
     await assert.rejects(reviewEvidence({ ...body, ...patch }));
   for (const patch of [{ dataUrl: 'http://127.0.0.1/private' }, { sha256: '0'.repeat(64) }, { durationMs: 0 }])
     await assert.rejects(reviewEvidence({ ...body, images: [{ ...body.images[0], ...patch }] }));
-  await assert.rejects(reviewEvidence({ stage: 'sequence', scope: 'walk', images: [await image('reference'), ...Array(15).fill(await image())] }));
+  await assert.rejects(reviewEvidence({ stage: 'sequence', scope: 'walk', images: [await image('reference'), ...Array(11).fill(await image())] }));
+  await assert.rejects(reviewEvidence({ stage: 'sequence', scope: 'run', images: [await image('reference'), ...Array(17).fill(await image())] }));
+  // A gait at the count it was filmed in (gait-frames-1).
+  assert.equal((await reviewEvidence({ stage: 'sequence', scope: 'run', images: [await image('reference'), ...Array(14).fill(await image())] })).binding.length, 15);
   assert.equal((await reviewEvidence({ stage: 'sequence', scope: 'walk', images: [await image('reference'), ...Array(16).fill(await image())] })).binding.length, 17);
   const animated = Buffer.from(imageBytes); animated.write('acTL', 12);
   await assert.rejects(reviewEvidence({ ...body, images: [{ ...body.images[0], dataUrl: `data:image/png;base64,${animated.toString('base64')}`, sha256: await sha256(animated) }] }));

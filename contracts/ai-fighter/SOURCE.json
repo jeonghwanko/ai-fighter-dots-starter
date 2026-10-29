@@ -2,8 +2,8 @@
   "upstream": "Wonder Lupin game repository (private), kaito_web/",
   "rule": "Byte copies. Change them only by copying the game's files, then run npm run contract:vendored -- --pin and update verifiedAgainst.",
   "verifiedAgainst": {
-    "commit": "39c7ad327bef579d02ee30164796141591f54e2b",
-    "date": "2026-10-27"
+    "commit": "f1734308f2580c181d4b315ba6aa7b5625242b19",
+    "date": "2026-10-29"
   },
   "files": {
     "contracts/ai-fighter/validate.mjs": {
@@ -12,15 +12,15 @@
     },
     "contracts/ai-fighter/v1/spec.json": {
       "upstream": "contracts/ai-fighter/v1/spec.json",
-      "sha256": "93127ba4c9dbcf202a586739e09c62dbcfc9a3c19cea5b771ede3e963eb41c0f"
+      "sha256": "eba85bc87340ef28905ac77431ca35ca365727774af5f6804cee5bc9dc3d6625"
     },
     "contracts/ai-fighter/v1/fighter.schema.json": {
       "upstream": "contracts/ai-fighter/v1/fighter.schema.json",
-      "sha256": "fa1fa8b9c7e96ce6beb17ad37aa5ef5f63c1bd7003844d92787cee89a3ef2f4e"
+      "sha256": "0d38474d16bda305154657d5b80a899f8b46efa77e48e491edb3da14b2d62acb"
     },
     "contracts/ai-fighter/v1/invalid-examples.json": {
       "upstream": "contracts/ai-fighter/v1/invalid-examples.json",
-      "sha256": "8ddc4d806ae2f840ed288c8140f328c6dfdb2cb56cfa8bdd93f007905eb142ec"
+      "sha256": "db78bb99e95d5ea092d305577387106d39cef34f43927ad0158e8ab4eec307cc"
     },
     "server/ai-fighter-package.mjs": {
       "upstream": "server/ai-fighter-package.mjs",

@@ -1,6 +1,6 @@
 // Offline analysis only. Never dispatches review/generation or changes approval policy.
 import { createHash } from 'node:crypto';
-import { reviewEvidence, questions } from '../api/decisions-review.mjs';
+import { reviewEvidence, questions, gaitCount } from '../api/decisions-review.mjs';
 import { RESPONSE_REVIEW } from '../api/responses-benchmark.mjs';
 import { SEQUENCE_METHODS, PAIRED_SEQUENCE_METHOD, BENCHMARK_TIMEOUT_MS } from '../api/sequence-benchmark.mjs';
 import { validateComparisonPlan } from './animation-review-plan.mjs';
@@ -31,7 +31,7 @@ export function canonicalEvidence(value, { native = false } = {}) {
     if (candidate) candidates++; else references++;
     return Object.fromEntries(keys.map(k => [k, image[k]]));
   });
-  if (references !== 1 || (native ? candidates < 2 || candidates > 64 : candidates !== (value.scope === 'walk' ? 16 : 12))) fail('Wrong sequence image count');
+  if (references !== 1 || (native ? candidates < 2 || candidates > 64 : !gaitCount(value.scope, candidates))) fail('Wrong sequence image count');
   return { stage: value.stage, scope: value.scope, images };
 }
 export const evidenceDigest = (value, options) => digest(JSON.stringify(canonicalEvidence(value, options)));

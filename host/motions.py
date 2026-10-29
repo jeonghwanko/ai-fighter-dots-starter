@@ -535,13 +535,17 @@ def game_pack_frames(pack_file: Path, animation: str):
     return frames, anim["durations_ms"]
 
 
+GAIT_FRAMES = {"walk": (12, 32), "run": (10, 16)}
+
+
 def decision_frames(pack_file: Path, animation: str, out: Path):
     """Exact final-pack pixels and durations for server review. No resize, ground alignment or animation flattening."""
     if animation not in ("walk", "run"):
         raise ValueError("review expects walk or run")
     frames, durations = game_pack_frames(pack_file, animation)
     identity, _ = game_pack_frames(pack_file, "idle")
-    if len(frames) != (16 if animation == "walk" else 12) or len(durations) != len(frames):
+    # The contract's range (gait-frames-1): a gait keeps the frames it was filmed in, the standard 16 and 12 inside it.
+    if not (GAIT_FRAMES[animation][0] <= len(frames) <= GAIT_FRAMES[animation][1]) or len(durations) != len(frames):
         raise ValueError("incomplete review sequence")
     out.mkdir(parents=True, exist_ok=True)
     Image.fromarray(identity[0]).save(out / "identity.png")
@@ -708,7 +712,7 @@ def judge_prompt(motion: str) -> str:
     """What a vision model is asked about one gait loop. Image 1 is the chosen look, image 2 the loop's contact sheet (every frame in
     order, the ground line drawn). Alternation is not asked: the engine reads it (its foot naming), and legs of one colour seen from
     the side look alike to a vision model (2026-10-28)."""
-    what = {"walk": "a walk cycle (16 frames)", "run": "a run cycle (12 frames)"}[motion]
+    what = {"walk": "a walk cycle", "run": "a run cycle"}[motion]
     return "\n".join([
         f"Image 2 is {what} of a 2D fighting-game character seen from the side, every frame in order, left to right and top to bottom,",
         "with a thin ground line. Image 1 is the character's approved look. Judge the frames strictly; answer with JSON only, as the schema says.",

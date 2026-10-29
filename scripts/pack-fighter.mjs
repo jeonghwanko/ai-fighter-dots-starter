@@ -235,8 +235,10 @@ async function packMotion(name, motion, animation, plan) {
   const getUp = animation.getUp?.frames.map((frame, step) => ({ clip: 'fall', ...include({ frame,
     durationMs: animation.getUp.durations[step], key: animation.getUp.keys[step] }) }));
   if (motionSpec.kind === 'gait') {
-    if (unique.length !== (motionSpec.frames ?? 1) || steps.some((step, index) => step.frame !== index))
-      fail('GAIT_FRAMES', `${name}: needs ${motionSpec.frames} distinct frames played once in order; found ${unique.length} distinct in ${steps.length} steps`);
+    // A gait keeps the frames it was filmed or drawn in, inside the contract's range (gait-frames-1); idle is one.
+    const fewest = motionSpec.minFrames ?? motionSpec.frames ?? 1, most = motionSpec.maxFrames ?? motionSpec.frames ?? 1;
+    if (unique.length < fewest || unique.length > most || steps.some((step, index) => step.frame !== index))
+      fail('GAIT_FRAMES', `${name}: needs ${fewest === most ? fewest : `${fewest} to ${most}`} distinct frames played once in order; found ${unique.length} distinct in ${steps.length} steps`);
     if (new Set(steps.map(step => step.durationMs)).size !== 1) fail('GAIT_TIMING', `${name}: every gait frame needs the same duration`);
   }
   let groundY = 0, union = null;

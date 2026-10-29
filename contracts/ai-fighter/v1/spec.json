@@ -41,12 +41,16 @@
     "walk": {
       "kind": "gait",
       "frames": 16,
+      "minFrames": 12,
+      "maxFrames": 32,
       "loop": true,
       "purpose": "걷기 한 주기. 양발 교대, 같은 접지 기준."
     },
     "run": {
       "kind": "gait",
       "frames": 12,
+      "minFrames": 10,
+      "maxFrames": 16,
       "loop": true,
       "purpose": "달리기 한 주기. 양발 교대."
     },
@@ -136,8 +140,20 @@
     "profile-names-1",
     "combat-style-1",
     "extra-clips-1",
-    "profile-lines-1"
+    "profile-lines-1",
+    "gait-frames-1"
   ],
+  "gaitFrames": {
+    "walk": {
+      "min": 12,
+      "max": 32
+    },
+    "run": {
+      "min": 10,
+      "max": 16
+    },
+    "note": "걷기·달리기는 찍거나 그린 한 주기의 칸 수 그대로 낸다(이 범위 안). frames 는 마을 표준(걷기 16·달리기 12)이다. 칸마다 같은 durationMs 로 재생하고, 한 주기 시간이 걸음 속도를 정한다."
+  },
   "profileExtras": {
     "languages": [
       "ko",

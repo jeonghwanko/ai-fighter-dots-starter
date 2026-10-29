@@ -37,9 +37,13 @@ for (const failure of invalid) test(failure.description, () => {
   const input = clone(), leaf = failure.path.slice(0, -1).reduce((node, key) => node[key], input);
   leaf[failure.path.at(-1)] = failure.value; hasCode(validateFighter(input), failure.expectedCode);
 });
-test('all eleven motions and exact gait counts are required', () => {
+test('all eleven motions are required, and a gait frame count stays inside its range', () => {
   for (const name of Object.keys(spec.motions)) { const data = clone(); delete data.clips[name]; hasCode(validateFighter(data), 'SCHEMA_REQUIRED'); }
-  const data = clone(); data.clips.walk.frames.pop(); hasCode(validateFighter(data), 'SCHEMA_MINITEMS');
+  const data = clone(); data.clips.walk.frames.splice(spec.gaitFrames.walk.min - 1); data.clips.walk.origins.splice(spec.gaitFrames.walk.min - 1);
+  hasCode(validateFighter(data), 'SCHEMA_MINITEMS');
+  // gait-frames-1: a walk or run at the count it was filmed in (fewer than the standard here) is taken.
+  const own = clone(); own.clips.run.frames.splice(spec.gaitFrames.run.min); own.clips.run.origins.splice(spec.gaitFrames.run.min);
+  assert.equal(validateFighter(own).ok, true);
 });
 test('duplicate names, IDs, paths, and prototype-shaped fields cannot override state', () => {
   hasCode(parseFighterJson('{"a":1,"\\u0061":2}'), 'DUPLICATE_MEMBER');
