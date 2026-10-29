@@ -88,7 +88,8 @@ npm run sprite:status
   연결만 확인할 때 `purpose: "connection"`, 완성된 패키지 등록 때 `purpose: "registration"`을 지정한다.
   두 목적은 생성 구독 질문·키트 업데이트·Python 설치를 생략한다. 새 생성 준비만 기본 `purpose: "generation"`이다.
   연결 실행은 `connect_oddbout`의 `start` → 사용자 Google 승인 → `wait` 순서다. 로그인 후 MCP 재시작은 필요 없다.
-  - **kit:** 버전·작업 기록이 아직 하나도 없을 때만 이 브랜치를 fast-forward하고 동작 패치를 적용한다.
+  - **kit:** 버전·작업 기록이 아직 하나도 없을 때만 이 브랜치를 fast-forward한다. 고정된 엔진(`vendor/sprite-gen`)이 바뀌었거나 없으면
+    `nextCommands`에 `npm run sprite:setup`이 들어간다. 예전의 해시 고정 동작 패치는 엔진 고정으로 대체되어 더 적용하지 않는다.
     추적 파일에 로컬 변경이 있거나, 다른 브랜치이거나, 원격과 갈라졌으면 바꾸지 않고 `blocked`로 알린다.
     캐릭터가 진행 중이거나 작업 공간을 모르면 보고만 한다.
     돌려준 `nextCommands`를 모두 실행하고, `restartRequired`면 호스트를 다시 시작한다.
