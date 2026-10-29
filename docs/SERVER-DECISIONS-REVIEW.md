@@ -72,6 +72,10 @@ Sol 예약 시에도 임대·호스트·단계·공통 한도를 다시 검사�
 
 ### 기존 결과물 비교
 
+저장된 결과의 독립 정답·질문별 누락 검출·보류율 비교와 생성 없는 프레임 교환 실험은
+[오프라인 평가 절차](ANIMATION-REVIEW-EVALUATION.md)를 따른다. 실제 API 호출 없이 실행하는 도구이며,
+기존 0.8 기준이나 Luna→Sol 정책을 바꾸지 않는다. 합성 데모는 평가 코드 확인용이고 실제 정확도 근거가 아니다.
+
 완료된 결과물은 운영자가 `af_decision_benchmark_cases`에 호스트, 설계 의도, 증거 해시·크기·시간 및 최대 1일 만료를 등록한 뒤 비교한다.
 `POST /generation-worker/decision-benchmarks/{caseId}`는 기존 생성 워커 인증을 요구한다. 워커는 등록·질문 변경·임의 이미지 교체 권한이 없으며,
 서버가 해시를 다시 계산해 등록된 전체 바인딩과 일치할 때만 같은 검수기를 호출한다. 생성 작업을 만들거나 기존 작업의 임대·상태를 바꾸지 않는다.
@@ -85,6 +89,13 @@ Sol 예약 시에도 임대·호스트·단계·공통 한도를 다시 검사�
 비용 추정에는 응답의 입력·캐시 읽기·캐시 쓰기 토큰을 구분하며, 과금 내역을 조회하지 않았다면 실제 청구 금액으로 단정하지 않는다.
 
 #### Sol·Astra 비교
+
+native 프레임의 Luna 기존/개선 paired 비교는 [동결 실험 절차](ANIMATION-REVIEW-EVALUATION.md#frozen-native-sequence-paired-experiment)를 따른다.
+운영자가 `intent.sequenceBenchmark`에 `paired-native-v1`과 동결 계획 해시를 등록하면 한 호출에 기존 5개와 개선 5개 독립 질문을 보낸다.
+개선 시간표·인접 전이·원본 마지막/첫 프레임 패널은 개선 질문 안에만 있고 기존 shared input은 변하지 않는다.
+연구 전용으로 2–64 원본 프레임, 32 MiB 본문, 110초 제한을 허용하며 운영 16/12 프레임·8 MiB·25초는 유지한다.
+메타데이터 16,000바이트 migration을 먼저 검토하고 같은 원장·상한·서버 키를 사용한다. Responses/cascade와 혼합하거나 결과 불명을 재시도하지 않는다.
+팔별 시간·비용은 분리 측정할 수 없으며 실제 독립 정답과 동결 계획이 없는 모의 테스트는 성능 결과가 아니다.
 
 운영자가 등록한 사례의 `intent.benchmarkReview`만 Responses 비교를 선택할 수 있다.
 형식은 `{ "model": "gpt-6.1-sol", "questionNames": ["anatomy", "identity", "framing"] }`이며,

@@ -1,6 +1,7 @@
 // Server-only advisory review. The caller supplies evidence, never a model, prompt, endpoint or credential.
 import { Problem, readBody, sha256 } from './http.mjs';
 import { probeImage } from './image-probe.mjs';
+import { sequencePresentation, SEQUENCE_METHODS, PAIRED_SEQUENCE_METHOD, BENCHMARK_TIMEOUT_MS } from './sequence-benchmark.mjs';
 
 export const DECISIONS = Object.freeze({ model: 'gpt-6-luna', rubric: 'hosted-sprite-v1', threshold: 0.8,
   bodyBytes: 8 * 1024 * 1024, imageBytes: 2 * 1024 * 1024, timeoutMs: 25_000 });
@@ -32,10 +33,18 @@ function object(value, keys) {
   return value;
 }
 export async function reviewEvidence(body) {
+  return parseEvidence(body, false);
+}
+// Only the operator-enrolled benchmark route calls this; production remains 16/12.
+export async function nativeSequenceEvidence(body) {
+  if (body?.stage !== 'sequence') invalid();
+  return parseEvidence(body, true);
+}
+async function parseEvidence(body, native) {
   object(body, ['stage', 'scope', 'images']);
   const { stage, scope, images } = body;
   if (!Object.hasOwn(RUBRICS, stage) || !({ input: ['design'], pose: ['look-a', 'look-b'], sequence: ['walk', 'run'] }[stage]?.includes(scope))) invalid();
-  if (!Array.isArray(images) || images.length > 17) invalid();
+  if (!Array.isArray(images) || images.length > (native ? 65 : 17)) invalid();
   const binding = [], content = []; let candidates = 0, references = 0;
   for (const value of images) {
     const image = object(value, ['role', 'dataUrl', 'sha256', 'durationMs']);
@@ -68,7 +77,7 @@ export async function reviewEvidence(body) {
     content.push({ type: 'input_json', data: record }, { type: 'input_image', detail: 'original', image_url: `data:${info.type};base64,${base64(bytes)}` });
   }
   if (references > 3 || (stage === 'input' && candidates !== 0) || (stage === 'pose' && candidates !== 1)
-    || (stage === 'sequence' && (references !== 1 || candidates !== (scope === 'walk' ? 16 : 12)))) invalid();
+    || (stage === 'sequence' && (references !== 1 || (native ? candidates < 2 || candidates > 64 : candidates !== (scope === 'walk' ? 16 : 12))))) invalid();
   return { stage, scope, binding, content };
 }
 
@@ -110,19 +119,45 @@ function usageOf(usage) {
   return Object.keys(out).length ? out : null;
 }
 
+export async function decisionsRequest({ job, evidence, sequenceConfig }) {
+  const qs = questions(evidence.stage);
+  const intent = { description: job.description, brief: job.brief, appearanceNote: job.appearance_note ?? null,
+    motionNote: job.motion_note ?? null, scope: evidence.scope, stage: evidence.stage };
+  const paired = sequenceConfig?.method === PAIRED_SEQUENCE_METHOD;
+  const presentation = sequenceConfig === undefined || paired ? null : await sequencePresentation(evidence, sequenceConfig);
+  const request = { model: DECISIONS.model, input: [{ role: 'developer', content: RULES + (presentation?.rules ?? '') },
+    { role: 'user', content: [{ type: 'input_json', data: { designIntentNotObservations: intent } }, ...(presentation?.content ?? evidence.content)] }], questions: qs };
+  let researchBinding = presentation?.binding;
+  if (paired) {
+    const baseline = await sequencePresentation(evidence, { ...sequenceConfig, method: SEQUENCE_METHODS[0] });
+    const improved = await sequencePresentation(evidence, { ...sequenceConfig, method: SEQUENCE_METHODS[1] });
+    const extra = [improved.content[0], ...improved.content.slice(evidence.content.length + 1)]
+      .map(part => part.type === 'input_json' ? { type: 'input_text', text: JSON.stringify(part.data) } : part);
+    // The shared prefix and baseline questions are byte-identical to baseline-only requests.
+    // Additional evidence is local to each independent improved question, never in shared input.
+    request.questions = [...qs, ...qs.map(q => ({ ...q, name: `improved_${q.name}`,
+      instructions: [{ type: 'input_text', text: q.instructions + improved.rules }, ...extra] }))];
+    researchBinding = { version: 1, evidencePolicy: 'native-2-64-v1', timeoutMs: BENCHMARK_TIMEOUT_MS, method: PAIRED_SEQUENCE_METHOD,
+      planSha256: sequenceConfig.planSha256, sourceEvidenceSha256: baseline.binding.sourceEvidenceSha256,
+      arms: Object.fromEntries([baseline, improved].map((arm, index) => [arm.binding.method,
+        { presentationSha256: arm.binding.presentationSha256, questionNames: qs.map(q => index ? `improved_${q.name}` : q.name) }])) };
+  }
+  const raw = JSON.stringify(request), requestSha256 = await sha256(new TextEncoder().encode(raw));
+  const binding = { images: evidence.binding, requestSha256, model: DECISIONS.model, rubric: DECISIONS.rubric, threshold: DECISIONS.threshold,
+    ...(researchBinding ? { sequenceBenchmark: researchBinding } : {}) };
+  const fingerprint = await sha256(new TextEncoder().encode(JSON.stringify({ requestSha256, rubric: DECISIONS.rubric,
+    threshold: DECISIONS.threshold, ...(researchBinding ? { sequenceBenchmark: researchBinding } : {}) })));
+  return { request, raw, binding, fingerprint };
+}
+
 export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fetch } = {}) {
   const active = enabled === true && typeof apiKey === 'string' && apiKey.trim().length > 0;
   return {
     enabled: active,
-    async review({ db, job, host, lease, evidence }) {
+    async review({ db, job, host, lease, evidence, sequenceConfig }) {
       if (!active) return { mode: 'off', status: 'disabled', advisory: true, visualApproval: false };
-      const qs = questions(evidence.stage);
-      const intent = { description: job.description, brief: job.brief, appearanceNote: job.appearance_note ?? null,
-        motionNote: job.motion_note ?? null, scope: evidence.scope, stage: evidence.stage };
-      const request = { model: DECISIONS.model, input: [{ role: 'developer', content: RULES },
-        { role: 'user', content: [{ type: 'input_json', data: { designIntentNotObservations: intent } }, ...evidence.content] }], questions: qs };
-      const raw = JSON.stringify(request), requestSha256 = await sha256(new TextEncoder().encode(raw));
-      const fingerprint = await sha256(new TextEncoder().encode(JSON.stringify({ requestSha256, rubric: DECISIONS.rubric, threshold: DECISIONS.threshold })));
+      const { request, raw, binding, fingerprint } = await decisionsRequest({ job, evidence, sequenceConfig });
+      const qs = request.questions;
       const rpc = async (name, args) => {
         const { data, error } = await db.rpc(name, args);
         if (error) {
@@ -134,12 +169,18 @@ export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fet
       };
       const claimed = await rpc('af_decision_review_start', { p_job: job.id, p_host: host, p_lease: lease,
         p_fingerprint: fingerprint, p_stage: evidence.stage, p_scope: evidence.scope,
-        p_binding: { images: evidence.binding, requestSha256, model: DECISIONS.model, rubric: DECISIONS.rubric, threshold: DECISIONS.threshold } });
+        p_binding: binding });
       // Persisted before dispatch. A crash or timeout never frees this fingerprint for another paid call.
-      if (!claimed.started) return claimed.report;
+      if (!claimed.started) {
+        if (claimed.report?.binding?.requestSha256 !== binding.requestSha256
+          || claimed.report.binding.sequenceBenchmark?.method !== binding.sequenceBenchmark?.method
+          || claimed.report.binding.sequenceBenchmark?.planSha256 !== binding.sequenceBenchmark?.planSha256)
+          throw new Problem(409, 'review-binding-changed');
+        return claimed.report;
+      }
       const started = performance.now(); let requestId = null, providerHttpStatus = null, usage = null, report;
       try {
-        const response = await fetcher(ENDPOINT, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(DECISIONS.timeoutMs),
+        const response = await fetcher(ENDPOINT, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(sequenceConfig ? BENCHMARK_TIMEOUT_MS : DECISIONS.timeoutMs),
           headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, body: raw });
         providerHttpStatus = response.status;
         const rid = response.headers.get('x-request-id');

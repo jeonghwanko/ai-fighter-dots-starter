@@ -3,6 +3,7 @@
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
+import { BENCHMARK_BODY_BYTES } from '../api/sequence-benchmark.mjs';
 
 if (process.platform !== 'linux') throw new Error('Run on the authorized Linux server, not a creator PC');
 const [manifestPath, workerEnvPath, resultPath] = process.argv.slice(2);
@@ -21,7 +22,7 @@ for (const entry of manifest.cases) {
   if (!/^[a-f0-9-]{36}$/.test(entry.id)) throw new Error('Missing enrolled case id');
   const filename = path.resolve(path.dirname(manifestPath), entry.request);
   const raw = await readFile(filename);
-  if (raw.length > 8 * 1024 * 1024 || createHash('sha256').update(raw).digest('hex') !== entry.requestSha256) throw new Error('Request bytes changed');
+  if (raw.length > BENCHMARK_BODY_BYTES || createHash('sha256').update(raw).digest('hex') !== entry.requestSha256) throw new Error('Request bytes changed');
   const item = { caseId: entry.id, label: entry.label, requestSha256: entry.requestSha256, status: 'request_started' };
   result.calls.push(item); await writeFile(resultPath, JSON.stringify(result, null, 2), { mode: 0o600 });
   const start = performance.now();
