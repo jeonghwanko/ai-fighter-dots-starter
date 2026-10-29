@@ -1,5 +1,6 @@
 import { Problem, UUID } from './http.mjs';
-import { reviewEvidence } from './decisions-review.mjs';
+import { reviewEvidence, nativeSequenceEvidence } from './decisions-review.mjs';
+import { sequenceConfig as validateSequenceConfig } from './sequence-benchmark.mjs';
 import { benchmarkConfig } from './responses-benchmark.mjs';
 
 /** A generation worker may submit only evidence enrolled for its host by an operator, once per case. */
@@ -10,8 +11,11 @@ export async function benchmarkReview({ db, reviewer, responsesReviewer, cascade
   if (error) throw new Problem(503, 'review-store-unavailable');
   if (!row) throw new Problem(404, 'not-found');
   if (Date.parse(row.expires_at) <= Date.now()) throw new Problem(410, 'benchmark-expired');
-  const evidence = await reviewEvidence(body);
+  const sequenceConfig = row.intent.sequenceBenchmark;
+  if (sequenceConfig !== undefined) validateSequenceConfig(sequenceConfig);
+  const evidence = await (sequenceConfig === undefined ? reviewEvidence(body) : nativeSequenceEvidence(body));
   const config = row.intent.benchmarkReview;
+  if (sequenceConfig !== undefined && (config !== undefined || row.intent.cascadeFollowupCaseId !== undefined)) throw new Problem(422, 'invalid-benchmark-config');
   if (config !== undefined) { benchmarkConfig(config, evidence.stage); reviewer = responsesReviewer; }
   // Operators may pair two one-call cases to smoke-test the production cascade on
   // existing art. Workers cannot enroll a case or choose a second model/case.
@@ -23,7 +27,7 @@ export async function benchmarkReview({ db, reviewer, responsesReviewer, cascade
     const { data: child, error: childError } = await db.from('af_decision_benchmark_cases').select('id,host_id,intent,evidence,expires_at')
       .eq('id', followupId).eq('host_id', effectiveHost).maybeSingle();
     if (childError) throw new Problem(503, 'review-store-unavailable');
-    if (!child || child.intent.benchmarkReview !== undefined || child.intent.cascadeFollowupCaseId !== undefined
+    if (!child || child.intent.benchmarkReview !== undefined || child.intent.cascadeFollowupCaseId !== undefined || child.intent.sequenceBenchmark !== undefined
       || JSON.stringify(intentOf(child)) !== JSON.stringify(intentOf(row))
       || JSON.stringify(child.evidence) !== JSON.stringify(row.evidence)) throw new Problem(422, 'invalid-benchmark-config');
     if (Date.parse(child.expires_at) <= Date.now()) throw new Problem(410, 'benchmark-expired');
@@ -38,5 +42,5 @@ export async function benchmarkReview({ db, reviewer, responsesReviewer, cascade
     : db.rpc(name, args) };
   const job = { id: caseId, description: row.intent.description, brief: row.intent.brief,
     appearance_note: row.intent.appearance_note, motion_note: row.intent.motion_note };
-  return reviewer.review({ db: mapped, job, host, lease: null, evidence, config });
+  return reviewer.review({ db: mapped, job, host, lease: null, evidence, config, sequenceConfig });
 }

@@ -2,6 +2,8 @@
 import { createHash } from 'node:crypto';
 import { reviewEvidence, questions } from '../api/decisions-review.mjs';
 import { RESPONSE_REVIEW } from '../api/responses-benchmark.mjs';
+import { SEQUENCE_METHODS, PAIRED_SEQUENCE_METHOD, BENCHMARK_TIMEOUT_MS } from '../api/sequence-benchmark.mjs';
+import { validateComparisonPlan } from './animation-review-plan.mjs';
 
 const HEX = /^[a-f0-9]{64}$/;
 const VALUES = ['clear', 'defect', 'unverified'];
@@ -16,7 +18,7 @@ export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 
 // This is the image-evidence identity, NOT the server prompt/request fingerprint.
 // Normalize key order while retaining image order, reference, dimensions and timing.
-export function canonicalEvidence(value) {
+export function canonicalEvidence(value, { native = false } = {}) {
   if (!exact(value, ['stage', 'scope', 'images']) || value.stage !== 'sequence' || !['walk', 'run'].includes(value.scope)
     || !Array.isArray(value.images)) fail('Expected sequence evidence');
   let candidates = 0, references = 0;
@@ -29,13 +31,15 @@ export function canonicalEvidence(value) {
     if (candidate) candidates++; else references++;
     return Object.fromEntries(keys.map(k => [k, image[k]]));
   });
-  if (references !== 1 || candidates !== (value.scope === 'walk' ? 16 : 12)) fail('Wrong sequence image count');
+  if (references !== 1 || (native ? candidates < 2 || candidates > 64 : candidates !== (value.scope === 'walk' ? 16 : 12))) fail('Wrong sequence image count');
   return { stage: value.stage, scope: value.scope, images };
 }
-export const evidenceDigest = value => digest(JSON.stringify(canonicalEvidence(value)));
+export const evidenceDigest = (value, options) => digest(JSON.stringify(canonicalEvidence(value, options)));
 
 export function validateLabels(manifest) {
-  if (!exact(manifest, ['version', 'provenance', 'cases']) || manifest.version !== 1
+  const native = manifest?.version === 2;
+  if (!exact(manifest, ['version', 'provenance', 'cases', ...(native ? ['evidencePolicy'] : [])]) || ![1, 2].includes(manifest.version)
+    || (native && manifest.evidencePolicy !== 'native-2-64-v1')
     || !exact(manifest.provenance, ['method', 'reviewer', 'recordedAt'])
     || !['human-independent', 'synthetic-demo'].includes(manifest.provenance.method)
     || !identifier(manifest.provenance.reviewer, 64)
@@ -48,12 +52,12 @@ export function validateLabels(manifest) {
     if (!exact(entry, ['id', 'sourceGroup', 'split', 'evidence', 'labels']) || !identifier(entry.id, 80)
       || ids.has(entry.id) || !hash(entry.sourceGroup) || !['calibration', 'held-out'].includes(entry.split)
       || !exact(entry.labels, NAMES) || Object.values(entry.labels).some(v => !VALUES.includes(v))) fail('Invalid or duplicate labeled case');
-    const evidenceSha256 = evidenceDigest(entry.evidence);
+    const evidenceSha256 = evidenceDigest(entry.evidence, { native });
     if (bindings.has(evidenceSha256)) fail('Duplicate labeled evidence');
     if (groups.has(entry.sourceGroup) && groups.get(entry.sourceGroup) !== entry.split) fail('Source family crosses calibration/held-out split');
     // Catch undeclared frame permutations/time variants even if sourceGroup was assigned incorrectly.
     // A shared reference alone does not group unrelated candidate sequences.
-    const inventory = digest(JSON.stringify(canonicalEvidence(entry.evidence).images.map(({ role, sha256, width, height }) =>
+    const inventory = digest(JSON.stringify(canonicalEvidence(entry.evidence, { native }).images.map(({ role, sha256, width, height }) =>
       JSON.stringify({ role, sha256, width, height })).sort()));
     if (inventories.has(inventory) && inventories.get(inventory) !== entry.split) fail('Same image inventory crosses calibration/held-out split');
     inventories.set(inventory, entry.split);
@@ -62,11 +66,15 @@ export function validateLabels(manifest) {
   });
 }
 
-function checkedReport(report) {
+function checkedReport(report, transport = 'standalone') {
   if (!object(report) || !['completed', 'unverified', 'request_started'].includes(report.status) || !object(report.binding)) fail('Invalid saved report');
   const b = report.binding;
   if (!hash(b.requestSha256) || b.rubric !== 'hosted-sprite-v1') fail('Unsupported report binding/rubric');
   const luna = b.model === 'gpt-6-luna';
+  const research = b.sequenceBenchmark;
+  if (research !== undefined && (!luna || !exact(research, ['version', 'evidencePolicy', 'timeoutMs', 'method', 'planSha256', 'sourceEvidenceSha256', 'presentationSha256'])
+    || research.version !== 1 || research.evidencePolicy !== 'native-2-64-v1' || research.timeoutMs !== BENCHMARK_TIMEOUT_MS || !SEQUENCE_METHODS.includes(research.method)
+    || ![research.planSha256, research.sourceEvidenceSha256, research.presentationSha256].every(hash) || b.threshold !== 0.8 || b.policy !== undefined)) fail('Invalid native benchmark binding');
   if (luna ? b.adapter !== undefined || !unit(b.threshold)
     : !['gpt-6.1-sol', 'gpt-6-astra'].includes(b.model) || b.adapter !== 'responses-choice-v1'
       || b.confidenceType !== 'not-available' || b.reasoning !== RESPONSE_REVIEW.reasoning
@@ -74,7 +82,9 @@ function checkedReport(report) {
   const names = luna ? NAMES : b.questionNames;
   if (!Array.isArray(names) || !names.length || new Set(names).size !== names.length || names.some(n => !NAMES.includes(n))) fail('Invalid report questions');
   if (b.policy !== undefined && (b.policy !== 'luna-sol-v1' || b.model !== 'gpt-6.1-sol' || !hash(b.parentRequestSha256))) fail('Invalid followup policy');
-  const evidence = canonicalEvidence({ stage: report.stage, scope: report.scope, images: b.images });
+  const evidence = canonicalEvidence({ stage: report.stage, scope: report.scope, images: b.images }, { native: research !== undefined });
+  const sourceEvidenceSha256 = evidenceDigest(evidence, { native: research !== undefined });
+  if (research && research.sourceEvidenceSha256 !== sourceEvidenceSha256) fail('Native source evidence mismatch');
   if (report.checks !== undefined && (!object(report.checks) || Object.keys(report.checks).some(n => !names.includes(n)))) fail('Unexpected report checks');
   const checks = {};
   for (const name of names) {
@@ -91,14 +101,32 @@ function checkedReport(report) {
         || Math.abs(Object.values(c.probabilities).reduce((a, n) => a + n, 0) - 1) > 0.0001) fail('Invalid saved probabilities');
       if (c.status !== gated(c, b.threshold)) fail('Recorded status contradicts its bound threshold');
     } else if (c.status !== c.choice || typeof c.reason !== 'string' || c.reason.length > 400
-      || !Array.isArray(c.frames) || c.frames.length > 16 || new Set(c.frames).size !== c.frames.length
+      || !Array.isArray(c.frames) || c.frames.length > evidence.images.length - 1 || new Set(c.frames).size !== c.frames.length
       || c.frames.some(n => !Number.isInteger(n) || n < 0 || n >= evidence.images.length - 1)) fail('Invalid Responses answer');
     checks[name] = c;
   }
   const cohort = { model: b.model, adapter: luna ? 'decisions' : b.adapter, rubric: b.rubric,
+    ...(research ? { method: research.method, evidencePolicy: research.evidencePolicy, planSha256: research.planSha256, transport } : {}),
     policy: b.policy ?? 'standalone', questionNames: NAMES.filter(n => names.includes(n)),
     ...(luna ? { recordedThreshold: b.threshold } : { reasoning: b.reasoning, maxOutputTokens: b.maxOutputTokens }) };
-  return { report, checks, luna, cohort, evidenceSha256: evidenceDigest(evidence) };
+  return { report, checks, luna, cohort, evidenceSha256: sourceEvidenceSha256 };
+}
+function unpackPaired(report) {
+  const b = report.binding, p = b?.sequenceBenchmark;
+  if (p?.method !== PAIRED_SEQUENCE_METHOD) return [{ report, transport: 'standalone' }];
+  if (!exact(p, ['version', 'evidencePolicy', 'timeoutMs', 'method', 'planSha256', 'sourceEvidenceSha256', 'arms'])
+    || p.version !== 1 || p.evidencePolicy !== 'native-2-64-v1' || !hash(p.planSha256) || !hash(p.sourceEvidenceSha256)
+    || !exact(p.arms, SEQUENCE_METHODS) || report.followup !== undefined
+    || (report.checks !== undefined && (!object(report.checks) || Object.keys(report.checks).some(n => ![...NAMES, ...NAMES.map(n => `improved_${n}`)].includes(n))))) fail('Invalid paired report');
+  return SEQUENCE_METHODS.map((method, index) => {
+    const arm = p.arms[method], expectedNames = NAMES.map(n => index ? `improved_${n}` : n);
+    if (!exact(arm, ['presentationSha256', 'questionNames']) || !hash(arm.presentationSha256)
+      || JSON.stringify(arm.questionNames) !== JSON.stringify(expectedNames)) fail('Invalid paired question mapping');
+    return { transport: 'paired-independent-questions-v1', report: { ...report,
+      binding: { ...b, sequenceBenchmark: { version: p.version, evidencePolicy: p.evidencePolicy, timeoutMs: p.timeoutMs, method,
+        planSha256: p.planSha256, sourceEvidenceSha256: p.sourceEvidenceSha256, presentationSha256: arm.presentationSha256 } },
+      checks: Object.fromEntries(NAMES.flatMap((name, i) => report.checks?.[expectedNames[i]] === undefined ? [] : [[name, report.checks[expectedNames[i]]]])) } };
+  });
 }
 const gated = (check, cutoff) => check.choice && check.confidence >= cutoff && check.probabilities?.[check.choice] >= cutoff ? check.choice : 'unverified';
 const ratio = (n, d) => d ? n / d : null;
@@ -109,9 +137,12 @@ function emptyMetric() {
 function finishMetric(m) {
   const c = m.confusion, defects = Object.values(c.defect).reduce((a, n) => a + n, 0), clean = Object.values(c.clear).reduce((a, n) => a + n, 0);
   const abstentions = c.clear.unverified + c.defect.unverified + c.unverified.unverified;
+  const correct = c.clear.clear + c.defect.defect;
   return { ...m, falseClear: c.defect.clear, falseReject: c.clear.defect, detectedDefects: c.defect.defect,
     defectAbstentions: c.defect.unverified, labeledDefectAttempts: defects, labeledCleanAttempts: clean,
     humanUnverifiedAttempts: Object.values(c.unverified).reduce((a, n) => a + n, 0), abstentions,
+    definitiveHumanCorrect: correct, definitiveHumanAccuracy: ratio(correct, defects + clean),
+    resolvedPredictions: m.attempted - abstentions, resolvedCoverage: ratio(m.attempted - abstentions, m.attempted),
     coverage: ratio(m.attempted, m.expectedCases), falseClearRate: ratio(c.defect.clear, defects),
     falseRejectRate: ratio(c.clear.defect, clean), defectRecall: ratio(c.defect.defect, defects),
     abstentionRate: ratio(abstentions, m.attempted) };
@@ -133,8 +164,18 @@ function metrics(cases, rows, names, view, cutoff) {
   return { total: finishMetric(total), byQuestion: Object.fromEntries(Object.entries(byQuestion).map(([n, m]) => [n, finishMetric(m)])) };
 }
 
-export function evaluate(manifest, results, { cutoff = null } = {}) {
+export function evaluate(manifest, results, { cutoff = null, plan = null } = {}) {
   const cases = validateLabels(manifest);
+  if (plan !== null) {
+    validateComparisonPlan(plan);
+    if (manifest.version !== 2 || cases.length !== plan.cases.length) fail('Plan/label inventory mismatch');
+    for (const entry of cases) {
+      const frozen = plan.cases.find(c => c.id === entry.id);
+      if (!frozen || frozen.sourceEvidenceSha256 !== entry.evidenceSha256 || frozen.sourceGroup !== entry.sourceGroup
+        || frozen.split !== entry.split || frozen.frameCount !== entry.evidence.images.length - 1) fail('Plan/label source or split mismatch');
+    }
+    if (cutoff !== null && cutoff !== plan.protocol.threshold) fail('Frozen plan threshold mismatch');
+  }
   if (cutoff !== null && !unit(cutoff)) fail('Cutoff must be a finite number in [0, 1]');
   if (!object(results) || !Array.isArray(results.calls) || results.calls.length > 5000) fail('Expected saved benchmark runner calls');
   const labels = new Map(cases.map(c => [c.evidenceSha256, c]));
@@ -154,15 +195,29 @@ export function evaluate(manifest, results, { cutoff = null } = {}) {
         reports.push(followup);
       }
     }
-    for (const report of reports) {
-      const row = checkedReport(report);
+    for (const originalReport of reports) for (const { report, transport } of unpackPaired(originalReport)) {
+      const row = checkedReport(report, transport);
       if (!labels.has(row.evidenceSha256)) fail('Report evidence has no matching independent labels');
+      if (plan !== null) {
+        const frozen = plan.cases.find(c => c.sourceEvidenceSha256 === row.evidenceSha256);
+        const research = report.binding.sequenceBenchmark, method = frozen?.methods[row.cohort.method];
+        if (!method || research.planSha256 !== plan.planSha256 || transport !== plan.protocol.transport
+          || method.requestSha256 !== report.binding.requestSha256 || method.presentationSha256 !== research.presentationSha256
+          || (call.requestSha256 !== undefined && call.requestSha256 !== frozen.sourceRequestSha256)) fail('Report does not match frozen plan');
+      }
       const key = JSON.stringify(row.cohort);
       if (!cohorts.has(key)) cohorts.set(key, { info: row.cohort, luna: row.luna, rows: new Map() });
       const cohort = cohorts.get(key);
       if (cohort.rows.has(row.evidenceSha256)) fail('Duplicate evidence within model cohort; evaluate repeated trials separately');
       cohort.rows.set(row.evidenceSha256, row);
     }
+  }
+  if (plan) for (const method of SEQUENCE_METHODS) {
+    const info = { model: 'gpt-6-luna', adapter: 'decisions', rubric: 'hosted-sprite-v1', method,
+      evidencePolicy: 'native-2-64-v1', planSha256: plan.planSha256, transport: plan.protocol.transport,
+      policy: 'standalone', questionNames: NAMES, recordedThreshold: 0.8 };
+    const key = JSON.stringify(info);
+    if (!cohorts.has(key)) cohorts.set(key, { info, luna: true, rows: new Map() });
   }
   const output = [];
   for (const { info, luna, rows } of cohorts.values()) {
@@ -175,12 +230,16 @@ export function evaluate(manifest, results, { cutoff = null } = {}) {
         ...(luna && cutoff !== null ? { frozenCutoff: { cutoff, ...metrics(subset, rows, info.questionNames, 'frozen-cutoff', cutoff) } } : {}) };
     }
     output.push({ ...info, partitions,
-      ...(luna ? { calibrationSweep: Array.from({ length: 11 }, (_, i) => i / 10).map(t => ({ cutoff: t,
+      ...(luna && !info.method ? { calibrationSweep: Array.from({ length: 11 }, (_, i) => i / 10).map(t => ({ cutoff: t,
         ...metrics(cases.filter(c => c.split === 'calibration'), rows, info.questionNames, 'frozen-cutoff', t) })) } : {}) });
   }
-  return { version: 1, advisory: true, visualApproval: false, mechanicsOnly: manifest.provenance.method === 'synthetic-demo',
+  return { version: manifest.version, advisory: true, visualApproval: false, mechanicsOnly: manifest.provenance.method === 'synthetic-demo',
     provenance: manifest.provenance, labelsSha256: digest(JSON.stringify(manifest)), frozenCutoff: cutoff,
     labeledCases: cases.length, unboundCalls, cohorts: output,
+    ...(plan ? { planSha256: plan.planSha256, sourceFamilies: new Set(cases.map(c => c.sourceGroup)).size,
+      pairedComparison: comparePaired(cases, [...cohorts.values()]),
+      sharedCalls: { recordedCalls: results.calls.length, completedCalls: results.calls.filter(c => c.report?.status === 'completed').length,
+        perArmCost: null, perArmLatency: null, accounting: 'Shared paired requests; do not sum virtual cohort usage or infer per-arm cost/latency.' } } : {}),
     limitations: ['Human independence and source-family declarations require operator verification.',
       'Unbound calls cannot be assigned a model or evidence; inspect the server ledger, never retry automatically.',
       'Unverified human labels are excluded from defect/clean denominators; missing reports are not clean.',
@@ -188,6 +247,45 @@ export function evaluate(manifest, results, { cutoff = null } = {}) {
       'No cutoff is selected automatically. Freeze the cutoff before inspecting held-out results.',
       'Cohorts with different question subsets or coverage are not an equal-case model comparison.',
       'Frame references are not transition localization; this evaluator does not score localization or approve artwork.'] };
+}
+
+function comparePaired(cases, cohorts) {
+  const baseline = cohorts.find(c => c.info.method === SEQUENCE_METHODS[0]).rows;
+  const improved = cohorts.find(c => c.info.method === SEQUENCE_METHODS[1]).rows;
+  const partitions = {};
+  for (const split of ['calibration', 'held-out']) {
+    const expected = cases.filter(c => c.split === split), matched = expected.filter(c => baseline.has(c.evidenceSha256) && improved.has(c.evidenceSha256));
+    const transitions = names => {
+      const counts = { expectedJudgments: expected.length * names.length, matchedJudgments: matched.length * names.length,
+        humanUnverified: 0, humanDefinitive: 0, bothResolved: 0, baselineUnavailable: 0, improvedUnavailable: 0,
+        baselineCorrectOnly: 0, improvedCorrectOnly: 0, bothCorrect: 0, neitherCorrect: 0,
+        predictionTransitions: Object.fromEntries(VALUES.map(v => [v, Object.fromEntries(VALUES.map(w => [w, 0]))])) };
+      for (const entry of matched) for (const name of names) {
+        const a = baseline.get(entry.evidenceSha256).checks[name], b = improved.get(entry.evidenceSha256).checks[name], human = entry.labels[name];
+        counts.predictionTransitions[a.status][b.status]++;
+        if (a.unavailable) counts.baselineUnavailable++;
+        if (b.unavailable) counts.improvedUnavailable++;
+        if (human === 'unverified') { counts.humanUnverified++; continue; }
+        counts.humanDefinitive++;
+        if (a.status !== 'unverified' && b.status !== 'unverified') counts.bothResolved++;
+        if (a.status === human && b.status === human) counts.bothCorrect++;
+        else if (a.status === human) counts.baselineCorrectOnly++;
+        else if (b.status === human) counts.improvedCorrectOnly++;
+        else counts.neitherCorrect++;
+      }
+      return counts;
+    };
+    const a = metrics(matched, baseline, NAMES, 'recorded'), b = metrics(matched, improved, NAMES, 'recorded');
+    partitions[split] = { expectedCases: expected.length, matchedCases: matched.length, pairedCoverage: ratio(matched.length, expected.length),
+      sourceFamilies: new Set(expected.map(c => c.sourceGroup)).size, baseline: a, improved: b,
+      deltaImprovedMinusBaseline: Object.fromEntries(['falseClearRate', 'falseRejectRate', 'defectRecall', 'abstentionRate', 'definitiveHumanAccuracy', 'resolvedCoverage']
+        .map(key => [key, a.total[key] === null || b.total[key] === null ? null : b.total[key] - a.total[key]])),
+      total: transitions(NAMES), byQuestion: Object.fromEntries(NAMES.map(name => [name, transitions([name])])) };
+  }
+  return { methods: SEQUENCE_METHODS, view: 'recorded-0.8-gate', partitions,
+    limitations: ['Descriptive matched judgments only; correlated clips within a source family are not independent trials.',
+      'Human-unverified labels are separate; model abstentions and unavailable results are not clean.',
+      'No statistical significance or guaranteed improvement is claimed; report unchanged/worse results without tuning.'] };
 }
 
 export async function swappedPair(raw, a, b) {

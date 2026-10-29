@@ -25,12 +25,13 @@ export function responsesRequest({ model, job, evidence, questionNames }) {
   return buildRequest({ model, job, evidence, selected });
 }
 function buildRequest({ model, job, evidence, selected }) {
+  const frameCount = evidence.binding.filter(image => image.role === 'candidate').length;
   const intent = { description: job.description, brief: job.brief, appearanceNote: job.appearance_note ?? null,
     motionNote: job.motion_note ?? null, scope: evidence.scope, stage: evidence.stage };
   const item = { type: 'object', properties: {
     choice: { type: 'string', enum: OPTIONS },
     reason: { type: 'string', maxLength: 400 },
-    frames: { type: 'array', items: { type: 'integer', minimum: 0, maximum: 15 }, maxItems: 16 },
+    frames: { type: 'array', items: { type: 'integer', minimum: 0, maximum: Math.max(0, frameCount - 1) }, maxItems: frameCount },
   }, required: ['choice', 'reason', 'frames'], additionalProperties: false };
   // input_json is serialized without altering its data; images, order, detail and durations are unchanged.
   const content = [{ type: 'input_json', data: { designIntentNotObservations: intent } }, ...evidence.content]
@@ -66,7 +67,7 @@ function checksOf(value, model, names, count) {
     const a = answers[name];
     if (!a || Object.keys(a).sort().join(',') !== 'choice,frames,reason' || !OPTIONS.includes(a.choice)
       || typeof a.reason !== 'string' || a.reason.length > 400 || a.reason.includes('\0') || !a.reason.isWellFormed()
-      || !Array.isArray(a.frames) || a.frames.length > 16 || new Set(a.frames).size !== a.frames.length
+      || !Array.isArray(a.frames) || a.frames.length > count || new Set(a.frames).size !== a.frames.length
       || a.frames.some(n => !Number.isSafeInteger(n) || n < 0 || n >= count)) throw Error('invalid-response');
     checks[name] = { status: a.choice, choice: a.choice, reason: a.reason, frames: a.frames };
   }

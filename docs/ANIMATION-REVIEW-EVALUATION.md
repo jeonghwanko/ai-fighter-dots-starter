@@ -75,8 +75,8 @@ This is a schema illustration with deliberately invalid placeholders, not a labe
 timestamp and labels with actual review records. `evidence` is `{stage, scope, images}`; copy the exact
 `originalEvidence`/`variantEvidence` objects from the pair preparation below, or the saved report's
 `{stage, scope, images: binding.images}`. All candidate entries include zero-based index, SHA-256, width,
-height and duration; the reference includes its role, SHA-256 and dimensions. The evaluator currently accepts
-only the existing 16-frame walk and 12-frame run sequence formats.
+height and duration; the reference includes its role, SHA-256 and dimensions. Version 1 accepts
+the existing 16-frame walk and 12-frame run sequence formats. The native research format below is separate.
 
 For a source without a pair, `evidenceDigest(evidence)` exported by `scripts/animation-review-eval-lib.mjs`
 computes its group ID. Do not invent hashes or reuse the server's prompt fingerprint as an evidence ID.
@@ -161,6 +161,81 @@ all-abstaining reviewer has zero defect recall when human defects exist. Missing
 rate denominators, so always inspect coverage alongside rates. `unboundCalls` counts calls with no evidence
 binding; inspect the server ledger before drawing a conclusion or taking any separately authorized action.
 An unknown outcome never causes an automatic retry. Missing outcomes are not successful reviews.
+
+## Frozen native-sequence paired experiment
+
+Version 2 labels use the same case/provenance fields above, with `version: 2` and the additional top-level
+`evidencePolicy: "native-2-64-v1"`. Each case retains one original reference and 2–64 native candidate frames,
+with exact pixels, dimensions, order and durations. Production validation and registration still require
+16 walk / 12 run frames. Never duplicate, drop, resample or recompress source frames to fit the experiment.
+
+Freeze the protocol **before the candidate author reads human answers, notes or model results**. This is
+author-level blinding, not a claim that the entire workflow is blind: the operator may already have inspected
+human answers and prepared the label manifest. Record that exposure separately from the candidate author's
+lack of access; the current workflow's operator has seen the labels. No tuning follows model results. Source-family
+assignments and calibration/held-out splits remain fixed across variants. A pilot with three source families
+still has three families, even if it contains many clips or question judgments. Record deviations and disclose
+the limited independence; do not claim a statistically significant or guaranteed improvement.
+
+The fixed comparison uses Luna/Decisions and the existing five questions and 0.8 confidence **and** chosen-choice
+probability gates in both arms. One enrolled case sends one request with ten independent questions:
+
+- `ordered-native-v1`: unchanged shared developer/input content and the original five question definitions.
+- `timeline-loop-native-v1`: five `improved_` questions add a complete timeline, every directed adjacency
+  including last→first, whole-cycle inspection instructions, and a last/first panel of the **same original
+  images**. Only those questions carry the extra evidence. The baseline shared prefix stays unchanged.
+
+This uses [independent questions and question-local images](https://developers.openai.com/api/docs/guides/decisions).
+The question-local timeline/mapping is serialized as `input_text`; image parts retain `detail: "original"`.
+The repeated panel is a derived presentation, not new frames, motion measurements or an altered playback.
+It maps explicitly to original frame indices and hashes. No contact-sheet raster or pixel transform is used.
+Both arms share call-level latency, token usage and outcome availability; **per-arm cost/speed is unmeasured**.
+This transport is kept separate from standalone reviewer cohorts. No model fallback or cascade is permitted.
+
+Prepare a label-free selection JSON with exactly `version: 1` and `cases`. Each case has `id`, `sourceGroup`,
+`split`, `request` (path to original request JSON), `requestSha256`, and `intent`. The intent has exactly
+`description`, `brief`, `appearance_note`, `motion_note`; use null for absent notes. Do not include labels,
+human review comments or cohort descriptions inferred from answers. Freeze with:
+
+```powershell
+node scripts/animation-review-plan.mjs C:/work/selection.json C:/work/frozen-plan.json
+```
+
+The command verifies original request hashes and all source images, preserves family/split declarations and
+exclusively writes a plan. It performs no calls. `freezeComparison` exports the same operation for local tooling,
+accepting `{id, sourceGroup, split, raw: Uint8Array, intent}` entries. The plan distinguishes:
+
+- `sourceRequestSha256`: original request-file bytes, including inline PNGs.
+- `sourceEvidenceSha256`: canonical original ordered image/reference/dimension/timing binding.
+- `presentationSha256`: the method's explicit mapping to those originals.
+- `requestSha256`: the complete paired provider request; both virtual arms share this value.
+- `planSha256`: the frozen protocol plus all cases, splits and expected method request/presentation hashes.
+
+An operator enrolls one case per sequence with `intent.sequenceBenchmark` set to
+`{ "method": "paired-native-v1", "planSha256": "REPLACE_WITH_FROZEN_PLAN_SHA256" }` and the frozen intent/evidence.
+The worker supplies only the original request bytes. This config cannot combine with Responses or cascade
+settings. The existing host authorization, one-call ledger and shared daily quota apply. Benchmark requests
+are bounded to 32 MiB, each source image to the existing 2 MiB, and the research timeout is fixed at 110 seconds;
+production remains 8 MiB and 25 seconds. Native binding storage requires the narrowly bounded
+`20261029065638_native_sequence_benchmark.sql` migration (16,000-byte metadata bound; no permission/quota change).
+
+Once the plan is frozen, import the independently recorded labels and evaluate saved calls with:
+
+```powershell
+node scripts/animation-review-eval.mjs evaluate C:/work/labels-v2.json C:/work/results.json C:/work/evaluation.json 0.8 C:/work/frozen-plan.json
+```
+
+Evaluation rejects changed source pixels/timing, family/split drift, question mappings, request/presentation
+hashes or threshold. Both cohorts include expected/observed coverage; `pairedComparison` uses the same source
+cases and shows prediction transitions, false clears/rejects, defect recall, abstentions and accuracy on
+definitive human labels, including model abstentions in its denominator. Human `unverified` labels remain
+separate. No reports yields zero coverage, never synthetic answers. No threshold sweep is emitted for these
+frozen research cohorts. Report unchanged or worse performance as observed; do not tune after opening labels.
+
+An unknown provider, transport or finish-store outcome retains its reservation. The server and runner never
+retry it; the runner stops at the first incomplete/refused outcome. Reconcile the existing ledger before any
+further separately authorized work. Do not enlarge daily quota or rotate credentials to complete a benchmark.
+Keep source assets, source manifests, labels, frozen plans and results outside the public checkout.
 
 ## Next experiments and evidence limits
 

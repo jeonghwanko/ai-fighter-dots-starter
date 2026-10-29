@@ -56,12 +56,15 @@ async function demo(directory) {
 
 export async function main(args) {
   const [command, ...rest] = args;
-  if (command === 'evaluate' && [3, 4].includes(rest.length)) {
-    const [labelsFile, resultsFile, output, cutoffText] = rest;
+  if (command === 'evaluate' && [3, 4, 5].includes(rest.length)) {
+    const [labelsFile, resultsFile, output, cutoffText, planFile] = rest;
     if (cutoffText !== undefined && !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(cutoffText)) throw Error('Cutoff must be a decimal in [0, 1]');
     const labels = await readBounded(labelsFile), results = await readBounded(resultsFile);
-    const report = evaluate(JSON.parse(labels), JSON.parse(results), { cutoff: cutoffText === undefined ? null : Number(cutoffText) });
+    const planBytes = planFile === undefined ? null : await readBounded(planFile);
+    const report = evaluate(JSON.parse(labels), JSON.parse(results), { cutoff: cutoffText === undefined ? null : Number(cutoffText),
+      plan: planBytes === null ? null : JSON.parse(planBytes) });
     report.inputFiles = { labelsSha256: digest(labels), resultsSha256: digest(results) };
+    if (planBytes) report.inputFiles.planFileSha256 = digest(planBytes);
     await save(output, json(report));
     console.log(`Saved offline evaluation: ${report.cohorts.length} cohort(s), ${report.unboundCalls} unbound call(s).${report.mechanicsOnly ? ' SYNTHETIC: mechanics only.' : ''}`);
   } else if (command === 'swap' && rest.length === 4) {
@@ -77,7 +80,7 @@ export async function main(args) {
     await mkdir(rest[0]);
     await demo(rest[0]);
     console.log('Saved SYNTHETIC mechanics-only demo. No model was called; no animation quality was measured.');
-  } else throw Error('Usage: animation-review-eval.mjs evaluate <labels.json> <results.json> <new-output.json> [frozen-cutoff] | swap <request.json> <frame-a> <frame-b> <new-directory> | demo <new-directory>');
+  } else throw Error('Usage: animation-review-eval.mjs evaluate <labels.json> <results.json> <new-output.json> [frozen-cutoff] [frozen-plan.json] | swap <request.json> <frame-a> <frame-b> <new-directory> | demo <new-directory>');
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
