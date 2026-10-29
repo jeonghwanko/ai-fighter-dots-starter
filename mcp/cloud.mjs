@@ -604,6 +604,60 @@ function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }
     { jobId: JOB }, async ({ jobId }) => withNext(await invoke(`generations/${jobId}`, 'DELETE')), { write: true, publish: true, idempotent: true });
 }
 
+/** Browser calls are taken from the agents that connect (ChatGPT, Grok, Cursor, Claude) and ODDBOUT's own site; a call with no origin is not a browser's. */
+const ALLOWED_ORIGINS = new Set(['https://chatgpt.com', 'https://chat.openai.com', 'https://platform.openai.com', 'https://oddbout.com',
+  'https://grok.com', 'https://www.grok.com', 'https://cursor.com', 'https://www.cursor.com', 'https://claude.ai', 'https://claude.com']);
+
+/**
+ * Where a request goes: its route under the function, whether it came to the sign-in-first address, and the resource its OAuth metadata
+ * names (the sign-in-first address, the public address the gateway says it came through, or the function's own).
+ * @param {Request} request
+ */
+function routeOf(request) {
+  // The Edge gateway may strip /functions/v1 and replace the origin before forwarding.
+  const segments = new URL(request.url).pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter-mcp');
+  const path = prefix < 0 ? segments : segments.slice(prefix + 1), signInFirst = path[0] === 'signin';
+  const requestedResource = request.headers.get('x-oddbout-public-resource') ?? '';
+  const resource = signInFirst ? SIGN_IN_RESOURCE
+    : [PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE].includes(requestedResource) ? requestedResource : CLOUD_RESOURCE;
+  return { route: (signInFirst ? path.slice(1) : path).join('/'), signInFirst, resource };
+}
+
+/**
+ * The verified identity a call runs as: needed at the sign-in-first address and for account tools (false when there is none), tried for a
+ * public tool whose budget is the caller's (a valid token counts it on its owner, anything else on every signed-out agent), else null.
+ * @param {any} db @param {Request} request @param {any} body @param {boolean} signInFirst
+ */
+async function identityFor(db, request, body, signInFirst) {
+  const tool = body.method === 'tools/call' ? body.params?.name : null;
+  if (signInFirst || (tool !== null && !PUBLIC_TOOLS.has(tool))) return (await authenticateCloud(db, request).catch(() => null)) ?? false;
+  if (OWNER_BUDGET_TOOLS.has(tool) && request.headers.has('authorization')) return authenticateCloud(db, request).catch(() => null);
+  return null;
+}
+
+/**
+ * ChatGPT's calls carry its own `_meta` (`openai/locale`, `openai/subject`, …): it reads the structured result, so the text can be short,
+ * and its anonymous user is a read budget.
+ * @param {any} body
+ */
+async function hostOf(body) {
+  const meta = body.params?._meta && typeof body.params._meta === 'object' ? body.params._meta : {};
+  return { compact: Object.keys(meta).some(key => key.startsWith('openai/')), caller: await subjectKey(meta['openai/subject']) };
+}
+
+/**
+ * The tool list as hosts read it. SDK 1.32 serializes custom auth metadata only in _meta: publish the current host's top-level contract too.
+ * Every schema names its JSON Schema draft (1.1 KB of each list, every conversation); hosts do not need it.
+ * @param {any} result
+ */
+function publishedToolList(result) {
+  for (const tool of result.result?.tools ?? []) {
+    tool.securitySchemes = tool._meta.securitySchemes;
+    delete tool.inputSchema?.$schema; delete tool.outputSchema?.$schema;
+  }
+  return result;
+}
+
 /**
  * Keep optional integrations typed at the TypeScript Edge entry boundary: a null default alone
  * makes Deno infer that only null is accepted, even when the integration is configured.
@@ -616,26 +670,19 @@ function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }
  */
 export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted = null }) {
   return async request => {
-    const url = new URL(request.url);
-    // The Edge gateway may strip /functions/v1 and replace the origin before forwarding.
-    const segments = url.pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter-mcp');
-    const path = prefix < 0 ? segments : segments.slice(prefix + 1), signInFirst = path[0] === 'signin';
-    const route = (signInFirst ? path.slice(1) : path).join('/');
-    const requestedResource = request.headers.get('x-oddbout-public-resource');
-    const resource = signInFirst ? SIGN_IN_RESOURCE
-      : [PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE].includes(requestedResource) ? requestedResource : CLOUD_RESOURCE;
-    const metadataUrl = `${resource}/.well-known/oauth-protected-resource`;
+    const { route, signInFirst, resource } = routeOf(request);
     if (route === '.well-known/oauth-protected-resource' && request.method === 'GET') return json({ resource,
       authorization_servers: [CLOUD_ISSUER], scopes_supported: ['openid', 'email', 'profile'],
       resource_name: 'ODDBOUT character registration', resource_documentation: 'https://oddbout.com/docs.html' });
     if (route) return json({ error: 'not_found' }, 404);
-    if (request.headers.has('origin') && !['https://chatgpt.com','https://chat.openai.com','https://platform.openai.com','https://oddbout.com','https://grok.com','https://www.grok.com','https://cursor.com','https://www.cursor.com','https://claude.ai','https://claude.com'].includes(request.headers.get('origin')))
-      return json({ error: 'origin_not_allowed' }, 403);
+    const origin = request.headers.get('origin');
+    if (origin !== null && !ALLOWED_ORIGINS.has(origin)) return json({ error: 'origin_not_allowed' }, 403);
     if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: {
-      'access-control-allow-origin': request.headers.get('origin') ?? 'https://chatgpt.com',
+      'access-control-allow-origin': origin ?? 'https://chatgpt.com',
       'access-control-allow-methods': 'POST, GET, OPTIONS', 'access-control-allow-headers': 'Authorization, Content-Type, MCP-Protocol-Version',
       'access-control-expose-headers': 'WWW-Authenticate' } });
-    const unauthorized = () => json({ error: 'invalid_token' }, 401, { 'www-authenticate': `Bearer resource_metadata="${metadataUrl}", scope="openid email profile"` });
+    const unauthorized = () => json({ error: 'invalid_token' }, 401,
+      { 'www-authenticate': `Bearer resource_metadata="${resource}/.well-known/oauth-protected-resource", scope="openid email profile"` });
     if (request.method !== 'POST') {
       // A client that probes the sign-in-first address with GET, or HEAD as Gemini CLI does first (2026-10-29), learns there that it needs a sign-in.
       if (signInFirst && ['GET', 'HEAD'].includes(request.method) && !(await authenticateCloud(db, request).catch(() => null))) return unauthorized();
@@ -645,35 +692,17 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
     try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 65536))); }
     catch { return json({ error: 'invalid_request' }, 400); }
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
-    let identity = null;
-    if (signInFirst || (body.method === 'tools/call' && !PUBLIC_TOOLS.has(body.params?.name))) {
-      try { identity = await authenticateCloud(db, request); } catch { /* fail closed */ }
-      if (!identity) return unauthorized();
-    } else if (body.method === 'tools/call' && OWNER_BUDGET_TOOLS.has(body.params?.name) && request.headers.has('authorization')) {
-      // A public tool whose budget is the caller's: a valid token counts it on its owner; anything else on every signed-out agent.
-      try { identity = await authenticateCloud(db, request); } catch { identity = null; }
-    }
-    // ChatGPT's calls carry its own `_meta` (`openai/locale`, `openai/subject`, …): it reads the structured result, so the text can be short.
-    const meta = body.params?._meta && typeof body.params._meta === 'object' ? body.params._meta : {};
-    const host = { compact: Object.keys(meta).some(key => key.startsWith('openai/')), caller: await subjectKey(meta['openai/subject']) };
+    const identity = await identityFor(db, request, body, signInFirst);
+    if (identity === false) return unauthorized();
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
     // user's identity into another's call. Measured 2026-10-28: building it with all tools and answering tools/list
     // takes about 1.8 ms, small beside the network hop, so sharing a server is not worth that guarantee.
-    const server = cloudServer({ db, identity, fetcher, arena, hosted, host });
+    const server = cloudServer({ db, identity, fetcher, arena, hosted, host: await hostOf(body) });
     const transport = new WebStandardStreamableHTTPServerTransport({ sessionIdGenerator: undefined, enableJsonResponse: true });
     try {
       await server.connect(transport);
       const response = await transport.handleRequest(request, { parsedBody: body });
-      // SDK 1.32 serializes custom auth metadata only in _meta. Publish the current host's top-level contract too.
-      if (body.method === 'tools/list' && response.status === 200) {
-        const result = await response.json();
-        for (const tool of result.result?.tools ?? []) {
-          tool.securitySchemes = tool._meta.securitySchemes;
-          // Every schema names its JSON Schema draft (1.1 KB of each list, every conversation); hosts do not need it.
-          delete tool.inputSchema?.$schema; delete tool.outputSchema?.$schema;
-        }
-        return json(result);
-      }
+      if (body.method === 'tools/list' && response.status === 200) return json(publishedToolList(await response.json()));
       return response;
     } catch { return json({ error: 'mcp_unavailable' }, 503); }
     finally { await server.close(); }
