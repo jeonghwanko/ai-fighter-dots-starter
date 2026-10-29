@@ -3,8 +3,14 @@
  * each one's "return" link opens. Dots/ChatGPT may come back anywhere on its two hosts. Grok (grok.com custom connectors) and Grok Bot
  * (Cursor's web connector) come back only on their published callback paths (2026-10-27; xAI does not document them — taken from their
  * registrations). Claude's custom connectors (claude.ai, and claude.com) come back on Anthropic's MCP callback, that exact path only (`exact`);
- * Claude's web, desktop and mobile apps and Claude Code share that one connector (2026-10-28, the site's My agents). A desktop client's
- * loopback or app-scheme callback is not accepted.
+ * Claude's web, desktop and mobile apps and Claude Code share that one connector (2026-10-28, the site's My agents).
+ *
+ * An app on this computer (`local`, 2026-10-29): Claude Code (`claude mcp add`), Codex (CLI, app and IDE share `codex mcp add`) and Gemini CLI
+ * (`gemini mcp add`) register themselves with a loopback callback on a port of their own (RFC 8252 §7.3; Supabase Auth's registration takes
+ * http only for loopback). The MCP authorization spec (2025-11-25) allows `localhost` or https redirects, and asks a consent screen to show the
+ * redirect host and warn on loopback ones: the code goes to whatever listens on that port of this computer, and the client's name is its own
+ * claim. So the consent names it as an app on this computer, shows host and port, and warns (`localWarning`). An app scheme (`cursor://`) is
+ * still not accepted.
  */
 const AGENTS = {
   dots: { hosts: { 'chatgpt.com': null, 'chat.openai.com': null }, home: 'https://chatgpt.com/dots/home' },
@@ -12,11 +18,15 @@ const AGENTS = {
     home: 'https://grok.com/connectors' },
   claude: { hosts: { 'claude.ai': ['/api/mcp/auth_callback'], 'claude.com': ['/api/mcp/auth_callback'] }, exact: true,
     home: 'https://claude.ai/settings/connectors' },
+  local: { hosts: {}, home: 'https://oddbout.com/creator.html#view=agents' },
 };
-/** Which agent a callback address belongs to (`dots`, `grok`, `claude`), or null for an address no agent may use. */
+/** The loopback literals RFC 8252 names (`[::1]` is how a URL spells IPv6's), and `localhost`, which the CLIs use. */
+const LOOPBACK = new Set(['127.0.0.1', '[::1]', 'localhost']);
+/** Which agent a callback address belongs to (`dots`, `grok`, `claude`, `local`), or null for an address no agent may use. */
 export function agentOf(value) {
   try {
     const u = new URL(value);
+    if (u.protocol === 'http:' && LOOPBACK.has(u.hostname) && !u.username && !u.password) return 'local';
     if (u.protocol !== 'https:' || u.username || u.password || u.port) return null;
     for (const [agent, { hosts, exact }] of Object.entries(AGENTS)) {
       if (!Object.hasOwn(hosts, u.hostname)) continue;
@@ -31,8 +41,9 @@ export function safeClientRedirect(value) { return agentOf(value) !== null; }
 export const agentWords = {
   ko: { dots: { name: 'Dots', to: 'Dots로', at: 'Dots에서', on: 'Dots에' }, grok: { name: 'Grok', to: 'Grok으로', at: 'Grok에서', on: 'Grok에' },
     claude: { name: 'Claude', to: 'Claude로', at: 'Claude에서', on: 'Claude에' },
+    local: { name: '이 컴퓨터의 앱', to: '이 컴퓨터의 앱으로', at: '이 컴퓨터의 앱에서', on: '이 컴퓨터의 앱에' },
     any: { name: '에이전트', to: '에이전트로', at: '에이전트에서', on: '에이전트에' } },
-  en: { dots: { name: 'Dots' }, grok: { name: 'Grok' }, claude: { name: 'Claude' }, any: { name: 'your agent' } },
+  en: { dots: { name: 'Dots' }, grok: { name: 'Grok' }, claude: { name: 'Claude' }, local: { name: 'an app on this computer' }, any: { name: 'your agent' } },
 };
 export function fillAgent(text, words) {
   return text.replace(/\{(name|to|at|on)\}/g, (_, key) => words[key] ?? words.name);
@@ -56,7 +67,8 @@ export const copy = {
     accountChoice:'이 계정으로 연결할까요?', continueAccount:'이 계정으로 계속', switchAccount:'다른 계정 사용', switchingAccount:'다른 계정으로 로그인할 준비를 하고 있습니다.',
     noRequest:'{at} ODDBOUT 연결을 시작해 주세요.', failed:'요청이 만료되었거나 연결할 수 없습니다. {at} 다시 시도해 주세요.',
     unsafe:'지원하는 연결 요청이 아닙니다. 권한을 승인하지 않았습니다.', googleAccount:'ODDBOUT 계정', connecting:'Google 로그인으로 이동합니다.', approving:'연결을 마무리하고 있습니다.',
-    emailOption:'이메일 계정으로 로그인', emailLabel:'이메일', passwordLabel:'비밀번호', emailSignIn:'로그인', emailConnecting:'로그인하고 있습니다.', emailFailed:'이메일 또는 비밀번호를 확인해 주세요.'
+    emailOption:'이메일 계정으로 로그인', emailLabel:'이메일', passwordLabel:'비밀번호', emailSignIn:'로그인', emailConnecting:'로그인하고 있습니다.', emailFailed:'이메일 또는 비밀번호를 확인해 주세요.',
+    localWarning:'승인하면 이 컴퓨터에서 실행 중인 앱(터미널·편집기의 에이전트)이 연결을 받습니다. 방금 직접 연결을 시작했을 때만 승인하세요.', returnLocal:'연결 안내 보기'
   },
   en: {
     title:'ODDBOUT · Connect to {name}', headline1:'Your fighter.', headline2:'Into the ring.',
@@ -69,7 +81,8 @@ export const copy = {
     accountChoice:'Connect with this account?', continueAccount:'Continue with this account', switchAccount:'Use another account', switchingAccount:'Preparing sign-in with another account.',
     noRequest:'Start the ODDBOUT connection from {name}.', failed:'This request expired or could not be completed. Start again from {name}.',
     unsafe:'This connection request is not supported. No access was approved.', googleAccount:'ODDBOUT account', connecting:'Opening Google sign-in.', approving:'Completing your connection.',
-    emailOption:'Sign in with an email account', emailLabel:'Email', passwordLabel:'Password', emailSignIn:'Sign in', emailConnecting:'Signing in.', emailFailed:'Check your email and password and try again.'
+    emailOption:'Sign in with an email account', emailLabel:'Email', passwordLabel:'Password', emailSignIn:'Sign in', emailConnecting:'Signing in.', emailFailed:'Check your email and password and try again.',
+    localWarning:'If you approve, an app running on this computer (an agent in your terminal or editor) receives the connection. Approve only if you just started this connection yourself.', returnLocal:'See how to connect'
   }
 };
 export async function start({ document = globalThis.document, location = globalThis.location,
@@ -84,6 +97,8 @@ export async function start({ document = globalThis.document, location = globalT
     // The return link needs a place to go: an agent not yet known is Dots (where most requests start); the other words stay general.
     const named = agentWords[language][agent ?? 'any'], back = agentWords[language][agent ?? 'dots'];
     const words = Object.fromEntries(Object.entries(copy[language]).map(([key, text]) => [key, fillAgent(text, key === 'returnDots' ? back : named)]));
+    // An app on this computer has no page to go back to: the link shows how to connect one.
+    if (agent === 'local') words.returnDots = words.returnLocal;
     document.documentElement.lang = language; document.title = words.title;
     document.querySelector('.languages').setAttribute('aria-label', language === 'ko' ? '언어' : 'Language');
     document.querySelector('.connection').setAttribute('aria-label', language === 'ko' ? '계정 연결' : 'Account connection');
@@ -96,6 +111,7 @@ export async function start({ document = globalThis.document, location = globalT
     byId('panel-title').textContent = words[mode === 'consent' ? 'consentTitle' : mode === 'account' ? 'accountChoice' : mode === 'error' ? 'errorTitle' : 'panelTitle'];
     byId('login').hidden = mode !== 'login'; byId('consent').hidden = mode !== 'consent';
     byId('account-choice').hidden = mode !== 'account';
+    byId('local-warning').hidden = agent !== 'local';
     byId('existing-account').textContent = accountEmail || '';
     byId('email-login').hidden = mode !== 'login';
     byId('login-note').hidden = mode !== 'login'; byId('retry-link').hidden = mode !== 'error';
@@ -180,7 +196,9 @@ export async function start({ document = globalThis.document, location = globalT
   if (!safeClientRedirect(details.data.redirect_uri)) { state('error', 'unsafe'); return; }
   learn(details.data.redirect_uri);
   accountEmail = session.user.email;
-  clientLabel = (details.data.client.name ?? agentWords.en[agent].name) + ' · ' + new URL(details.data.redirect_uri).hostname;
+  // The host the approval goes to; for an app on this computer its port too, the one thing that tells two local apps apart.
+  const back = new URL(details.data.redirect_uri);
+  clientLabel = (details.data.client.name ?? agentWords.en[agent].name) + ' · ' + (agent === 'local' ? back.host : back.hostname);
   state('consent', 'consent');
   for (const action of ['approve', 'deny']) byId(action).onclick = async () => {
     byId('approve').disabled = byId('deny').disabled = true; statusKey = 'approving'; render();

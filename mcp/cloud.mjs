@@ -614,8 +614,8 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       'access-control-expose-headers': 'WWW-Authenticate' } });
     const unauthorized = () => json({ error: 'invalid_token' }, 401, { 'www-authenticate': `Bearer resource_metadata="${metadataUrl}", scope="openid email profile"` });
     if (request.method !== 'POST') {
-      // A client that probes the sign-in-first address with GET learns there that it needs a sign-in.
-      if (signInFirst && request.method === 'GET' && !(await authenticateCloud(db, request).catch(() => null))) return unauthorized();
+      // A client that probes the sign-in-first address with GET, or HEAD as Gemini CLI does first (2026-10-29), learns there that it needs a sign-in.
+      if (signInFirst && ['GET', 'HEAD'].includes(request.method) && !(await authenticateCloud(db, request).catch(() => null))) return unauthorized();
       return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
     }
     let body;
