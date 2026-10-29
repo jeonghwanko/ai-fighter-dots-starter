@@ -6,9 +6,11 @@ import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/valid
 import { Problem, readBody, sha256, unstorableTextPath } from './http.mjs';
 
 export const BUCKET = 'ai-fighter-beta';
+/** @type {(submission: { owner_id: string, asset_source_submission?: string | null, id: string }, asset: { id: string }) => string} */
 export const objectKey = (submission, asset) => `${submission.owner_id}/${submission.asset_source_submission ?? submission.id}/${asset.id}.webp`;
 
 /** A request body as a fighter.json the contract accepts: its text, sha256 and asset bytes. Problem(422) names what fails. */
+/** @param {Request} request */
 export async function checkedManifest(request) {
   let text;
   try { text = new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, spec.limits.jsonBytes)); }
@@ -24,7 +26,14 @@ export async function checkedManifest(request) {
   return { text, sha: await sha256(new TextEncoder().encode(text)), bytes: result.assetBytes };
 }
 
-/** One asset of an uploading submission, its bytes checked against the manifest and stored once (a retry of the same bytes succeeds). */
+/**
+ * One asset of an uploading submission, its bytes checked against the manifest and stored once (a retry of the same bytes succeeds).
+ * @param {any} db
+ * @param {{ status: string, expires_at: string, owner_id: string, id: string, asset_source_submission?: string | null,
+ *   manifest: { assets: { id: string, bytes: number, sha256: string }[] } }} row  The submission row as read from the database.
+ * @param {string} assetId
+ * @param {Request} request
+ */
 export async function storeAsset(db, row, assetId, request) {
   if (row.status !== 'uploading' || new Date(row.expires_at).getTime() <= Date.now()) throw new Problem(409, 'upload-closed');
   const asset = row.manifest.assets.find(a => a.id === assetId);

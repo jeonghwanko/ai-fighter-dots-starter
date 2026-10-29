@@ -23,7 +23,7 @@ test('Deno checks api/ at the same strictness as tsc', async () => {
   }
 });
 
-test('tsc finds no type errors in api/ (npm run typecheck)', () => {
-  const run = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: root, encoding: 'utf8' });
+test('tsc finds no type errors in api/, and no implicit any outside the shrinking pending list (npm run typecheck)', () => {
+  const run = spawnSync(process.execPath, ['scripts/typecheck.mjs'], { cwd: root, encoding: 'utf8' });
   assert.equal(run.status, 0, run.stdout + run.stderr);
 });

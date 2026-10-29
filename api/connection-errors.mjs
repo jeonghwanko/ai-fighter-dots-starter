@@ -1,5 +1,6 @@
 // @ts-check
 // Classify only observable transport failures. Never return raw messages (URLs/tokens may be present).
+/** @param {any} error  Anything thrown; only its codes and messages are read. @returns {string} */
 export function transportCode(error) {
   const seen = new Set(), queue = [error], messages = [], codes = [];
   while (queue.length && seen.size < 12) {
@@ -19,8 +20,10 @@ export function transportCode(error) {
   return 'api-unreachable';
 }
 
+/** @type {(code: string) => boolean} */
 export const isTransportCode = code => ['network-connect-forbidden', 'network-timeout', 'network-dns-failed', 'api-unreachable'].includes(code);
 
+/** @param {string} code */
 export function connectionAction(code) {
   if (code === 'client-account-changed') return { actor: 'agent', code: 'check-workspace-owner',
     message: '실행 중인 작업 공간의 계정이 바뀌었다. 제출을 멈추고 작업 소유자를 확인한다. 다른 사용자라면 전용 작업 공간을 사용하며 기존 패키지를 자동 제출하지 않는다.' };

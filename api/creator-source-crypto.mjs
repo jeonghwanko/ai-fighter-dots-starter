@@ -7,10 +7,12 @@ export const SOURCE_BUCKET = 'af-creator-sources';
 export const SOURCE_LIMIT = 16 * 1024 * 1024;
 export const STORAGE_ORIGIN = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co';
 export const base64 = encodeBase64;
+/** @param {unknown} value @param {number} [maximum] */
 export function unbase64(value, maximum = 32768) {
   if (typeof value !== 'string' || value.length > maximum || !/^[A-Za-z0-9+/]*={0,2}$/.test(value)) throw new Problem(400, 'invalid-envelope');
   try { return decodeBase64(value); } catch { throw new Problem(400, 'invalid-envelope'); }
 }
+/** @param {any} request  A VM's grant request, checked here before any use. */
 export async function importVmPublicKey(request) {
   if (request?.version !== 1 || !UUID.test(request.requestId ?? '')) throw new Problem(400, 'invalid-vm-request');
   try {
@@ -20,6 +22,7 @@ export async function importVmPublicKey(request) {
     return { key, sha256: await sha256(raw) };
   } catch { throw new Problem(400, 'invalid-vm-public-key'); }
 }
+/** @param {any} request @param {Record<string, unknown>} grant */
 export async function sealVmGrant(request, grant) {
   const { key, sha256: keySha256 } = await importVmPublicKey(request);
   const aes = await crypto.subtle.generateKey({ name: 'AES-GCM', length: 256 }, true, ['encrypt']);
@@ -30,6 +33,7 @@ export async function sealVmGrant(request, grant) {
   const encryptedKey = await crypto.subtle.encrypt({ name: 'RSA-OAEP' }, key, await crypto.subtle.exportKey('raw', aes));
   return { version: 1, requestId: request.requestId, keySha256, encryptedKey: base64(encryptedKey), nonce: base64(nonce), ciphertext: base64(ciphertext) };
 }
+/** @param {any} record @param {any} envelope  Both read from disk or the wire and checked here. @param {number} [now] */
 export async function openVmGrant(record, envelope, now = Date.now()) {
   try {
     if (envelope.version !== 1 || envelope.requestId !== record.requestId || envelope.keySha256 !== record.keySha256) throw Error('binding');

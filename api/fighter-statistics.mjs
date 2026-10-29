@@ -2,9 +2,11 @@
 import { UUID, bearerToken, jsonResponse, verifiedUserId } from './http.mjs';
 
 const CORS = { methods: 'GET, OPTIONS', headers: 'Authorization, Content-Type' };
+/** @type {(body: any, status?: number) => Response} */
 const reply = (body, status = 200) => jsonResponse(body, status, CORS);
 
 /** Read access depends on verified ownership, not an active submission invitation or leaderboard membership. */
+/** @param {{ db: any }} options @returns {import('./http.mjs').Route} */
 export function createFighterStatisticsHandler({ db }) {
   return async (request, parts) => {
     try {
