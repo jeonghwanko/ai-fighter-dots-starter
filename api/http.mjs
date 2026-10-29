@@ -1,6 +1,6 @@
 // @ts-check
 // Shared by every Edge route. No Node-only imports: this file runs on Deno and Node.
-import { UUID } from './bytes.mjs';
+import { Problem, UUID } from './bytes.mjs';
 export { UUID, Problem, sha256, readBody } from './bytes.mjs';
 /**
  * Services the Edge entry hands the route factories; each is null where a deployment lacks it, and every use checks for that.
@@ -68,3 +68,33 @@ export function unstorableTextPath(value, at = '') {
   for (const [key, item] of Object.entries(value)) { const found = unstorableTextPath(item, `${at}/${key}`); if (found !== null) return found; }
   return null;
 }
+
+/**
+ * A database function's refusal as the route answers it: the code `statuses` names — the error message itself, or with `contains` the
+ * longest code the message contains — with its status. Anything else is what `otherwise(error)` names, else a 503 `unavailable` (a code,
+ * or one picked from the error). One helper for every module's database calls: about ten copies disagreed (API 점검 2026-10-29).
+ * @param {{ message?: string, code?: string } | null | undefined} error
+ * @param {Readonly<Record<string, number>>} statuses
+ * @param {{ contains?: boolean, unavailable?: string | ((error: any) => string), otherwise?: (error: any) => Problem | null }} [options]
+ * @returns {Problem}
+ */
+export function rpcProblem(error, statuses, { contains = false, unavailable = 'database-unavailable', otherwise } = {}) {
+  const message = error?.message ?? '';
+  const code = contains ? Object.keys(statuses).sort((x, y) => y.length - x.length).find(known => message.includes(known))
+    : Object.hasOwn(statuses, message) ? message : undefined;
+  if (code) return new Problem(statuses[code], code);
+  return otherwise?.(error) ?? new Problem(503, typeof unavailable === 'function' ? unavailable(error) : unavailable);
+}
+
+/**
+ * One module's `db.rpc`: resolves to the function's data, or throws its refusal (rpcProblem).
+ * @param {any} db
+ * @param {Readonly<Record<string, number>>} statuses
+ * @param {Parameters<typeof rpcProblem>[2]} [options]
+ * @returns {(name: string, args: Record<string, unknown>) => Promise<any>}
+ */
+export const rpcCaller = (db, statuses, options) => async (name, args) => {
+  const { data, error } = await db.rpc(name, args);
+  if (error) throw rpcProblem(error, statuses, options);
+  return data;
+};

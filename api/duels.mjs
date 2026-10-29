@@ -1,5 +1,5 @@
 // @ts-check
-import { Problem, UUID, jsonResponse, readBody, sha256 } from './http.mjs';
+import { Problem, UUID, jsonResponse, readBody, rpcProblem, sha256 } from './http.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { CLIENT_LIMITS } from './client-limit.mjs';
 const CORS = {methods:'GET, POST, OPTIONS',headers:'Content-Type'};
@@ -13,13 +13,10 @@ const reply = (body,status=200) => jsonResponse(body,status,CORS);
 /** @type {(row: DuelRow) => object} */
 const present = row => ({id:row.id,a:row.a,b:row.b,hashes:[row.hash_a,row.hash_b],seed:row.seed,engine:row.engine,
   createdAt:row.created_at,completedAt:row.completed_at,result:row.result});
+const DUEL_STATUS = Object.freeze({'idempotency-conflict':409,'duel-not-approved':409,'duels-paused':503,'duel-budget':429,
+  'invalid-duel':422,'not-found':404,'engine-mismatch':409,'result-conflict':409,'duels-failing':503,'invalid-result':503});
 /** @param {{ message: string } | null} error  A database call's error, if any. */
-function check(error) {
-  if (!error) return;
-  const status = /** @type {Record<string, number>} */ ({'idempotency-conflict':409,'duel-not-approved':409,'duels-paused':503,'duel-budget':429,
-    'invalid-duel':422,'not-found':404,'engine-mismatch':409,'result-conflict':409,'duels-failing':503,'invalid-result':503})[error.message];
-  throw new Problem(status ?? 503,status ? error.message : 'duel-service-unavailable');
-}
+function check(error) { if (error) throw rpcProblem(error,DUEL_STATUS,{unavailable:'duel-service-unavailable'}); }
 const ENGINE_NAME = /^[a-z0-9][a-z0-9.-]{0,63}$/;
 /**
  * Guest-triggered, server-computed matches. No client result or seed is accepted. All DB access stays service-only.

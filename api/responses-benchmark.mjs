@@ -1,8 +1,8 @@
 // @ts-check
 // Shared Responses transport. Production uses the fixed Sol-only factory below;
 // arbitrary comparison models remain restricted to operator-enrolled benchmarks.
-import { Problem, readBody, sha256 } from './http.mjs';
-import { RULES, questions } from './decisions-review.mjs';
+import { Problem, readBody, rpcCaller, sha256 } from './http.mjs';
+import { REVIEW_STATUS, RULES, questions } from './decisions-review.mjs';
 
 /**
  * @typedef {import('./decisions-review.mjs').Evidence} Evidence
@@ -174,16 +174,7 @@ function createReviewer({ apiKey, enabled = false, fetcher = fetch, select, time
       maxOutputTokens: RESPONSE_REVIEW.maxOutputTokens, confidenceType: 'not-available', approvalGate: false, ...selected.binding };
     const fingerprint = selected.binding
       ? await sha256(new TextEncoder().encode(JSON.stringify({ requestSha256, ...selected.binding }))) : requestSha256;
-    /** @type {(name: string, args: Record<string, unknown>) => Promise<any>} */
-    const rpc = async (name, args) => {
-      const { data, error } = await db.rpc(name, args);
-      if (error) {
-        const code = ['review-limit', 'worker-required', 'lease-lost', 'generation-state', 'benchmark-expired', 'benchmark-evidence-changed'].find(k => error.message?.includes(k));
-        throw new Problem(code === 'review-limit' ? 429 : code === 'worker-required' ? 403 : code === 'benchmark-expired' ? 410
-          : code === 'benchmark-evidence-changed' ? 422 : code ? 409 : 503, code ?? 'review-store-unavailable');
-      }
-      return data;
-    };
+    const rpc = rpcCaller(db, REVIEW_STATUS, { contains: true, unavailable: 'review-store-unavailable' });
     const claimed = await rpc('af_decision_review_start', { p_job: job.id, p_host: host, p_lease: lease, p_fingerprint: fingerprint,
       p_stage: evidence.stage, p_scope: evidence.scope, p_binding: binding });
     if (!claimed.started) {

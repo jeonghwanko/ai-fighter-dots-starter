@@ -9,7 +9,13 @@ import { Problem, sha256 } from './http.mjs';
 
 export const SEQUENCE_METHODS = Object.freeze(['ordered-native-v1', 'timeline-loop-native-v1']);
 export const PAIRED_SEQUENCE_METHOD = 'paired-native-v1';
-export const BENCHMARK_BODY_BYTES = 32 * 1024 * 1024;
+/**
+ * A research request's body. It was 32 MiB: a request holds about seven times its body while it is read, decoded, presented and sent
+ * (measured 2026-10-30: 28 MiB took 185–220 MiB more), so one near that limit could pass the Edge isolate's 256 MB — the pilot's 49-frame
+ * request already stopped once at WORKER_RESOURCE_LIMIT. 16 MiB keeps about half the isolate free and twice production's 8 MiB. A plan is
+ * frozen against this bound too (`scripts/animation-review-plan.mjs`), so an entry over it is refused before enrollment or a paid call.
+ */
+export const BENCHMARK_BODY_BYTES = 16 * 1024 * 1024;
 export const BENCHMARK_TIMEOUT_MS = 110_000;
 export const SEQUENCE_RULES = '\nReview the complete original sequence in its supplied order and timing before answering each question. '
   + 'Trace visible body/foot identity through every adjacent pair, including the last-to-first transition. '

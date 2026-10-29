@@ -217,7 +217,8 @@ An operator enrolls one case per sequence with `intent.sequenceBenchmark` set to
 `{ "method": "paired-native-v1", "planSha256": "REPLACE_WITH_FROZEN_PLAN_SHA256" }` and the frozen intent/evidence.
 The worker supplies only the original request bytes. This config cannot combine with Responses or cascade
 settings. The existing host authorization, one-call ledger and shared daily quota apply. Benchmark requests
-are bounded to 32 MiB, each source image to the existing 2 MiB, and the research timeout is fixed at 110 seconds;
+are bounded to 16 MiB (32 MiB until 2026-10-30: a request holds about seven times its body, so one near 32 MiB could pass the
+256 MB Edge isolate), each source image to the existing 2 MiB, and the research timeout is fixed at 110 seconds;
 production remains 8 MiB and 25 seconds. Native binding storage requires the narrowly bounded
 `20261029071902_native_sequence_benchmark.sql` migration (16,000-byte metadata bound; no permission/quota change).
 

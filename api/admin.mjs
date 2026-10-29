@@ -1,5 +1,5 @@
 // @ts-check
-import { Problem, UUID, jsonResponse, readBody, verifiedUserId } from './http.mjs';
+import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUserId } from './http.mjs';
 
 const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };
 /** @type {(body: any, status?: number) => Response} */
@@ -18,12 +18,7 @@ async function smallBody(request, keys) {
 }
 /** @param {{ db: any }} options @returns {import('./http.mjs').Route} */
 export function createAdminHandler({ db }) {
-  /** @param {string} name @param {Record<string, unknown>} args */
-  async function rpc(name, args) {
-    const { data, error } = await db.rpc(name, args);
-    if (error) throw new Problem(statuses[error.message] ?? 503, statuses[error.message] ? error.message : 'admin-unavailable');
-    return data;
-  }
+  const rpc = rpcCaller(db, statuses, { unavailable: 'admin-unavailable' });
   return async (request, parts) => {
     try {
       if (request.method === 'OPTIONS') return reply({ ok: true });

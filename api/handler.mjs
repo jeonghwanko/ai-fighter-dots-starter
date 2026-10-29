@@ -8,7 +8,7 @@ import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
 import { createWorkshopHandler, workshopRoute } from './workshop.mjs';
 import { createGenerationHandler, generationRoute } from './generations.mjs';
-import { Problem, UUID, bearerToken, jsonResponse, readBody, sha256, verifiedUserId } from './http.mjs';
+import { Problem, UUID, bearerToken, jsonResponse, readBody, rpcProblem, sha256, verifiedUserId } from './http.mjs';
 import { BUCKET, SUBMISSION_STATUS, checkedManifest, objectKey, storeAsset } from './submissions.mjs';
 
 export { Problem, readBody, sha256 } from './http.mjs';
@@ -56,11 +56,7 @@ const view = (row, fighter) => {
       : row.status === 'rejected' || uploadExpired(row) ? [] : ['server-validation', 'registration'] };
 };
 /** @param {{ message: string } | null} error  A database call's error, if any. */
-function check(error) {
-  if (!error) return;
-  if (Object.hasOwn(SUBMISSION_STATUS, error.message)) throw new Problem(SUBMISSION_STATUS[error.message], error.message);
-  throw new Problem(503, 'database-unavailable');
-}
+function check(error) { if (error) throw rpcProblem(error, SUBMISSION_STATUS); }
 /**
  * `agentClient` (공방과 연대기, 2026-10-27): the cloud MCP's OAuth client for its in-process calls — the workshop labels notes and canon
  * versions with that agent's name. The public Edge handler never sets it.

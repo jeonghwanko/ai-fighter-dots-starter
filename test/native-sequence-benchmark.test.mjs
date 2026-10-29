@@ -44,7 +44,7 @@ test('native benchmark accepts original counts through 64 while production takes
   await assert.rejects(nativeSequenceEvidence({ ...request(16), prompt: 'override' }));
   assert.equal(DECISIONS.bodyBytes, 8 * 1024 * 1024);
   assert.equal(DECISIONS.timeoutMs, 25_000);
-  assert.equal(BENCHMARK_BODY_BYTES, 32 * 1024 * 1024);
+  assert.equal(BENCHMARK_BODY_BYTES, 16 * 1024 * 1024);
   const evidence = await nativeSequenceEvidence(request(49));
   const schema = responsesRequest({ model: 'gpt-6.1-sol', job: intent, evidence, questionNames: names }).text.format.schema;
   assert.equal(schema.properties.continuity.properties.frames.items.maximum, 48);
@@ -161,7 +161,7 @@ test('64-frame paired enrollment uses one durable ledger call, rejects mixed con
   } finally { await ctx.sql.close(); }
 });
 
-test('only the benchmark route accepts original PNG evidence above 8 MiB, still bounded at 32 MiB', async () => {
+test('only the benchmark route accepts original PNG evidence above 8 MiB, still bounded at 16 MiB', async () => {
   let calls = 0;
   const ctx = await generation({ decisionsReviewer: createDecisionsReviewer({ apiKey: 'test-only-key', enabled: true,
     fetcher: async () => { calls++; throw Error('unknown'); } }) });

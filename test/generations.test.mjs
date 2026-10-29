@@ -265,3 +265,23 @@ test('맡기기: the worker picks the look and the job goes on to the motions; w
     assert.equal((await finish(held, { candidates: ['look-a-0', 'look-b-0'], choice: 'a' })).body.code, 'invalid-result');
   } finally { await sql.close(); }
 });
+
+test('the free hosted fighter reads as used however many own-PC jobs came after it, as the request check decides (API 점검 2026-10-29)', async () => {
+  // The overview counted only the newest five jobs: past five own-PC jobs the free one fell out of view, the page offered the form
+  // again, and the request was refused with generation-quota.
+  const { sql, owner, call, healthy } = await generation();
+  try {
+    await healthy();
+    const host = (await sql.query(`insert into public.af_generation_hosts(owner_id, name, billing, approved, terms_accepted_at)
+      values ($1, '내 PC', 'subscription', true, now()) returning id`, [owner])).rows[0].id;
+    await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, status, created_at)
+      values ($1, $2, 'The free hosted fighter, registered', 'en', 'submitted', now() - interval '2 days')`, [owner, crypto.randomUUID()]);
+    for (let i = 0; i < 5; i++) await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, status,
+      host_choice, requested_host, host_consent) values ($1, $2, 'A fighter made on his own PC', 'en', 'submitted', 'host', $3, false)`, [owner, crypto.randomUUID(), host]);
+    const overview = (await call('GET', 'generations')).body;
+    assert.equal(overview.jobs.length, 5);
+    assert.equal(overview.used, true);
+    const ask = await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() });
+    assert.equal(ask.body.code, 'generation-quota');
+  } finally { await sql.close(); }
+});
