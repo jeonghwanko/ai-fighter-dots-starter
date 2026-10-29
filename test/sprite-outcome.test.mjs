@@ -84,9 +84,12 @@ test('the kit wrapper passes a stop on and waits for sprite-gen to write its rep
   await rm(dir, { recursive: true, force: true });
 });
 
-test('an error whose code is a number is still read: its retryable says what to do, never an unread failure', () => {
-  assert.deepEqual(judgeOutcome({ code: 1, report: report(true, [error(503, true)]) }).next, 'retry');
-  const refused = judgeOutcome({ code: 1, report: report(true, [error(400, false)]) });
-  assert.deepEqual([refused.next, refused.codes], ['fix', ['400']]);
+test('an error whose code is not a string is an outcome nobody can read: never retried, whatever its retryable says', () => {
+  for (const odd of [503, null, { status: 503 }]) {
+    const verdict = judgeOutcome({ code: 1, report: report(true, [error(odd, true)]) });
+    assert.deepEqual([verdict.next, verdict.codes], ['inspect', ['outcome-unknown']], JSON.stringify(odd));
+  }
+  // Beside a retryable error it still wins: one unreadable error is enough to look first.
+  assert.equal(judgeOutcome({ code: 1, report: report(true, [error('provider-unavailable', true), error(429, true)]) }).next, 'inspect');
   assert.equal(judgeOutcome({ code: 1, report: { ...report(true, []), errors: 'not a list' } }).next, 'inspect');
 });

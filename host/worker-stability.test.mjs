@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ASKS, createStages } from './generation-stages.mjs';
-import { STAGE_LIMIT_MS, STAGE_STOPPED, TIMING, errorCode, stageLimitMs, unlessStopped } from './generation-worker.mjs';
+import { STAGE_LIMIT_MS, STAGE_STOPPED, TIMING, errorCode, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
 
 const brief = { profile: { name: 'Blue' }, look: { subject: 'A blue cat boxer', palette: ['blue'], prop: 'gloves', avoid: 'none' },
   motion: { temper: 'bold', attack: 'jab' } };
@@ -93,8 +93,11 @@ test('a stopped stage starts no run: its next og or motions.py call ends the sta
   // The stage turns it into its own end; the worker then reports the timeout or drops the cancelled job.
   const stages = createStages({ og: args => unlessStopped(controller.signal, start), api: { artifact: async () => ({ ok: true }) },
     fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, signal: controller.signal });
-  await assert.rejects(stages.appearance(job, await mkdtemp(path.join(tmpdir(), 'look-stopped-'))), error => error.code === STAGE_STOPPED);
-  assert.equal(started, 1);
+  const dir = await mkdtemp(path.join(tmpdir(), 'look-stopped-'));
+  try {
+    await assert.rejects(stages.appearance(job, dir), error => error.code === STAGE_STOPPED);
+    assert.equal(started, 1);
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test('an error code the finish takes is a short string, whatever the error carried', () => {
@@ -115,5 +118,22 @@ test('a look whose outcome is unknown goes to an operator even when the other lo
     // The other way round, and with a look that may be retried: still the operator's.
     Object.assign(plan, { 'look-a-0': { code: 1, errors: [{ ...timeout, code: 'provider-rate-limited', retryable: true }] }, 'look-b-0': { code: 1, errors: [timeout] } });
     assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-outcome-unknown' } });
+  } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('a stage past its limit goes to an operator with the xAI requests it named, to resume rather than film again', () => {
+  assert.deepEqual(timedOutOutcome('motions', { outcome: 'review', result: { code: 'video-unfinished', requestIds: ['req-1'] } }),
+    { outcome: 'review', result: { code: 'motions-stage-timeout', requestIds: ['req-1'] } });
+  assert.deepEqual(timedOutOutcome('appearance', undefined), { outcome: 'review', result: { code: 'appearance-stage-timeout' } });
+  assert.deepEqual(timedOutOutcome('motions', { outcome: 'retry', result: { code: 'stage-stopped' } }),
+    { outcome: 'review', result: { code: 'motions-stage-timeout' } });
+});
+
+test('a look gen said it made but whose picture is not there goes to an operator, never sent again', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'look-no-output-')), made = [];
+  try {
+    const og = async args => { made.push(args); await writeFile(args[args.indexOf('--report') + 1], report(true)); return { code: 0 }; };
+    const stages = createStages({ og, api: { artifact: async () => ({ ok: true }) }, fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
+    assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-no-output' } });
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

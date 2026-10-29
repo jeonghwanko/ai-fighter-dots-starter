@@ -131,6 +131,12 @@ export function createApi({ base, key, fetcher = fetch }) {
 export const STAGE_STOPPED = 'stage-stopped';
 export const unlessStopped = (signal, start) => signal?.aborted
   ? Promise.reject(Object.assign(new Error(STAGE_STOPPED), { code: STAGE_STOPPED })) : start();
+/** A stage past its time limit goes to an operator. The xAI requests the stopped stage named stay with it (2026-10-30 review): the
+ * operator resumes them (video-resume) rather than films them again. */
+export function timedOutOutcome(status, outcome) {
+  const requestIds = outcome?.result?.requestIds;
+  return { outcome: 'review', result: { code: `${status}-stage-timeout`, ...(Array.isArray(requestIds) && requestIds.length ? { requestIds } : {}) } };
+}
 /** An error's code as the finish route takes it: a string of at most 60 characters (a child process's or a reply's code may be a number). */
 export const errorCode = (error, fallback = 'stage-error') => String(error?.code ?? fallback).slice(0, 60);
 
@@ -234,11 +240,11 @@ export async function main({ once = false } = {}) {
     } catch (error) {
       // A numeric code (a child process's) used to throw here, outside this catch: the finish never went and the job lost a lease.
       outcome = { outcome: 'retry', result: { code: errorCode(error) } };
-      await appendFile(log, `stage error: ${error.stack ?? error}\n`).catch(() => {});
+      await appendFile(log, `stage error: ${error?.stack ?? error}\n`).catch(() => {});
     } finally { clearInterval(renew); clearTimeout(limit); }
     if (timedOut) {
       await say(`job ${job.id} ${job.status} stopped after ${Math.round(stageLimitMs(job.status) / 60_000)} minutes`);
-      outcome = { outcome: 'review', result: { code: `${job.status}-stage-timeout` } };
+      outcome = timedOutOutcome(job.status, outcome);
     } else if (controller.signal.aborted) { await say(`job ${job.id} ${job.status} stopped (lease lost)`); return; }
     // codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon.
     if (outcome.result?.code === ASKS) {
