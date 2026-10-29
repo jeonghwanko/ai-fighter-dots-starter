@@ -66,18 +66,19 @@ Storage bucket은 비공개 `ai-fighter-beta`다. 기존 게임 테이블·로�
   거부한다. 이관은 postgres로 돌고 로컬 DB에는 `safeupdate`가 없어 둘 다 이 실패를 보이지 않는다. 한 행짜리 표도
   `where singleton`처럼 적는다(2026-10-27 생성 워커 심장 박동이 모두 `database-unavailable`로 실패했다).
 
-Supabase CLI에서 계정 로그인·프로젝트 선택 후:
+운영 `ai-fighter`는 게임 저장소의 배포 도구로만 올린다. plan의 변경 파일·현재 및 보관 엔진·대체할 운영 버전을 확인한 뒤 같은 옵션으로 배포한다:
 
 ```sh
-supabase functions deploy ai-fighter --project-ref YOUR_PROJECT_REF --no-verify-jwt
+npm run fighter:edge -- plan
+npm run fighter:edge -- deploy --plan <id>
 ```
 
-함수 파일 목록은 `node scripts/edge-bundle.mjs`가 진입점의 import 그래프에서 만든다. 새 import가 배포에서 빠지지 않는다.
+함수 파일 목록은 `edgeFiles`가 진입점의 import 그래프에서 만든다. 게임 배포 도구가 이 함수를 가져와 실제 엔진과 보관 엔진을 포함한다. `node scripts/edge-bundle.mjs --list`는 경로 확인만 가능하며 배포 payload를 만들지 않는다.
 Deno import map에 없는 모듈(sharp, `node:` 모듈)을 Edge 코드가 import하면 목록 생성이 실패한다.
 마이그레이션을 먼저, Edge 함수를 다음에, 작업자를 마지막에 반영한다.
 
-**서버 대결을 운영할 때:** 먼저 `supabase/functions/ai-fighter/duel-engine.mjs`를 게임 원천에서 생성·검증한
-순수 엔진 번들로 교체하고 배포한다. 샘플에 있는 파일은 엔진 없는 설치에서 경기 저장을 503으로 막는 어댑터다.
+**서버 대결을 운영할 때:** 게임 배포 도구가 `supabase/functions/ai-fighter/duel-engine.mjs`를 게임 원천에서 생성·검증한
+순수 엔진 번들로 교체한다. 샘플에 있는 파일은 엔진 없는 설치에서 경기 저장을 503으로 막는 어댑터다. 이 체크아웃을 Supabase CLI/MCP나 수제 payload로 직접 배포하지 않는다.
 게임 소스·원화는 이 공개 스타터에 포함하지 않는다. 기존 운영 함수에 빈 어댑터를 덮어쓰지 않는다.
 게임의 `tools/ai-fighter/build-duel-engine.mjs`는 같은 공통 규칙·AI·타격 엔진을 번들로 만들며,
 `simulateDuel(a, manifestA, b, manifestB, seed)`와 `engineVersion`을 내보낸다.

@@ -40,7 +40,10 @@ export async function edgeFiles({ root = REPOSITORY, entry = ENTRY, importMap = 
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
-  const names = await edgeFiles();
-  const files = await Promise.all(names.map(async name => ({ name, content: await readFile(path.join(REPOSITORY, name), 'utf8') })));
-  console.log(JSON.stringify({ name: 'ai-fighter', entrypoint_path: ENTRY, import_map_path: IMPORT_MAP, verify_jwt: false, files }));
+  // This checkout carries a null duel engine. Emitting an upload payload here let a handler-only change
+  // erase the live game's engine. Only the game's planner may combine sources, engines and a live version.
+  if (process.argv.length !== 3 || process.argv[2] !== '--list') {
+    console.error('Direct Edge deploy payloads are disabled. Use the game repository: npm run fighter:edge -- plan, then deploy --plan <id>. Use --list only to inspect source paths.');
+    process.exitCode = 1;
+  } else console.log(JSON.stringify(await edgeFiles()));
 }
