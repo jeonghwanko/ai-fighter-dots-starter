@@ -35,10 +35,10 @@ async function prepared(count = 49) {
   return { source, plan, evidence, built, labels, results };
 }
 
-test('native benchmark accepts original counts through 64 while production remains 16/12', async () => {
+test('native benchmark accepts original counts through 64 while production takes the contract range (walk 12 to 32)', async () => {
   for (const count of [11, 12, 16, 18, 23, 49, 64]) {
     assert.equal((await nativeSequenceEvidence(request(count))).binding.length, count + 1);
-    if (count !== 16) await assert.rejects(reviewEvidence(request(count)));
+    if (count < 12 || count > 32) await assert.rejects(reviewEvidence(request(count)));
   }
   for (const count of [0, 1, 65]) await assert.rejects(nativeSequenceEvidence(request(count)));
   await assert.rejects(nativeSequenceEvidence({ ...request(16), prompt: 'override' }));
