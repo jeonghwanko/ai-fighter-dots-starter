@@ -212,7 +212,7 @@ export async function doctor(options, { run = runCommand, find = findBinary, now
       // No file contents, account claims, raw errors or token strings leave this subprocess.
       const python = path.join(venvDir, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
       const storage = await inspectGrokAuthStorage({ env: toolEnv });
-      const probe = storage.status !== 'permission-available' ? { code: 1, text: '' } : await run(python, ['-c', 'import json; from sprite_gen.workflow.access import probe_access; s=probe_access("grok"); print(json.dumps({k:s[k] for k in ("login","billing")}))'], { cwd: workspace, env: toolEnv });
+      const probe = storage.status !== 'permission-available' ? { code: 1, text: '' } : await run(python, ['-c', 'import json; from sprite_gen.api import probe_access; s=probe_access("grok"); print(json.dumps({k:s[k] for k in ("login","billing")}))'], { cwd: workspace, env: toolEnv });
       let state; try { state = JSON.parse(probe.text); } catch { /* redacted unknown */ }
       report.auth = { status: env.XAI_API_KEY?.trim() || state?.billing === 'api-credit' ? 'api-billing-blocked' : probe.code ? 'unknown' : state?.login === 'ready' ? 'signed-in' : state?.login === 'unavailable' ? 'sign-in-required' : 'unknown',
         ...(env.XAI_API_KEY?.trim() ? { reason: 'xai-api-key-environment' } : {}),

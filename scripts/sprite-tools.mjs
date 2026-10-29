@@ -64,20 +64,11 @@ export function img2webpInstall(platform = process.platform, arch = process.arch
   return userInstall(platform === 'darwin' ? 'brew install webp' : 'install libwebp >= 1.5 (img2webp with -exact) on PATH', platform);
 }
 
+// sprite_gen.api.rife_status: the engine's own locate-and-check, as a status that never installs (vendor/sprite-gen/docs/api.md).
 const RIFE_PROBE = `
-import json, sys
-from sprite_gen.video import rife, rife_install
-try:
-    binary, model = rife.locate()
-except rife.RifeNotInstalled as error:
-    print(json.dumps({"status": "missing", "reason": str(error)})); sys.exit(0)
-except Exception as error:
-    print(json.dumps({"status": "broken", "reason": str(error)})); sys.exit(0)
-try:
-    rife_install.check(binary, model)
-    print(json.dumps({"status": "ok", "path": str(binary), "version": rife.RELEASE}))
-except SystemExit as error:
-    print(json.dumps({"status": "broken", "path": str(binary), "reason": str(error.code)}))
+import json
+from sprite_gen.api import rife_status
+print(json.dumps(rife_status()))
 `;
 
 /** RIFE as the engine resolves it (SPRITE_GEN_RIFE, PATH, user data dir), with sprite-gen's own check frame. */

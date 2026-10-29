@@ -23,9 +23,8 @@ import sys
 
 import numpy as np
 from PIL import Image, ImageDraw
-from sprite_gen.qa.motion import analyze_motion
-from sprite_gen.spec.assets import load_asset
-from sprite_gen.spec.runio import acquire_run_dir_lock, atomic_write_set, release_run_dir_lock
+# Only sprite_gen.api: the engine keeps these names stable; its other modules may move (vendor/sprite-gen/docs/api.md).
+from sprite_gen.api import acquire_run_dir_lock, analyze_motion, atomic_write_set, load_asset, release_run_dir_lock
 
 ENGINES = {1: "ai-fighter-foot-evidence-v1", 2: "ai-fighter-foot-evidence-v2"}
 LOBE_REASON = "multiple contact lobes in foot ROI"
@@ -34,7 +33,7 @@ REVIEW_KEYS = ("sameAnatomicalFoot", "completeFoot", "otherFootExcluded", "groun
 # Upstream reasons that only proxy foot identity or travel through the ROI silhouette.
 # With v2 evidence the outlines answer identity and the leading contact track answers
 # travel. Every other upstream reason, including any added later, stays a failure.
-# Decided on the engine's stable codes (sprite_gen.qa.motion STANCE_REASONS): its texts may be reworded.
+# Decided on the engine's stable codes (sprite_gen.api STANCE_REASONS): its texts may be reworded.
 SILHOUETTE_PROXY_CODES = (
     LOBE_CODE,
     "foot-centroid-moves",
