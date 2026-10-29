@@ -60,25 +60,36 @@ export function emptyWhere(query) {
 }
 /**
  * Production's API role preloads safeupdate (2026-10-27 heartbeat); PGlite cannot load the extension. Postgres prints the parse
- * tree of every statement it analyzes, and a statement inside a function or trigger that safeupdate would refuse fails the
+ * tree of each statement it analyzes, and a statement run inside a function or trigger that safeupdate would refuse fails the
  * call here. The API reaches this database only through functions; a test's own top-level SQL plays the operator, as postgres,
  * whom production does not hold to safeupdate either.
+ * Postgres analyzes a function's statement once, when that branch first runs, and caches it. `discard plans` makes the
+ * functions migrations already ran be read again, and the first refusal fails every later call: unlike safeupdate the
+ * statement has already run, and a retry would otherwise pass on the cached plan. Branches no test runs are left to
+ * migration-rules.test.mjs.
  */
 export async function enforceSafeupdate(db) {
-  await db.exec('set debug_print_parse = on; set debug_pretty_print = off; set client_min_messages = log');
-  for (const [method, optionsAt] of [['query', 2], ['exec', 1]]) {
-    const run = db[method].bind(db);
-    db[method] = async (...args) => {
-      const refused = [], options = args[optionsAt] ?? {};
-      args[optionsAt] = { ...options, onNotice: notice => {
-        if (notice.message !== 'parse tree:') return options.onNotice?.(notice);
-        if (notice.where && notice.detail) for (const command of emptyWhere(readNodeTree(notice.detail)))
-          refused.push(`${command} requires a WHERE clause (safeupdate)\n  ${notice.where.replaceAll('\n', '\n  ')}`);
-      } };
-      const result = await run(...args);
-      if (refused.length) throw new Error(refused.join('\n'));
-      return result;
-    };
-  }
-  return db;
+  await db.exec('set debug_print_parse = on; set debug_pretty_print = off; set client_min_messages = log; discard plans');
+  let refusal = null;
+  const guard = target => {
+    for (const [method, optionsAt] of [['query', 2], ['exec', 1]]) {
+      const run = target[method].bind(target);
+      target[method] = async (...args) => {
+        if (refusal) throw new Error(refusal);
+        const refused = [], options = args[optionsAt] ?? {};
+        args[optionsAt] = { ...options, onNotice: notice => {
+          if (notice.message !== 'parse tree:') return options.onNotice?.(notice);
+          if (notice.where && notice.detail) for (const command of emptyWhere(readNodeTree(notice.detail)))
+            refused.push(`${command} requires a WHERE clause (safeupdate)\n  ${notice.where.replaceAll('\n', '\n  ')}`);
+        } };
+        const result = await run(...args);
+        if (refused.length) throw new Error(refusal = refused.join('\n'));
+        return result;
+      };
+    }
+    return target;
+  };
+  const transaction = db.transaction.bind(db);
+  db.transaction = callback => transaction(tx => callback(guard(tx)));
+  return guard(db);
 }

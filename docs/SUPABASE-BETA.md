@@ -64,8 +64,9 @@ Storage bucket은 비공개 `ai-fighter-beta`다. 기존 게임 테이블·로�
   적용하므로 운영 DB에는 영향이 없다. 운영 이력을 맞추려면 `migration repair --status applied 20261021090001`이 필요하다.
 - 함수 안의 `update`·`delete`는 `where`로 행을 고른다. 운영 API 역할(`authenticator`)은 `safeupdate`를 불러와 `where` 없는 문장을
   거부한다. 이관은 postgres로 돌아 이 실패를 보이지 않는다. 테스트의 PGlite는 확장을 불러올 수 없어 `migratedDatabase()`가
-  Postgres의 구문 트리(`debug_print_parse`)로 같은 규칙을 함수·트리거 안 문장에 적용하고, 어긴 호출을 실패시킨다
-  (`test/helpers/fighter-database.mjs`). 테스트가 부르지 않는 함수는 `test/migration-rules.test.mjs`의 정적 검사가 맡는다.
+  Postgres의 구문 트리(`debug_print_parse`)로 같은 규칙을 함수·트리거 안에서 실제로 실행된 문장에 적용하고, 어긴 뒤로는
+  그 데이터베이스의 모든 호출을 실패시킨다(`test/helpers/fighter-database.mjs`). 테스트가 지나가지 않는 분기와 부르지 않는
+  함수는 `test/migration-rules.test.mjs`의 정적 검사가 맡는다.
   한 행짜리 표도 `where singleton`처럼 적는다(2026-10-27 생성 워커 심장 박동이 모두 `database-unavailable`로 실패했다).
 
 운영 `ai-fighter`는 게임 저장소의 배포 도구로만 올린다. plan의 변경 파일·현재 및 보관 엔진·대체할 운영 버전을 확인한 뒤 같은 옵션으로 배포한다:
