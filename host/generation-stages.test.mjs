@@ -5,7 +5,7 @@ import { existsSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { BRIEF_SCHEMA, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
+import { ALIGN_AGAIN, BRIEF_SCHEMA, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
   submissionOutcome, withProfile } from './generation-stages.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 
@@ -161,7 +161,7 @@ test('a gait whose cuts never align stops for an operator without filming anothe
     return { code: 0 };
   };
   const stages = createStages({ og, api: { artifact: async () => ({ ok: true }), progress: async () => ({ ok: true }) }, motionsPy,
-    fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0 });
+    fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs: 0 });
   const job = { id: '0123abcd-0001', language: 'ko', brief, choice: 'b', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 };
   const done = await stages.motions(job, dir);
   assert.equal(done.outcome, 'review');
@@ -169,6 +169,9 @@ test('a gait whose cuts never align stops for an operator without filming anothe
   // One clip per gait, no retake filmed and no relaxed still drawn.
   assert.deepEqual(calls.filter(a => a.includes('video-set')).map(a => path.basename(flag(a, '--out-dir'))).sort(), ['video-run-0', 'video-walk-0']);
   assert.ok(!calls.some(a => a.includes('gen')));
+  // Each gait's cut was aligned in two passes (each a try and a --multi-cycle warn try) before the stage stopped.
+  const aligns = gait => calls.filter(a => a.includes('video-cycle-align') && flag(a, '--loop-dir').includes(`video-${gait}-0`)).length;
+  assert.equal(aligns(done.result.code.split('-')[0]), 2 * (1 + ALIGN_AGAIN));
 });
 
 test('a failed look is tried again only when its report says so; otherwise an operator looks', async () => {
@@ -379,7 +382,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
 });
 
 /** The motions stage with every provider step passing at once, `scaleCheck(args)` and `scaleFit(round)` standing in for the engine. */
-async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false }) {
+async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, alignFails = {}, job: change = {} }) {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-scale-')), calls = [], events = [];
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'look-a-0.png'), 'look');
@@ -392,6 +395,9 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false })
     if (tool === 'video-set') { const gait = flag(args, '--states'), loop = path.join(flag(args, '--out-dir'), `side-${gait}`, 'loop');
       await mkdir(loop, { recursive: true }); await writeFile(path.join(loop, `side-${gait}.strip.json`), '{}'); }
     if (tool === 'video-cycle-align') { const to = flag(args, '--length'), dirOf = flag(args, '--loop-dir');
+      // alignFails[gait]: that many of the gait's alignments stop first (the GPU out of memory), leaving the cut unaligned.
+      const failing = Object.keys(alignFails).find(gait => dirOf.includes(`video-${gait}`) && alignFails[gait] > 0);
+      if (failing) { alignFails[failing] -= 1; return { code: 1 }; }
       // brokenRun: every filmed run breaks its beat (the walk, and a run made from its cut, align clean).
       const retake = brokenRun && dirOf.includes('video-run') ? { reason: 'broken-beat', reasons: ['broken-beat'] } : undefined;
       await writeFile(path.join(dirOf, `side-${dirOf.includes('walk') ? 'walk' : 'run'}.strip.json`),
@@ -418,8 +424,8 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false })
     return { code: 0 };
   };
   const api = { artifact: async () => ({ ok: true }), progress: async (j, value, event) => { if (event) events.push(event); return { ok: true }; } };
-  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0 });
-  const done = await stages.motions({ id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 }, dir);
+  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs: 0 });
+  const done = await stages.motions({ id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...change }, dir);
   return { done, calls, events, dir };
 }
 
@@ -427,9 +433,11 @@ test('a run the gate refuses is made from the walk that passed, played faster, a
   const { done, calls, dir } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), brokenRun: true });
   assert.equal(done.outcome, 'ok', JSON.stringify(done));
   assert.deepEqual(done.result.preview.filter(p => p.note).map(p => [p.clip, p.note]), [['run', RUN_FROM_WALK]]);
-  // Every run take was filmed and refused; then the walk's cut, copied, was aligned to the run's twelve frames and judged as a run.
+  // The first run take broke its beat: no retake was filmed (nor its relaxed still drawn); the walk's cut, copied, was aligned to the
+  // run's twelve frames and judged as a run (RUN_FROM_WALK_FIRST).
   const flag = (args, name) => args[args.indexOf(name) + 1];
-  assert.equal(calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'run').length, 3);
+  assert.equal(calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'run').length, 1);
+  assert.ok(!calls.some(a => a.includes('gen')));
   const derived = calls.find(a => a.includes('video-cycle-align') && path.basename(flag(a, '--loop-dir')).startsWith('run-from-walk-'));
   assert.equal(flag(derived, '--length'), '12');
   assert.ok(existsSync(path.join(flag(derived, '--loop-dir'), 'judge', 'judge-prompt.txt')));
@@ -441,6 +449,24 @@ test('a run the gate refuses is made from the walk that passed, played faster, a
   const config = JSON.parse(await readFile(calls.find(a => a.includes('loop-review') && a.some(x => String(x).includes(`${path.sep}run${path.sep}`))).at(-2), 'utf8'));
   assert.match(config.judge, /the run is the walk's cut aligned to its frames/);
   assert.ok(dir);
+});
+
+test('a creator who asked for the run again gets every run take filmed before the walk makes it', async () => {
+  const { done, calls } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), brokenRun: true,
+    job: { motionNote: { clip: 'run', note: 'faster' }, motionRound: 1 } });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  assert.equal(calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'run').length, 1 + GAIT_RETAKES);
+  assert.deepEqual(done.result.preview.filter(p => p.note).map(p => p.clip), ['run']);
+});
+
+test('a take whose cuts did not align (the GPU out of memory) is aligned again after a pause, and no take is filmed again', async () => {
+  const { done, calls } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), alignFails: { walk: 2 } });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  assert.deepEqual(calls.filter(a => a.includes('video-set')).map(a => path.basename(flag(a, '--out-dir'))).sort(), ['video-run-0', 'video-walk-0']);
+  assert.equal(calls.filter(a => a.includes('video-cycle-align') && flag(a, '--loop-dir').includes('video-walk-0')).length, 3);
+  assert.ok(!done.result.preview.some(p => p.note));
 });
 
 test('the motions scale-check every clip against the look before the game pack, growing a canvas and measuring it again', async () => {
