@@ -7,7 +7,7 @@ do not ask again for every command. Keep the agreed review groups, provider, bil
 ## Choose the right environment and source
 
 Use a per-user **saved Codex cloud environment** for this repository, with Node 22.12+, Git,
-Python 3.11+ and venv, ffmpeg and ffprobe. Start from `codex/creator-hosting`, then record the exact
+Python 3.11+ and venv, ffmpeg and ffprobe. Start from `main`, then record the exact
 commit. The ordinary main checkout inspected on 2026-10-27 was kit 0.2.0; service commit
 `5cddc786bc7ca4d41a06c1e2ed10a0160b081a44` was 0.5.4. A delivered 0.5.2 plugin and the preserved
 0.4.0 validation runtime are separate artifacts. Read their manifests; never rename a version to imply an upgrade.
@@ -35,7 +35,7 @@ Official references (checked 2026-10-27): [cloud environments](https://learn.cha
 For a **new** workspace only, after the host has allowed the required installation destinations:
 
 ```sh
-git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git /workspace/oddbout-kit
+git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git /workspace/oddbout-kit
 cd /workspace/oddbout-kit
 git checkout --detach <reviewed-commit-containing-the-Dots-bootstrap>
 node scripts/dots-workspace.mjs doctor --workspace /workspace/my-fighter

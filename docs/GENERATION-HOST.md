@@ -44,7 +44,7 @@ oddbout.com 제작자 페이지의 My agents(`creator.html#view=agents`) → **�
 
 ```bash
 git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
-cd ai-fighter-dots-starter && git checkout codex/creator-hosting && npm ci
+cd ai-fighter-dots-starter && git checkout main && npm ci
 npm run host -- join ohj_…                   # 붙이기 코드(30분 안에 한 번): 설치 → codex·grok 로그인(없으면) → 워커
 ```
 

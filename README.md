@@ -110,10 +110,10 @@ record its actual commit, and do not mistake an older main checkout for the curr
 The Dots workflow reports unsupported image-output contracts as blocked; it does not read protected
 Codex sessions or claim that login/installation proves image generation or parent delivery.
 
-Use the **codex/creator-hosting** branch, which contains the public service configuration. For a new installation:
+Use the **main** branch, which contains the public service configuration. For a new installation:
 
 ```sh
-git clone --branch codex/creator-hosting --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
+git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
 cd ai-fighter-dots-starter
 npm ci --ignore-scripts
 npm run sprite:setup

@@ -80,7 +80,7 @@ GPT만 사용 가능하면 둘 다 GPT로 제안한다. 사용자가 지정한 �
 
 ### 도구 준비
 
-1. 소스는 [ai-fighter-dots-starter의 codex/creator-hosting 브랜치](https://github.com/jeonghwanko/ai-fighter-dots-starter/tree/codex/creator-hosting)다.
+1. 소스는 [ai-fighter-dots-starter의 main 브랜치](https://github.com/jeonghwanko/ai-fighter-dots-starter/tree/main)다.
    이 브랜치의 `AGENTS.md`, `docs/DOT-CREATION.md`, `docs/AUTHORING.md`를 읽는다. 기존 설치를 재사용할 때는
    버전과 작업 중 변경을 확인하고, 이 대화 흐름이 있는 버전을 사용한다. 기본 `main`으로 바꾸지 않는다.
 2. 로컬 생성·패키징을 사용할 때 Git·Node 22.12+·Python 3.11+와 로컬 실행 기능을 확인한다. 필요한 설치는 에이전트가 처리한다.
