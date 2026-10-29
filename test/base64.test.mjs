@@ -6,7 +6,7 @@ import { base64, unbase64 } from '../api/creator-source-crypto.mjs';
 
 // The codecs the server used before Buffer: the reference every case below is held to.
 const legacyDecode = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
-const legacyEncode = bytes => btoa(Array.from(bytes, b => String.fromCharCode(b)).join(''));
+const legacyEncode = bytes => btoa(Array.from(new Uint8Array(bytes), b => String.fromCharCode(b)).join(''));
 const outcome = (decode, text) => { try { return Array.from(decode(text)); } catch { return 'rejected'; } };
 
 test('encoding matches btoa for every length and for ArrayBuffer, offset views and empty input', () => {
@@ -18,6 +18,9 @@ test('encoding matches btoa for every length and for ArrayBuffer, offset views a
   const whole = new Uint8Array(randomBytes(40)), view = whole.subarray(7, 29);
   assert.equal(encodeBase64(view), legacyEncode(view));
   assert.equal(base64(view), legacyEncode(view));
+  // Element values, as `new Uint8Array(typedArray)` gave: 300 wraps to 44, and a Uint16Array is not read as raw bytes.
+  for (const other of [new Uint16Array([1, 2, 300]), new Int8Array([-1, 5]), Buffer.from([7, 8, 9])])
+    assert.equal(encodeBase64(other), legacyEncode(other));
 });
 
 test('decoding accepts and rejects exactly what atob does, including tails, padding, whitespace and base64url', () => {
@@ -43,6 +46,9 @@ test('decoded bytes own their memory, never a view into Buffer\'s shared pool', 
   assert.equal(Object.getPrototypeOf(bytes), Uint8Array.prototype);
   assert.equal(bytes.byteOffset, 0); assert.equal(bytes.buffer.byteLength, 3);
   assert.deepEqual(bytes.slice(0, 1), new Uint8Array([65]));
+  const large = new Uint8Array(randomBytes(70000)), decoded = decodeBase64(legacyEncode(large));
+  assert.equal(Object.getPrototypeOf(decoded), Uint8Array.prototype);
+  assert.equal(decoded.byteOffset, 0); assert.equal(decoded.buffer.byteLength, large.length); assert.deepEqual(decoded, large);
 });
 
 test('the source envelope keeps its own grammar on top of the codec', () => {
