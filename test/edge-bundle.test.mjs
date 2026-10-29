@@ -21,7 +21,7 @@ test('the Edge bundle holds every module the entry imports and nothing Node-only
   assert.ok(files.every(file => !/^(server|mcp|scripts|worker)\//.test(file)), JSON.stringify(files));
   for (const file of files) await access(path.join(repository, file));
   const config = JSON.parse(await readFile(path.join(repository, 'supabase/functions/ai-fighter/deno.json'), 'utf8'));
-  // Deno supplies this builtin; it is explicitly mapped for the native research image codec.
+  // Deno supplies this builtin; it is explicitly mapped for the native base64 codec (api/base64.mjs).
   assert.equal(config.imports['node:buffer'], 'node:buffer');
 });
 test('an import the Edge runtime cannot resolve fails before deploy', async () => {
