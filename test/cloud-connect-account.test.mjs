@@ -132,6 +132,8 @@ test('a web agent shows no local warning', async () => {
   await start(h.env); await h.element('continue-account').onclick();
   assert.equal(h.element('consent').hidden, false); assert.equal(h.element('local-warning').hidden, true);
   assert.equal(h.element('client').textContent, 'Claude · claude.ai');
+  // Claude keeps its connectors under Customize (2026-10-29); settings/connectors only says they moved.
+  assert.equal(h.element('retry-link').href, 'https://claude.ai/customize/connectors');
 });
 
 test('the copy names the agent with the particles its sound takes', () => {

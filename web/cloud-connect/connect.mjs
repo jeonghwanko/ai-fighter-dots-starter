@@ -17,7 +17,7 @@ const AGENTS = {
   grok: { hosts: { 'grok.com': ['/connectors-oauth-exchange-code'], 'www.cursor.com': ['/agents/mcp/oauth/callback', '/bot/mcp/oauth/callback'] },
     home: 'https://grok.com/connectors' },
   claude: { hosts: { 'claude.ai': ['/api/mcp/auth_callback'], 'claude.com': ['/api/mcp/auth_callback'] }, exact: true,
-    home: 'https://claude.ai/settings/connectors' },
+    home: 'https://claude.ai/customize/connectors' },
   local: { hosts: {}, home: 'https://oddbout.com/creator.html#view=agents' },
 };
 /** The loopback literals RFC 8252 names (`[::1]` is how a URL spells IPv6's), and `localhost`, which the CLIs use. */
