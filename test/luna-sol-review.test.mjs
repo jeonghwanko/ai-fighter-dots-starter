@@ -7,7 +7,7 @@ import { sha256 } from '../api/http.mjs';
 import { generation } from './helpers/generation-database.mjs';
 
 const bytes = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+a0xoAAAAASUVORK5CYII=', 'base64');
-async function setup({ choices = {}, fail, afterLuna } = {}) {
+async function setup({ choices = {}, fail, afterLuna, snapshot = '' } = {}) {
   const requests = [];
   const reviewer = createLunaSolReviewer({ enabled: true, apiKey: 'test-server-key', fetcher: async (url, init) => {
     const request = JSON.parse(init.body); requests.push(request);
@@ -17,7 +17,7 @@ async function setup({ choices = {}, fail, afterLuna } = {}) {
     if (request.model === 'gpt-6-luna') {
       assert.equal(url, 'https://api.openai.com/v1/decisions');
       await afterLuna?.();
-      return Response.json({ model: request.model, answers: request.questions.map(q => {
+      return Response.json({ model: request.model + snapshot, answers: request.questions.map(q => {
         const choice = choices[q.name] ?? 'clear', low = choice === 'low-clear';
         if (choice === 'refusal') return { name: q.name, type: 'refusal' };
         return { name: q.name, type: 'choice', choice: low ? 'clear' : choice, confidence: low ? 0.6 : 0.95,
@@ -27,7 +27,7 @@ async function setup({ choices = {}, fail, afterLuna } = {}) {
     assert.equal(url, 'https://api.openai.com/v1/responses');
     assert.equal(request.store, false); assert.equal(request.reasoning.effort, 'medium');
     assert.equal(request.max_output_tokens, 1800); assert.equal(request.tools, undefined);
-    return Response.json({ model: request.model, status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text',
+    return Response.json({ model: request.model + snapshot, status: 'completed', output: [{ type: 'message', content: [{ type: 'output_text',
       text: JSON.stringify(Object.fromEntries(request.text.format.schema.required.map(name => [name, { choice: 'clear', reason: 'Visible evidence.', frames: [0] }]))) }] }] });
   } });
   const ctx = await generation({ cascadeReviewer: reviewer });
@@ -69,6 +69,15 @@ test('production reviews only uncertain/defect questions with Sol once, without 
     const completed = await ctx.work('POST', 'finish', { jobId: job.id, leaseToken: job.leaseToken, outcome: 'ok', result: { candidates: ['look-a-0', 'look-b-0'] } });
     assert.equal(completed.status, 200);
     assert.equal((await ctx.send(job)).status, 409);
+  } finally { await ctx.sql.close(); }
+});
+
+test('both models may answer with a dated snapshot of the model asked for', async () => {
+  const ctx = await setup({ choices: { anatomy: 'defect' }, snapshot: '-2026-10-01' });
+  try {
+    const r = (await ctx.send(await ctx.job())).body.review;
+    assert.deepEqual([r.status, r.responseModel, r.checks.anatomy.status], ['completed', 'gpt-6-luna-2026-10-01', 'defect']);
+    assert.deepEqual([r.followup.status, r.followup.checks.anatomy.status], ['completed', 'clear']);
   } finally { await ctx.sql.close(); }
 });
 

@@ -205,6 +205,11 @@ export async function main({ once = false } = {}) {
         const code = await run(python, ['-I', '-c', 'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]); im.thumbnail((1024, 1024)); im.save(sys.argv[2], "WEBP", quality=90, method=6)', from, to], { cwd: kit, log });
         if (code !== 0) throw Object.assign(new Error('webp-failed'), { code: 'webp-failed' });
       },
+      // Review evidence over the server's limits (2 MiB, 2048 px): lossless WebP, at most 2048 px, nearest so pixel art stays sharp.
+      fitImage: async (from, to) => {
+        const code = await run(python, ['-I', '-c', 'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]); im.thumbnail((2048, 2048), Image.NEAREST); im.save(sys.argv[2], "WEBP", lossless=True, method=6)', from, to], { cwd: kit, log });
+        if (code !== 0) throw Object.assign(new Error('evidence-fit-failed'), { code: 'evidence-fit-failed' });
+      },
     });
     let outcome;
     try {

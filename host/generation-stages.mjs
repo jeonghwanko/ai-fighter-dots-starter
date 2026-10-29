@@ -23,15 +23,34 @@ import { NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mj
 
 const reviewHash = bytes => createHash('sha256').update(bytes).digest('hex');
 export const serverReviewEnabled = (job, api) => job.decisionsReview?.mode === 'shadow' && typeof api.decisions === 'function';
-export async function reviewOnServer({ api, job, dir, stage, scope, images }) {
+/** What the server takes for one review image (api/decisions-review.mjs DECISIONS): its bytes and its longest side. */
+export const EVIDENCE_LIMIT = Object.freeze({ bytes: 2 * 1024 * 1024, side: 2048 });
+/** A PNG's width and height from its header, or null for anything else. */
+export function pngSize(bytes) {
+  if (bytes.length < 24 || bytes.readUInt32BE(0) !== 0x89504e47 || bytes.toString('latin1', 12, 16) !== 'IHDR') return null;
+  return { width: bytes.readUInt32BE(16), height: bytes.readUInt32BE(20) };
+}
+/** Whether an image is sent as it is: a PNG within both limits. Anything else (a reference JPEG or WebP, a large look) is fitted first. */
+export const fitsAsIs = bytes => {
+  const size = pngSize(bytes);
+  return bytes.length <= EVIDENCE_LIMIT.bytes && size !== null && Math.max(size.width, size.height) <= EVIDENCE_LIMIT.side;
+};
+
+export async function reviewOnServer({ api, job, dir, stage, scope, images, fit }) {
   if (!serverReviewEnabled(job, api)) return null;
   let body, fingerprint, out;
   try {
     const encoded = [];
     for (const image of images) {
-      const bytes = await readFile(image.file);
-      if (bytes.length > 2 * 1024 * 1024) throw Error('evidence-limit');
-      const type = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[path.extname(image.file).toLowerCase()];
+      let file = image.file, bytes = await readFile(file);
+      // An image past the server's limits used to end the review as unverified; it is fitted (lossless) when the worker can.
+      if (fit && !fitsAsIs(bytes)) {
+        const fitted = path.join(dir, 'decisions', 'evidence', `${reviewHash(bytes).slice(0, 24)}.webp`);
+        if (!existsSync(fitted)) { await mkdir(path.dirname(fitted), { recursive: true }); await fit(file, fitted); }
+        file = fitted; bytes = await readFile(file);
+      }
+      if (bytes.length > EVIDENCE_LIMIT.bytes) throw Error('evidence-limit');
+      const type = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[path.extname(file).toLowerCase()];
       if (!type) throw Error('evidence-type');
       encoded.push({ role: image.role, sha256: reviewHash(bytes), dataUrl: `data:${type};base64,${bytes.toString('base64')}`,
         ...(image.durationMs === undefined ? {} : { durationMs: image.durationMs }) });
@@ -48,7 +67,9 @@ export async function reviewOnServer({ api, job, dir, stage, scope, images }) {
     try { await writeFile(out, JSON.stringify(record) + '\n', { flag: 'wx' }); }
     catch (error) { if (error.code === 'EEXIST') return JSON.parse(await readFile(out, 'utf8')); throw error; }
     const reply = await api.decisions(job, body);
-    const report = reply.ok && reply.review ? reply.review : { ...record, status: 'unverified', errorCode: 'server-review-unavailable' };
+    // The server's daily or per-job review limit is not an outage: it is named, so the numbers can tell them apart.
+    const report = reply.ok && reply.review ? reply.review
+      : { ...record, status: 'unverified', errorCode: reply.code === 'review-limit' ? 'review-limit' : 'server-review-unavailable' };
     await writeFile(out, JSON.stringify(report) + '\n');
     return report;
   } catch {
@@ -326,7 +347,7 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * worker's API client; `fetchBytes(url)`; `toWebp(png, webp)` re-encodes a still (at most 1024 px); `motionsPy(args)` runs motions.py
  * on the kit's sprite-gen venv (pixels only, no provider) and resolves `{ code }`. Calls may overlap: `og` waits for a free codex slot.
  */
-export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS }) {
+export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS }) {
   // One loop alignment at a time on this worker: RIFE on the GPU takes about 4 GB, and a walk and a run aligning at once (or two jobs) ran
   // an 8 GB card out of memory (2026-10-28).
   let aligning = Promise.resolve();
@@ -350,7 +371,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
   // Decisions screening only annotates (it never gates, selects or retries), so it runs beside the stage's own work instead of before
   // it. The stage waits for it only before it returns: the review route needs the stage's lease, which ends with the stage.
   let screening = [];
-  const screen = args => { screening.push(Promise.resolve().then(() => reviewOnServer({ api, ...args })).catch(() => null)); };
+  const screen = args => { screening.push(Promise.resolve().then(() => reviewOnServer({ api, fit: fitImage, ...args })).catch(() => null)); };
   const screened = stage => async (job, dir) => {
     screening = [];
     try { return await stage(job, dir); } finally { await Promise.allSettled(screening); screening = []; }
