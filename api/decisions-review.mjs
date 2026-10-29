@@ -6,7 +6,49 @@ import { probeImage } from './image-probe.mjs';
 import { sequencePresentation, SEQUENCE_METHODS, PAIRED_SEQUENCE_METHOD, BENCHMARK_TIMEOUT_MS } from './sequence-benchmark.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
-/** A gait sequence's frame counts: the contract's range (`gait-frames-1`), the village standard inside it. */
+/**
+ * Checked evidence as a review binds it. Each image keeps its role, digest and size; a candidate also its order and display time.
+ * `content` is the model input: each image's record as input_json, then its pixels.
+ * @typedef {{ role: 'reference', sha256: string, width: number, height: number }} ReferenceImage
+ * @typedef {{ role: 'candidate', sha256: string, width: number, height: number, index: number, durationMs: number }} CandidateImage
+ * @typedef {ReferenceImage | CandidateImage} ImageBinding
+ * @typedef {{ type: 'input_json', data: unknown } | { type: 'input_text', text: string } | { type: 'input_image', detail: 'original', image_url: string }} ContentPart
+ * @typedef {'input' | 'pose' | 'sequence'} Stage
+ * @typedef {{ stage: Stage, scope: string, binding: ImageBinding[], content: ContentPart[] }} Evidence
+ */
+/**
+ * What a review is told the fighter should be: a generation job row, or a benchmark case's operator-written intent.
+ * Its fields go to the model as design intent, never as observations, and are not read here.
+ * @typedef {{ id?: string, description?: unknown, brief?: unknown, appearance_note?: unknown, motion_note?: unknown }} ReviewJob
+ */
+/**
+ * What a reviewer's review() receives from its route. `lease` is null for an enrolled benchmark case.
+ * @typedef {{ db: any, job: ReviewJob, host: string | null, lease: string | null, evidence: Evidence,
+ *   sequenceConfig?: import('./sequence-benchmark.mjs').SequenceConfig }} ReviewArgs
+ */
+/**
+ * One rubric criterion as a choice question, and the Decisions request that asks them. A paired benchmark's improved
+ * questions carry their extra evidence in their instructions.
+ * @typedef {{ name: string, type: 'choice', instructions: string, choices: { value: string, description: string }[] }} Question
+ * @typedef {{ model: string, input: { role: 'developer' | 'user', content: string | ContentPart[] }[],
+ *   questions: (Question | Omit<Question, 'instructions'> & { instructions: ContentPart[] })[] }} DecisionsRequest
+ */
+/**
+ * One question's outcome in a report. Decisions keeps the choice only when confident enough; Responses adds its reason and frames.
+ * @typedef {'clear' | 'defect' | 'unverified'} Choice
+ * @typedef {{ status: Choice, choice?: Choice, confidence?: number, probabilities?: Record<string, number>, reason?: string,
+ *   frames?: number[] }} Check
+ */
+/**
+ * Token counts a provider reported, kept only where they are non-negative safe integers.
+ * @typedef {{ input_tokens?: number, output_tokens?: number, total_tokens?: number, input_tokens_details?: Record<string, number>,
+ *   output_tokens_details?: Record<string, number> }} Usage
+ */
+
+/**
+ * A gait sequence's frame counts: the contract's range (`gait-frames-1`), the village standard inside it.
+ * @type {(scope: 'walk' | 'run', count: number) => boolean}
+ */
 export const gaitCount = (scope, count) => count >= spec.gaitFrames[scope].min && count <= spec.gaitFrames[scope].max;
 
 export const DECISIONS = Object.freeze({ model: 'gpt-6-luna', rubric: 'hosted-sprite-v1', threshold: 0.8,
@@ -30,24 +72,35 @@ const RUBRICS = {
 };
 /** @type {() => never} */
 const invalid = () => { throw new Problem(422, 'invalid-review'); };
+/**
+ * @param {any} value  Untrusted JSON, checked here to be an object with no keys beyond `keys`.
+ * @param {string[]} keys
+ */
 function object(value, keys) {
   if (!value || typeof value !== 'object' || Array.isArray(value) || Object.keys(value).some(k => !keys.includes(k))) invalid();
   return value;
 }
+/** @param {any} body  A worker's upload, checked by parseEvidence. */
 export async function reviewEvidence(body) {
   return parseEvidence(body, false);
 }
 // Only the operator-enrolled benchmark route calls this; production remains 16/12.
+/** @param {any} body  A worker's upload, checked by parseEvidence. */
 export async function nativeSequenceEvidence(body) {
   if (body?.stage !== 'sequence') invalid();
   return parseEvidence(body, true);
 }
+/**
+ * @param {any} body  A worker's upload: untrusted JSON, checked here.
+ * @param {boolean} native
+ * @returns {Promise<Evidence>}
+ */
 async function parseEvidence(body, native) {
   object(body, ['stage', 'scope', 'images']);
   const { stage, scope, images } = body;
-  if (!Object.hasOwn(RUBRICS, stage) || !({ input: ['design'], pose: ['look-a', 'look-b'], sequence: ['walk', 'run'] }[stage]?.includes(scope))) invalid();
+  if (!Object.hasOwn(RUBRICS, stage) || !({ input: ['design'], pose: ['look-a', 'look-b'], sequence: ['walk', 'run'] }[/** @type {Stage} */ (stage)]?.includes(scope))) invalid();
   if (!Array.isArray(images) || images.length > (native ? 65 : 17)) invalid();
-  const binding = [], content = []; let candidates = 0, references = 0;
+  const binding = /** @type {ImageBinding[]} */ ([]), content = /** @type {ContentPart[]} */ ([]); let candidates = 0, references = 0;
   for (const value of images) {
     const image = object(value, ['role', 'dataUrl', 'sha256', 'durationMs']);
     if (!['reference', 'candidate'].includes(image.role) || !HEX.test(image.sha256 ?? '')) invalid();
@@ -83,22 +136,36 @@ async function parseEvidence(body, native) {
   return { stage, scope, binding, content };
 }
 
+/**
+ * @param {Stage} stage
+ * @returns {Question[]}
+ */
 export function questions(stage) {
   return Object.entries(RUBRICS[stage]).map(([name, instructions]) => ({ name, type: 'choice', instructions,
     choices: [{ value: 'clear', description: 'Sufficient visible evidence with no defect for this criterion.' },
       { value: 'defect', description: 'A visible contradiction or defect for this criterion.' },
       { value: 'unverified', description: 'Missing, hidden, ambiguous or insufficient evidence.' }] }));
 }
-/** The requested model, or a dated snapshot of it (`gpt-6-luna-2026-10-01`): the API may answer with the snapshot it ran. */
+/**
+ * The requested model, or a dated snapshot of it (`gpt-6-luna-2026-10-01`): the API may answer with the snapshot it ran.
+ * @type {(model: unknown) => boolean}
+ */
 export const sameModel = model => typeof model === 'string' && (model === DECISIONS.model || model.startsWith(`${DECISIONS.model}-`));
+/**
+ * @param {any} response  The provider's JSON, checked here.
+ * @param {{ name: string }[]} expected  The questions asked.
+ * @returns {Record<string, Check>}
+ */
 function checkedAnswers(response, expected) {
   if (!sameModel(response?.model) || !Array.isArray(response.answers) || response.answers.length !== expected.length) throw Error('invalid-response');
+  /** @type {Record<string, Check>} */
   const checks = {};
   for (const a of response.answers) {
     if (!a || !expected.some(q => q.name === a.name) || Object.hasOwn(checks, a.name)) throw Error('invalid-response');
     if (a.type === 'refusal') { checks[a.name] = { status: 'unverified', reason: 'refusal' }; continue; }
     if (a.type !== 'choice' || !OPTIONS.includes(a.choice) || !Number.isFinite(a.confidence) || a.confidence < 0 || a.confidence > 1
       || !Array.isArray(a.probabilities) || a.probabilities.length !== 3) throw Error('invalid-response');
+    /** @type {Record<string, number>} */
     const probabilities = {};
     for (const p of a.probabilities) {
       if (!OPTIONS.includes(p.value) || Object.hasOwn(probabilities, p.value) || !Number.isFinite(p.probability) || p.probability < 0 || p.probability > 1) throw Error('invalid-response');
@@ -110,10 +177,12 @@ function checkedAnswers(response, expected) {
   }
   return checks;
 }
+/** @param {any} usage  The provider's usage JSON, checked here. */
 function usageOf(usage) {
   if (!usage || typeof usage !== 'object') return null;
+  /** @type {Usage} */
   const out = {};
-  for (const k of ['input_tokens', 'output_tokens', 'total_tokens']) if (Number.isSafeInteger(usage[k]) && usage[k] >= 0) out[k] = usage[k];
+  for (const k of /** @type {const} */ (['input_tokens', 'output_tokens', 'total_tokens'])) if (Number.isSafeInteger(usage[k]) && usage[k] >= 0) out[k] = usage[k];
   for (const k of ['cached_tokens', 'cache_write_tokens']) {
     const n = usage.input_tokens_details?.[k];
     if (Number.isSafeInteger(n) && n >= 0) (out.input_tokens_details ??= {})[k] = n;
@@ -121,12 +190,17 @@ function usageOf(usage) {
   return Object.keys(out).length ? out : null;
 }
 
+/**
+ * The exact request a review sends, the binding it is stored under, and the fingerprint that claims it.
+ * @param {{ job: ReviewJob, evidence: Evidence, sequenceConfig?: import('./sequence-benchmark.mjs').SequenceConfig }} options
+ */
 export async function decisionsRequest({ job, evidence, sequenceConfig }) {
   const qs = questions(evidence.stage);
   const intent = { description: job.description, brief: job.brief, appearanceNote: job.appearance_note ?? null,
     motionNote: job.motion_note ?? null, scope: evidence.scope, stage: evidence.stage };
   const paired = sequenceConfig?.method === PAIRED_SEQUENCE_METHOD;
   const presentation = sequenceConfig === undefined || paired ? null : await sequencePresentation(evidence, sequenceConfig);
+  /** @type {DecisionsRequest} */
   const request = { model: DECISIONS.model, input: [{ role: 'developer', content: RULES + (presentation?.rules ?? '') },
     { role: 'user', content: [{ type: 'input_json', data: { designIntentNotObservations: intent } }, ...(presentation?.content ?? evidence.content)] }], questions: qs };
   /** @type {Record<string, any> | undefined} */
@@ -134,12 +208,13 @@ export async function decisionsRequest({ job, evidence, sequenceConfig }) {
   if (paired) {
     const baseline = await sequencePresentation(evidence, { ...sequenceConfig, method: SEQUENCE_METHODS[0] });
     const improved = await sequencePresentation(evidence, { ...sequenceConfig, method: SEQUENCE_METHODS[1] });
+    /** @type {ContentPart[]} */
     const extra = [improved.content[0], ...improved.content.slice(evidence.content.length + 1)]
       .map(part => part.type === 'input_json' ? { type: 'input_text', text: JSON.stringify(part.data) } : part);
     // The shared prefix and baseline questions are byte-identical to baseline-only requests.
     // Additional evidence is local to each independent improved question, never in shared input.
     request.questions = [...qs, ...qs.map(q => ({ ...q, name: `improved_${q.name}`,
-      instructions: [{ type: 'input_text', text: q.instructions + improved.rules }, ...extra] }))];
+      instructions: [{ type: /** @type {const} */ ('input_text'), text: q.instructions + improved.rules }, ...extra] }))];
     researchBinding = { version: 1, evidencePolicy: 'native-2-64-v1', timeoutMs: BENCHMARK_TIMEOUT_MS, method: PAIRED_SEQUENCE_METHOD,
       planSha256: sequenceConfig.planSha256, sourceEvidenceSha256: baseline.binding.sourceEvidenceSha256,
       arms: Object.fromEntries([baseline, improved].map((arm, index) => [arm.binding.method,
@@ -153,15 +228,20 @@ export async function decisionsRequest({ job, evidence, sequenceConfig }) {
   return { request, raw, binding, fingerprint };
 }
 
-/** @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch }} [options] */
+/**
+ * @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch }} [options]
+ * @returns {import('./http.mjs').Reviewer}
+ */
 export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fetch } = {}) {
   const active = enabled === true && typeof apiKey === 'string' && apiKey.trim().length > 0;
   return {
     enabled: active,
+    /** @param {ReviewArgs} args */
     async review({ db, job, host, lease, evidence, sequenceConfig }) {
       if (!active) return { mode: 'off', status: 'disabled', advisory: true, visualApproval: false };
       const { request, raw, binding, fingerprint } = await decisionsRequest({ job, evidence, sequenceConfig });
       const qs = request.questions;
+      /** @type {(name: string, args: Record<string, unknown>) => Promise<any>} */
       const rpc = async (name, args) => {
         const { data, error } = await db.rpc(name, args);
         if (error) {
@@ -183,7 +263,7 @@ export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fet
         return claimed.report;
       }
       const started = performance.now(); let requestId = /** @type {string | null} */ (null), providerHttpStatus = /** @type {number | null} */ (null),
-        usage = /** @type {Record<string, any> | null} */ (null), report;
+        usage = /** @type {Usage | null} */ (null), report;
       try {
         const response = await fetcher(ENDPOINT, { method: 'POST', redirect: 'error', signal: AbortSignal.timeout(sequenceConfig ? BENCHMARK_TIMEOUT_MS : DECISIONS.timeoutMs),
           headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, body: raw });
