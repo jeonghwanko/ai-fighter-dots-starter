@@ -16,7 +16,7 @@ export function createLunaSolReviewer(options = {}) {
     if (!questionNames.length) return { ...primary, cascade, followup: null };
     let followup;
     try { followup = await sol.review({ ...args, primary }); }
-    catch (error) {
+    catch (/** @type {any} */ error) {
       // Quota, lease or persistence failure must not erase a completed Luna review,
       // trigger generation, expose an exception, or turn this advisory into approval.
       const code = ['review-limit', 'lease-lost', 'worker-required', 'generation-state', 'benchmark-expired', 'benchmark-evidence-changed', 'review-binding-changed']

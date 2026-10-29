@@ -1,4 +1,7 @@
 {
+  "compilerOptions": {
+    "strict": true
+  },
   "imports": {
     "node:buffer": "node:buffer",
     "@supabase/supabase-js": "npm:@supabase/supabase-js@2.117.3",

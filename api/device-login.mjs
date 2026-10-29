@@ -68,7 +68,7 @@ export function createDeviceLoginHandler({ db, creatorLink = null, limiter = nul
         const row = await call('af_device_login_start', { p_device_code_hash: hash, p_user_code: userCode(random), p_ttl_seconds: DEVICE_LOGIN_TTL_SECONDS });
         return { ok: true, stage: 'device-login', deviceCode, userCode: formatUserCode(row.userCode), expiresAt: row.expiresAt,
           interval: DEVICE_POLL_INTERVAL_SECONDS };
-      } catch (error) {
+      } catch (/** @type {any} */ error) {
         if (error.message !== 'user-code-collision' || attempt >= 2) throw error;
       }
     }

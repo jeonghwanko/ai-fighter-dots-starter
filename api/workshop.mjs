@@ -10,6 +10,7 @@ import { WORLD_COVERS, canonSheet, factionId, factions, nickname, note, text, wo
   RELATION_KINDS } from './canon.mjs';
 
 const CORS = { methods: 'GET, POST, PUT, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type' };
+/** @type {Record<string, number>} */
 const STATUS = { 'nickname-required': 409, 'nickname-taken': 409, 'canon-changed': 409, 'fighter-not-found': 404, 'not-found': 404,
   'rate-limit': 429, 'world-rate-limit': 429, 'not-a-proposal': 409, 'note-closed': 409, 'relation-exists': 409, 'relation-quota': 409,
   'world-quota': 409, 'world-not-found': 404, 'faction-not-found': 422, 'world-locked': 409, 'not-world-owner': 403,
@@ -20,15 +21,21 @@ const UNIQUE = /** @type {[RegExp, string][]} */ ([[/af_creator_names_nickname/,
 // A story's cursor: the time a page's last note was written, as the story gave it.
 const CURSOR = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 
-/** Is this path the workshop's? */
+/** Is this path the workshop's? @param {string[]} parts */
 export function workshopRoute(parts) {
   return ['story', 'notes', 'relations', 'worlds'].includes(parts[0])
     || parts[0] === 'me' && parts.length === 2 && ['workshop', 'name'].includes(parts[1])
     || parts[0] === 'fighters' && parts.length === 3 && ['canon', 'world'].includes(parts[2]);
 }
 
+/**
+ * @param {{ db: any, authenticate: (request: Request) => Promise<string>, rpc: import('./fighter-profile.mjs').EditTarget['rpc'],
+ *   agentClient?: string | null }} options  `authenticate` resolves to the signed-in creator's id or throws a Problem.
+ * @returns {import('./http.mjs').Route}
+ */
 export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agentClient = null }) {
   const client = UUID.test(agentClient ?? '') ? agentClient : null;
+  /** @param {string} name @param {Record<string, unknown>} args */
   async function call(name, args) {
     const { data, error } = await db.rpc(name, args);
     if (!error) return data;
@@ -41,16 +48,20 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
     if (error.code === '23514' || /violates check constraint/.test(error.message ?? '')) throw new Problem(422, 'invalid-text');
     throw new Problem(503, 'database-unavailable');
   }
+  /** @param {Request} request @param {number} [limit] */
   async function readJson(request, limit = 24000) {
     try { return JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, limit))); }
     catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
   }
+  /** @type {(value: any) => string} An id from the path or a body, checked here. */
   const id = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value.toLowerCase(); };
+  /** @type {(body: any, allowed: string[]) => Record<string, any>} A request's JSON object with only the allowed keys, checked here. */
   const fields = (body, allowed) => {
     if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !allowed.includes(key))) throw new Problem(422, 'invalid-body');
     return body;
   };
   // His current package, as an accepted style would edit it.
+  /** @param {string} fighter @returns {Promise<{ owner: string, sha: string, manifest: any }>} */
   async function currentPackage(fighter) {
     const { data: f, error } = await db.from('af_fighters').select('owner_id,submission_id,manifest_sha').eq('id', fighter).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
@@ -61,12 +72,20 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
     return { owner: f.owner_id, sha: f.manifest_sha, manifest: row.manifest };
   }
   // A proposed style must make a valid package of his current one.
+  /** @param {any} manifest  His package's fighter.json as stored. @param {object | null} style */
   function checkStyle(manifest, style) {
     const combat = { ...manifest.combat, style }; if (style === null) delete combat.style;
     const result = validateFighter({ ...manifest, combat });
     if (!result.ok) throw new Problem(422, 'invalid-proposal', result.errors?.slice(0, 20));
   }
   // A proposal's style, applied once: the note's id keys the edit, so a retry finds it made and does not make it twice.
+  /**
+   * @param {string} noteId
+   * @param {string} fighter
+   * @param {object | null} style
+   * @param {string} owner
+   * @param {{ sha: string }} pack
+   */
   async function applyStyle(noteId, fighter, style, owner, pack) {
     const { data: made, error } = await db.from('af_submissions').select('id').eq('owner_id', owner).eq('idempotency_key', noteId).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
@@ -75,6 +94,7 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
     catch (problem) { if (!(problem instanceof Problem && problem.message === 'fighter-unchanged')) throw problem; }
     return true;
   }
+  /** @param {string} fighter @param {URL} url */
   async function story(fighter, url) {
     const before = url.searchParams.get('before'), version = url.searchParams.get('version');
     if (before !== null && (!CURSOR.test(before) || !Number.isFinite(Date.parse(before)))) throw new Problem(422, 'invalid-cursor');
@@ -85,15 +105,17 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
     return { ok: true, fighter, canon: data.canon, versions: data.versions, notes, hasMore: data.notes.length > 20,
       nextBefore: data.notes.length > 20 ? notes.at(-1).createdAt : null, relations: data.relations };
   }
+  /** @param {string} id */
   async function world(id) {
     const { data, error } = await db.from('af_worlds').select('id').eq('id', id).eq('published', true).eq('hidden', false).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
     if (!data) throw new Problem(404, 'world-not-found');
     const overview = await call('af_world_overview', { p_world: id }), chronicle = await call('af_world_chronicle', { p_world: id });
     return { ok: true, world: overview.world, owner: overview.owner ?? null, memberCount: overview.memberCount,
-      fighters: overview.characters.map(c => ({ id: c.fighter_id, name: c.name, faction: c.faction ?? null })), chronicle };
+      fighters: overview.characters.map(/** @param {{ fighter_id: string, name: string, faction?: string | null }} c */ c => ({ id: c.fighter_id, name: c.name, faction: c.faction ?? null })), chronicle };
   }
   return async (request, parts) => {
+    /** @type {(body: any, status?: number) => Response} */
     const json = (body, status = 200) => jsonResponse(body, status, CORS);
     try {
       const method = request.method, url = new URL(request.url), route = parts.join('/');
@@ -146,7 +168,8 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
           checkStyle(pack.manifest, n.proposal.style);
         }
         const row = await call('af_note_resolve', { p_owner: owner, p_note: noteId, p_accept: body.decision === 'accept', p_sheet: null, p_client: client });
-        if (style) await applyStyle(noteId, n.fighter_id, n.proposal.style, owner, pack);
+        // `pack` is set here: af_note_resolve refuses a note that was not open (`note-closed`), and an accepted one returned above.
+        if (style) await applyStyle(noteId, n.fighter_id, n.proposal.style, owner, /** @type {{ sha: string }} */ (pack));
         return json({ ok: true, note: { id: row.id, state: row.state, resolvedVersion: row.resolved_version } });
       }
       if (method === 'DELETE' && parts[0] === 'notes' && parts.length === 2) {

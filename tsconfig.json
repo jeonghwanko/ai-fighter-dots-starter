@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "strict": false,
+    "strict": true,
     "allowJs": true,
     "checkJs": false,
     "noEmit": true,
@@ -16,8 +16,7 @@
       "node"
     ],
     "resolveJsonModule": true,
-    "skipLibCheck": true,
-    "strictNullChecks": true
+    "skipLibCheck": true
   },
   "include": [
     "api/**/*.mjs"
