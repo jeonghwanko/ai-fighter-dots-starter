@@ -3,13 +3,21 @@ import { Problem, UUID, jsonResponse, readBody, sha256 } from './http.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { CLIENT_LIMITS } from './client-limit.mjs';
 const CORS = {methods:'GET, POST, OPTIONS',headers:'Content-Type'};
+/** @type {(body: any, status?: number) => Response} */
 const reply = (body,status=200) => jsonResponse(body,status,CORS);
+/**
+ * An af_duels row, as the table or a duel function returns it. `result` is the engine's record of the bout, null until it completes.
+ * @typedef {{ id: string, a: string, b: string, hash_a: string, hash_b: string, seed: number, engine: string, created_at: string,
+ *   completed_at: string | null, result: unknown }} DuelRow
+ */
+/** @type {(row: DuelRow) => object} */
 const present = row => ({id:row.id,a:row.a,b:row.b,hashes:[row.hash_a,row.hash_b],seed:row.seed,engine:row.engine,
   createdAt:row.created_at,completedAt:row.completed_at,result:row.result});
+/** @param {{ message: string } | null} error  A database call's error, if any. */
 function check(error) {
   if (!error) return;
-  const status = {'idempotency-conflict':409,'duel-not-approved':409,'duels-paused':503,'duel-budget':429,
-    'invalid-duel':422,'not-found':404,'engine-mismatch':409,'result-conflict':409,'duels-failing':503,'invalid-result':503}[error.message];
+  const status = /** @type {Record<string, number>} */ ({'idempotency-conflict':409,'duel-not-approved':409,'duels-paused':503,'duel-budget':429,
+    'invalid-duel':422,'not-found':404,'engine-mismatch':409,'result-conflict':409,'duels-failing':503,'invalid-result':503})[error.message];
   throw new Problem(status ?? 503,status ? error.message : 'duel-service-unavailable');
 }
 const ENGINE_NAME = /^[a-z0-9][a-z0-9.-]{0,63}$/;
@@ -21,12 +29,18 @@ const ENGINE_NAME = /^[a-z0-9][a-z0-9.-]{0,63}$/;
  * `release` (2026-10-26): the deployed release's name (`release.mjs`, written by the game's Edge deploy), told by `GET rankings` so the deploy
  * sees its own upload answer — a change to this handler alone moves no engine name.
  */
-/** @param {{ db: any, simulateDuel: any, engineVersion: any, engines?: any, release?: any, limiter?: import('./http.mjs').Limiter | null }} options */
+/**
+ * @param {{ db: any, simulateDuel: any, engineVersion: any, engines?: any, release?: any, limiter?: import('./http.mjs').Limiter | null }} options
+ * @returns {import('./http.mjs').Route}
+ */
 export function createDuelHandler({db,simulateDuel,engineVersion,engines=null,release=null,limiter=null}) {
   const kept=new Map(Object.entries(engines??{}).filter(([name,run])=>ENGINE_NAME.test(name) && typeof run==='function' && name!==engineVersion));
+  /** @type {(request: Request) => [string | null, unknown]} The engine's name and its run function, which the caller checks. */
   const pick=request=>{ const wanted=new URL(request.url).searchParams.get('engine');
     return wanted && kept.has(wanted) ? [wanted,kept.get(wanted)] : [engineVersion,simulateDuel]; };
+  /** @type {(name: string, args: Record<string, unknown>) => Promise<any>} */
   const rpc = async (name,args) => { const {data,error}=await db.rpc(name,args); check(error); return data; };
+  /** @param {string} id @param {string} hash */
   async function manifest(id,hash) {
     const {data:f,error:e}=await db.from('af_fighters').select('submission_id').eq('id',id).maybeSingle(); check(e);
     if (!f) throw new Problem(404,'not-found');
@@ -38,10 +52,11 @@ export function createDuelHandler({db,simulateDuel,engineVersion,engines=null,re
   }
   /** The ranking rows with each fighter's per-language names (contract profile.names) where he has them. */
   async function rankings() {
+    /** @type {{ id: string }[]} Each fighter's ranking row; its other fields pass through. */
     const rows=await rpc('af_duel_rankings',{});
     if (!rows.length) return rows;
     const {data,error}=await db.from('af_fighters').select('id,profile').in('id',rows.map(row=>row.id)); check(error);
-    const names=new Map((data??[]).map(f=>[f.id,f.profile?.names]));
+    const names=new Map((data??[]).map(/** @param {{ id: string, profile: { names?: Record<string, string> } | null }} f */ f=>[f.id,f.profile?.names]));
     return rows.map(row=>names.get(row.id)?{...row,names:names.get(row.id)}:row);
   }
   return async (request,parts) => {
@@ -66,6 +81,7 @@ export function createDuelHandler({db,simulateDuel,engineVersion,engines=null,re
       if (row.result) return reply({ok:true,match:present(row)});
       if(row.engine!==engine) throw new Problem(409,'engine-mismatch');
       // A run that cannot finish is recorded as failed: it leaves the match budget and counts toward the failure brake.
+      /** @type {(code: string) => Promise<void>} */
       const fail = code => db.rpc('af_fail_duel',{p_id:row.id,p_engine:engine,p_code:code}).then(()=>{},()=>{});
       let result;
       try {

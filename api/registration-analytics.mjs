@@ -1,9 +1,15 @@
 // @ts-check
 import { jsonResponse, Problem, readBody } from './http.mjs';
+/** @type {(value: unknown) => boolean} */
 export const validClient = value => typeof value === 'string' && /^\d{1,20}\.\d{1,20}$/.test(value);
 const cors = { methods: 'POST, OPTIONS', headers: 'authorization, apikey, content-type' };
 
+/**
+ * @param {{ db: any, measurementId?: string, apiSecret?: string, send?: typeof fetch }} options
+ * @returns {import('./http.mjs').Analytics}
+ */
 export function createRegistrationAnalytics({ db, measurementId, apiSecret, send = fetch }) {
+  /** @param {Request} request @param {string} owner */
   async function context(request, owner) {
     if (request.method === 'OPTIONS') return jsonResponse({ ok: true }, 200, cors);
     if (request.method !== 'POST') throw new Problem(405, 'method-not-allowed');
@@ -22,6 +28,7 @@ export function createRegistrationAnalytics({ db, measurementId, apiSecret, send
     }
     return jsonResponse({ ok: true, stage: 'analytics-context' }, 200, cors);
   }
+  /** @param {{ id: string, status: string } | null} row  The submission row as its registration left it. */
   async function registered(row) {
     if (row?.status !== 'registered' || !apiSecret || !/^G-[A-Z0-9]+$/.test(measurementId ?? '')) return;
     // Atomic claim: repeated worker receipts and concurrent requests cannot send this registration twice.
@@ -29,7 +36,9 @@ export function createRegistrationAnalytics({ db, measurementId, apiSecret, send
       .select('submission_id,client_id,session_id,created_at').maybeSingle();
     if (error || !data) return;
     const url = new URL('https://www.google-analytics.com/mp/collect');
-    url.searchParams.set('measurement_id', measurementId); url.searchParams.set('api_secret', apiSecret);
+    // measurementId matched the G- pattern above, so it is a string.
+    url.searchParams.set('measurement_id', /** @type {string} */ (measurementId)); url.searchParams.set('api_secret', apiSecret);
+    /** @type {{ event_source: string, engagement_time_msec: number, session_id?: number }} */
     const params = { event_source: 'server', engagement_time_msec: 1 };
     if (data.session_id && Number.isSafeInteger(Number(data.session_id))) params.session_id = Number(data.session_id);
     try {

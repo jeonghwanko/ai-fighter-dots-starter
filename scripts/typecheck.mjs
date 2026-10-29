@@ -6,8 +6,7 @@ import { readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 
 export const IMPLICIT_ANY_PENDING = [
-  'account.mjs', 'admin.mjs', 'canon.mjs', 'client.mjs', 'device-login.mjs', 'duels.mjs', 'fighter-profile.mjs', 'generations.mjs',
-  'handler.mjs', 'registration-analytics.mjs', 'workshop.mjs',
+  'generations.mjs', 'handler.mjs', 'workshop.mjs',
 ];
 
 const root = fileURLToPath(new URL('../', import.meta.url));
