@@ -289,6 +289,13 @@ export const RUN_FROM_WALK_PACE = 0.6;
  * frames halved with no RIFE frame, passed at once. A creator's change to the run still films it.
  */
 export const RUN_FROM_WALK_FIRST = true;
+/**
+ * The jolt at which the engine reads a gait's beat as broken (sprite-gen `--beat-limit`; its own is 0.25). A Grok run's cut is a frame or two
+ * longer than the run's 12 frames, and sprite-gen makes a loop whose beat still breaks of source frames placed where the legs move least:
+ * the 냥잽 cat's 14-frame run went from 0.75 to 0.28, which the owner watched and took (2026-10-29). The walk keeps the engine's.
+ */
+export const BEAT_LIMIT = Object.freeze({ run: 0.3 });
+const beatLimit = gait => BEAT_LIMIT[gait] ? ['--beat-limit', String(BEAT_LIMIT[gait])] : [];
 /** A take none of whose cuts aligned (the engine stopped) is aligned ALIGN_AGAIN more times, ALIGN_PAUSE_MS apart, before an operator. */
 export const ALIGN_AGAIN = 1;
 export const ALIGN_PAUSE_MS = 120_000;
@@ -496,7 +503,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     if ((await readJson(strip).catch(() => null))?.cycle_align?.to !== GAIT_FRAMES.run) {
       await rm(folder, { recursive: true, force: true });
       await cp(cut, folder, { recursive: true });
-      const args = ['video-cycle-align', '--loop-dir', folder, '--length', String(GAIT_FRAMES.run), '--view', 'side@right', '--start-foot', 'left'];
+      const args = ['video-cycle-align', '--loop-dir', folder, '--length', String(GAIT_FRAMES.run), '--view', 'side@right', '--start-foot', 'left',
+        ...beatLimit('run')];
       if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
     }
     const meta = await readJson(strip).catch(() => null);
@@ -558,7 +566,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
           if ((await readJson(strip).catch(() => null))?.cycle_align?.to !== GAIT_FRAMES[gait]) {
             await rm(aligned, { recursive: true, force: true });
             await cp(cut, aligned, { recursive: true });
-            const args = ['video-cycle-align', '--loop-dir', aligned, '--length', String(GAIT_FRAMES[gait]), '--view', 'side@right', '--start-foot', 'left'];
+            const args = ['video-cycle-align', '--loop-dir', aligned, '--length', String(GAIT_FRAMES[gait]), '--view', 'side@right', '--start-foot', 'left',
+              ...beatLimit(gait)];
             if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
           }
           const meta = await readJson(strip).catch(() => null);
