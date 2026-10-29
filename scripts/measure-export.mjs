@@ -25,19 +25,30 @@ const minutes = list => spread(list.map(v => v / 60000));
 /** One job's events in order, read once: what the user answered, how long each stage and each wait took, which release made it. */
 export function timeline(job, events) {
   const own = events.filter(e => e.jobId === job.id).sort((a, b) => (a.id ?? 0) - (b.id ?? 0) || a.at.localeCompare(b.at));
-  const t = { job, events: own, stageMs: {}, claims: {}, waitsMs: [], calls: {}, kit: null, engine: null };
-  let claimed = null, ready = null;
+  const t = { job, events: own, stageMs: {}, claims: {}, waitsMs: [], calls: {}, kit: null, engine: null,
+    stageReviews: [], stageRetries: [], operatorRetries: 0, operatorWaitsMs: [], cancelledAfterReview: false, workerPicks: 0 };
+  let claimed = null, ready = null, reviewed = null;
   for (const e of own) {
     const data = e.data ?? {};
     if (e.kind === 'versions') { t.kit = data.kit ?? t.kit; t.engine = data.engine ?? t.engine; }
     if (e.kind === 'claimed') { claimed = e; count(t.claims, data.status ?? 'unknown'); }
     if (e.kind === 'finished') {
-      if (claimed) (t.stageMs[claimed.data?.status ?? 'unknown'] ??= []).push(ms(claimed.at, e.at));
+      const stage = claimed?.data?.status ?? 'unknown';
+      if (claimed) (t.stageMs[stage] ??= []).push(ms(claimed.at, e.at));
       claimed = null;
+      // A stage that stopped for an operator, or will run again: the job may still end well, so the end state alone hides these.
+      if (data.outcome === 'review') { t.stageReviews.push({ stage, code: data.code ?? 'none' }); reviewed = e; }
+      if (data.outcome === 'retry') t.stageRetries.push({ stage, code: data.code ?? 'none' });
+      if (['a', 'b'].includes(data.choice)) t.workerPicks += 1;   // 맡기기: the look the worker's judge chose
       for (const [tool, v] of Object.entries(data.calls ?? {})) if (Array.isArray(v)) t.calls[tool] = (t.calls[tool] ?? [0, 0, 0]).map((x, i) => x + (v[i] ?? 0));
       if (READY[data.status]) ready = e;
     }
     if (ANSWERS.has(e.kind) && ready) { t.waitsMs.push(ms(ready.at, e.at)); ready = null; }
+    if (e.kind === 'operator' && data.action === 'retry') {
+      t.operatorRetries += 1;
+      if (reviewed) { t.operatorWaitsMs.push(ms(reviewed.at, e.at)); reviewed = null; }
+    }
+    if (e.kind === 'cancelled' && reviewed) { t.cancelledAfterReview = true; reviewed = null; }
   }
   const first = kind => own.find(e => e.kind === kind);
   t.firstAppearance = first('appearance-answer') ?? null;
@@ -47,6 +58,7 @@ export function timeline(job, events) {
   t.firstMotionDecision = firstMotionReady ? own.find(e => e.id > firstMotionReady.id && ['motion-answer', 'register'].includes(e.kind)) ?? null : null;
   t.register = first('register') ?? null;
   t.created = first('created') ?? null;
+  t.delegated = t.created ? t.created.data?.delegate === true : null;   // unknown for jobs created before the request said
   return t;
 }
 
@@ -71,6 +83,12 @@ export function kpis(timelines, { reviews = [], ledger = null } = {}) {
   for (const t of registered) {
     for (const [provider, v] of Object.entries(ledgerOf.get(ogJobId(t.job))?.providers ?? {})) (runsPerRegistered[provider] ??= []).push(v.runs ?? 0);
   }
+  const reviewCodes = {}, reviewStages = {}, retryCodes = {};
+  for (const t of timelines) {
+    for (const r of t.stageReviews) { count(reviewCodes, r.code); count(reviewStages, r.stage); }
+    for (const r of t.stageRetries) count(retryCodes, r.code);
+  }
+  const reviewedJobs = timelines.filter(t => t.stageReviews.length), known = timelines.filter(t => t.delegated !== null);
   const ownReviews = reviews.filter(r => ids.has(r.jobId)), reviewStatus = {}, reviewScopes = {};
   for (const r of ownReviews) { count(reviewStatus, r.status ?? 'unknown'); count(reviewScopes, r.scope ?? 'unknown'); }
   return {
@@ -82,6 +100,15 @@ export function kpis(timelines, { reviews = [], ledger = null } = {}) {
     endStates: statuses,
     failureCodes: errors,
     failureOrReviewRate: { rate: rate(jobs.filter(j => ['failed', 'needs_review'].includes(j.status)).length, jobs.length), of: jobs.length },
+    stageReviews: { total: reviewedJobs.reduce((s, t) => s + t.stageReviews.length, 0), jobs: reviewedJobs.length,
+      jobRate: rate(reviewedJobs.length, jobs.length), byCode: reviewCodes, byStage: reviewStages,
+      perJob: spread(reviewedJobs.map(t => t.stageReviews.length)) },
+    stageRetries: { total: timelines.reduce((s, t) => s + t.stageRetries.length, 0), byCode: retryCodes },
+    operatorRetries: timelines.reduce((s, t) => s + t.operatorRetries, 0),
+    operatorWaitMinutes: minutes(timelines.flatMap(t => t.operatorWaitsMs)),
+    cancelledAfterReview: { n: timelines.filter(t => t.cancelledAfterReview).length, of: reviewedJobs.length },
+    delegated: { rate: rate(known.filter(t => t.delegated).length, known.length), of: known.length,
+      workerPicks: timelines.reduce((s, t) => s + t.workerPicks, 0) },
     abandonRate: { rate: rate(reachedReady.filter(t => ['cancelled', 'expired'].includes(t.job.status)).length, reachedReady.length), of: reachedReady.length },
     stageMinutes: Object.fromEntries(Object.entries(stageMs).map(([stage, list]) => [stage, minutes(list)])),
     claimsPerStage: Object.fromEntries(Object.entries(claims).map(([stage, list]) => [stage, spread(list)])),
@@ -169,6 +196,7 @@ async function main(argv) {
   const a = summary.all, pct = v => (v === null ? '—' : `${Math.round(v * 100)}%`);
   console.log(`jobs ${a.jobs} (ended ${summary.ended})  look first choice ${pct(a.appearanceFirstChoice.rate)} of ${a.appearanceFirstChoice.of}  ` +
     `motions first accept ${pct(a.motionFirstAccept.rate)} of ${a.motionFirstAccept.of}  failed/review ${pct(a.failureOrReviewRate.rate)}  ` +
+    `stage reviews ${a.stageReviews.total} in ${a.stageReviews.jobs} job(s)  operator retries ${a.operatorRetries}  ` +
     `labels ${labels.length}  screened clips ${summary.screening.clips}`);
   console.log(`wrote ${path.join(outDir, 'kpis.json')} and clip-labels.jsonl`);
   return 0;
