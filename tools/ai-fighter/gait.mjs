@@ -215,8 +215,11 @@ const retakeReasons = record => record ? (Array.isArray(record.reasons) ? record
 export function loopReview({ motion, sequence, strip, visual, judge, stridePixels }) {
   const errors = [];
   if (!['walk', 'run'].includes(motion)) throw Error('Loop reviews cover walk and run');
-  const expected = spec.motions[motion].frames;
-  if (sequence.frames.length !== expected) errors.push({ code: 'FRAME_COUNT', actual: sequence.frames.length, expected });
+  // A gait keeps the frames it was filmed in, inside the contract's range (gait-frames-1), as fighter:pack takes it: the standard 16 and
+  // 12 alone refused every cut the hosted worker aligned at its own length, after its clips and judge were paid for (2026-10-30).
+  const { frames: standard, minFrames = standard, maxFrames = standard } = spec.motions[motion];
+  if (sequence.frames.length < minFrames || sequence.frames.length > maxFrames)
+    errors.push({ code: 'FRAME_COUNT', actual: sequence.frames.length, min: minFrames, max: maxFrames });
   if (new Set(sequence.frames.map(f => digest(f.data))).size !== sequence.frames.length) errors.push({ code: 'DUPLICATE_FRAME' });
   const retake = [...retakeReasons(strip?.retake), ...retakeReasons(strip?.cycle_align?.retake)];
   if (retake.length) errors.push({ code: 'ENGINE_RETAKE', reasons: retake });

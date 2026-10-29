@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ASKS, createStages } from './generation-stages.mjs';
-import { STAGE_LIMIT_MS, TIMING, stageLimitMs } from './generation-worker.mjs';
+import { STAGE_LIMIT_MS, STAGE_STOPPED, TIMING, errorCode, stageLimitMs, unlessStopped } from './generation-worker.mjs';
 
 const brief = { profile: { name: 'Blue' }, look: { subject: 'A blue cat boxer', palette: ['blue'], prop: 'gloves', avoid: 'none' },
   motion: { temper: 'bold', attack: 'jab' } };
@@ -80,4 +80,40 @@ test('each stage has a time limit, and a codex question is checked again within 
   assert.equal(stageLimitMs('motions'), 150 * 60_000);
   assert.equal(stageLimitMs('something-new'), 150 * 60_000);
   assert.ok(TIMING.askedRecheckMs < TIMING.healthMs);
+});
+
+test('a stopped stage starts no run: its next og or motions.py call ends the stage instead', async () => {
+  const controller = new AbortController();
+  let started = 0;
+  const start = async () => { started += 1; return { code: 0 }; };
+  assert.deepEqual(await unlessStopped(controller.signal, start), { code: 0 });
+  controller.abort();
+  await assert.rejects(unlessStopped(controller.signal, start), error => error.code === STAGE_STOPPED);
+  assert.equal(started, 1);
+  // The stage turns it into its own end; the worker then reports the timeout or drops the cancelled job.
+  const stages = createStages({ og: args => unlessStopped(controller.signal, start), api: { artifact: async () => ({ ok: true }) },
+    fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, signal: controller.signal });
+  await assert.rejects(stages.appearance(job, await mkdtemp(path.join(tmpdir(), 'look-stopped-'))), error => error.code === STAGE_STOPPED);
+  assert.equal(started, 1);
+});
+
+test('an error code the finish takes is a short string, whatever the error carried', () => {
+  assert.equal(errorCode({ code: 137 }), '137');
+  assert.equal(errorCode(Object.assign(new Error('x'), { code: 'artifact-refused' })), 'artifact-refused');
+  assert.equal(errorCode(new Error('no code')), 'stage-error');
+  assert.equal(errorCode(null), 'stage-error');
+  assert.equal(errorCode({ code: 'x'.repeat(80) }).length, 60);
+});
+
+test('a look whose outcome is unknown goes to an operator even when the other look asked the codex question', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'look-unknown-')), made = [];
+  try {
+    const timeout = { state: null, code: 'provider-timeout', retryable: false, message: 'no answer in time' };
+    const plan = { 'look-a-0': 75, 'look-b-0': { code: 1, errors: [timeout] } };
+    const stages = createStages({ og: looksOg(plan, made), api: { artifact: async () => ({ ok: true }) }, fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
+    assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-outcome-unknown' } });
+    // The other way round, and with a look that may be retried: still the operator's.
+    Object.assign(plan, { 'look-a-0': { code: 1, errors: [{ ...timeout, code: 'provider-rate-limited', retryable: true }] }, 'look-b-0': { code: 1, errors: [timeout] } });
+    assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-outcome-unknown' } });
+  } finally { await rm(dir, { recursive: true, force: true }); }
 });
