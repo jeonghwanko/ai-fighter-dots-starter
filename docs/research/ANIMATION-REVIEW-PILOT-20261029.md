@@ -28,6 +28,9 @@ still-image review, not video inference or observed foot tracking. No original p
 Requested and returned model values were `gpt-6-luna` for all 20 calls. The provider returned no dated snapshot
 identifier, so the exact backend snapshot is **unobserved**. There was no fallback model or cascade.
 
+One human reviewer supplied the reference labels and declared no prior exposure to AI judgments for these
+clips. This declaration was not independently verified, and inter-reviewer agreement was not measured.
+
 Candidate authors did not access human answers or review notes while designing the presentation. The operator
 had already seen the labels and prepared the label file; this was **author-level blinding, not a fully blind
 workflow**. The candidate and plan were frozen before model results, and the report authors opened labels and
