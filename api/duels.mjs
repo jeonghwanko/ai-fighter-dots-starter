@@ -52,12 +52,10 @@ export function createDuelHandler({db,simulateDuel,engineVersion,engines=null,re
   }
   /** The ranking rows with each fighter's per-language names (contract profile.names) where he has them. */
   async function rankings() {
-    /** @type {{ id: string }[]} Each fighter's ranking row; its other fields pass through. */
+    // One query: the ranking carries each fighter's per-language names (2026-10-29), shown only when he has them.
+    /** @type {{ id: string, names: Record<string, string> | null }[]} Each fighter's ranking row; its other fields pass through. */
     const rows=await rpc('af_duel_rankings',{});
-    if (!rows.length) return rows;
-    const {data,error}=await db.from('af_fighters').select('id,profile').in('id',rows.map(row=>row.id)); check(error);
-    const names=new Map((data??[]).map(/** @param {{ id: string, profile: { names?: Record<string, string> } | null }} f */ f=>[f.id,f.profile?.names]));
-    return rows.map(row=>names.get(row.id)?{...row,names:names.get(row.id)}:row);
+    return rows.map(({names,...row})=>names?{...row,names}:row);
   }
   return async (request,parts) => {
     try {

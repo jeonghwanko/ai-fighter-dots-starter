@@ -27,9 +27,10 @@ const ROSTER_CORS = { methods: 'GET, OPTIONS' };
  * @typedef {{ runtime_approved: boolean, runtime_scope: string | null, moderation_reason: string }} Admission
  */
 /**
- * An af_fighters row as the roster lists it; `profile` is the registered package's.
+ * An af_roster_entries row (af_fighters with its maker) as the roster lists it; `profile` is the registered package's.
  * @typedef {{ id: string, created_at: string, manifest_sha: string, profile: { name: string, names?: Record<string, string> },
- *   runtime_scope: string | null, runtime_manifest_sha: string | null, duel_approved: boolean, duel_manifest_sha: string | null }} RosterFighter
+ *   runtime_scope: string | null, runtime_manifest_sha: string | null, duel_approved: boolean, duel_manifest_sha: string | null,
+ *   made_with: string | null }} RosterFighter
  */
 /** @type {(value: any) => string} An id from the path, a header or a body, checked here. */
 const requireId = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value; };
@@ -78,15 +79,6 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
     if (row.status !== 'registered') return view(row);
     const { data, error } = await db.from('af_fighters').select('runtime_approved,runtime_scope,moderation_reason').eq('submission_id', row.id).maybeSingle();
     check(error); return view(row, data);
-  }
-  // The agent that made each fighter (`af_fighter_agents`, 2026-10-27). Not knowing it never fails a roster read.
-  /** @param {string[]} ids @returns {Promise<Map<string, string>>} */
-  async function madeWith(ids) {
-    if (!ids.length) return new Map();
-    try {
-      const { data, error } = await db.from('af_fighter_agents').select('fighter_id,client_name').in('fighter_id', ids);
-      return error || !Array.isArray(data) ? new Map() : new Map(data.map(row => [row.fighter_id, row.client_name]));
-    } catch { return new Map(); }
   }
   /** One Storage call signs every asset of a submission, in manifest order. @param {Submission} row @param {number} seconds @returns {Promise<string[]>} */
   async function signedUrls(row, seconds) {
@@ -161,7 +153,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         /** @type {(body: any, status?: number) => Response} */
         const reply = (body, status = 200) => jsonResponse(body, status, ROSTER_CORS);
         if (method === 'OPTIONS') return reply({ ok: true });
-        let query = db.from('af_fighters').select('id,created_at,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha')
+        // af_roster_entries joins the agent that made each fighter (`made_with`), so a page or a fighter is one query (2026-10-29).
+        let query = db.from('af_roster_entries').select('id,created_at,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha,made_with')
           .eq('runtime_approved', true).eq('runtime_scope', 'arena-player-v1').eq('review_state', 'approved');
         if (parts.length === 1) {
           // An unlisted fighter (`listed`, 2026-10-27) is left out of the list only: his own address below still serves him.
@@ -177,10 +170,9 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
           query = query.order('created_at', { ascending: false }).order('id');
           const { data, error } = await query.limit(21); check(error);
           const last = data[19], hasMore = data.length > 20, shown = /** @type {RosterFighter[]} */ (data.slice(0, 20)).filter(f => f.runtime_manifest_sha === f.manifest_sha);
-          const makers = await madeWith(shown.map(f => f.id));
           return reply({ ok: true, hasMore, nextCursor: hasMore ? `${last.created_at}|${last.id}` : null,
             fighters: shown.map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, ...(f.profile.names ? { names: f.profile.names } : {}), runtimeScope: f.runtime_scope,
-              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha, ...(makers.has(f.id) ? { madeWith: makers.get(f.id) } : {}) })) });
+              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha, ...(f.made_with ? { madeWith: f.made_with } : {}) })) });
         }
         if (parts.length !== 2 || !UUID.test(parts[1])) return reply({ ok: false, code: 'not-found' }, 404);
         const { data: fighter, error } = await query.eq('id', parts[1]).maybeSingle(); check(error);
@@ -188,7 +180,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         const { data: row, error: readError } = await db.from('af_submissions').select('*').eq('id', fighter.submission_id).eq('status', 'registered').maybeSingle();
         check(readError);
         if (!row || row.manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
-        const urls = await signedUrls(row, 600), maker = (await madeWith([fighter.id])).get(fighter.id);
+        const urls = await signedUrls(row, 600), maker = fighter.made_with;
         const files = row.manifest.assets.map(/** @param {{ id: string }} asset @param {number} index */ (asset, index) => ({ id: asset.id, downloadUrl: urls[index] }));
         return reply({ ok: true, fighterId: fighter.id, manifestSha256: fighter.manifest_sha, runtimeApproved: true,
           runtimeScope: fighter.runtime_scope, duelApproved: fighter.duel_approved === true && fighter.duel_manifest_sha === fighter.manifest_sha,
