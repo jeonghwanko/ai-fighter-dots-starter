@@ -26,6 +26,9 @@ ODDBOUT 제작자 페이지·에이전트의 **호스팅 생성 신청**(글과 
 | `install-service-user.sh` | 서비스 설치의 처음 한 번(root) |
 | `*.test.mjs` | `node --test host/*.test.mjs` |
 
+단계 모듈은 서버가 비교 모드를 켠 경우에만 증거를 ODDBOUT 검수 API로 전달한다.
+OpenAI 키는 서버 Secrets에만 둔다([서버 검수 운영](../docs/SERVER-DECISIONS-REVIEW.md)).
+
 ## 단계
 
 | 단계 | 누가 | 하는 일 |

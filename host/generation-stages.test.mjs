@@ -110,6 +110,14 @@ test('the stages run their commands through og, upload what they made and report
   assert.equal((await stages.appearance({ ...job, brief, delegate: true, appearanceRound: 1, appearanceNote: 'longer scarf', candidates: [{ url: 'https://s/look-a-0' }] }, dir)).result.choice, undefined);
   assert.equal((await stages.appearance({ ...job, brief }, dir)).result.choice, undefined);
   assert.ok(!calls.slice(before).some(c => c.args[0] === 'codex'));
+  // Server advisory failures/defects never replace the existing look judge or trigger extra generation.
+  const screened = [];
+  api.decisions = async (_, evidence) => { screened.push(evidence); return { ok: true, review: { status: 'completed', checks: { anatomy: { status: 'defect' } }, advisory: true, visualApproval: false } }; };
+  before = calls.length;
+  const shadow = await stages.appearance({ ...job, brief, decisionsReview: { mode: 'shadow' } }, dir);
+  assert.deepEqual(shadow, looks);
+  assert.deepEqual(screened.map(e => `${e.stage}/${e.scope}`), ['input/design', 'pose/look-a', 'pose/look-b']);
+  assert.equal(calls.slice(before).filter(c => c.args.includes('gen')).length, 2);
   assert.equal(lookPick({ a: pass, b: pass, pick: 'none', notes: 'x' }), null);
   assert.equal(lookPick(null), null);
   // The package then goes in under the creator with his profile.
@@ -248,6 +256,13 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     if (command === 'video-still') await writeFile(rest[1].replace(/\.png$/, '.json'), '{"key":"green"}');
     if (command === 'judge-request') { await mkdir(rest[1], { recursive: true }); await writeFile(path.join(rest[1], 'judge-prompt.txt'), 'judge it'); }
     if (command === 'stride') await writeFile(rest[2], '{"stridePixels":300}');
+    if (command === 'decision-frames') {
+      await mkdir(rest[2], { recursive: true });
+      const durations = Array.from({ length: rest[1] === 'walk' ? 16 : 12 }, (_, i) => 70 + i);
+      await writeFile(path.join(rest[2], 'durations.json'), JSON.stringify(durations));
+      await writeFile(path.join(rest[2], 'identity.png'), 'final-idle');
+      for (let i = 0; i < durations.length; i++) await writeFile(path.join(rest[2], `frame-${i}.png`), `final-${rest[1]}-${i}`);
+    }
     if (command === 'preview') { await mkdir(rest[1], { recursive: true }); for (const clip of PREVIEW_CLIPS) await writeFile(path.join(rest[1], `${clip}.webp`), clip); }
     if (command === 'drafts') { await mkdir(rest[1], { recursive: true }); for (const clip of ['combo', 'fightIdle']) await writeFile(path.join(rest[1], `${clip}.webp`), clip); }
     if (command === 'strip-preview') await writeFile(rest[1], 'loop');
@@ -347,6 +362,12 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const withoutShow = await stages.motions(job, dir);
   assert.equal(withoutShow.outcome, 'ok', JSON.stringify(withoutShow));
   assert.equal(py.findLast(a => a[0] === 'assemble')[5], '');
+  const screens = [];
+  api.decisions = async (_, evidence) => { screens.push(evidence); throw Error('review outage'); };
+  assert.equal((await stages.motions({ ...job, decisionsReview: { mode: 'shadow' } }, dir)).outcome, 'ok');
+  assert.deepEqual(screens.map(e => [e.scope, e.images.length]), [['walk', 17], ['run', 13]]);
+  assert.deepEqual(screens[0].images.slice(1).map(i => i.durationMs), Array.from({ length: 16 }, (_, i) => 70 + i));
+  assert.ok(py.filter(a => a[0] === 'decision-frames').every(a => a[1].endsWith(path.join('pack', 'game-pack.json'))));
 });
 
 /** The motions stage with every provider step passing at once, `scaleCheck(args)` and `scaleFit(round)` standing in for the engine. */

@@ -535,6 +535,21 @@ def game_pack_frames(pack_file: Path, animation: str):
     return frames, anim["durations_ms"]
 
 
+def decision_frames(pack_file: Path, animation: str, out: Path):
+    """Exact final-pack pixels and durations for server review. No resize, ground alignment or animation flattening."""
+    if animation not in ("walk", "run"):
+        raise ValueError("review expects walk or run")
+    frames, durations = game_pack_frames(pack_file, animation)
+    identity, _ = game_pack_frames(pack_file, "idle")
+    if len(frames) != (16 if animation == "walk" else 12) or len(durations) != len(frames):
+        raise ValueError("incomplete review sequence")
+    out.mkdir(parents=True, exist_ok=True)
+    Image.fromarray(identity[0]).save(out / "identity.png")
+    for i, frame in enumerate(frames):
+        Image.fromarray(frame).save(out / f"frame-{i}.png")
+    (out / "durations.json").write_text(json.dumps(durations) + "\n")
+
+
 def _runs(columns, gap=3, minimum=4):
     out, start, last = [], None, None
     for x in np.nonzero(columns)[0]:
@@ -817,6 +832,8 @@ def main(argv):
     elif command == "video-still" and len(rest) == 2:
         key = video_still(Path(rest[0]), Path(rest[1]))
         Path(rest[1]).with_suffix(".json").write_text(json.dumps({"key": key}) + "\n")
+    elif command == "decision-frames" and len(rest) == 3:
+        decision_frames(Path(rest[0]), rest[1], Path(rest[2]))
     elif command == "sheet" and len(rest) == 2:
         contact_sheet(Path(rest[0]), Path(rest[1]))
     elif command == "stride" and len(rest) == 3:

@@ -4,7 +4,7 @@ import { existsSync, statSync } from 'node:fs';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { checkSystem, healthy, hostEnv, openJobs, readHostEnv, runHost } from '../scripts/host.mjs';
+import { HOST_FILES, checkSystem, healthy, hostEnv, openJobs, readHostEnv, runHost } from '../scripts/host.mjs';
 import { generation } from './helpers/generation-database.mjs';
 
 // 커뮤니티 호스트 H2 (2026-10-28): npm run host -- … against the API on a test database; og is a fake that records its calls.
@@ -106,11 +106,11 @@ test('start refuses until both subscriptions answer; setup refuses with open job
   } finally { await sql.close(); await rm(root, { recursive: true, force: true }); }
 });
 
-test('setup writes host.env and the generator files (Unix line endings, og runnable only by the host)', async () => {
+test('setup writes host.env and the generator files (Unix line endings, og runnable only by the host)', { skip: process.platform !== 'linux' && 'host setup requires Linux paths and Unix permissions' }, async () => {
   const root = await mkdtemp(path.join(os.tmpdir(), 'host-setup-')), from = path.join(root, 'from');
   try {
     await mkdir(from);
-    for (const name of ['og', 'generation-worker.mjs', 'generation-stages.mjs', 'ledger-report.mjs', 'motions.py']) await writeFile(path.join(from, name), 'line one\r\nline two\r\n');
+    for (const name of HOST_FILES) await writeFile(path.join(from, name), 'line one\r\nline two\r\n');
     const ogCalls = [];
     const code = await runHost(['setup', '--slots', '2', '--memory', '6G'], { root, out: () => {}, hostDir: from, linger: () => true,
       system: () => ({ missing: [], warnings: [], python: '/opt/py/bin/python3.12', toolPath: '/opt/ffmpeg/bin' }),
@@ -182,7 +182,7 @@ test('signin --device waits again on a link made before, and says how to get a n
 });
 
 // 내 PC 붙이기 (2026-10-28): a join code from the site, no sign-in on the PC; the key goes into og's stdin only, then the worker starts.
-test('join puts the site\'s code to work: the key into og only, then health and the worker, no session and no approval needed', async () => {
+test('join puts the site\'s code to work: the key into og only, then health and the worker, no session and no approval needed', { skip: process.platform !== 'linux' && 'host setup requires Linux paths and Unix permissions' }, async () => {
   const lines = [], ogCalls = [], code = `ohj_${'a'.repeat(40)}`, key = `afw_${'b'.repeat(64)}`;
   const root = await mkdtemp(path.join(os.tmpdir(), 'og-join-')), from = path.join(root, 'from'), install = path.join(root, 'install');
   let healthOutput = 'og: codex ok (h@x)\nog: grok ok (h@x)\n';
@@ -195,7 +195,7 @@ test('join puts the site\'s code to work: the key into og only, then health and 
       return { code: 0, output: args[0] === 'health' ? healthOutput : '' }; } };
   try {
     await mkdir(from);
-    for (const name of ['og', 'generation-worker.mjs', 'generation-stages.mjs', 'ledger-report.mjs', 'motions.py']) await writeFile(path.join(from, name), 'x\n');
+    for (const name of HOST_FILES) await writeFile(path.join(from, name), 'x\n');
     assert.equal(await runHost(['join', 'ohj_short'], deps), 1);
     assert.match(lines.at(-1), /붙이기 코드 모양이 아니다/);
     // One command on a new PC: the code first, then the install, the key, the sign-in it lacks (grok here), the worker.

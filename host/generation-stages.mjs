@@ -19,6 +19,43 @@ import { existsSync } from 'node:fs';
 import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { judgeOutcome, readOutcome } from './sprite-outcome.mjs';
+// No OpenAI credentials or API calls on a generation host. Use its existing ODDBOUT worker identity.
+
+const reviewHash = bytes => createHash('sha256').update(bytes).digest('hex');
+export const serverReviewEnabled = (job, api) => job.decisionsReview?.mode === 'shadow' && typeof api.decisions === 'function';
+export async function reviewOnServer({ api, job, dir, stage, scope, images }) {
+  if (!serverReviewEnabled(job, api)) return null;
+  let body, fingerprint, out;
+  try {
+    const encoded = [];
+    for (const image of images) {
+      const bytes = await readFile(image.file);
+      if (bytes.length > 2 * 1024 * 1024) throw Error('evidence-limit');
+      const type = { '.png': 'image/png', '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.webp': 'image/webp' }[path.extname(image.file).toLowerCase()];
+      if (!type) throw Error('evidence-type');
+      encoded.push({ role: image.role, sha256: reviewHash(bytes), dataUrl: `data:${type};base64,${bytes.toString('base64')}`,
+        ...(image.durationMs === undefined ? {} : { durationMs: image.durationMs }) });
+    }
+    body = { stage, scope, images: encoded };
+    const raw = JSON.stringify(body);
+    if (Buffer.byteLength(raw) > 8 * 1024 * 1024) throw Error('evidence-limit');
+    // Local fingerprints include server-owned design revisions too; server recomputes its own binding.
+    fingerprint = reviewHash(JSON.stringify({ body, brief: job.brief, description: job.description,
+      appearanceNote: job.appearanceNote ?? null, motionNote: job.motionNote ?? null }));
+    const folder = path.join(dir, 'decisions'); await mkdir(folder, { recursive: true });
+    out = path.join(folder, `${stage}-${scope}-${fingerprint}.json`);
+    const record = { status: 'request_started', advisory: true, visualApproval: false, stage, scope, fingerprint };
+    try { await writeFile(out, JSON.stringify(record) + '\n', { flag: 'wx' }); }
+    catch (error) { if (error.code === 'EEXIST') return JSON.parse(await readFile(out, 'utf8')); throw error; }
+    const reply = await api.decisions(job, body);
+    const report = reply.ok && reply.review ? reply.review : { ...record, status: 'unverified', errorCode: 'server-review-unavailable' };
+    await writeFile(out, JSON.stringify(report) + '\n');
+    return report;
+  } catch {
+    // Advisory failure never retries generation or passes a failed existing gate. Unknown requests stay started on disk/server.
+    return { status: 'unverified', advisory: true, visualApproval: false, stage, scope, errorCode: 'server-review-unavailable' };
+  }
+}
 
 /** The text model for the brief and the image model for the looks (the subscription's; `gpt-6.1-sol` is refused on a ChatGPT login). */
 export const MODELS = Object.freeze({ text: 'gpt-6-sol', image: 'gpt-6-sol' });
@@ -340,6 +377,7 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
     const promptFile = path.join(dir, 'looks', `prompt-${round}.txt`);
     await mkdir(path.dirname(promptFile), { recursive: true });
     await writeFile(promptFile, appearancePrompt(job.brief, note));
+    await reviewOnServer({ api, job, dir, stage: 'input', scope: 'design', images: refs.slice(0, 3).map(file => ({ file, role: 'reference' })) });
     // Both looks at once (one codex slot each; og waits for a free one, and the engine finds each run's picture by its own session).
     const since = Date.now();
     const made = await Promise.all(names.map(async name => {
@@ -355,6 +393,8 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
       const webp = png.replace(/\.png$/, '.webp');
       await toWebp(png, webp);
       await api.artifact(job, name, await readFile(webp));
+      await reviewOnServer({ api, job, dir, stage: 'pose', scope: name.startsWith('look-a-') ? 'look-a' : 'look-b',
+        images: [...refs.slice(0, 3).map(file => ({ file, role: 'reference' })), { file: png, role: 'candidate', durationMs: 100 }] });
     }
     // 맡기기: the first round is ours to pick. Once the creator wrote a change, the look is his to choose.
     const choice = job.delegate && !note ? await pickLook(job, dir, made) : null;
@@ -723,6 +763,21 @@ export function createStages({ og, api, fetchBytes, toWebp, motionsPy = async ()
         ...(gait === 'walk' ? { stridePixels } : {}) }));
       if ((await og(['npm', 'run', 'fighter:gait', '--', 'loop-review', config, path.join(folder, 'review.json')])).code !== 0)
         return { outcome: 'review', result: { code: `${gait}-loop-review` } };
+      if (serverReviewEnabled(job, api)) {
+        // Review final game-pack frames at their actual durations, after all existing gait gates passed.
+        // This comparison cannot select a version, retry generation, or waive a gate.
+        try {
+          const evidenceDir = path.join(asm, 'decisions-evidence', gait);
+          const made = await motionsPy(['decision-frames', path.join(asm, 'pack', 'game-pack.json'), gait, evidenceDir]);
+          if (made.code !== 0) throw Error('evidence-unavailable');
+          const durations = await readJson(path.join(evidenceDir, 'durations.json'));
+          await reviewOnServer({ api, job, dir, stage: 'sequence', scope: gait,
+            images: [{ file: path.join(evidenceDir, 'identity.png'), role: 'reference' },
+              ...durations.map((durationMs, i) => ({ file: path.join(evidenceDir, `frame-${i}.png`), role: 'candidate', durationMs }))] });
+        } catch {
+          await Promise.resolve(api.progress?.(job, undefined, { kind: 'decisions-review', scope: gait, status: 'unverified' })).catch(() => {});
+        }
+      }
     }
     const pkg = path.join(dir, 'package');
     await rm(pkg, { recursive: true, force: true });
