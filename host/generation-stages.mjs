@@ -262,6 +262,23 @@ export const GAIT_FRAMES = Object.freeze({ walk: 16, run: 12 });
  * range (half a stride, or two) is refused (`frames-<n>`). A server without it takes the standard GAIT_FRAMES, resampled as before.
  */
 export const GAIT_OWN_FEATURE = 'gait-frames-1';
+/**
+ * A gait branch's end as a job event (`gait`, 2026-10-29): its outcome and code, the take that passed, and every cut tried with what
+ * stopped it — the engine's reasons with the cut's filmed and delivered frames and its beat jolt, or the judge's failed keys. An operator
+ * and the measurement read why a walk or run stopped from the job's events instead of the PC's logs. Kept under the progress route's
+ * 2000 bytes: the oldest cuts give way first (`more` counts them).
+ */
+export const GAIT_EVENT_BYTES = 1900;
+export function gaitEvent(gait, loop) {
+  const stopped = loop.review ?? loop.retry;
+  const event = { kind: 'gait', gait, outcome: loop.review ? 'review' : loop.retry ? 'retry' : 'ok', ...(stopped ? { code: stopped } : {}),
+    ...(loop.strip ? { take: loop.take ?? null, ...(loop.note ? { note: loop.note } : {}) } : {}), tried: [...(loop.tried ?? [])] };
+  while (JSON.stringify(event).length > GAIT_EVENT_BYTES && event.tried.length) { event.tried.shift(); event.more = (event.more ?? 0) + 1; }
+  return event;
+}
+/** What a cut's alignment says about it, for `tried`: frames filmed and delivered, the beat's jolt, frames RIFE made. */
+const cutFacts = meta => { const a = meta?.cycle_align;
+  return a ? { from: a.from ?? null, frames: meta.frames ?? null, jolt: a.beat?.jolt ?? null, rife: a.made_by_rife ?? null } : {}; };
 /** The gait frame ranges the server's spec gives, when it takes a gait at its own count, or null. */
 export async function gaitRanges(api) {
   const reply = await Promise.resolve(api.spec?.()).catch(() => null);
@@ -594,7 +611,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
           const reasons = meta ? retakeReasons(meta) : ['unreadable'];
           if (meta && (range ? meta.frames < range.min || meta.frames > range.max : meta.frames !== GAIT_FRAMES[gait])) reasons.push(`frames-${meta.frames}`);
           if (meta && !namedFeet(meta)) reasons.push('feet-unnamed');
-          if (reasons.length) { tried.push({ take, cut: path.basename(cut), reasons }); continue; }
+          if (reasons.length) { tried.push({ take, cut: path.basename(cut), reasons, ...cutFacts(meta) }); continue; }
           // The judge: codex with every tool off sees the look and the loop's frames.
           const judge = path.join(aligned, 'judge');
           if ((await motionsPy(['judge-request', gait, judge])).code !== 0 || (await motionsPy(['sheet', strip, path.join(judge, 'sheet.png')])).code !== 0)
@@ -608,8 +625,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
             verdict = judged === 0 ? checkedVerdict(await readJson(verdictFile).catch(() => null)) : null;
           }
           if (!verdict) return { retry: `judge-exit-${judged}` };
-          if (LOOP_VISUAL.every(key => verdict[key] === 'pass')) return { strip, verdict: verdictFile, take };
-          tried.push({ take, cut: path.basename(cut), judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass') });
+          if (LOOP_VISUAL.every(key => verdict[key] === 'pass')) { tried.push({ take, cut: path.basename(cut), passed: true, ...cutFacts(meta) }); return { strip, verdict: verdictFile, take, tried }; }
+          tried.push({ take, cut: path.basename(cut), judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass'), ...cutFacts(meta) });
           break;   // the judge saw this take: another cut of it would show the same motion
         }
         if (!cuts.length || unaligned < cuts.length) break;
@@ -810,6 +827,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       if (delayMs) await new Promise(done => setTimeout(done, delayMs));
       const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null, early, ranges?.[gait] ?? null);
       if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip);
+      await Promise.resolve(api.progress?.(job, undefined, gaitEvent(gait, loop))).catch(() => {});
       return loop;
     };
     const gaitDraft = async (gait, strip) => {
@@ -836,7 +854,10 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     let run = filmed;
     if (['run-not-clean', 'run-align'].includes(filmed.review) && walk.strip && !actions.review && !actions.retry) {
       const made = await runFromWalk(walk, look, m);
-      if (made) { run = made; await gaitDraft('run', made.strip); }
+      if (made) {
+        run = made; await gaitDraft('run', made.strip);
+        await Promise.resolve(api.progress?.(job, undefined, gaitEvent('run', { ...made, tried: filmed.tried }))).catch(() => {});
+      }
     }
     const branches = [actions, walk, run], stopped = branches.find(b => b.review) ?? branches.find(b => b.retry);
     if (stopped) return stopped.review ? { outcome: 'review', result: { code: stopped.review, ...(stopped.requestIds ? { requestIds: stopped.requestIds } : {}) } } : { outcome: 'retry', result: { code: stopped.retry } };

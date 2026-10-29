@@ -9,6 +9,7 @@
 |---|---|
 | `af_generation_events` | `appearance-answer`(a/b 선택 또는 수정 요청), `motion-answer`(수정 요청한 클립), `register`, `cancelled`, `claimed`·`finished`(단계 시작·끝) |
 | `versions` 이벤트(이번에 추가) | 워커가 단계를 시작할 때 보낸다: 킷 커밋(`kit`), 엔진 커밋(`engine`), 이미지·텍스트 모델. 읽지 못한 커밋은 `null` |
+| `gait` 이벤트(2026-10-29) | 걷기·달리기 갈래가 끝날 때마다: 결과(`ok`·`review`·`retry`)와 코드, 통과한 테이크, 시도한 컷마다 거절 사유(엔진) 또는 판정이 떨어뜨린 항목과 찍힌·낸 칸 수(`from`·`frames`), 박자 jolt, RIFE가 만든 칸 수. 2000바이트를 넘으면 오래된 컷부터 뺀다(`more`) |
 | `finished.calls`(이번에 채움) | 그 단계에서 og로 돈 명령별 `[실행 수, 실패 수, 초]`(`sprite gen`, `sprite video-set`, `codex` …). 12개 명령까지 이름을 남기고 나머지는 `other`로 합친다(이벤트 2000바이트 제한) |
 | `af_decision_reviews` | 범위(design·look-a·look-b·walk·run)별 Decisions 리포트 |
 | 호스트 장부(`og report --json`) | 실행마다 제공자, 걸린 시간, 칸 대기, 종료 코드, codex 세션 수. 작업 폴더 이름(`YYYYMMDD-gen-<id>`)으로 DB 작업과 잇는다 |
@@ -33,6 +34,7 @@
 | `stageMinutes`, `claimsPerStage` | 단계별 기계 시간(claimed→finished)과 단계당 시도 수(재시도·임대 만료 포함) |
 | `userWaitMinutes`, `minutesToRegister` | 미리보기에서 답(또는 취소)까지, 신청에서 등록까지 |
 | `calls`, `providerRunsPerRegistered` | 명령별 실행·실패·시간, 등록 1건당 제공자 실행 수(장부가 있을 때) |
+| `gaits` | 걷기·달리기별: 갈래 수와 결과·코드, 통과한 테이크 분포, 걸음으로 만든 달리기 수, 컷 거절 사유(`frames-<n>`은 `frames-out-of-range`로 묶음), 판정이 떨어뜨린 항목, 찍힌·낸 칸 수 분포, jolt |
 | `decisions` | 리뷰 수, 상태별·범위별 수, 입력 토큰 |
 
 모든 숫자는 전체(`all`)와 킷 커밋별(`byKit`)로 나온다. `versions` 이벤트가 없던 작업은 `unknown`이다.

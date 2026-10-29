@@ -17,7 +17,7 @@ select jsonb_build_object(
   -- Only the kinds the export reads; motion-answer data is the clip name only, appearance-answer the choice and whether it was a revision.
   'events', coalesce((select jsonb_agg(jsonb_build_object('jobId', e.job_id, 'id', e.id, 'at', e.at, 'kind', e.kind, 'data', e.data) order by e.id)
     from public.af_generation_events e join picked j on j.id = e.job_id
-    where e.kind in ('created', 'claimed', 'finished', 'appearance-answer', 'motion-answer', 'register', 'cancelled', 'operator', 'versions')), '[]'::jsonb),
+    where e.kind in ('created', 'claimed', 'finished', 'appearance-answer', 'motion-answer', 'register', 'cancelled', 'operator', 'versions', 'gait')), '[]'::jsonb),
   'reviews', coalesce((select jsonb_agg(jsonb_build_object('jobId', r.job_id, 'stage', r.stage, 'scope', r.scope, 'createdAt', r.created_at,
       'status', r.report->'status', 'errorCode', r.report->'errorCode', 'usage', r.report->'usage', 'elapsedSeconds', r.report->'elapsedSeconds',
       'checks', (select coalesce(jsonb_object_agg(c.key, c.value->'status'), '{}'::jsonb) from jsonb_each(coalesce(r.report->'checks', '{}'::jsonb)) c))
