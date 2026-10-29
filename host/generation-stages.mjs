@@ -404,7 +404,7 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * on the kit's sprite-gen venv (pixels only, no provider) and resolves `{ code }`. Calls may overlap: `og` waits for a free codex slot.
  */
 export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS,
-  alignPauseMs = ALIGN_PAUSE_MS }) {
+  alignPauseMs = ALIGN_PAUSE_MS, signal = null }) {
   // One loop alignment at a time on this worker: RIFE on the GPU takes about 4 GB, and a walk and a run aligning at once (or two jobs) ran
   // an 8 GB card out of memory (2026-10-28).
   let aligning = Promise.resolve();
@@ -428,7 +428,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
   // Decisions screening only annotates (it never gates, selects or retries), so it runs beside the stage's own work instead of before
   // it. The stage waits for it only before it returns: the review route needs the stage's lease, which ends with the stage.
   let screening = [];
-  const screen = args => { screening.push(Promise.resolve().then(() => reviewOnServer({ api, fit: fitImage, ...args })).catch(() => null)); };
+  // A stopped stage (`signal`: its time limit, a cancelled job) asks the server for no more reviews.
+  const screen = args => { if (signal?.aborted) return; screening.push(Promise.resolve().then(() => reviewOnServer({ api, fit: fitImage, ...args })).catch(() => null)); };
   const screened = stage => async (job, dir) => {
     screening = [];
     try { return await stage(job, dir); } finally { await Promise.allSettled(screening); screening = []; }
@@ -483,10 +484,14 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const { code } = await og(appearanceCommand({ promptFile, out: png, report, refs }));
       return { name, png, report, code };
     }));
-    if (made.some(look => look.code === 75)) return asOutcome(ASKED);
-    const failed = made.find(look => look.code !== 0 || !existsSync(look.png));
-    if (failed) return failed.code === 0 ? { outcome: 'retry', result: { code: 'look-exit-0' } }
-      : asOutcome(await failedRun('look', failed.code, failed.report, since));
+    // Every failed look is read (2026-10-30): only the first was, so a look whose request may have been taken went out again when the
+    // other one asked the codex question or may be retried. An operator's look wins, then the question, then a retry.
+    const failed = made.filter(look => look.code !== 0 || !existsSync(look.png));
+    if (failed.length) {
+      const said = await Promise.all(failed.map(look => look.code === 0 ? { retry: 'look-exit-0' } : look.code === 75 ? ASKED
+        : failedRun('look', look.code, look.report, since)));
+      return asOutcome(said.find(r => r.review) ?? said.find(r => r.retry === ASKS) ?? said[0]);
+    }
     for (const { name, png } of made) {
       const webp = png.replace(/\.png$/, '.webp');
       await toWebp(png, webp);
@@ -535,12 +540,16 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
   /** RUN_FROM_WALK: the walk's cut (before its alignment) aligned to the run's frames and judged as a run, or null. Its folder names the
    * walk's strip, so a walk made again makes the run again; a stage run again with the same walk reuses the alignment and the verdict. */
   async function runFromWalk(walkLoop, look, m) {
-    const cut = path.dirname(walkLoop.strip).replace(/-\d+$/, '');
-    const folder = path.join(m, `run-from-walk-${createHash('sha256').update(walkLoop.strip).digest('hex').slice(0, 8)}`);
+    // The walk's cut as the engine made it: its aligned folder less the alignment's suffix (`-16`, or at its own length `-own`, `-own1`).
+    // Only `-16` was taken off (2026-10-30): at its own length the walk's aligned folder was copied, its judge's verdict with it, and the
+    // run took the walk's verdict for its own — never judged as a run. The folder's name hashes the cut too, so a folder made so is not reused.
+    const cut = path.dirname(walkLoop.strip).replace(/-(?:\d+|own1?)$/, '');
+    const folder = path.join(m, `run-from-walk-${createHash('sha256').update(`${walkLoop.strip}\n${cut}`).digest('hex').slice(0, 8)}`);
     const strip = path.join(folder, path.basename(walkLoop.strip));
     if ((await readJson(strip).catch(() => null))?.cycle_align?.to !== GAIT_FRAMES.run) {
       await rm(folder, { recursive: true, force: true });
       await cp(cut, folder, { recursive: true });
+      await rm(path.join(folder, 'judge'), { recursive: true, force: true });   // a verdict is the run's own, never one copied with the cut
       const args = ['video-cycle-align', '--loop-dir', folder, '--length', String(GAIT_FRAMES.run), '--view', 'side@right', '--start-foot', 'left',
         ...beatLimit('run')];
       if ((await align(sprite(...args))).code !== 0) await align(sprite(...args, '--multi-cycle', 'warn'));
@@ -584,18 +593,35 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       // says a request xAI took is unfinished (resume it), its outcome cannot be told, or the same run would fail again.
       if (code !== 0 && !existsSync(path.join(item, 'frames', 'keyed')) && !existsSync(path.join(item, 'loop')))
         return failedRun('video', code, path.join(clip, 'set.report.json'), since);
-      const cuts = [];
-      if (existsSync(path.join(item, 'loop', `side-${gait}.strip.json`))) cuts.push(path.join(item, 'loop'));
-      if (existsSync(path.join(item, 'frames', 'keyed'))) {
-        const auto = path.join(clip, 'cut-auto');
-        if (!existsSync(path.join(auto, `side-${gait}.strip.json`))) {
-          const fps = (await readJson(path.join(item, 'frames.report.json')).catch(() => ({}))).fps ?? 24;
-          await og(sprite('video-loop', '--frames-dir', path.join(item, 'frames', 'keyed'), '--out-dir', auto, '--fps', String(fps), '--state', gait,
-            '--anchor', 'motion-auto', '--facing', 'right', '--name', `side-${gait}`));
+      const keyed = path.join(item, 'frames', 'keyed'), auto = path.join(clip, 'cut-auto');
+      const cutsOf = async () => {
+        const cuts = [];
+        if (existsSync(path.join(item, 'loop', `side-${gait}.strip.json`))) cuts.push(path.join(item, 'loop'));
+        if (existsSync(keyed)) {
+          if (!existsSync(path.join(auto, `side-${gait}.strip.json`))) {
+            const fps = (await readJson(path.join(item, 'frames.report.json')).catch(() => ({}))).fps ?? 24;
+            await og(sprite('video-loop', '--frames-dir', keyed, '--out-dir', auto, '--fps', String(fps), '--state', gait,
+              '--anchor', 'motion-auto', '--facing', 'right', '--name', `side-${gait}`));
+          }
+          if (existsSync(path.join(auto, `side-${gait}.strip.json`))) cuts.push(auto);
         }
-        if (existsSync(path.join(auto, `side-${gait}.strip.json`))) cuts.push(auto);
-      }
+        return cuts;
+      };
+      let cuts = await cutsOf();
       const seen = tried.length;
+      // A clip filmed (and paid for) of which no cut came (2026-10-30). The engine refused it — its report says why, no cycle in the frames:
+      // another take films other words, as before. The engine stopped — no report (out of memory, a crash) or no frames: the same clip is
+      // cut again ALIGN_AGAIN times, ALIGN_PAUSE_MS apart, then an operator. Filming another take there bought a second clip for one the
+      // engine never read.
+      for (let again = 0; !cuts.length; again++) {
+        if ((await readJson(path.join(auto, `side-${gait}.loop.report.json`)).catch(() => null))?.status === 'failed') {
+          tried.push({ take, cut: 'cut-auto', reasons: ['not-cut'] });
+          break;
+        }
+        if (again >= ALIGN_AGAIN || !existsSync(keyed)) return { review: `${gait}-cut`, tried };
+        await new Promise(done => setTimeout(done, alignPauseMs));
+        cuts = await cutsOf();
+      }
       for (let pass = 0; ; pass++) {
         let unaligned = 0;
         for (const cut of cuts) {
@@ -760,9 +786,13 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     /**
      * 1b. The show row (2026-10-28): the optional entrance and victory, one GPT row of its own drawn beside the six (one image at a time).
      * Never a stop — a show row that fails leaves the fighter without those clips. Drawn once: a stage tried again keeps its cells.
+     * A run whose request may have been taken (its outcome unknown, stopped after it left: what failedRun gives an operator) is left out
+     * for good (`show-left-out.json`, 2026-10-30): gen-set removes a failed row, so the next stage run sent it again unseen.
      */
+    const showLeftOut = path.join(m, 'show-left-out.json');
     async function showRow() {
       try {
+        if (existsSync(showLeftOut)) return null;
         if (!existsSync(path.join(showRows, 'sprite-request.json'))) {
           const requestFile = path.join(m, 'show-request.json');
           if ((await motionsPy(['request-show', brief, requestFile])).code !== 0) return null;
@@ -772,7 +802,13 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
             '--request', path.join(m, 'show-prepare-request.json')))).code !== 0) return null;
         }
         if (!existsSync(path.join(showRows, 'frames', 'frames-manifest.json'))) {
-          if ((await og(sprite('gen-set', '--run-dir', showRows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '1'))).code !== 0) return null;
+          const since = Date.now();
+          const { code } = await og(sprite('gen-set', '--run-dir', showRows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '1'));
+          if (code !== 0) {
+            const said = code === 75 ? ASKED : await failedRun('show', code, path.join(showRows, 'reports', 'gen-set', 'set.report.json'), since);
+            if (said.review) await writeFile(showLeftOut, JSON.stringify(said) + '\n');
+            return null;
+          }
           if ((await og(sprite('extract', '--run-dir', showRows))).code !== 0) return null;
         }
         return showRows;
@@ -873,9 +909,12 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       return walked.strip && !walked.retry && !walked.review ? runFromWalk(walked, look, m) : null;
     } : null;
     const [actions, walk, filmed] = await Promise.all([settle(actionRows), walking, settle(gaitBranch('run', gaitStaggerMs, fromWalk))]);
-    // A run the gate refused (or could not align) while the walk passed: the walk makes it (RUN_FROM_WALK); otherwise the stage stops as before.
+    // A run the gate refused (or could not align or cut) while the walk passed: the walk makes it (RUN_FROM_WALK); otherwise the stage stops
+    // as before. Never for a creator who asked for the run again (2026-10-30): the walk's run ignores his words, and when it had been his run
+    // already (RUN_FROM_WALK, the same walk) he got back the very clip he asked to change. His takes passed or an operator looks.
+    const runChanged = changes.some(c => c.clip === 'run');
     let run = filmed;
-    if (['run-not-clean', 'run-align'].includes(filmed.review) && walk.strip && !actions.review && !actions.retry) {
+    if (!runChanged && ['run-not-clean', 'run-align', 'run-cut'].includes(filmed.review) && walk.strip && !actions.review && !actions.retry) {
       const made = await runFromWalk(walk, look, m);
       if (made) {
         run = made; await gaitDraft('run', made.strip);

@@ -146,6 +146,16 @@ test('a loop review fails on an engine retake reason, unnamed feet, a failing ve
   const changed = { ...seq, durations: seq.durations.map((ms, i) => i ? ms : ms + 1) };
   assert.throws(() => requireLoopReview(pass, changed, 'walk'), /LOOP_REVIEW_STALE/);
 });
+test('a loop review takes a gait at the frames it was filmed in, inside the contract range (gait-frames-1)', () => {
+  const verdicts = { identity: 'pass', anatomy: 'pass', loop: 'pass', notes: 'Clean loop.' };
+  const aligned = { from: 27, strikes: [0, 8], foot: { feet: ['left', 'right'], margin: 0.13 } };
+  const counted = (motion, n) => loopReview({ motion, sequence: { frames: Array.from({ length: n }, (_, i) => frame(70, i)), durations: Array(n).fill(100) },
+    strip: { cycle_align: aligned }, visual: verdicts, judge: 'test', stridePixels: 90 }).errors.map(e => e.code);
+  for (const [motion, n] of [['walk', 12], ['walk', 24], ['walk', 32], ['run', 10], ['run', 14], ['run', 16]])
+    assert.deepEqual(counted(motion, n), [], `${motion} ${n}`);
+  for (const [motion, n] of [['walk', 11], ['walk', 33], ['run', 9], ['run', 17]])
+    assert.deepEqual(counted(motion, n), ['FRAME_COUNT'], `${motion} ${n}`);
+});
 test('a common request carries each asset scale check, and none when not asked', async () => temporary(async dir => {
   const reference = await manifest(dir, 'standing', frame(70)), crouch = await manifest(dir, 'crouch', frame(40));
   const config = { reference, assets: [{ id: 'idle', source: reference }, { id: 'crouch', source: crouch }] };

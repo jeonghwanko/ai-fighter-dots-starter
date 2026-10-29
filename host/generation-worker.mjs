@@ -124,11 +124,23 @@ export function createApi({ base, key, fetcher = fetch }) {
 }
 
 /**
+ * A stage's next run once the stage was stopped (its time limit, or the job cancelled and its lease lost): refused before it starts
+ * (2026-10-30). The abort stops only the run under way; the stage's code went on to its next command (the run's next take, the judge),
+ * and a signal already aborted never fires again, so each of those ran, paid, to its end. The stage now ends with `stage-stopped`.
+ */
+export const STAGE_STOPPED = 'stage-stopped';
+export const unlessStopped = (signal, start) => signal?.aborted
+  ? Promise.reject(Object.assign(new Error(STAGE_STOPPED), { code: STAGE_STOPPED })) : start();
+/** An error's code as the finish route takes it: a string of at most 60 characters (a child process's or a reply's code may be a number). */
+export const errorCode = (error, fallback = 'stage-error') => String(error?.code ?? fallback).slice(0, 60);
+
+/**
  * One child process in its own process group; its output appended to the job's log. Resolves its exit code (signals count as 128 + n).
  * Stopping it signals the whole group: og's bash waits for its command before its own trap runs, so only the group stops the work.
  */
 function run(command, args, { cwd, log, stdin, signal }) {
   return new Promise(resolve => {
+    if (signal?.aborted) return resolve(128 + 15);   // stopped before it began: nothing started
     const child = spawn(command, args, { cwd, stdio: ['pipe', 'pipe', 'pipe'], detached: true });
     const write = chunk => { appendFile(log, chunk).catch(() => {}); };
     child.stdout.on('data', write); child.stderr.on('data', write);
@@ -196,13 +208,15 @@ export async function main({ once = false } = {}) {
       api.progress(job, undefined).then(reply => { if (!reply.ok && reply.code === 'lease-lost') controller.abort(); }).catch(() => {});
     }, TIMING.renewMs);
     const stages = createStages({
-      og: (args, { stdin } = {}) => {
+      og: (args, { stdin } = {}) => unlessStopped(controller.signal, () => {
         const started = Date.now();
         return run(og, ['run', ogId, '--', ...args], { cwd: kit, log, stdin, signal: controller.signal })
           .then(code => { tally.add(args, code, Date.now() - started); return { code }; });
-      },
-      api, fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
-      motionsPy: args => run(python, ['-I', path.join(ROOT, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal }).then(code => ({ code })),
+      }),
+      api, signal: controller.signal,
+      fetchBytes: async url => { const r = await fetch(url, { signal: AbortSignal.timeout(60_000) }); if (!r.ok) throw new Error(`download ${r.status}`); return new Uint8Array(await r.arrayBuffer()); },
+      motionsPy: args => unlessStopped(controller.signal, () => run(python, ['-I', path.join(ROOT, 'bin', 'motions.py'), ...args], { cwd: kit, log, signal: controller.signal })
+        .then(code => ({ code }))),
       toWebp: async (from, to) => {
         const code = await run(python, ['-I', '-c', 'import sys\nfrom PIL import Image\nim = Image.open(sys.argv[1]); im.thumbnail((1024, 1024)); im.save(sys.argv[2], "WEBP", quality=90, method=6)', from, to], { cwd: kit, log });
         if (code !== 0) throw Object.assign(new Error('webp-failed'), { code: 'webp-failed' });
@@ -218,7 +232,8 @@ export async function main({ once = false } = {}) {
       const stage = stages[job.status];
       outcome = stage ? await stage(job, dir) : { outcome: 'failed', result: { code: `no-stage-${job.status}` } };
     } catch (error) {
-      outcome = { outcome: 'retry', result: { code: (error.code ?? 'stage-error').slice(0, 60) } };
+      // A numeric code (a child process's) used to throw here, outside this catch: the finish never went and the job lost a lease.
+      outcome = { outcome: 'retry', result: { code: errorCode(error) } };
       await appendFile(log, `stage error: ${error.stack ?? error}\n`).catch(() => {});
     } finally { clearInterval(renew); clearTimeout(limit); }
     if (timedOut) {

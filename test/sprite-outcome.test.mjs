@@ -83,3 +83,10 @@ test('the kit wrapper passes a stop on and waits for sprite-gen to write its rep
   assert.equal(await read(done, 'utf8'), 'written', 'the wrapper ended after sprite-gen wrote its report');
   await rm(dir, { recursive: true, force: true });
 });
+
+test('an error whose code is a number is still read: its retryable says what to do, never an unread failure', () => {
+  assert.deepEqual(judgeOutcome({ code: 1, report: report(true, [error(503, true)]) }).next, 'retry');
+  const refused = judgeOutcome({ code: 1, report: report(true, [error(400, false)]) });
+  assert.deepEqual([refused.next, refused.codes], ['fix', ['400']]);
+  assert.equal(judgeOutcome({ code: 1, report: { ...report(true, []), errors: 'not a list' } }).next, 'inspect');
+});

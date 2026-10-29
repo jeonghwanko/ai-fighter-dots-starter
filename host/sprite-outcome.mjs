@@ -46,7 +46,9 @@ export async function readOutcome(file, { since = 0 } = {}) {
  * `retry` (every error says the same command may succeed) or `fix` the command or its input.
  */
 export function judgeOutcome({ code, report }) {
-  const errors = (report?.errors ?? []).filter(e => e && typeof e.code === 'string');
+  // A code written as a number is still an error: dropped, it left a failed run with no errors, which reads as nothing to retry.
+  const errors = (Array.isArray(report?.errors) ? report.errors : [])
+    .filter(e => e && (typeof e.code === 'string' || Number.isFinite(e.code))).map(e => ({ ...e, code: String(e.code) }));
   const charge = code === NOT_STARTED_EXIT || code === 2 ? 'not-charged'
     : report ? (report.provider_submitted ? 'request-sent' : 'not-charged') : 'unknown';
   const requestIds = [...new Set([report?.request_id, ...errors.map(e => e.request_id)].filter(id => typeof id === 'string' && id))];

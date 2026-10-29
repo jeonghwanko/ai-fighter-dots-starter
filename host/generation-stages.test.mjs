@@ -386,7 +386,10 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
 });
 
 /** The motions stage with every provider step passing at once, `scaleCheck(args)` and `scaleFit(round)` standing in for the engine. */
-async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, alignFails = {}, job: change = {}, spec = null, ownFrames = { walk: 24, run: 14 } }) {
+// `uncut[gait]`: its clip films frames but no cut — `crash` (video-loop stops with no report) or `refuse` (its report says why).
+// `showGenSet()`: the show row's gen-set exit (no report), or null for no show row.
+async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, alignFails = {}, job: change = {}, spec = null, ownFrames = { walk: 24, run: 14 },
+  uncut = {}, showGenSet = null }) {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-scale-')), calls = [], events = [];
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'look-a-0.png'), 'look');
@@ -396,8 +399,15 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
     if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), '{}'); }
     if (tool === 'gen') await writeFile(flag(args, '--out'), 'relaxed');
-    if (tool === 'video-set') { const gait = flag(args, '--states'), loop = path.join(flag(args, '--out-dir'), `side-${gait}`, 'loop');
+    if (tool === 'gen-set' && flag(args, '--run-dir').endsWith('show-rows')) return { code: showGenSet() };
+    if (tool === 'video-set') { const gait = flag(args, '--states'), item = path.join(flag(args, '--out-dir'), `side-${gait}`), loop = path.join(item, 'loop');
+      if (uncut[gait]) { await mkdir(path.join(item, 'frames', 'keyed'), { recursive: true }); return { code: 1 }; }
       await mkdir(loop, { recursive: true }); await writeFile(path.join(loop, `side-${gait}.strip.json`), '{}'); }
+    if (tool === 'video-loop') { const gait = flag(args, '--state');
+      if (uncut[gait] === 'crash') return { code: 137 };
+      await mkdir(flag(args, '--out-dir'), { recursive: true });
+      await writeFile(path.join(flag(args, '--out-dir'), `side-${gait}.loop.report.json`), JSON.stringify({ status: 'failed', error: 'no cycle' }));
+      return { code: 1 }; }
     if (tool === 'video-cycle-align') { const dirOf = flag(args, '--loop-dir'), gait = dirOf.includes('walk') ? 'walk' : 'run';
       // No --length (the server takes a gait at its own count): the cut keeps the frames it was filmed in.
       // --cycles <cut>=2: the engine takes one cycle out of the cut (half its frames, as filmed).
@@ -421,7 +431,7 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
   let fits = 0;
   const motionsPy = async ([command, ...rest]) => {
     calls.push(['motions.py', command, ...rest]);
-    if (command === 'request') await writeFile(rest[1], JSON.stringify({ request: { states: {} }, description: 'a cat' }));
+    if (command === 'request' || (command === 'request-show' && showGenSet)) await writeFile(rest[1], JSON.stringify({ request: { states: {} }, description: 'a cat' }));
     if (command === 'assemble') { await mkdir(rest[2], { recursive: true });
       await writeFile(path.join(rest[2], 'game-request.json'), JSON.stringify({ version: 1,
         assets: ['idle', 'fightIdle', 'combo', 'fall', 'fall-getup', 'walk', 'run'].map(id => ({ id, source: `clips/${id}.json` })) })); }
@@ -435,8 +445,9 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
   const api = { artifact: async () => ({ ok: true }), progress: async (j, value, event) => { if (event) events.push(event); return { ok: true }; },
     ...(spec ? { spec: async () => spec } : {}) };
   const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs: 0 });
-  const done = await stages.motions({ id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...change }, dir);
-  return { done, calls, events, dir };
+  const job = { id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...change };
+  const done = await stages.motions(job, dir);
+  return { done, calls, events, dir, again: () => stages.motions(job, dir) };
 }
 
 test('a run the gate refuses is made from the walk that passed, played faster, and its preview says so', async () => {
@@ -508,13 +519,55 @@ test('the gait ranges are read off the server spec only where it lists the featu
   assert.equal(await gaitRanges({}), null);
 });
 
-test('a creator who asked for the run again gets every run take filmed before the walk makes it', async () => {
+test('a creator who asked for the run again gets his takes or an operator, never the run made from the walk', async () => {
   const { done, calls } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), brokenRun: true,
     job: { motionNote: { clip: 'run', note: 'faster' }, motionRound: 1 } });
-  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  assert.deepEqual(done, { outcome: 'review', result: { code: 'run-not-clean' } });
   const flag = (args, name) => args[args.indexOf(name) + 1];
   assert.equal(calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'run').length, 1 + GAIT_RETAKES);
+  assert.ok(!calls.some(a => a.includes('video-cycle-align') && path.basename(flag(a, '--loop-dir')).startsWith('run-from-walk-')));
+});
+
+const fitAll = () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] });
+
+test('a run made from a walk aligned at its own length is judged as a run, never on the walk\'s verdict', async () => {
+  const { done, calls } = await scaleStage({ scaleFit: fitAll, spec: ownSpec, brokenRun: true });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
   assert.deepEqual(done.result.preview.filter(p => p.note).map(p => p.clip), ['run']);
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const derived = calls.find(a => a.includes('video-cycle-align') && path.basename(flag(a, '--loop-dir')).startsWith('run-from-walk-'));
+  // The walk's cut as filmed, aligned to the run's frames; the judge saw it as a run.
+  assert.equal(flag(derived, '--length'), '12');
+  const folder = flag(derived, '--loop-dir');
+  assert.ok(calls.some(a => a[0] === 'codex' && flag(a, '-o').startsWith(folder)), 'the run made from the walk had its own judge');
+  assert.ok(calls.some(a => a[0] === 'motions.py' && a[1] === 'judge-request' && a[2] === 'run' && a[3].startsWith(folder)));
+});
+
+test('a show row whose request may have been taken is left out, never drawn again on a later stage run', async () => {
+  let showRuns = 0;
+  const { done, calls, again } = await scaleStage({ scaleFit: fitAll, showGenSet: () => { showRuns += 1; return 1; } });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  assert.equal(calls.find(a => a[0] === 'motions.py' && a[1] === 'assemble')[6], '');
+  assert.equal((await again()).outcome, 'ok');
+  assert.equal(showRuns, 1, 'one show row request, never sent again unseen');
+  // A show row its report says may be tried again (og refused it before it started: exit 3) is drawn on the next stage run.
+  let refused = 0;
+  const retried = await scaleStage({ scaleFit: fitAll, showGenSet: () => (refused += 1) === 1 ? 3 : 1 });
+  await retried.again();
+  assert.equal(refused, 2);
+});
+
+test('a filmed clip the engine stopped cutting is cut again, then an operator; one it refused films another take', async () => {
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const crashed = await scaleStage({ scaleFit: fitAll, uncut: { walk: 'crash' } });
+  assert.deepEqual(crashed.done, { outcome: 'review', result: { code: 'walk-cut' } });
+  assert.equal(crashed.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1, 'no second walk clip bought');
+  assert.equal(crashed.calls.filter(a => a.includes('video-loop')).length, 1 + ALIGN_AGAIN);
+  const refused = await scaleStage({ scaleFit: fitAll, uncut: { walk: 'refuse' } });
+  assert.deepEqual(refused.done, { outcome: 'review', result: { code: 'walk-not-clean' } });
+  assert.equal(refused.calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'walk').length, 1 + GAIT_RETAKES);
+  const walkEvent = refused.events.find(e => e.kind === 'gait' && e.gait === 'walk');
+  assert.deepEqual(walkEvent.tried.map(t => [t.take, t.reasons]), [[0, ['not-cut']], [1, ['not-cut']], [2, ['not-cut']]]);
 });
 
 test('a take whose cuts did not align (the GPU out of memory) is aligned again after a pause, and no take is filmed again', async () => {
