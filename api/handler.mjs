@@ -40,6 +40,11 @@ function check(error) {
  * `agentClient` (공방과 연대기, 2026-10-27): the cloud MCP's OAuth client for its in-process calls — the workshop labels notes and canon
  * versions with that agent's name. The public Edge handler never sets it.
  */
+/**
+ * @param {{ db: any, simulateDuel?: any, engineVersion?: any, engines?: any, release?: any, creatorLink?: import('./http.mjs').CreatorLink | null,
+ *   analytics?: import('./http.mjs').Analytics | null, agentClient?: any, limiter?: import('./http.mjs').Limiter | null, decisionsReviewer?: import('./http.mjs').Reviewer | null,
+ *   responsesReviewer?: import('./http.mjs').Reviewer | null, cascadeReviewer?: import('./http.mjs').Reviewer | null }} options
+ */
 export function createHandler({ db, simulateDuel = null, engineVersion = null, engines = null, release = null, creatorLink = null, analytics = null, agentClient = null, limiter = null, decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null }) {
   const duelHandler = createDuelHandler({db,simulateDuel,engineVersion,engines,release,limiter});
   const statisticsHandler = createFighterStatisticsHandler({ db });

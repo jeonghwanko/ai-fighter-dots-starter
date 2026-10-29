@@ -14,7 +14,7 @@ export async function checkedManifest(request) {
   try { text = new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, spec.limits.jsonBytes)); }
   catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-utf8'); }
   const parsed = parseFighterJson(text);
-  if (!parsed.ok) throw new Problem(422, 'invalid-manifest', parsed.errors.slice(0, 20));
+  if (!parsed.ok) throw new Problem(422, 'invalid-manifest', /** @type {any[]} */ (parsed.errors).slice(0, 20));
   const result = validateFighter(parsed.data);
   if (!result.ok) throw new Problem(422, 'invalid-manifest', result.errors.slice(0, 20));
   // Reject here with 422. Otherwise the jsonb cast in af_create_submission fails and the API returns 503.

@@ -135,7 +135,7 @@ export function createWorkshopHandler({ db, authenticate, rpc: profileRpc, agent
         // style after it. A style his package cannot take refuses the accept before anything is written; an accepted proposal whose style
         // edit failed after the answer is finished by accepting it again.
         const style = body.decision === 'accept' && n.kind === 'proposal' && n.proposal?.style !== undefined;
-        let pack = null;
+        let pack = /** @type {{ owner: any, sha: any, manifest: any } | null} */ (null);
         if (style && ['open', 'accepted'].includes(n.state)) {
           pack = await currentPackage(n.fighter_id);
           if (pack.owner !== owner) throw new Problem(404, 'not-found');

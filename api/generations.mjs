@@ -77,6 +77,10 @@ export function confirmedProfile(value) {
   return out;
 }
 
+/**
+ * @param {{ db: any, authenticate: any, present: any, decisionsReviewer?: import('./http.mjs').Reviewer | null, responsesReviewer?: import('./http.mjs').Reviewer | null,
+ *   cascadeReviewer?: import('./http.mjs').Reviewer | null }} options
+ */
 export function createGenerationHandler({ db, authenticate, present, decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null }) {
   const productionReviewer = cascadeReviewer ?? decisionsReviewer;
   async function call(name, args) {
@@ -119,7 +123,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     const hosts = await hostsOf([row.requested_host, row.assigned_host]);
     const urls = await signed([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name)),
       ...drafts.map(d => artifactPath(row.id, d.name))]);
-    let submission = null;
+    let submission = /** @type {{ id: any, stage: any, fighterId: any } | null} */ (null);
     if (row.submission_id) {
       const { data, error } = await db.from('af_submissions').select('id,status,fighter_id').eq('id', row.submission_id).maybeSingle();
       if (error) throw new Problem(503, 'database-unavailable');

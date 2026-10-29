@@ -2,6 +2,13 @@
 // Shared by every Edge route. No Node-only imports: this file runs on Deno and Node.
 import { UUID } from './bytes.mjs';
 export { UUID, Problem, sha256, readBody } from './bytes.mjs';
+/**
+ * Services the Edge entry hands the route factories; each is null where a deployment lacks it, and every use checks for that.
+ * @typedef {{ enabled: boolean, allow: (request: Request, bucket: string, limit: number, windowSeconds: number) => Promise<boolean> }} Limiter
+ * @typedef {{ enabled: boolean, review: (args: any) => Promise<any> }} Reviewer
+ * @typedef {(owner: string) => Promise<{ tokenHash: string, expiresAt: string }>} CreatorLink
+ * @typedef {{ preflight: () => Response, context: (request: Request, owner: string) => Promise<Response>, registered: (row: any) => Promise<void> }} Analytics
+ */
 const BASE_HEADERS = { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff' };
 
 /** JSON response. `cors` opens a browser route: { methods, headers? }. */

@@ -99,7 +99,7 @@ export async function createRemoteClient(configPath, { createAuthClient = create
         if (error || !data.session) {
           // A network failure during refresh is not evidence of a revoked account.
           const code = transportCode(error);
-          if (code !== 'api-unreachable' || ['AuthRetryableFetchError', 'TypeError'].includes(error?.name) || error?.status >= 500)
+          if (code !== 'api-unreachable' || ['AuthRetryableFetchError', 'TypeError'].includes(error?.name ?? '') || (error?.status ?? 0) >= 500)
             throw new Error(code);
           throw new Error('client-sign-in-required');
         }

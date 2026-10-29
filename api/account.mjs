@@ -12,6 +12,7 @@ const ROUTES = { me: 'GET', 'access-requests': 'POST', 'creator-handoffs': 'POST
  * invitations are retired; access-requests remains a compatibility alias for the current account state.
  * creatorLink(owner) mints a one-use sign-in token for the creator homepage; the browser redeems it with Supabase Auth.
  */
+/** @param {{ db: any, creatorLink?: import('./http.mjs').CreatorLink | null }} options */
 export function createAccountHandler({ db, creatorLink = null }) {
   async function call(name, args) {
     const { data, error } = await db.rpc(name, args);

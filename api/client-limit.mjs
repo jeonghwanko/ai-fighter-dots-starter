@@ -12,7 +12,7 @@ const IPV6 = /^[0-9a-f:]{2,39}$/i;
 
 /** The caller's address from the configured header, or null when it is missing or not an address. */
 export function clientAddress(request, source) {
-  let value = null;
+  let value = /** @type {string | null} */ (null);
   if (source === 'cf-connecting-ip') value = request.headers.get('cf-connecting-ip');
   else if (source === 'forwarded-last') value = request.headers.get('x-forwarded-for')?.split(',').at(-1) ?? null;
   value = value?.trim().toLowerCase() ?? null;

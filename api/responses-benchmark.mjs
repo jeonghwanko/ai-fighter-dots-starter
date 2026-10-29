@@ -138,7 +138,8 @@ function createReviewer({ apiKey, enabled = false, fetcher = fetch, select, time
         || claimed.report.binding.parentRequestSha256 !== binding.parentRequestSha256) throw new Problem(409, 'review-binding-changed');
       return claimed.report;
     }
-    const start = performance.now(); let requestId = null, providerHttpStatus = null, usage = null, report;
+    const start = performance.now(); let requestId = /** @type {string | null} */ (null), providerHttpStatus = /** @type {number | null} */ (null),
+      usage = /** @type {Record<string, any> | null} */ (null), report;
     try {
       const response = await fetcher('https://api.openai.com/v1/responses', { method: 'POST', redirect: 'error',
         signal: AbortSignal.timeout(timeoutMs), headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, body: raw });
