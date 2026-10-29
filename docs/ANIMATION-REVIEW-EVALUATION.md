@@ -9,6 +9,8 @@ This is evaluation infrastructure, not evidence that a reviewer improved. Ordina
 after existing gait gates pass, so those reports alone cannot estimate recall on rejected animations.
 Use independently selected clean, obvious-defect and subtle-defect cases as well.
 
+The [2026-10-29 real-call pilot](research/ANIMATION-REVIEW-PILOT-20261029.md) found no improvement at the frozen gate; its candidate remains research-only.
+
 ## Mechanics-only demonstration
 
 Run from the repository root with its existing dependencies installed:
