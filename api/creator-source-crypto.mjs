@@ -1,3 +1,4 @@
+// @ts-check
 // Standard WebCrypto envelope; only the requesting VM can open the temporary grant.
 import { decodeBase64, encodeBase64 } from './base64.mjs';
 import { Problem, UUID, sha256 } from './bytes.mjs';
@@ -15,7 +16,7 @@ export async function importVmPublicKey(request) {
   try {
     const raw = unbase64(request.publicKey, 2048);
     const key = await crypto.subtle.importKey('spki', raw, { name: 'RSA-OAEP', hash: 'SHA-256' }, true, ['encrypt']);
-    if (key.algorithm.modulusLength !== 2048) throw Error('key-size');
+    if (/** @type {RsaHashedKeyAlgorithm} */ (key.algorithm).modulusLength !== 2048) throw Error('key-size');
     return { key, sha256: await sha256(raw) };
   } catch { throw new Problem(400, 'invalid-vm-public-key'); }
 }

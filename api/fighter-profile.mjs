@@ -1,3 +1,4 @@
+// @ts-check
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { Problem, readBody, sha256, unstorableTextPath } from './http.mjs';
 

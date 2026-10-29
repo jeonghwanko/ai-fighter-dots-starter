@@ -1,3 +1,4 @@
+// @ts-check
 import { Problem, UUID, jsonResponse, readBody, verifiedUserId } from './http.mjs';
 
 const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };

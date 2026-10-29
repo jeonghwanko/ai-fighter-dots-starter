@@ -1,3 +1,4 @@
+// @ts-check
 import { Problem, UUID } from './http.mjs';
 import { reviewEvidence, nativeSequenceEvidence } from './decisions-review.mjs';
 import { sequenceConfig as validateSequenceConfig } from './sequence-benchmark.mjs';

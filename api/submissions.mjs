@@ -1,3 +1,4 @@
+// @ts-check
 // A package's way in, shared by the creator's own routes (`handler.mjs`) and the hosted generation worker's (`generations.mjs`, 2026-10-27):
 // the fighter.json checked the same way, its WebP assets stored the same way. No Node-only imports: Deno and Node.
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };

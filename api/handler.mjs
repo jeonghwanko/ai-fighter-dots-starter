@@ -1,3 +1,4 @@
+// @ts-check
 import { updateFighterProfile } from './fighter-profile.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { createAccountHandler } from './account.mjs';

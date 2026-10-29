@@ -1,3 +1,4 @@
+// @ts-check
 // Shared by every Edge route. No Node-only imports: this file runs on Deno and Node.
 import { UUID } from './bytes.mjs';
 export { UUID, Problem, sha256, readBody } from './bytes.mjs';

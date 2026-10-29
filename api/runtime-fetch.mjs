@@ -1,3 +1,4 @@
+// @ts-check
 import { EnvHttpProxyAgent } from 'undici';
 import { transportCode } from './connection-errors.mjs';
 
@@ -12,7 +13,7 @@ export async function runtimeFetch(input, init) {
     return await globalThis.fetch(input, configured ? { ...init, dispatcher } : init);
   } catch (error) {
     // Auth SDKs can discard causes and log fetch errors. Keep the safe transport reason, never proxy credentials.
-    const safe = new Error(transportCode(error));
+    const safe = /** @type {Error & { code?: string }} */ (new Error(transportCode(error)));
     safe.code = safe.message;
     throw safe;
   }

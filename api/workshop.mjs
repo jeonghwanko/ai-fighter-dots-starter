@@ -1,3 +1,4 @@
+// @ts-check
 // 공방과 연대기 (4단계, 2026-10-27): canon sheets, the workshop's notes, declared relations and open worlds. The site and the cloud MCP
 // share these routes; the MCP calls them in-process with its OAuth client as `agentClient` (shown as "made with"). Reads are public; every
 // write names its owner and the database function checks him (`supabase/migrations/20261027200000_oddbout_workshop.sql`,
@@ -15,7 +16,7 @@ const STATUS = { 'nickname-required': 409, 'nickname-taken': 409, 'canon-changed
   'world-membership-required': 409, 'world-author-mismatch': 403, 'account-disabled': 403, 'invite-required': 403, 'canon-empty': 422,
   'invalid-canon': 422, 'post-exists': 409, 'world-full': 409 };
 // A unique key two writers raced for, by its name (any other is a plain conflict).
-const UNIQUE = [[/af_creator_names_nickname/, 'nickname-taken'], [/af_fighter_relations_pair/, 'relation-exists'], [/af_world_posts_pkey|af_world_posts_world_id_id_key/, 'post-exists']];
+const UNIQUE = /** @type {[RegExp, string][]} */ ([[/af_creator_names_nickname/, 'nickname-taken'], [/af_fighter_relations_pair/, 'relation-exists'], [/af_world_posts_pkey|af_world_posts_world_id_id_key/, 'post-exists']]);
 // A story's cursor: the time a page's last note was written, as the story gave it.
 const CURSOR = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d+)?(?:Z|[+-]\d{2}:\d{2})$/;
 

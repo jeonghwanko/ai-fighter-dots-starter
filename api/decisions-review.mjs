@@ -1,3 +1,4 @@
+// @ts-check
 // Server-only advisory review. The caller supplies evidence, never a model, prompt, endpoint or credential.
 import { decodeBase64, encodeBase64 } from './base64.mjs';
 import { Problem, readBody, sha256 } from './http.mjs';
@@ -123,6 +124,7 @@ export async function decisionsRequest({ job, evidence, sequenceConfig }) {
   const presentation = sequenceConfig === undefined || paired ? null : await sequencePresentation(evidence, sequenceConfig);
   const request = { model: DECISIONS.model, input: [{ role: 'developer', content: RULES + (presentation?.rules ?? '') },
     { role: 'user', content: [{ type: 'input_json', data: { designIntentNotObservations: intent } }, ...(presentation?.content ?? evidence.content)] }], questions: qs };
+  /** @type {Record<string, any> | undefined} */
   let researchBinding = presentation?.binding;
   if (paired) {
     const baseline = await sequencePresentation(evidence, { ...sequenceConfig, method: SEQUENCE_METHODS[0] });
@@ -146,6 +148,7 @@ export async function decisionsRequest({ job, evidence, sequenceConfig }) {
   return { request, raw, binding, fingerprint };
 }
 
+/** @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch }} [options] */
 export function createDecisionsReviewer({ apiKey, enabled = false, fetcher = fetch } = {}) {
   const active = enabled === true && typeof apiKey === 'string' && apiKey.trim().length > 0;
   return {

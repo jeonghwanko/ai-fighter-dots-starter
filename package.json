@@ -28,6 +28,7 @@
     "example": "node scripts/create-example.mjs",
     "validate": "node tools/ai-fighter/validate-package.mjs",
     "test": "node --test test/*.test.mjs host/*.test.mjs",
+    "typecheck": "tsc -p tsconfig.json",
     "test:fast": "node scripts/test-suite.mjs fast",
     "test:heavy": "node scripts/test-suite.mjs heavy",
     "spec:check": "node tools/ai-fighter/build-contract.mjs --check",
@@ -64,6 +65,8 @@
     "zod": "4.6.7"
   },
   "devDependencies": {
-    "@electric-sql/pglite": "0.5.10"
+    "@electric-sql/pglite": "0.5.10",
+    "@types/node": "22.20.5",
+    "typescript": "7.0.2"
   }
 }

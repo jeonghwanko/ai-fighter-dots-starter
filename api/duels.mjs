@@ -1,3 +1,4 @@
+// @ts-check
 import { Problem, UUID, jsonResponse, readBody, sha256 } from './http.mjs';
 import { parseFighterJson, validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { CLIENT_LIMITS } from './client-limit.mjs';
