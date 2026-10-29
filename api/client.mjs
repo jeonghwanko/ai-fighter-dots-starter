@@ -4,17 +4,24 @@ import { createClient } from '@supabase/supabase-js';
 import { transportCode } from './connection-errors.mjs';
 import { runtimeFetch } from './runtime-fetch.mjs';
 import { withFileLock } from '../mcp/file-lock.mjs';
+/**
+ * @typedef {{ method?: string, body?: any, headers?: Record<string, string>, timeoutMs?: number }} RequestOptions
+ * @typedef {{ request: (route: string, options?: RequestOptions) => Promise<any> }} RemoteClient  `request` resolves to the API's JSON object; callers check its fields.
+ */
 
+/** @param {unknown} url */
 export function validProjectUrl(url) {
   return typeof url === 'string' && /^https:\/\/[a-z0-9]{20}\.supabase\.co$/.test(url);
 }
 /** 30 s plus one second per 64 KiB: a 4 MB asset still finishes on a ~0.5 Mbit/s link. */
+/** @type {(bytes: number) => number} */
 export const transferTimeoutMs = bytes => 30000 + Math.ceil(Math.max(0, bytes || 0) / 65536) * 1000;
+/** @type {(body: string | { byteLength?: number } | null | undefined) => number} */
 const bodyBytes = body => body == null ? 0 : typeof body === 'string' ? Buffer.byteLength(body) : body.byteLength ?? 0;
 
 /**
  * @param {string} url @param {string} token @param {string} route
- * @param {{ method?: string, body?: any, headers?: Record<string, string>, timeoutMs?: number }} [options]
+ * @param {RequestOptions} [options]
  */
 export async function apiRequest(url, token, route, { method = 'GET', body, headers = {}, timeoutMs = transferTimeoutMs(bodyBytes(body)) } = {}) {
   let response;
@@ -31,10 +38,12 @@ export async function apiRequest(url, token, route, { method = 'GET', body, head
 }
 
 /** Expiry time in milliseconds from the JWT payload, or 0. Only decides when to refresh; the server verifies the token. */
+/** @param {string} token */
 function accessTokenExpiry(token) {
   try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).exp * 1000 || 0; }
   catch { return 0; }
 }
+/** @param {string} token */
 function tokenSubject(token) {
   try { return JSON.parse(Buffer.from(token.split('.')[1], 'base64url').toString('utf8')).sub ?? null; }
   catch { return null; }
@@ -45,9 +54,14 @@ const REFRESH_MARGIN_MS = 60000, LOCK_STALE_MS = 30000, LOCK_WAIT_MS = 15000;
  * Run `task` while holding `<configPath>.lock`. Only one process refreshes or replaces a session file at a time.
  * The same lock as creation sessions (mcp/file-lock.mjs): queued in this process, a killed holder's lock reclaimed once stale.
  */
+/** @type {<T>(configPath: string, task: () => Promise<T>) => Promise<T>} */
 export const withSessionLock = (configPath, task) =>
   withFileLock(`${configPath}.lock`, task, { busy: 'session-refresh-busy', waitMs: LOCK_WAIT_MS, staleMs: LOCK_STALE_MS });
-/** Replace the session file atomically: a partial write would lose the only valid session. Call under withSessionLock. */
+/**
+ * Replace the session file atomically: a partial write would lose the only valid session. Call under withSessionLock.
+ * @param {string} configPath
+ * @param {object} config  Any JSON object: a session, or a pending sign-in (scripts/login.mjs).
+ */
 export async function writeSessionFile(configPath, config) {
   const temporary = `${configPath}.${process.pid}.tmp`;
   try {
@@ -69,6 +83,9 @@ export async function writeSessionFile(configPath, config) {
  * Several MCP processes may share one session file (desktop app, CLI, IDE). Supabase rotates the refresh
  * token on every refresh and ends the whole session when a token two rotations old is used. So a process
  * first adopts a newer session another process saved, and refreshes only under a lock file.
+ * @param {string} configPath
+ * @param {{ createAuthClient?: typeof createClient }} [options]
+ * @returns {Promise<RemoteClient>}
  */
 export async function createRemoteClient(configPath, { createAuthClient = createClient } = {}) {
   const config = JSON.parse(await readFile(configPath, 'utf8'));
@@ -115,7 +132,12 @@ export async function createRemoteClient(configPath, { createAuthClient = create
   };
 }
 
-/** A stable MCP tool catalog can start before login. Resolve the user's session on first use, without a restart. */
+/**
+ * A stable MCP tool catalog can start before login. Resolve the user's session on first use, without a restart.
+ * @param {string} configPath
+ * @param {{ createAuthClient?: typeof createClient }} [options]
+ * @returns {RemoteClient}
+ */
 export function createLazyRemoteClient(configPath, options = {}) {
   let client;
   return { request: async (route, requestOptions) => {

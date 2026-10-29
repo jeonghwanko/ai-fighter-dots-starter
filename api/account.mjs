@@ -2,9 +2,12 @@
 import { Problem, bearerToken, jsonResponse, readBody, verifiedUserId } from './http.mjs';
 
 const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };
+/** @type {(body: any, status?: number) => Response} */
 const reply = (body, status = 200) => jsonResponse(body, status, CORS);
 const NOTE_LIMIT = 500;
+/** @type {Record<string, number>} */
 const errorStatus = { 'already-invited': 409, 'request-declined': 409, 'rate-limit': 429, 'note-too-long': 422 };
+/** @type {Record<string, string>} */
 const ROUTES = { me: 'GET', 'access-requests': 'POST', 'creator-handoffs': 'POST' };
 
 /**
@@ -12,8 +15,12 @@ const ROUTES = { me: 'GET', 'access-requests': 'POST', 'creator-handoffs': 'POST
  * invitations are retired; access-requests remains a compatibility alias for the current account state.
  * creatorLink(owner) mints a one-use sign-in token for the creator homepage; the browser redeems it with Supabase Auth.
  */
-/** @param {{ db: any, creatorLink?: import('./http.mjs').CreatorLink | null }} options */
+/**
+ * @param {{ db: any, creatorLink?: import('./http.mjs').CreatorLink | null }} options
+ * @returns {import('./http.mjs').Route}
+ */
 export function createAccountHandler({ db, creatorLink = null }) {
+  /** @param {string} name @param {Record<string, unknown>} args */
   async function call(name, args) {
     const { data, error } = await db.rpc(name, args);
     if (error) {

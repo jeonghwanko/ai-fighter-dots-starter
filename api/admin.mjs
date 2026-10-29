@@ -2,10 +2,13 @@
 import { Problem, UUID, jsonResponse, readBody, verifiedUserId } from './http.mjs';
 
 const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };
+/** @type {(body: any, status?: number) => Response} */
 const reply = (body, status = 200) => jsonResponse(body, status, CORS);
+/** @type {Record<string, number>} */
 const statuses = { 'admin-required': 403, 'not-found': 404, 'review-conflict': 409, 'beta-capacity': 409,
   'invalid-query': 400, 'invalid-review': 400, 'validation-incomplete': 409, 'registration-open': 410 };
 // A small JSON body with only the named keys.
+/** @param {Request} request @param {string[]} keys */
 async function smallBody(request, keys) {
   let body;
   try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 1000))); }
@@ -13,7 +16,9 @@ async function smallBody(request, keys) {
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !keys.includes(key))) throw new Problem(400, 'invalid-review');
   return body;
 }
+/** @param {{ db: any }} options @returns {import('./http.mjs').Route} */
 export function createAdminHandler({ db }) {
+  /** @param {string} name @param {Record<string, unknown>} args */
   async function rpc(name, args) {
     const { data, error } = await db.rpc(name, args);
     if (error) throw new Problem(statuses[error.message] ?? 503, statuses[error.message] ? error.message : 'admin-unavailable');
