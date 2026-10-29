@@ -122,7 +122,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       if (parts.length === 1 && ['me', 'access-requests', 'creator-handoffs'].includes(parts[0])) return accountHandler(request, parts);
       if (method === 'GET' && parts.join('/') === 'spec') return json({ ok: true, stage: 'public-contract', data: { ...spec,
         registration: { available: true, mode: 'open', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary',
-          approvalRequired: false, publication: 'automatic-after-file-validation', moderation: 'post-publication', deviceLogin: 'v1', profileUpdate: 'v1', initialSubmissionLimit: 5, revisionsCountTowardLimit: false } } });
+          approvalRequired: false, publication: 'automatic-after-file-validation', moderation: 'post-publication', deviceLogin: 'v1', profileUpdate: 'v1', dailySubmissionLimit: 5, revisionsCountTowardLimit: false } } });
       // Validated, active packages are public; uploads and removed packages remain private.
       if (parts[0] === 'roster' && (method === 'GET' || method === 'OPTIONS')) {
         const reply = (body, status = 200) => jsonResponse(body, status, ROSTER_CORS);
