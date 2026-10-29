@@ -28,7 +28,7 @@ for (const entry of manifest.cases) {
   try {
     const response = await fetch(`${base.href.replace(/\/$/, '')}/generation-worker/decision-benchmarks/${entry.id}`, {
       method: 'POST', headers: { authorization: `Bearer ${env.ODDBOUT_GENERATION_WORKER_KEY}`, 'content-type': 'application/json' },
-      body: raw, redirect: 'error', signal: AbortSignal.timeout(45_000) });
+      body: raw, redirect: 'error', signal: AbortSignal.timeout(135_000) });
     const reply = await response.json();
     Object.assign(item, { status: 'response_received', httpStatus: response.status, report: reply.review ?? null, code: reply.code ?? null });
   } catch { item.status = 'transport_outcome_unknown'; }

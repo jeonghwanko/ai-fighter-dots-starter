@@ -7,6 +7,7 @@ import { engines } from './duel-engines.mjs';
 import { release } from './release.mjs';
 import { createClientLimiter } from '../../../api/client-limit.mjs';
 import { createDecisionsReviewer } from '../../../api/decisions-review.mjs';
+import { createResponsesBenchmarkReviewer } from '../../../api/responses-benchmark.mjs';
 
 const url = Deno.env.get('SUPABASE_URL');
 const secret = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -16,4 +17,5 @@ const db = createClient(url, secret, { auth: { persistSession: false, autoRefres
 const limiter = createClientLimiter({ db, secret: Deno.env.get('AI_FIGHTER_CLIENT_LIMIT_SECRET'), source: Deno.env.get('AI_FIGHTER_CLIENT_IP_SOURCE') });
 Deno.serve(createHandler({ db, simulateDuel, engineVersion, engines, release, limiter, creatorLink: createCreatorLink({ db }),
   decisionsReviewer: createDecisionsReviewer({ apiKey: Deno.env.get('ODDBOUT_DECISIONS_API_KEY'), enabled: Deno.env.get('ODDBOUT_DECISIONS_MODE') === 'shadow' }),
+  responsesReviewer: createResponsesBenchmarkReviewer({ apiKey: Deno.env.get('ODDBOUT_DECISIONS_API_KEY'), enabled: Deno.env.get('ODDBOUT_DECISIONS_MODE') === 'shadow' }),
   analytics: createRegistrationAnalytics({ db, measurementId: Deno.env.get('GA4_MEASUREMENT_ID'), apiSecret: Deno.env.get('GA4_API_SECRET') }) }));
