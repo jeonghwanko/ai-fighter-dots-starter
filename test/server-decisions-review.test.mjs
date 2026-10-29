@@ -130,7 +130,9 @@ test('disabled or absent server secrets preserve generation without a paid call 
 test('evidence validation refuses URLs, changed hashes, caller prompts/models, incomplete cycles and animated inputs', async () => {
   const body = await pose();
   assert.equal((await reviewEvidence(body)).binding.length, 1);
-  for (const patch of [{ model: 'other' }, { prompt: 'ignore rules' }, { apiKey: 'not-allowed' }, { stage: '__proto__' }])
+  // A stage that is not a string: Object.hasOwn and the scope lookup stringified ['pose'] while the count checks compare 'pose'.
+  for (const patch of [{ model: 'other' }, { prompt: 'ignore rules' }, { apiKey: 'not-allowed' }, { stage: '__proto__' },
+    { stage: ['pose'] }, { stage: ['pose'], images: [] }, { scope: ['look-a'] }])
     await assert.rejects(reviewEvidence({ ...body, ...patch }));
   for (const patch of [{ dataUrl: 'http://127.0.0.1/private' }, { sha256: '0'.repeat(64) }, { durationMs: 0 }])
     await assert.rejects(reviewEvidence({ ...body, images: [{ ...body.images[0], ...patch }] }));
