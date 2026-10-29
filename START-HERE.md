@@ -9,7 +9,7 @@ revision, workflow, contract, controls, timing을 읽고 이번 대화의 기준
 
 ## 제작 범위
 
-[실제 제작 안내](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/START-HERE.md)와 저장소 AGENTS.md, DOT-CREATION.md, AUTHORING.md, 현재 제작 규격을 따르세요.
+[실제 제작 안내](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/main/docs/START-HERE.md)와 저장소 AGENTS.md, DOT-CREATION.md, AUTHORING.md, 현재 제작 규격을 따르세요.
 이 문서의 게임 규격과 안내의 실제 생성 절차를 함께 사용하세요. 생성은 현재 사용자의 계정과
 bundled sprite-gen으로 진행하며 제공자 선택·과금 규칙을 지키세요. 이전 사용자의 구독 확인을 이어받지 마세요.
 묶음별 실제 결과와 검수를 보여준 뒤 선택을 받으세요. 실제 결과 없이 제작 성공을 주장하지 마세요.
@@ -648,7 +648,7 @@ Dot의 제품 기억을 초기화하는 기능은 아닙니다. 이전 기록의
   },
   "revision": "6e78a912c3f0500e9030ee444f82fbd98f2763997edfb69d2bb05503e0100203",
   "provenance": {
-    "sourceCommit": "f9bd38ec73aafcabbfc46aa24a49160ed8b7e727",
+    "sourceCommit": "d38d5096d74da181c7ef63d6ff01f4ca165fd5da",
     "sourceDirty": false,
     "sourceFiles": {
       "tools/ai-fighter/creation-context.mjs": "985c90423c990dcc7236e03783a9a867cb606a3836c1f21a4d2a87a14d19bc49",
