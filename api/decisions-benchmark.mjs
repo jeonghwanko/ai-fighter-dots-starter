@@ -4,7 +4,17 @@ import { reviewEvidence, nativeSequenceEvidence } from './decisions-review.mjs';
 import { sequenceConfig as validateSequenceConfig } from './sequence-benchmark.mjs';
 import { benchmarkConfig } from './responses-benchmark.mjs';
 
-/** A generation worker may submit only evidence enrolled for its host by an operator, once per case. */
+/**
+ * A row of af_decision_benchmark_cases. `intent` is operator-written JSON; each field is checked where it is used.
+ * @typedef {{ id: string, host_id: string, intent: any, evidence: unknown, expires_at: string }} BenchmarkCase
+ */
+
+/**
+ * A generation worker may submit only evidence enrolled for its host by an operator, once per case.
+ * @param {{ db: any, reviewer: import('./http.mjs').Reviewer | null, responsesReviewer: import('./http.mjs').Reviewer | null,
+ *   cascadeReviewer: import('./http.mjs').Reviewer | null, host: string | null, caseId: string, body: any }} options
+ *   `host` is the worker's host (null: the official one); `body` is its upload, checked by the evidence parsers.
+ */
 export async function benchmarkReview({ db, reviewer, responsesReviewer, cascadeReviewer, host, caseId, body }) {
   const effectiveHost = host ?? (await db.rpc('af_generation_official', {})).data;
   const { data: row, error } = await db.from('af_decision_benchmark_cases').select('id,host_id,intent,evidence,expires_at')
@@ -21,6 +31,7 @@ export async function benchmarkReview({ db, reviewer, responsesReviewer, cascade
   // Operators may pair two one-call cases to smoke-test the production cascade on
   // existing art. Workers cannot enroll a case or choose a second model/case.
   const followupId = row.intent.cascadeFollowupCaseId;
+  /** @type {(r: BenchmarkCase) => Record<string, unknown>} */
   const intentOf = r => ({ description: r.intent.description, brief: r.intent.brief,
     appearance_note: r.intent.appearance_note ?? null, motion_note: r.intent.motion_note ?? null });
   if (followupId !== undefined) {
@@ -36,6 +47,7 @@ export async function benchmarkReview({ db, reviewer, responsesReviewer, cascade
   }
   if (!reviewer?.enabled) return { mode: 'off', status: 'disabled', advisory: true, visualApproval: false };
   // SQL compares the complete binding again while holding the shared quota lock.
+  /** @type {{ rpc: (name: string, args: Record<string, any>) => Promise<any> }} */
   const mapped = { rpc: (name, args) => name === 'af_decision_review_start'
     ? db.rpc('af_decision_benchmark_start', { p_case: followupId && args.p_binding.model === 'gpt-6.1-sol' ? followupId : caseId,
       p_host: host, p_fingerprint: args.p_fingerprint,

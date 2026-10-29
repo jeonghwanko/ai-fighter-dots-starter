@@ -4,12 +4,35 @@
 import { Problem, readBody, sha256 } from './http.mjs';
 import { RULES, questions } from './decisions-review.mjs';
 
+/**
+ * @typedef {import('./decisions-review.mjs').Evidence} Evidence
+ * @typedef {import('./decisions-review.mjs').Stage} Stage
+ * @typedef {import('./decisions-review.mjs').Question} Question
+ * @typedef {import('./decisions-review.mjs').ReviewJob} ReviewJob
+ * @typedef {import('./decisions-review.mjs').Check} Check
+ * @typedef {import('./decisions-review.mjs').Usage} Usage
+ */
+/**
+ * The model and questions a Responses review asks; a Sol follow-up also binds the policy and the Luna request it follows.
+ * @typedef {{ model: string, questions: Question[], binding?: { policy: string, parentRequestSha256: string } }} Selection
+ */
+/**
+ * What a Responses reviewer receives: the review arguments plus, for an enrolled benchmark, the operator's config, or for a
+ * Sol follow-up, the stored Luna report it follows. Both are checked before use.
+ * @typedef {import('./decisions-review.mjs').ReviewArgs & { config?: any, primary?: any }} ResponsesReviewArgs
+ */
+
 export const RESPONSE_MODELS = Object.freeze(['gpt-6.1-sol', 'gpt-6-astra']);
 export const RESPONSE_REVIEW = Object.freeze({ rubric: 'hosted-sprite-v1', adapter: 'responses-choice-v1',
   reasoning: 'medium', maxOutputTokens: 1800, timeoutMs: 110_000 });
 const OPTIONS = ['clear', 'defect', 'unverified'];
 const invalid = () => { throw new Problem(422, 'invalid-benchmark-config'); };
 
+/**
+ * @param {any} config  A case intent's benchmarkReview: operator-written JSON, checked here.
+ * @param {Stage} stage
+ * @returns {Selection}
+ */
 export function benchmarkConfig(config, stage) {
   if (!config || typeof config !== 'object' || Array.isArray(config)
     || Object.keys(config).some(k => !['model', 'questionNames'].includes(k)) || !RESPONSE_MODELS.includes(config.model)) invalid();
@@ -21,10 +44,12 @@ export function benchmarkConfig(config, stage) {
   return { model: config.model, questions: all.filter(q => names.includes(q.name)) };
 }
 
+/** @param {{ model: string, job: ReviewJob, evidence: Evidence, questionNames: string[] }} options */
 export function responsesRequest({ model, job, evidence, questionNames }) {
   const selected = benchmarkConfig({ model, questionNames }, evidence.stage).questions;
   return buildRequest({ model, job, evidence, selected });
 }
+/** @param {{ model: string, job: ReviewJob, evidence: Evidence, selected: Question[] }} options */
 function buildRequest({ model, job, evidence, selected }) {
   const frameCount = evidence.binding.filter(image => image.role === 'candidate').length;
   const intent = { description: job.description, brief: job.brief, appearanceNote: job.appearance_note ?? null,
@@ -47,42 +72,61 @@ function buildRequest({ model, job, evidence, selected }) {
         required: selected.map(q => q.name), additionalProperties: false } } } };
 }
 
+/** @param {any} value  The provider's usage JSON, checked here. */
 function usageOf(value) {
   if (!value || typeof value !== 'object') return null;
+  /** @type {Usage} */
   const out = {};
-  for (const name of ['input_tokens', 'output_tokens', 'total_tokens'])
+  for (const name of /** @type {const} */ (['input_tokens', 'output_tokens', 'total_tokens']))
     if (Number.isSafeInteger(value[name]) && value[name] >= 0) out[name] = value[name];
-  for (const [group, names] of /** @type {[string, string[]][]} */ ([['input_tokens_details', ['cached_tokens', 'cache_write_tokens']], ['output_tokens_details', ['reasoning_tokens']]]))
+  for (const [group, names] of /** @type {['input_tokens_details' | 'output_tokens_details', string[]][]} */ ([['input_tokens_details', ['cached_tokens', 'cache_write_tokens']], ['output_tokens_details', ['reasoning_tokens']]]))
     for (const name of names) if (Number.isSafeInteger(value[group]?.[name]) && value[group][name] >= 0)
       (out[group] ??= {})[name] = value[group][name];
   return Object.keys(out).length ? out : null;
 }
 // The requested model, or a dated snapshot of it: the Responses API answers with the snapshot it ran (`gpt-6.1-sol-2026-10-01`).
+/** @type {(answered: unknown, model: string) => boolean} */
 const sameModel = (answered, model) => typeof answered === 'string' && (answered === model || answered.startsWith(`${model}-`));
+/**
+ * @param {any} value  The provider's JSON, checked here.
+ * @param {string} model
+ * @param {string[]} names
+ * @param {number} count  Candidate frames: answers may cite indices below it.
+ * @returns {Record<string, Check>}
+ */
 function checksOf(value, model, names, count) {
   if (!sameModel(value.model, model) || value.status !== 'completed' || !Array.isArray(value.output)) throw Error('invalid-response');
-  const parts = value.output.filter(o => o.type === 'message').flatMap(o => o.content ?? []);
+  const parts = /** @type {any[]} */ (value.output).filter(o => o.type === 'message').flatMap(o => o.content ?? []);
   if (parts.length !== 1 || parts[0].type !== 'output_text') throw Error('invalid-response');
   const answers = JSON.parse(parts[0].text);
   if (!answers || Array.isArray(answers) || Object.keys(answers).length !== names.length) throw Error('invalid-response');
+  /** @type {Record<string, Check>} */
   const checks = {};
   for (const name of names) {
     const a = answers[name];
     if (!a || Object.keys(a).sort().join(',') !== 'choice,frames,reason' || !OPTIONS.includes(a.choice)
       || typeof a.reason !== 'string' || a.reason.length > 400 || a.reason.includes('\0') || !a.reason.isWellFormed()
       || !Array.isArray(a.frames) || a.frames.length > count || new Set(a.frames).size !== a.frames.length
-      || a.frames.some(n => !Number.isSafeInteger(n) || n < 0 || n >= count)) throw Error('invalid-response');
+      || /** @type {any[]} */ (a.frames).some(n => !Number.isSafeInteger(n) || n < 0 || n >= count)) throw Error('invalid-response');
     checks[name] = { status: a.choice, choice: a.choice, reason: a.reason, frames: a.frames };
   }
   return checks;
 }
 
-/** @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch }} [options] */
+/**
+ * @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch }} [options]
+ * @returns {import('./http.mjs').Reviewer}
+ */
 export function createResponsesBenchmarkReviewer({ apiKey, enabled = false, fetcher = fetch } = {}) {
   return createReviewer({ apiKey, enabled, fetcher, select: ({ config, evidence }) => benchmarkConfig(config, evidence.stage) });
 }
 
 export const SOL_FOLLOWUP = Object.freeze({ model: 'gpt-6.1-sol', policy: 'luna-sol-v1', timeoutMs: 90_000 });
+/**
+ * @param {any} primary  The Luna report as stored, checked here before it selects anything.
+ * @param {Evidence} evidence
+ * @returns {Question[]}
+ */
 export function followupQuestions(primary, evidence) {
   // Only completed semantic judgments can trigger a second model. A transport failure,
   // unknown outcome or refusal is not evidence of a visual defect and is not retried.
@@ -92,11 +136,15 @@ export function followupQuestions(primary, evidence) {
     || !Array.isArray(primary.binding.images) || primary.binding.images.length !== evidence.binding.length
     || evidence.binding.some((image, index) => {
       const original = primary.binding.images[index];
-      return !original || Object.keys(original).length !== Object.keys(image).length || Object.keys(image).some(k => image[k] !== original[k]);
+      return !original || Object.keys(original).length !== Object.keys(image).length || Object.keys(image).some(k => /** @type {Record<string, unknown>} */ (image)[k] !== original[k]);
     })) return [];
   return questions(evidence.stage).filter(q => ['unverified', 'defect'].includes(primary.checks?.[q.name]?.status)
     && OPTIONS.includes(primary.checks[q.name].choice));
 }
+/**
+ * @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch }} [options]
+ * @returns {import('./http.mjs').Reviewer}
+ */
 export function createSolFollowupReviewer(options = {}) {
   return createReviewer({ ...options, timeoutMs: SOL_FOLLOWUP.timeoutMs,
     select: ({ primary, evidence }) => {
@@ -107,10 +155,16 @@ export function createSolFollowupReviewer(options = {}) {
     } });
 }
 
-/** @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch, select: (context: any) => any, timeoutMs?: number }} options */
+/**
+ * @param {{ apiKey?: string, enabled?: boolean, fetcher?: typeof fetch,
+ *   select: (context: { config?: any, evidence: Evidence, primary?: any }) => Selection, timeoutMs?: number }} options
+ * @returns {import('./http.mjs').Reviewer}
+ */
 function createReviewer({ apiKey, enabled = false, fetcher = fetch, select, timeoutMs = RESPONSE_REVIEW.timeoutMs }) {
   const active = enabled === true && typeof apiKey === 'string' && apiKey.trim().length > 0;
-  return { enabled: active, async review({ db, job, host, lease, evidence, config, primary }) {
+  return { enabled: active,
+    /** @param {ResponsesReviewArgs} args */
+    async review({ db, job, host, lease, evidence, config, primary }) {
     if (!active) return { mode: 'off', status: 'disabled', advisory: true, visualApproval: false };
     const selected = select({ config, evidence, primary }), names = selected.questions.map(q => q.name);
     const request = buildRequest({ model: selected.model, job, evidence, selected: selected.questions });
@@ -120,6 +174,7 @@ function createReviewer({ apiKey, enabled = false, fetcher = fetch, select, time
       maxOutputTokens: RESPONSE_REVIEW.maxOutputTokens, confidenceType: 'not-available', approvalGate: false, ...selected.binding };
     const fingerprint = selected.binding
       ? await sha256(new TextEncoder().encode(JSON.stringify({ requestSha256, ...selected.binding }))) : requestSha256;
+    /** @type {(name: string, args: Record<string, unknown>) => Promise<any>} */
     const rpc = async (name, args) => {
       const { data, error } = await db.rpc(name, args);
       if (error) {
@@ -139,7 +194,7 @@ function createReviewer({ apiKey, enabled = false, fetcher = fetch, select, time
       return claimed.report;
     }
     const start = performance.now(); let requestId = /** @type {string | null} */ (null), providerHttpStatus = /** @type {number | null} */ (null),
-      usage = /** @type {Record<string, any> | null} */ (null), report;
+      usage = /** @type {Usage | null} */ (null), report;
     try {
       const response = await fetcher('https://api.openai.com/v1/responses', { method: 'POST', redirect: 'error',
         signal: AbortSignal.timeout(timeoutMs), headers: { authorization: `Bearer ${apiKey}`, 'content-type': 'application/json' }, body: raw });
