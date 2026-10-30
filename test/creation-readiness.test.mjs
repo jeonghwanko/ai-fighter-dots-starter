@@ -231,6 +231,32 @@ test('pending approval resumes without a new request; a blocked VM never tells t
   assert.equal(recovered.action.status, 'awaiting-approval');
 });
 
+test('a server without device login goes to its operator; unknown pending and unverified sessions are checked, a live one awaits approval', async t => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'fighter-outcomes-')); t.after(() => rm(dir, { recursive: true, force: true }));
+  const sessionPath = path.join(dir, 'client.json'), pendingPath = pendingDeviceLoginPath(sessionPath);
+  const undeployed = await checkLogin({ sessionPath, probe: publicProbe(false) });
+  assert.deepEqual([undeployed.status, undeployed.action.status, undeployed.action.actor, undeployed.nextAction.actor, undeployed.nextAction.code],
+    ['blocked', 'blocked', 'service-operator', 'service-operator', 'device-login-deployment-required']);
+  await writeFile(pendingPath, '{');
+  const unknown = await checkLogin({ sessionPath, probe: publicProbe(true) });
+  assert.deepEqual([unknown.status, unknown.pendingConnection, unknown.action.status, unknown.action.actor, unknown.nextAction.code],
+    ['sign-in-required', 'unknown', 'check-required', 'user', 'check-required']);
+  assert.deepEqual([unknown.action.command, unknown.action.resumeCommand], [undefined, undefined]);
+  await writeFile(pendingPath, JSON.stringify({ version: 1, expiresAt: new Date(Date.now() - 60000).toISOString() }));
+  const expired = await checkLogin({ sessionPath, probe: publicProbe(true) });
+  assert.deepEqual([expired.status, expired.pendingConnection, expired.action.status, expired.action.resumeCommand], ['sign-in-required', 'expired', 'available', undefined]);
+  assert.equal(expired.action.command, expired.routes.otherDevice.start);
+  await writeFile(pendingPath, JSON.stringify({ version: 1, expiresAt: new Date(Date.now() + 60000).toISOString() }));
+  const pending = await checkLogin({ sessionPath, probe: publicProbe(true) });
+  assert.deepEqual([pending.status, pending.accountStatus, pending.action.status, pending.nextAction.actor, pending.nextAction.code],
+    ['pending-approval', 'sign-in-required', 'awaiting-approval', 'user', 'awaiting-approval']);
+  await writeFile(sessionPath, JSON.stringify({ accessToken: 'token', refreshToken: 'refresh' }));
+  const unverified = await checkLogin({ sessionPath, remoteActive: true, probe: publicProbe(true) });
+  assert.deepEqual([unverified.status, unverified.action.status, unverified.action.actor, unverified.nextAction.code],
+    ['session-present-unverified', 'check-required', 'agent', 'check-required']);
+  assert.deepEqual([unverified.action.command, unverified.action.resumeCommand], [undefined, undefined]);
+});
+
 test('ODDBOUT and kit success never verify generation or parent display, and existing work survives recovery', async t => {
   const dir = await mkdtemp(path.join(tmpdir(), 'fighter-ready-')); t.after(() => rm(dir, { recursive: true, force: true }));
   const sessionPath = path.join(dir, 'client.json');

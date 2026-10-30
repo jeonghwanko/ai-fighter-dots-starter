@@ -1,12 +1,9 @@
 // @ts-check
+/// <reference path="./site-globals.d.ts" />
 const virtualId = 'virtual:oddbout-analytics';
 const resolvedId = '\0oddbout-analytics';
 
 /**
- * The page globals Analytics uses: Google's tag queue and the sign-in binding site-milestones.mjs calls.
- * @typedef {typeof window & { dataLayer: IArguments[], oddboutAnalyticsStarted?: boolean, [gaDisable: string]: unknown,
- *   gtag: { (command: 'get', target: string, field: string, done: (value: any) => void): void, (...args: unknown[]): void },
- *   oddboutBindAnalytics?: (api: string, token: string, key: string) => Promise<void> }} AnalyticsWindow
  * The Vite plugin hooks the site build uses (also site-milestones.mjs and site-social.mjs).
  * @typedef {{ name: string, enforce?: 'pre', configResolved?: (config: { root: string }) => void,
  *   resolveId?: (id: string) => string | undefined, load?: (id: string) => string | undefined,
@@ -17,7 +14,7 @@ const resolvedId = '\0oddbout-analytics';
 /** @param {string} measurementId @param {string} hostname @param {string | null} apiBase */
 function startAnalytics(measurementId, hostname, apiBase) {
   if (window.location.hostname !== hostname || window.location.protocol !== 'https:' ||
-      window.location.pathname.endsWith('/admin.html') || /** @type {AnalyticsWindow} */ (window).oddboutAnalyticsStarted) return;
+      window.location.pathname.endsWith('/admin.html') || window.oddboutAnalyticsStarted) return;
   const current = new URL(window.location.href);
   const fragment = new URLSearchParams(current.hash.slice(1));
   const privateKeys = ['code', 'state', 'handoff', 'dot', 'token', 'access_token', 'refresh_token', 'id_token', 'error_description'];
@@ -34,8 +31,8 @@ function startAnalytics(measurementId, hostname, apiBase) {
     const source = new URL(document.referrer);
     if (['http:', 'https:'].includes(source.protocol)) referrer = source.origin + '/';
   } catch {}
-  const permitted = () => /** @type {Navigator & { globalPrivacyControl?: boolean }} */ (navigator).globalPrivacyControl !== true && !/** @type {AnalyticsWindow} */ (window)['ga-disable-' + measurementId];
-  /** @type {AnalyticsWindow} */ (window).oddboutBindAnalytics = async (api, token, key) => {
+  const permitted = () => navigator.globalPrivacyControl !== true && !window[/** @type {`ga-disable-${string}`} */ ('ga-disable-' + measurementId)];
+  window.oddboutBindAnalytics = async (api, token, key) => {
     if (!apiBase || api !== apiBase || typeof token !== 'string') return;
     try {
       /** @type {{ enabled: boolean, clientId?: string, sessionId?: string }} */
@@ -44,7 +41,7 @@ function startAnalytics(measurementId, hostname, apiBase) {
         /** @type {(field: string) => Promise<any>} */
         const get = field => new Promise(resolve => {
           const timer = setTimeout(() => resolve(null), 2500);
-          /** @type {AnalyticsWindow} */ (window).gtag('get', measurementId, field, value => { clearTimeout(timer); resolve(value); });
+          window.gtag('get', measurementId, field, value => { clearTimeout(timer); resolve(value); });
         });
         const [clientId, sessionId] = await Promise.all([get('client_id'), get('session_id')]);
         if (!/^\d{1,20}\.\d{1,20}$/.test(clientId ?? '') || !/^\d{1,20}$/.test(String(sessionId ?? '')) || !permitted()) return;
@@ -59,27 +56,27 @@ function startAnalytics(measurementId, hostname, apiBase) {
     window.dispatchEvent(new CustomEvent('oddbout:analytics-ready'));
     return;
   }
-  /** @type {AnalyticsWindow} */ (window).oddboutAnalyticsStarted = true;
-  /** @type {AnalyticsWindow} */ (window).dataLayer = /** @type {AnalyticsWindow} */ (window).dataLayer || [];
-  /** @type {AnalyticsWindow} */ (window).gtag = function () { /** @type {AnalyticsWindow} */ (window).dataLayer.push(arguments); };
+  window.oddboutAnalyticsStarted = true;
+  window.dataLayer = window.dataLayer || [];
+  window.gtag = function () { window.dataLayer.push(arguments); };
   const page = { page_location: current.href, page_referrer: referrer };
-  /** @type {AnalyticsWindow} */ (window).gtag('js', new Date());
-  /** @type {AnalyticsWindow} */ (window).gtag('set', { ...page, allow_google_signals: false, allow_ad_personalization_signals: false });
-  /** @type {AnalyticsWindow} */ (window).gtag('config', measurementId, { ...page, send_page_view: false,
+  window.gtag('js', new Date());
+  window.gtag('set', { ...page, allow_google_signals: false, allow_ad_personalization_signals: false });
+  window.gtag('config', measurementId, { ...page, send_page_view: false,
     allow_google_signals: false, allow_ad_personalization_signals: false });
   window.addEventListener('oddbout:milestone', event => {
     if (!permitted()) return;
-    const { name, parameters = {} } = /** @type {CustomEvent} */ (event).detail ?? {};
+    const { name, parameters = {} } = event.detail ?? {};
     if (!['game_start', 'match_complete', 'creation_start'].includes(name)) return;
     /** @type {Record<string, string>} */
     const safe = { ...page, send_to: measurementId };
     if (['play', 'watch', 'tournament', 'exhibition'].includes(parameters.mode)) safe.mode = parameters.mode;
     if (['ko', 'decision', 'forfeit', 'timeout', 'win', 'loss'].includes(parameters.result)) safe.result = parameters.result;
     if (name === 'creation_start') safe.method = 'request_copy';
-    /** @type {AnalyticsWindow} */ (window).gtag('event', name, safe);
+    window.gtag('event', name, safe);
   });
   window.dispatchEvent(new CustomEvent('oddbout:analytics-ready'));
-  /** @type {AnalyticsWindow} */ (window).gtag('event', 'page_view', { ...page, page_title: document.title });
+  window.gtag('event', 'page_view', { ...page, page_title: document.title });
   const script = document.createElement('script');
   script.async = true; script.referrerPolicy = 'no-referrer';
   script.src = 'https://www.googletagmanager.com/gtag/js?id=' + measurementId;

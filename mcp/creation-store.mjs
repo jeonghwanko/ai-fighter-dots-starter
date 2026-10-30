@@ -68,6 +68,7 @@ export const changeSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('advance') }).strict(),
   z.object({ type: z.literal('refresh-context'), note }).strict(),
 ]);
+/** @typedef {z.infer<typeof changeSchema>} ChangeEvent */
 
 /** @type {(bytes: string | Uint8Array) => string} */
 export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
@@ -261,105 +262,120 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
       if (state.revision !== revision) fail('session-revision-conflict');
       const context = await latestContext();
       if (event.type !== 'refresh-context' && context.revision !== state.contextRevision) fail('context-changed');
-      if (event.type === 'version') {
-        const group = itemGroup(state, event.item), item = state.items[event.item] ?? /** @type {SessionItem} */ ({ selectedVersion: null, versions: {} }); // version set below
-        if (Object.hasOwn(item.versions, event.version)) fail('version-already-exists');
-        const groupIndex = context.workflow.groups.findIndex(g => g.id === group.id);
-        const { view } = await effective(state);
-        if (groupIndex > 0) {
-          const decision = reviewCreationProgress(context, { ...view, groupId: context.workflow.groups[groupIndex - 1].id });
-          if (!decision.canAdvance) fail('previous-group-pending');
-        }
-        const source = await snapshots(event.files), recorded = [];
-        // This version is not recorded, so a folder for it is what an interrupted copy left: start it over. A failed
-        // copy removes its partial files too, so the same version can be retried instead of failing on EEXIST.
-        const versionFolder = `${prefix(id)}/versions/${event.item}/${event.version}`;
-        const clear = async () => rm(await localPath(root, versionFolder), { recursive: true, force: true });
-        await clear();
-        try {
-          for (const file of source) {
-            // Keep relative layout between declared metadata and assets; never rewrite their bytes.
-            const relative = `${versionFolder}/files/${file.path}`;
-            const destination = await localPath(root, relative, { createParents: true });
-            await copyFile(await localPath(root, file.path), destination, constants.COPYFILE_EXCL);
-            const copied = await fingerprint(root, relative);
-            if (copied.sha256 !== file.sha256) fail('source-changed-during-snapshot');
-            recorded.push({ ...copied, sourcePath: file.path });
+      // One handler per changeSchema type; changeSchema.parse above has rejected any other.
+      /** @type {{ [T in ChangeEvent['type']]: (event: Extract<ChangeEvent, { type: T }>) => Promise<void> }} */
+      const apply = {
+        version: async event => {
+          const group = itemGroup(state, event.item), item = state.items[event.item] ?? /** @type {SessionItem} */ ({ selectedVersion: null, versions: {} }); // version set below
+          if (Object.hasOwn(item.versions, event.version)) fail('version-already-exists');
+          const groupIndex = context.workflow.groups.findIndex(g => g.id === group.id);
+          const { view } = await effective(state);
+          if (groupIndex > 0) {
+            const decision = reviewCreationProgress(context, { ...view, groupId: context.workflow.groups[groupIndex - 1].id });
+            if (!decision.canAdvance) fail('previous-group-pending');
           }
-        } catch (error) { await clear(); throw error; }
-        item.versions[event.version] = { files: recorded, basis: basisFor(state, event.item), note: event.note,
-          createdAt: new Date().toISOString() };
-        item.version = event.version; state.items[event.item] = item;
-        state.pendingEdits = state.pendingEdits.filter(key => key !== event.item);
-        if (groupIndex < context.workflow.groups.findIndex(g => g.id === state.groupId)) state.groupId = group.id;
-      } else if (event.type === 'review') {
-        const version = current(state, event.item, event.version);
-        if ((state.mode === 'dialogue-only') !== (event.verdict === 'hypothetical')) {
-          if (state.mode === 'dialogue-only' || event.verdict === 'hypothetical') fail('review-mode-mismatch');
-        }
-        if (!await unchanged(root, version.files)) fail('version-files-changed');
-        version.review = { verdict: event.verdict, evidence: await snapshots(event.evidence), note: event.note,
-          contextRevision: state.contextRevision, source: 'agent-observation' };
-      } else if (event.type === 'select') {
-        const version = current(state, event.item, event.version);
-        if (!await unchanged(root, version.files)) fail('version-files-changed');
-        state.items[event.item].selectedVersion = event.version;
-        version.feedback = event.feedback;
-      } else if (event.type === 'restore') {
-        const group = itemGroup(state, event.item), item = state.items[event.item];
-        const version = item?.versions[event.version];
-        if (!version || !await unchanged(root, version.files)) fail('stored-version-unavailable');
-        item.version = event.version; item.selectedVersion = event.version; version.feedback = event.feedback;
-        state.pendingEdits = state.pendingEdits.filter(key => key !== event.item);
-        state.groupId = group.id;
-      } else if (event.type === 'revision') {
-        const group = itemGroup(state, event.item);
-        if (!state.pendingEdits.includes(event.item)) state.pendingEdits.push(event.item);
-        if (context.workflow.groups.findIndex(g => g.id === group.id) < context.workflow.groups.findIndex(g => g.id === state.groupId))
+          const source = await snapshots(event.files), recorded = [];
+          // This version is not recorded, so a folder for it is what an interrupted copy left: start it over. A failed
+          // copy removes its partial files too, so the same version can be retried instead of failing on EEXIST.
+          const versionFolder = `${prefix(id)}/versions/${event.item}/${event.version}`;
+          const clear = async () => rm(await localPath(root, versionFolder), { recursive: true, force: true });
+          await clear();
+          try {
+            for (const file of source) {
+              // Keep relative layout between declared metadata and assets; never rewrite their bytes.
+              const relative = `${versionFolder}/files/${file.path}`;
+              const destination = await localPath(root, relative, { createParents: true });
+              await copyFile(await localPath(root, file.path), destination, constants.COPYFILE_EXCL);
+              const copied = await fingerprint(root, relative);
+              if (copied.sha256 !== file.sha256) fail('source-changed-during-snapshot');
+              recorded.push({ ...copied, sourcePath: file.path });
+            }
+          } catch (error) { await clear(); throw error; }
+          item.versions[event.version] = { files: recorded, basis: basisFor(state, event.item), note: event.note,
+            createdAt: new Date().toISOString() };
+          item.version = event.version; state.items[event.item] = item;
+          state.pendingEdits = state.pendingEdits.filter(key => key !== event.item);
+          if (groupIndex < context.workflow.groups.findIndex(g => g.id === state.groupId)) state.groupId = group.id;
+        },
+        review: async event => {
+          const version = current(state, event.item, event.version);
+          if ((state.mode === 'dialogue-only') !== (event.verdict === 'hypothetical')) {
+            if (state.mode === 'dialogue-only' || event.verdict === 'hypothetical') fail('review-mode-mismatch');
+          }
+          if (!await unchanged(root, version.files)) fail('version-files-changed');
+          version.review = { verdict: event.verdict, evidence: await snapshots(event.evidence), note: event.note,
+            contextRevision: state.contextRevision, source: 'agent-observation' };
+        },
+        select: async event => {
+          const version = current(state, event.item, event.version);
+          if (!await unchanged(root, version.files)) fail('version-files-changed');
+          state.items[event.item].selectedVersion = event.version;
+          version.feedback = event.feedback;
+        },
+        restore: async event => {
+          const group = itemGroup(state, event.item), item = state.items[event.item];
+          const version = item?.versions[event.version];
+          if (!version || !await unchanged(root, version.files)) fail('stored-version-unavailable');
+          item.version = event.version; item.selectedVersion = event.version; version.feedback = event.feedback;
+          state.pendingEdits = state.pendingEdits.filter(key => key !== event.item);
           state.groupId = group.id;
-      } else if (event.type === 'delegate') {
-        if (event.groups.some(g => !context.workflow.groups.some(group => group.id === g))) fail('unknown-group');
-        state.delegatedGroups = [...new Set(event.groups)];
-      } else if (event.type === 'profile') {
-        const { type, feedback, ...profile } = event;
-        state.profile = { ...profile, selected: true };
-      } else if (event.type === 'package') {
-        const manifests = event.files.filter(p => p.endsWith('/fighter.json'));
-        if (manifests.length !== 1) fail('package-manifest-required');
-        const validation = await validatePackage(manifests[0]);
-        if (!validation.ok) fail('package-file-validation-failed');
-        /** @type {{ profile: Record<string, unknown>, combat: { stats?: object, style?: object }, clips: Record<string, object>, assets: { path: string }[] }} */
-        const manifest = await readJson(await localPath(root, manifests[0])); // its file validation passed above
-        // The package carries exactly the recorded profile: an extra absent from one side is a mismatch too.
-        /** @type {(value: unknown) => string} */
-        const canonical = value => JSON.stringify(value ?? null, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
-          ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v);
-        /** @type {(a: unknown, b: unknown) => boolean} */
-        const same = (a, b) => canonical(a) === canonical(b);
-        if (['name', 'description', 'language', 'concept', 'moves', 'names', 'lines'].some(key => !same(manifest.profile[key], state.profile[key]))
-          || !same(manifest.combat.stats, state.profile.stats) || !same(manifest.combat.style, state.profile.style)) fail('package-profile-mismatch');
-        // Optional clips never block a group, so the package is where they are held: each one it carries is a tracked, accepted item.
-        const { view } = await effective(state);
-        for (const id of Object.keys(spec.optionalClips).filter(id => Object.hasOwn(manifest.clips, id))) {
-          const group = state.context.workflow.groups.find(g => g.motions.includes(id));
-          if (!group || itemBlockers(view, group, id).length) fail('package-optional-clip-unreviewed');
-        }
-        const base = path.posix.dirname(manifests[0]);
-        const allFiles = [...event.files, ...manifest.assets.map(asset => `${base}/${asset.path}`)];
-        state.package = { files: await snapshots(allFiles), basisHash: packageBasis(state), contextRevision: state.contextRevision,
-          fileValidation: { stage: validation.stage, pending: validation.pending } };
-      } else if (event.type === 'package-review') {
-        if (!state.package || !await unchanged(root, state.package.files) || state.package.basisHash !== packageBasis(state)) fail('package-stale');
-        state.package.review = { verdict: event.verdict, evidence: await snapshots(event.evidence), feedback: event.feedback,
-          source: 'agent-observation' };
-      } else if (event.type === 'advance') {
-        const { view } = await effective(state), decision = reviewCreationProgress(context, view);
-        if (!decision.canAdvance) fail('group-review-pending');
-        if (!decision.nextGroup) fail('already-final-group');
-        state.groupId = decision.nextGroup;
-      } else if (event.type === 'refresh-context') {
-        state.context = context; state.contextRevision = context.revision;
-      }
+        },
+        revision: async event => {
+          const group = itemGroup(state, event.item);
+          if (!state.pendingEdits.includes(event.item)) state.pendingEdits.push(event.item);
+          if (context.workflow.groups.findIndex(g => g.id === group.id) < context.workflow.groups.findIndex(g => g.id === state.groupId))
+            state.groupId = group.id;
+        },
+        delegate: async event => {
+          if (event.groups.some(g => !context.workflow.groups.some(group => group.id === g))) fail('unknown-group');
+          state.delegatedGroups = [...new Set(event.groups)];
+        },
+        profile: async event => {
+          const { type, feedback, ...profile } = event;
+          state.profile = { ...profile, selected: true };
+        },
+        package: async event => {
+          const manifests = event.files.filter(p => p.endsWith('/fighter.json'));
+          if (manifests.length !== 1) fail('package-manifest-required');
+          const validation = await validatePackage(manifests[0]);
+          if (!validation.ok) fail('package-file-validation-failed');
+          /** @type {{ profile: Record<string, unknown>, combat: { stats?: object, style?: object }, clips: Record<string, object>, assets: { path: string }[] }} */
+          const manifest = await readJson(await localPath(root, manifests[0])); // its file validation passed above
+          // The package carries exactly the recorded profile: an extra absent from one side is a mismatch too.
+          /** @type {(value: unknown) => string} */
+          const canonical = value => JSON.stringify(value ?? null, (_, v) => v && typeof v === 'object' && !Array.isArray(v)
+            ? Object.fromEntries(Object.entries(v).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)) : v);
+          /** @type {(a: unknown, b: unknown) => boolean} */
+          const same = (a, b) => canonical(a) === canonical(b);
+          if (['name', 'description', 'language', 'concept', 'moves', 'names', 'lines'].some(key => !same(manifest.profile[key], state.profile[key]))
+            || !same(manifest.combat.stats, state.profile.stats) || !same(manifest.combat.style, state.profile.style)) fail('package-profile-mismatch');
+          // Optional clips never block a group, so the package is where they are held: each one it carries is a tracked, accepted item.
+          const { view } = await effective(state);
+          for (const id of Object.keys(spec.optionalClips).filter(id => Object.hasOwn(manifest.clips, id))) {
+            const group = state.context.workflow.groups.find(g => g.motions.includes(id));
+            if (!group || itemBlockers(view, group, id).length) fail('package-optional-clip-unreviewed');
+          }
+          const base = path.posix.dirname(manifests[0]);
+          const allFiles = [...event.files, ...manifest.assets.map(asset => `${base}/${asset.path}`)];
+          state.package = { files: await snapshots(allFiles), basisHash: packageBasis(state), contextRevision: state.contextRevision,
+            fileValidation: { stage: validation.stage, pending: validation.pending } };
+        },
+        'package-review': async event => {
+          if (!state.package || !await unchanged(root, state.package.files) || state.package.basisHash !== packageBasis(state)) fail('package-stale');
+          state.package.review = { verdict: event.verdict, evidence: await snapshots(event.evidence), feedback: event.feedback,
+            source: 'agent-observation' };
+        },
+        advance: async () => {
+          const { view } = await effective(state), decision = reviewCreationProgress(context, view);
+          if (!decision.canAdvance) fail('group-review-pending');
+          if (!decision.nextGroup) fail('already-final-group');
+          state.groupId = decision.nextGroup;
+        },
+        'refresh-context': async () => {
+          state.context = context; state.contextRevision = context.revision;
+        },
+      };
+      await /** @type {(event: ChangeEvent) => Promise<void>} */ (apply[event.type])(event);
       const entry = { ...event, at: new Date().toISOString(), revision: ++state.revision };
       // The full trail is append-only beside the session; the session keeps recent entries so it stays under the 2 MB read limit.
       await appendFile(await fileFor(id, 'creation-history.jsonl'), JSON.stringify(entry) + '\n', { mode: 0o600 });
