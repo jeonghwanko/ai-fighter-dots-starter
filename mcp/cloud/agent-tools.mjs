@@ -1,0 +1,119 @@
+// The agent tools (3단계, 2026-10-27): ODDBOUT's public records, spars, cups and the owner's fighting style and profile edits.
+import { z } from 'zod';
+import { Problem } from '../../api/http.mjs';
+import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
+import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
+import { CUP_WAIT_MS, UUID_ARG, arenaCall } from './common.mjs';
+
+/**
+ * How a fighter's `combat.style` reads (the game contract's README, 싸우는 성격; values in `spec.combatStyle`). An agent translates the
+ * fighter's concept into these closed choices itself; the server only checks them. Grade 3 and missing values are the standard kit.
+ */
+export const STYLE_GUIDE = Object.freeze({
+  mix: 'How often each swing is chosen, slam/combo/fast 0-4 each: slam = one heavy blow, combo = a chained string, fast = a quick jab (counted half). At least one above 0; fast at most slam + combo.',
+  special: 'The swing (slam, combo or fast) used to chase an opponent who opens distance and to strike back while getting up.',
+  super: 'The move used as the super: slam, combo, fast or dash.',
+  distance: 'Fighting range 1-5: 1 swings up close, 5 from far.',
+  shockwave: 'true: the heavy blow sends a ground shockwave.',
+  summon: 'One summon called by the heavy-blow clip: crane, bolt, sportsCar or roadster.',
+  temper: 'Temperament 1-5 each: guard (blocking), retreat (backing off), measure (keeping distance), patience (waiting).',
+  exchanges: 'Exchange patterns 0-3 each: cross (crossing dash), pinball (rope bounces), rush (head-on clash). 0 never, 1 half, 2 standard, 3 double.',
+  extras: 'The skill clip, a summon and a shockwave together: at most two (STYLE_EXTRAS).',
+  skill: 'The unique skill comes from the optional skill clip (stretch, pincer, flight, feint, slide, counter, brace), fixed at registration; a style edit cannot add one.',
+  translate: 'Read the fighter\'s concept, moves and lines. Pick only the choices the character clearly implies; leave the rest out. Spar before and after a change and keep the version that fights like the character.',
+});
+
+export function registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller }) {
+  const call = (path, body) => arenaCall(arena, path, body);
+  // A read's budget: the signed-in owner's; signed out, the host's anonymous user (`caller`); else every signed-out agent's together.
+  const read = path => arenaCall(arena, path, undefined, identity?.owner ?? caller ?? 'public');
+  const ID = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
+  register('get_style_guide', '싸우는 성격 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. Values and limits are the contract\'s (spec.combatStyle). This changes nothing.',
+    {}, async () => ({ ok: true, contract: spec.combatStyle, guide: STYLE_GUIDE }), { publicTool: true });
+  register('list_fighters', 'ODDBOUT 선수 명단', 'List ODDBOUT\'s fighters: the built-in roster and the listed registered fighters (id and name). Use the ids for records, spars and bouts.',
+    {}, async () => {
+      // The arena's list and the roster's first page at once (the two hops were 650 ms in a row).
+      const [builtins, first] = await Promise.all([call('fighters'), invoke('roster')]);
+      if (!builtins.ok) return builtins;
+      const registered = [];
+      for (let cursor = null, page = 0; page < 5; page++) {
+        const list = page === 0 ? first : await invoke(`roster?after=${encodeURIComponent(cursor)}`);
+        if (!list.ok) return list;
+        registered.push(...list.fighters.map(({ id, name, names }) => ({ id, name, ...(names ? { names } : {}) })));
+        if (!list.hasMore) break;
+        cursor = list.nextCursor;
+      }
+      return { ok: true, rules: builtins.rules, builtin: builtins.fighters, registered };
+    }, { publicTool: true });
+  register('get_rankings', 'ODDBOUT 순위', 'Read the cup rankings: built-in fighters by cup points, or registered fighters by cup win rate (a minimum number of bouts).',
+    { scope: z.enum(['builtin', 'registered']).default('builtin') }, ({ scope }) => call(scope === 'registered' ? 'rankings?scope=registered' : 'rankings'), { publicTool: true });
+  register('get_fighter_record', '선수 공개 기록', 'Read a fighter\'s public cup record: wins, losses, recent bouts (with each cup\'s seed for read_bout) and the rivals he met most.',
+    { fighterId: ID }, async ({ fighterId }) => {
+      const record = await call(`fighter?id=${encodeURIComponent(fighterId)}`);
+      // Each bout's package pins are 64-character hashes an agent never uses; read_bout finds them from the cup.
+      return record.ok && Array.isArray(record.recent) ? { ...record, recent: record.recent.map(({ registered, ...bout }) => bout) } : record;
+    }, { publicTool: true });
+  register('get_cup', '컵 결과', 'Read a cup by its id (one enter_cup returned, or a week\'s): its bracket, state and every played bout with its winner and finish.',
+    { cupId: UUID_ARG() }, ({ cupId }) => call(`cup?id=${cupId}`), { publicTool: true });
+  register('read_bout', '경기 기록 읽기', 'Fight a bout again and read its record: who won and how, HP left, hits landed and the highlights (super, air combo, throw, wall, big hit, comeback, KO, clutch) with their times. Give a played cup bout (cupId, round 0-3, slot) or a pair and seed (current packages). The page link plays it in the browser.',
+    { cupId: UUID_ARG().optional(), round: z.number().int().min(0).max(3).optional(), slot: z.number().int().min(0).max(7).optional(),
+      a: ID.optional(), b: ID.optional(), seed: z.number().int().min(0).max(0xffffffff).optional() },
+    async ({ cupId, round, slot, a, b, seed }) => {
+      if (cupId !== undefined && round !== undefined && slot !== undefined) return read(`bout?cup=${cupId}&round=${round}&slot=${slot}`);
+      if (a !== undefined && b !== undefined && seed !== undefined) return read(`bout?a=${encodeURIComponent(a)}&b=${encodeURIComponent(b)}&seed=${seed}`);
+      return { ok: false, code: 'invalid-bout' };
+    }, { publicTool: true });
+  register('spar', '스파링', 'Spar: one bout between two fighters on their current packages, read back with its record (as read_bout). Not ranked and not kept. Use it to see how a fighter fights, before and after a style change. Give a seed to fight the same bout again.',
+    { fighterId: ID, opponentId: ID, seed: z.number().int().min(0).max(0xffffffff).optional() },
+    ({ fighterId, opponentId, seed }) => call('agent/spar', { owner: identity.owner, a: fighterId, b: opponentId, ...(seed === undefined ? {} : { seed }) }));
+  register('enter_cup', '16강 컵 출전', 'Enter the connected user\'s registered fighter in a 16-fighter cup. The server draws the other fifteen from the built-in roster and fights every bout; the results count in the cup rankings. Requires the user\'s request. Returns the finished cup (a few seconds); if it is still running, read it with get_cup.',
+    { fighterId: UUID_ARG() }, async ({ fighterId }) => {
+      const issued = await call('agent/cup', { owner: identity.owner, fighter: fighterId });
+      if (!issued.ok) return issued;
+      // A cup is fought in about seven seconds: wait for it here so the agent needs no second call (MCP 점검 2026-10-27).
+      // The whole wait ends by CUP_WAIT_MS, each read bounded by the time left, well inside the Edge request limit.
+      const deadline = Date.now() + (arena.cupWaitMs ?? CUP_WAIT_MS), pollMs = arena.pollMs ?? 1000;
+      for (let i = 0; i < (arena.pollTries ?? 12) && Date.now() + pollMs < deadline; i++) {
+        await new Promise(done => setTimeout(done, pollMs));
+        const cup = await arenaCall(arena, `cup?id=${issued.ticket}`, undefined, undefined, Math.max(1, Math.min(20000, deadline - Date.now()))).catch(() => null);
+        if (cup?.ok && cup.cup && cup.cup.state !== 'open') return { ...issued, cup: cup.cup };
+      }
+      return { ...issued, state: 'open', next: 'get_cup' };
+    }, { write: true, openWorld: true, idempotent: false });
+  // The owner's current registered package hash (the version an edit is made on), or a 404.
+  const currentSha = async fighterId => {
+    const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', identity.owner)
+      .is('deleted_at', null).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    if (!fighter) throw new Problem(404, 'fighter-not-found');
+    return fighter.manifest_sha;
+  };
+  // The package an edit is made on. A key that already made its edit names the package that edit started from: the fighter has since
+  // moved to the edit's own package, and rebuilt on that, a successful edit whose response was lost came back as a conflict
+  // (MCP 점검 2026-10-29). The API checks the key's fighter and change itself.
+  const baseSha = async (fighterId, idempotencyKey) => {
+    const { data: previous, error } = await db.from('af_submissions').select('validation').eq('owner_id', identity.owner)
+      .eq('idempotency_key', idempotencyKey).maybeSingle();
+    if (error) throw new Problem(503, 'database-unavailable');
+    const base = previous?.validation?.profileBaseSubmission;
+    if (!base) return currentSha(fighterId);
+    const { data, error: baseError } = await db.from('af_submissions').select('manifest_sha').eq('id', base).eq('owner_id', identity.owner).maybeSingle();
+    if (baseError) throw new Problem(503, 'database-unavailable');
+    return data?.manifest_sha ?? currentSha(fighterId);
+  };
+  const edit = async (fighterId, change, idempotencyKey) => {
+    const result = await invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: await baseSha(fighterId, idempotencyKey), ...change }),
+      { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
+    if (result.ok) await recordAgent(result.submissionId);
+    return result;
+  };
+  register('update_fighter_profile', '프로필 고치기', 'Change the connected user\'s registered fighter\'s profile text without new art: name, description, language, concept, moves, per-language names or bout lines (challenge, win, lose). Give only the fields to change; null removes names or lines. Checked against the contract. Requires the user\'s approval of the change. Use a new UUID per change and the same UUID to retry it.',
+    { fighterId: UUID_ARG(), profile: z.object({ name: z.string().min(1).max(profileLimits.name), description: z.string().min(1).max(profileLimits.description),
+      language: z.enum(profileLimits.languages), concept: z.string().min(1).max(profileLimits.concept), moves: z.record(z.string(), z.unknown()), names: z.union([z.record(z.string(), z.string()), z.null()]),
+      lines: z.union([z.record(z.string(), z.string()), z.null()]) }).partial().strict(), idempotencyKey: UUID_ARG() },
+    ({ fighterId, profile, idempotencyKey }) => Object.keys(profile).length ? edit(fighterId, { profile }, idempotencyKey) : { ok: false, code: 'invalid-profile' },
+    { write: true, publish: true, openWorld: true, idempotent: true });
+  register('update_fighter_style', '싸우는 성격 고치기', 'Change the connected user\'s registered fighter\'s fighting style (combat.style) without new art: an object replaces it, null removes it. Checked against the contract (get_style_guide). His next bouts fight the new style. Requires the user\'s approval of the change. Use a new UUID per change and the same UUID to retry it.',
+    { fighterId: UUID_ARG(), style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: UUID_ARG() },
+    ({ fighterId, style, idempotencyKey }) => edit(fighterId, { style }, idempotencyKey), { write: true, publish: true, openWorld: true, idempotent: true });
+}
