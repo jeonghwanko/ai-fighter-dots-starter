@@ -133,6 +133,44 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
   } finally { await rm(root, { recursive: true }); }
 });
 
+test('a passing hiccup of the published site is retried; a missing file or wrong bytes are not (2026-10-30)', async () => {
+  // A publish stopped at one font file's brief 503 after the build was live, and the creation context was never published.
+  const root = await mkdtemp(join(tmpdir(), 'fighter-live-retry-test-'));
+  try {
+    await mkdir(join(root, '.vite'));
+    await mkdir(join(root, 'assets'));
+    await mkdir(join(root, 'ai-fighter-creator'));
+    const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js', assets: ['assets/font.woff2'] }]));
+    await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(manifest));
+    const content = new Map([...siteEntries, ...policyFiles, ...discoveryFiles, 'index.html', 'assets/main.js', 'assets/font.woff2', ...(hosting.customDomain ? ['CNAME'] : [])].map(path => [path, `content for ${path}`]));
+    for (const [path, value] of content) await writeFile(join(root, path), value);
+    const mime = path => path.endsWith('.html') ? 'text/html' : path.endsWith('.css') ? 'text/css' : path.endsWith('.xml') ? 'application/xml' : path.endsWith('.txt') ? 'text/plain' : path.endsWith('.js') ? 'text/javascript' : 'font/woff2';
+    let calls = 0, failures = 0, failure = null;
+    const request = async url => {
+      const path = url.pathname.slice(new URL('.', hosting.siteUrl).pathname.length);
+      if (path === 'assets/font.woff2') {
+        calls++;
+        if (failures > 0) { failures--; if (failure === 'network') throw new TypeError('fetch failed'); return new Response('busy', { status: failure }); }
+      }
+      return new Response(content.get(path), { status: 200, headers: { 'content-type': mime(path) } });
+    };
+    const waits = [], wait = async ms => { waits.push(ms); };
+    for (const [kind, times] of [[503, 1], ['network', 2], [502, 2], [429, 1]]) {
+      calls = 0; failure = kind; failures = times; waits.length = 0;
+      await verifyLiveSite(root, { request, wait });
+      assert.equal(calls, times + 1, String(kind)); assert.equal(waits.length, times);
+    }
+    // Still failing after the retries: the publish stops, naming the file and the last status.
+    calls = 0; failure = 503; failures = 10;
+    await assert.rejects(verifyLiveSite(root, { request, wait }), /Published asset unavailable: assets\/font\.woff2 \(503\)/);
+    assert.equal(calls, 3);
+    // A missing file is not a hiccup: no retry.
+    calls = 0; failure = 404; failures = 10;
+    await assert.rejects(verifyLiveSite(root, { request, wait }), /unavailable: assets\/font\.woff2 \(404\)/);
+    assert.equal(calls, 1);
+  } finally { await rm(root, { recursive: true }); }
+});
+
 test('build revisions detect changed inputs and commits while allowing unrelated repo files', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fighter-revision-test-'));
   try {

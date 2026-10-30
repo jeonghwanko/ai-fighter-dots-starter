@@ -96,8 +96,26 @@ export async function verifyArtifact(root, options) {
   return release;
 }
 
+/** A hiccup of the host, worth asking again: rate limiting and server errors. A missing file or wrong bytes are not one. */
+const TRANSIENT = new Set([429, 500, 502, 503, 504]);
+/** The waits before asking again after a hiccup (2026-10-30: one font's brief 503 stopped a publish after the build was live). */
+const RETRY_WAITS_MS = [2000, 5000];
+
+/** A published file's 200 response; a hiccup (a status above, a failed connection or a timeout) is asked again after each wait. */
+async function fetchPublished(url, file, request, wait) {
+  for (let attempt = 0; ; attempt++) {
+    const response = await request(url, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) }).catch(error => error);
+    const answered = typeof response?.status === 'number';
+    if (answered && response.status === 200) return response;
+    if (answered) await response.body?.cancel().catch(() => {});
+    const status = answered ? response.status : response?.name ?? 'no-response';
+    if ((answered && !TRANSIENT.has(status)) || attempt >= RETRY_WAITS_MS.length) throw new Error(`Published asset unavailable: ${file} (${status})`);
+    await wait(RETRY_WAITS_MS[attempt]);
+  }
+}
+
 /** Check the actual entry documents and manifest asset bytes, not just HTTP 200. */
-export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request = fetch } = {}) {
+export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)) } = {}) {
   const manifest = JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8'));
   const files = new Set(['index.html', ...siteEntries, ...policyFiles, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]), visited = new Set();
   function visit(key) {
@@ -114,8 +132,7 @@ export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request 
       throw new Error('Unsafe manifest asset path');
     }
     const url = new URL(file, siteUrl);
-    const response = await request(url, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) });
-    if (response.status !== 200) throw new Error(`Published asset unavailable: ${file} (${response.status})`);
+    const response = await fetchPublished(url, file, request, wait);
     const mime = file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css'
       : /\.(?:m?js)$/.test(file) ? /^(?:text|application)\/javascript$/
       : file.endsWith('.wasm') ? 'application/wasm'
