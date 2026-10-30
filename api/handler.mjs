@@ -7,7 +7,7 @@ import { createAdminHandler } from './admin.mjs';
 import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
 import { createWorkshopHandler, workshopRoute } from './workshop.mjs';
-import { createGenerationHandler, generationRoute } from './generations.mjs';
+import { attachJobProfileSet, createGenerationHandler, generationRoute } from './generations.mjs';
 import { createFighterDeletionHandler, deletionRoute } from './fighter-deletion.mjs';
 import { createFighterEntryHandler, entryRoute } from './fighter-entry.mjs';
 import { Problem, UUID, bearerToken, jsonResponse, readBody, rpcProblem, sha256, verifiedUserId } from './http.mjs';
@@ -261,6 +261,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
           const completed = await rpc('af_finish', { p_id: body.submissionId, p_lease: body.leaseToken,
             p_sha: body.manifestSha256, p_passed: body.passed, p_result: body.result });
           try { await analytics?.registered(completed); } catch { /* Analytics must never break registration. */ }
+          // A hosted fighter's profile set (2026-10-31): his chosen front, kept on his job, becomes his set now that he is registered.
+          try { await attachJobProfileSet(db, completed); } catch { /* A set never breaks registration; his owner can upload one. */ }
           return json(await present(completed));
         }
         // An infrastructure failure under the caller's own lease: requeue without spending one of the package's attempts.

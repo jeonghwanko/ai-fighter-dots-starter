@@ -24,8 +24,16 @@ export async function generation({ decisionsReviewer = null, responsesReviewer =
   };
   const from = table => {
     const filters = [], values = []; let order = '', limit = '', gt = [];
-    const run = async () => (await sql.query(`select to_jsonb(t) as value from public.${table} t${filters.length ? ' where ' + filters.join(' and ') : ''}${order}${limit}`, values)).rows.map(r => r.value);
-    const q = { select: () => q, eq: (key, val) => { values.push(val); filters.push(`${key}=$${values.length}`); return q; },
+    /** @type {Record<string, unknown> | null} An update's columns (2026-10-31: the API writes a job's profile front and set). */
+    let patch = null;
+    const where = () => filters.length ? ' where ' + filters.join(' and ') : '';
+    const run = async () => {
+      if (!patch) return (await sql.query(`select to_jsonb(t) as value from public.${table} t${where()}${order}${limit}`, values)).rows.map(r => r.value);
+      const keys = Object.keys(patch);
+      await sql.query(`update public.${table} set ${keys.map((key, i) => `${key}=$${values.length + i + 1}`).join(',')}${where()}`, [...values, ...keys.map(key => patch[key])]);
+      return [];
+    };
+    const q = { select: () => q, update: value => { patch = value; return q; }, eq: (key, val) => { values.push(val); filters.push(`${key}=$${values.length}`); return q; },
       gt: (key, val) => { values.push(val); filters.push(`${key}>$${values.length}`); return q; },
       in: (key, vals) => { values.push(vals); filters.push(`${key}=any($${values.length})`); return q; },
       order: (key, o) => { order = ` order by ${key}${o?.ascending === false ? ' desc' : ''}`; return q; }, limit: n => { limit = ` limit ${n}`; return q; },
@@ -35,7 +43,10 @@ export async function generation({ decisionsReviewer = null, responsesReviewer =
   const objects = new Map();
   const storage = { from: bucket => ({
     upload: async (path, bytes, options) => { const key = `${bucket}/${path}`; if (objects.has(key) && !options?.upsert) return { error: { message: 'exists' } };
-      objects.set(key, { bytes, type: options?.contentType }); return { data: { path } }; },
+      objects.set(key, { bytes, type: options?.contentType });
+      // A profile set's front, as Storage records it (af_profile_set_submit checks the object's size there).
+      if (path.includes('/profile-sets/')) await sql.query('insert into storage.objects values($1,$2,$3) on conflict do nothing', [bucket, path, { size: bytes.length }]);
+      return { data: { path } }; },
     remove: async paths => { for (const p of paths) objects.delete(`${bucket}/${p}`); return {}; },
     download: async path => objects.has(`${bucket}/${path}`) ? { data: new Blob([objects.get(`${bucket}/${path}`).bytes]) } : { error: { message: 'missing' } },
     createSignedUrls: async paths => ({ data: paths.map(path => ({ path, signedUrl: `https://storage.test/${bucket}/${path}?token=t` })) }) }) };

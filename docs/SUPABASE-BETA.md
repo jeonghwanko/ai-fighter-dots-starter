@@ -306,7 +306,7 @@ Dot에서 첫 실제 등록:
 | GET /generations/capabilities | 없음 | 호스팅 생성(2026-10-27): 지금 신청을 받는지(`hosted`)와 이유·대기 작업 수 |
 | GET /generations · POST /generations · POST /generations/uploads | 사용자 JWT | 내 최근 생성 작업 다섯과 무료 사용 여부(`used`, 무료권 수 `credits`), 신청(`Idempotency-Key`, 설명·언어·그림 id·권리 확인), 참조 그림 올리기(PNG·JPG·WebP, 4 MB). 작업은 대기 순번(`queue`)과 외형 소진 여부(`charged`)를 싣는다 |
 | GET·DELETE /generations/:id · POST /generations/:id/appearance·motions·register | 사용자 JWT | 작업 읽기(그림은 10분 서명 URL)·취소, 외형 고르기·수정, 동작 수정, 프로필 확인과 등록 |
-| POST /generation-worker/heartbeat·claim·progress·finish · PUT /generation-worker/jobs/:id/artifacts/:name · /generation-worker/jobs/:id/submission… | 생성 작업자(`scope = generation`) | 심장 박동·임대·연장·단계 결과, 후보·미리보기 그림, 신청자 계정으로 패키지 제출 |
+| POST /generation-worker/heartbeat·claim·progress·finish · PUT /generation-worker/jobs/:id/artifacts/:name · /generation-worker/jobs/:id/submission… · POST /generation-worker/jobs/:id/profile-front | 생성 작업자(`scope = generation`) | 심장 박동·임대·연장·단계 결과, 후보(정면)·옆모습·미리보기 그림, 신청자 계정으로 패키지 제출. `profile-front`는 고른 정면과 얼굴 칸을 작업에 남기고, 검증기가 패키지를 등록하는 순간 API가 그것으로 프로필 세트를 만든다(`attachJobProfileSet`) |
 | POST /worker/claim | 작업자 | 큐 임대·일시 다운로드 URL 발급 |
 | POST /worker/finish | 작업자 | 동일 임대·manifest 해시로 검사 확정 |
 

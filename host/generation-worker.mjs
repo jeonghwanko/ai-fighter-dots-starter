@@ -120,6 +120,9 @@ export function createApi({ base, key, fetcher = fetch }) {
       headers: leased(job, { 'content-type': 'image/webp' }), body: bytes, signal: AbortSignal.timeout(120_000) }).then(json),
     submit: job => fetcher(`${base}/generation-worker/jobs/${job.id}/submission/submit`, { method: 'POST', headers: leased(job, { 'content-type': 'application/json' }),
       body: '{}', signal: AbortSignal.timeout(60_000) }).then(json),
+    // 선수 프로필 세트 (2026-10-31): the chosen front (an artifact the job already holds) and its face square, before the package goes in.
+    profileFront: (job, front) => fetcher(`${base}/generation-worker/jobs/${job.id}/profile-front`, { method: 'POST',
+      headers: leased(job, { 'content-type': 'application/json' }), body: JSON.stringify(front), signal: AbortSignal.timeout(60_000) }).then(json),
   };
 }
 

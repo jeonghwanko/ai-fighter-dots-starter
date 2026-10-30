@@ -28,7 +28,9 @@ import { defaultSessionPath, login, startDeviceLogin, waitDeviceLogin } from './
 
 const KIT = fileURLToPath(new URL('../', import.meta.url));
 /** What a host's install runs; tests and the operator's installer stay in the checkout. */
-export const HOST_FILES = Object.freeze(['og', 'generation-worker.mjs', 'generation-stages.mjs', 'sprite-outcome.mjs', 'ledger-report.mjs', 'motions.py']);
+// style-anchor-front.webp (2026-10-31): the house front the looks take their colouring from (generation-stages.mjs STYLE_ANCHOR_FILE).
+export const HOST_FILES = Object.freeze(['og', 'generation-worker.mjs', 'generation-stages.mjs', 'sprite-outcome.mjs', 'ledger-report.mjs', 'motions.py',
+  'style-anchor-front.webp']);
 export const TERMS_DOC = 'docs/GENERATION-HOST.md#호스트-약속';
 const SYSTEM_DIRS = new Set(['/usr/local/bin', '/usr/bin', '/bin']);
 
@@ -60,7 +62,9 @@ export async function installFiles(root, from = path.join(KIT, 'host')) {
     // A new file renamed into place: a worker's bash keeps reading the og it started with.
     const target = path.join(root, 'bin', name), mode = name === 'og' ? 0o700 : 0o600;
     await rm(`${target}.new`, { force: true });
-    await writeFile(`${target}.new`, (await readFile(path.join(from, name), 'utf8')).replace(/\r$/gm, ''), { mode });
+    // The style anchor is a picture: its bytes as they are. The rest are text, written with Unix line endings.
+    const source = path.join(from, name);
+    await writeFile(`${target}.new`, name.endsWith('.webp') ? await readFile(source) : (await readFile(source, 'utf8')).replace(/\r$/gm, ''), { mode });
     await chmod(`${target}.new`, mode);
     await rename(`${target}.new`, target);
   }

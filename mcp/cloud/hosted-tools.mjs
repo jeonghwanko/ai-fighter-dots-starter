@@ -19,7 +19,7 @@ import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile } from './common.m
  *   revisionsLeft?: { appearance?: number, motions?: number }, preview?: { note?: string }[],
  *   submission?: { stage: string, fighterId?: string | null } | null,
  *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown },
- *   queue?: { position: number, dailyLimit: number, startedToday: number } | null }} HostedJob
+ *   queue?: { position: number, dailyLimit: number, startedToday: number } | null, profileSetId?: string | null }} HostedJob
  */
 
 /**
@@ -66,15 +66,17 @@ export function hostedNext(job) {
         return `ODDBOUT starts ${job.queue.dailyLimit} fighters a day and today's are started: this request is number ${job.queue.position} in line. `
           + 'Tell the user it starts by itself when its turn comes (he may close the chat), and check later with get_hosted_fighter.';
       return job.delegate
-        ? 'ODDBOUT is writing the profile, painting two looks and picking one itself, '
+        ? 'ODDBOUT is writing the profile, painting two front-view looks and picking one itself, '
           + 'then it makes the eleven motions (about 15 to 30 minutes in all). '
           + 'Tell the user, and check later with get_hosted_fighter.'
-        : 'ODDBOUT is writing the profile and painting two looks (a few minutes). Call get_hosted_fighter with waitSeconds to wait.';
+        : 'ODDBOUT is writing the profile and painting two front-view looks (a few minutes). Call get_hosted_fighter with waitSeconds to wait.';
     case 'appearance_ready':
-      return `${job.delegate ? 'ODDBOUT could not pick a look by itself. ' : ''}Show the user both looks (candidates a and b) as images and ask which one. `
+      return `${job.delegate ? 'ODDBOUT could not pick a look by itself. ' : ''}Show the user both looks (candidates a and b, his fighter from the front) as images `
+        + 'and ask which one: the one he picks is also his profile picture on the site and in the arena. '
         + `Then choose_hosted_look with his pick, or with one sentence to change both (${left.appearance ?? 0} changes left).`;
     case 'motions':
-      return `ODDBOUT is making the eleven motions from ${job.delegate ? 'the look it picked' : 'the chosen look'} (about 15 to 30 minutes). Tell the user, and check later with get_hosted_fighter.`;
+      return `ODDBOUT is drawing ${job.delegate ? 'the look it picked' : 'the chosen look'} from the side (job.side once it is drawn) and making the eleven motions `
+        + 'from that side view (about 15 to 30 minutes). Tell the user, and check later with get_hosted_fighter.';
     case 'motion_ready':
       return `${job.preview?.some(p => p.note === 'run-from-walk') ? RUN_FROM_WALK_NEXT : ''}`
         + `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images, and the profile draft. `
@@ -86,7 +88,9 @@ export function hostedNext(job) {
       // 출전 (2026-10-30): a registered fighter is in production until the user watches his motions and enters him.
       if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}, in production. Tell the user: he can watch `
         + 'every motion on his fighter page and enter him there (출전); other people meet him only after that. enter_fighter does it here '
-        + 'once he confirmed each of the eleven motions.';
+        + 'once he confirmed each of the eleven motions. '
+        + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}): the home shows him once an operator approves it.`
+          : 'His profile set (front picture) did not go in with it: prepare_profile_set can upload one.');
       if (job.submission?.stage === 'rejected') return 'The server check refused the package. A person at ODDBOUT will look at it; the user\'s free fighter is free again.';
       return 'The server is checking the package. Call get_hosted_fighter with waitSeconds.';
     case 'needs_review': return 'A person at ODDBOUT is checking this step. Nothing to do now; check later. If he cancels while it waits, his free fighter comes back.';
@@ -113,7 +117,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     return data?.id ?? null;
   };
   register('request_hosted_fighter', 'ODDBOUT에 선수 만들기 맡기기', 'ODDBOUT makes a fighter for the connected user on its own generation worker: '
-    + 'two looks to choose from, then the eleven motions, then registration under his account. delegate: '
+    + 'two front-view looks to choose from (the chosen one is also his profile picture), then a side view drawn from it and the eleven '
+    + 'motions, then registration under his account. delegate: '
     + 'true when he leaves the choices to ODDBOUT ("알아서 해 줘", "just make it"): '
     + 'ODDBOUT picks the look itself (or asks him if neither suits) and he answers once, at the finished motions. host: '
     + 'oddbout (default, ODDBOUT\'s own worker), mine (his own PC as a host: '
@@ -162,7 +167,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'Pass an id as request_hosted_fighter\'s host.',
     {}, () => invoke('generations/hosts'), { publicTool: true });
   register('get_hosted_fighter', 'ODDBOUT이 만드는 선수', `Read or resume the connected user's hosted fighter after a timeout or disconnection: its state, `
-    + `the two looks or the motion previews as fresh image URLs (ten minutes), the profile draft and next. `
+    + `the two front-view looks, the side view drawn from the chosen one (side) or the motion previews as fresh image URLs (ten minutes), `
+    + `the profile draft, the profile set made at registration (profileSetId) and next. `
     + `Supply either jobId or the original request's idempotencyKey, never both. `
     + `Key lookup only reads an existing job under this account, even when new generation is disabled; `
     + `not-found does not prove that an interrupted request never started. With neither identifier: `
@@ -195,8 +201,9 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       }
       return withNext(await invoke(`generations/${jobId}`));
     });
-  register('choose_hosted_look', '외형 고르기', 'Answer the two looks of the connected user\'s hosted fighter with his words: '
-    + 'choose a or b (ODDBOUT then makes the motions), or revise with one sentence (both looks are painted again). '
+  register('choose_hosted_look', '외형 고르기', 'Answer the two front-view looks of the connected user\'s hosted fighter with his words: '
+    + 'choose a or b (it is also his profile picture; ODDBOUT then draws it from the side and makes the motions from that), '
+    + 'or revise with one sentence (both looks are painted again). '
     + 'Requires the user\'s answer. Revisions are not idempotent: '
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
     { jobId: JOB, choose: z.enum(['a', 'b']).optional(), revise: z.string().min(2).max(GENERATION_LIMITS.note).optional() },

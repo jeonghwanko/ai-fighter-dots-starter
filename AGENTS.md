@@ -79,6 +79,9 @@ generation and the live AI Fighter spec before creating a package, and use the b
 
 - Creation is conversational in review groups: appearance (concept/idle), locomotion (fightIdle/walk/run), attacks
   (combo/slam/dash), defense and reactions (block/hit/groggy/fall), then final review.
+- Appearance starts with the front (the profile set, `get_fighter_spec` → `profileSet`): the user chooses a full-body front view;
+  the side view and the motions are drawn from it, and after registration the front goes up as his profile set. Every generation
+  carries the spec's colouring text and attaches its style anchor as the last reference: the house's plain cel colouring.
 - When the game context lists the optional style group (skill/entrance/victory clips and the fighting style), offer it
   once after defense and skip it when the user declines. It never blocks final, but each optional clip a package
   carries needs a selected, checked version.

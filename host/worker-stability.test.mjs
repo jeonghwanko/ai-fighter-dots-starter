@@ -27,19 +27,19 @@ function looksOg(plan, made) {
 test('a look this round already made is kept when the stage runs again for the other one', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'look-keep-')), made = [];
   try {
-    const plan = { 'look-a-0': 0, 'look-b-0': { code: 1, errors: [{ state: null, code: 'provider-rate-limited', retryable: true, message: '429' }] } };
+    const plan = { 'front-a-0': 0, 'front-b-0': { code: 1, errors: [{ state: null, code: 'provider-rate-limited', retryable: true, message: '429' }] } };
     const stages = createStages({ og: looksOg(plan, made), api: { artifact: async () => ({ ok: true }) }, fetchBytes: async () => new Uint8Array(), toWebp: async (png, webp) => writeFile(webp, 'webp') });
     assert.deepEqual(await stages.appearance(job, dir), { outcome: 'retry', result: { code: 'look-exit-1' } });
-    plan['look-b-0'] = 0; made.length = 0;
-    assert.deepEqual(await stages.appearance(job, dir), { outcome: 'ok', result: { candidates: ['look-a-0', 'look-b-0'] } });
-    assert.deepEqual(made, ['look-b-0'], 'look a was paid for once');
+    plan['front-b-0'] = 0; made.length = 0;
+    assert.deepEqual(await stages.appearance(job, dir), { outcome: 'ok', result: { candidates: ['front-a-0', 'front-b-0'] } });
+    assert.deepEqual(made, ['front-b-0'], 'front a was paid for once');
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
 
 test('codex that cannot run here now is a stage to run again, not an operator task', async () => {
   const dir = await mkdtemp(path.join(tmpdir(), 'look-asks-')), made = [];
   try {
-    const plan = { 'look-a-0': 75, 'look-b-0': 0, 'look-a-1': { code: 1, errors: [asked] }, 'look-b-1': 0 };
+    const plan = { 'front-a-0': 75, 'front-b-0': 0, 'front-a-1': { code: 1, errors: [asked] }, 'front-b-1': 0 };
     const stages = createStages({ og: looksOg(plan, made), api: { artifact: async () => ({ ok: true }) }, fetchBytes: async () => new Uint8Array(), toWebp: async (png, webp) => writeFile(webp, 'webp') });
     assert.deepEqual(await stages.appearance(job, dir), { outcome: 'retry', result: { code: ASKS } });
     // The same question read from a report (exit 1): a retry too.
@@ -70,7 +70,7 @@ test('Decisions screening runs beside the looks, and the stage returns only once
     const stages = createStages({ og, api, fetchBytes: async () => new Uint8Array(), toWebp: async (png, webp) => writeFile(webp, 'webp') });
     const result = await stages.appearance({ ...job, decisionsReview: { mode: 'shadow' } }, dir);
     assert.equal(result.outcome, 'ok');
-    assert.ok(order.indexOf('gen look-a-0') < order.indexOf('reviewed design'), order.join(', '));
+    assert.ok(order.indexOf('gen front-a-0') < order.indexOf('reviewed design'), order.join(', '));
     assert.deepEqual(order.filter(o => o.startsWith('reviewed')).sort(), ['reviewed design', 'reviewed look-a', 'reviewed look-b']);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
@@ -112,11 +112,11 @@ test('a look whose outcome is unknown goes to an operator even when the other lo
   const dir = await mkdtemp(path.join(tmpdir(), 'look-unknown-')), made = [];
   try {
     const timeout = { state: null, code: 'provider-timeout', retryable: false, message: 'no answer in time' };
-    const plan = { 'look-a-0': 75, 'look-b-0': { code: 1, errors: [timeout] } };
+    const plan = { 'front-a-0': 75, 'front-b-0': { code: 1, errors: [timeout] } };
     const stages = createStages({ og: looksOg(plan, made), api: { artifact: async () => ({ ok: true }) }, fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
     assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-outcome-unknown' } });
     // The other way round, and with a look that may be retried: still the operator's.
-    Object.assign(plan, { 'look-a-0': { code: 1, errors: [{ ...timeout, code: 'provider-rate-limited', retryable: true }] }, 'look-b-0': { code: 1, errors: [timeout] } });
+    Object.assign(plan, { 'front-a-0': { code: 1, errors: [{ ...timeout, code: 'provider-rate-limited', retryable: true }] }, 'front-b-0': { code: 1, errors: [timeout] } });
     assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-outcome-unknown' } });
   } finally { await rm(dir, { recursive: true, force: true }); }
 });

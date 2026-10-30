@@ -310,7 +310,7 @@ test('next names what the user is asked or how long ODDBOUT works', () => {
   // A full day (2026-10-30): the request waits in line; with room today it is simply being made.
   const line = { status: 'appearance', host: { choice: 'oddbout' }, queue: { position: 2, dailyLimit: 3, startedToday: 3 } };
   assert.match(hostedNext(line), /number 2 in line/);
-  assert.match(hostedNext({ ...line, queue: { position: 1, dailyLimit: 3, startedToday: 1 } }), /painting two looks/);
+  assert.match(hostedNext({ ...line, queue: { position: 1, dailyLimit: 3, startedToday: 1 } }), /painting two front-view looks/);
 });
 
 test('a picture chosen from the ChatGPT Library reaches the request; other Azure tenants and the registration tools still refuse it (2026-10-30)', async () => {
