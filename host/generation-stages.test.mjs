@@ -6,7 +6,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
-  submissionOutcome, withProfile } from './generation-stages.mjs';
+  submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows } from './generation-stages.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 
 const brief = { verdict: 'ok', rejectCode: 'none',
@@ -220,7 +220,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'look-b-0.png'), 'look');
   const flag = (args, name) => args[args.indexOf(name) + 1];
-  let live = 0, most = 0, failShow = false, aligning = 0, mostAligning = 0;
+  let live = 0, most = 0, failShow = false, aligning = 0, mostAligning = 0, extractFailed = false;
   const og = async (args, { stdin } = {}) => {
     calls.push({ args, stdin });
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
@@ -229,7 +229,15 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     if (tool === 'video-cycle-align') aligning -= 1;
     if (tool === 'gen') await writeFile(flag(args, '--out'), 'relaxed');
     if (failShow && tool === 'gen-set' && flag(args, '--run-dir').endsWith('show-rows')) return { code: 1 };
-    if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), '{}'); }
+    if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true });
+      await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), JSON.stringify({ states: { 'stance-a': {}, 'strike-a': {} } })); }
+    // The first extract of the keypose rows meets a row drawn with a cell missing (2026-10-30).
+    if (tool === 'extract' && flag(args, '--run-dir') === path.join(dir, 'motion', 'rows') && !extractFailed) {
+      extractFailed = true;
+      await writeFile(path.join(flag(args, '--run-dir'), 'extract-failure.json'),
+        JSON.stringify({ ok: false, errors: ['stance-a: frame 03 is empty or too sparse (10 pixels < 640)'] }));
+      return { code: 1 };
+    }
     if (tool === 'video-set') {
       const gait = flag(args, '--states'), item = path.join(flag(args, '--out-dir'), `side-${gait}`);
       await mkdir(path.join(item, 'loop'), { recursive: true }); await mkdir(path.join(item, 'frames', 'keyed'), { recursive: true });
@@ -305,6 +313,11 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     ['ok', 0, [['loop', ['broken-beat']], ['cut-auto', 'passed']]]);
   const tools = calls.map(c => c.args);
   assert.ok(tools.some(a => a.includes('gen-set') && flag(a, '--concurrency') === '2' && flag(a, '--provider') === 'codex'));
+  // The row the extract refused was drawn again alone (gen-set takes a finished row as it is), and the rows extracted again.
+  const rowsDir = path.join(dir, 'motion', 'rows');
+  assert.deepEqual(tools.filter(a => a.includes('gen-set') && a.includes('--force')).map(a => [flag(a, '--run-dir'), flag(a, '--states')]),
+    [[rowsDir, 'stance-a']]);
+  assert.equal(tools.filter(a => a.includes('extract') && flag(a, '--run-dir') === rowsDir).length, 2);
   assert.ok(tools.find(a => a.includes('prepare')).includes(path.join(dir, 'looks', 'look-b-0.png')));
   // The show row (the optional entrance and victory, 2026-10-28): its own run, one image at a time, handed to the assemble.
   assert.ok(tools.some(a => a.includes('gen-set') && flag(a, '--run-dir').endsWith('show-rows') && flag(a, '--concurrency') === '1'));
@@ -785,4 +798,15 @@ test('a video request xAI answered with 429 after its own waits is Grok to be as
   const taken = await scaleStage({ videoReport: { ok: 0, provider_submitted: true, request_id: 'req-1', errors: [limited] } });
   assert.equal(taken.done.outcome, 'review');
   assert.deepEqual(taken.done.result.requestIds, ['req-1']);
+});
+
+test('a failed extract names the rows to draw again: only the request\'s, once each, none without a record', async () => {
+  const run = await mkdtemp(path.join(tmpdir(), 'gen-extract-'));
+  assert.deepEqual(await extractFailedRows(run), []);
+  await writeFile(path.join(run, 'sprite-request.json'), JSON.stringify({ states: { 'stance-a': {}, 'strike-a': {} } }));
+  await writeFile(path.join(run, 'extract-failure.json'), JSON.stringify({ ok: false, errors: [
+    'strike-a: frame 02 is empty or too sparse', 'stance-a: frame 03 is empty or too sparse', 'stance-a: frame 04 is much smaller',
+    'chroma key: no candidate clears the erase radius', 'walk-x: not in this request'] }));
+  assert.deepEqual(await extractFailedRows(run), ['strike-a', 'stance-a']);
+  assert.equal(EXTRACT_REDRAWS, 2);
 });
