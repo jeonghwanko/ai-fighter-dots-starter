@@ -1,3 +1,4 @@
+// @ts-check
 // Google sign-in for Dot. Creates this user's own Supabase session file; nothing is shared with the browser.
 // Usage: npm run login | npm run login -- --link | npm run login -- --replace | npm run logout
 //        npm run login -- --device [--replace]  then  npm run login -- --device-wait [--timeout <seconds>]
@@ -28,21 +29,34 @@ export const DEFAULT_LOGIN_PORT = 47821;
 export const LOGIN_TIMEOUT_MS = 5 * 60 * 1000;
 // A chat round trip is slower than a local browser redirect; the authorization code itself is still single-use.
 export const PASTE_LOGIN_TTL_MS = 10 * 60 * 1000;
+/**
+ * @typedef {import('@supabase/supabase-js').SupabaseClient} SupabaseClient
+ * @typedef {{ access_token: string, refresh_token: string, user: { id: string, email?: string } }} Session
+ * @typedef {{ link?: boolean, linkedUser?: string | null, replace?: boolean, previousUser: string | null, sessionPath: string, url: string,
+ *   publishableKey: string, log: (message: string) => void, request: typeof apiRequest }} SignIn  What saveSignIn needs besides the session.
+ */
 export const defaultSessionPath = () => process.env.AI_FIGHTER_CLIENT_CONFIG || path.join(homedir(), '.ai-fighter', 'client.json');
+/** @param {string} sessionPath */
 export const pendingLoginPath = sessionPath => path.join(path.dirname(sessionPath), 'pending-login.json');
 
-/** Decoded JWT payload, or null. Used only to read `role`, `sub` and `exp`; the server verifies every token. */
+/** Decoded JWT payload, or null. Used only to read `role`, `sub` and `exp`; the server verifies every token. @param {unknown} token */
 export function jwtPayload(token) {
   try { return JSON.parse(Buffer.from(String(token).split('.')[1], 'base64url').toString('utf8')); } catch { return null; }
 }
-/** A publishable key (`sb_publishable_…`) or the legacy anon JWT. Never a secret or service_role key. */
+/** A publishable key (`sb_publishable_…`) or the legacy anon JWT. Never a secret or service_role key. @param {unknown} key */
 export const isPublishableKey = key => typeof key === 'string'
   && (/^sb_publishable_[A-Za-z0-9_-]{20,}$/.test(key) || (key.split('.').length === 3 && jwtPayload(key)?.role === 'anon'));
 
-/** Project URL and publishable key: flags, then environment, then the existing session file. All are public values. */
+/**
+ * Project URL and publishable key: flags, then environment, then the existing session file. All are public values.
+ * @param {{ argv?: string[], env?: NodeJS.ProcessEnv, sessionPath?: string }} [options]
+ * @returns {Promise<{ url: string, publishableKey: string, port: number }>} checked here
+ */
 export async function projectSettings({ argv = [], env = process.env, sessionPath = defaultSessionPath() } = {}) {
+  /** @param {string} name */
   const flag = name => { const index = argv.indexOf(name); return index >= 0 ? argv[index + 1] : undefined; };
-  let saved = {};
+  /** @type {any} */
+  let saved = {}; // the parsed session file
   try { saved = JSON.parse(await readFile(sessionPath, 'utf8')); } catch { /* first login */ }
   const url = flag('--url') ?? env.AI_FIGHTER_SUPABASE_URL ?? saved.url;
   const publishableKey = flag('--key') ?? env.AI_FIGHTER_PUBLISHABLE_KEY ?? saved.publishableKey;
@@ -55,30 +69,38 @@ export async function projectSettings({ argv = [], env = process.env, sessionPat
   return { url, publishableKey, port };
 }
 
+/**
+ * @param {Record<string, string>} [initial]
+ * @returns {{ getItem: (key: string) => string | null, setItem: (key: string, value: string) => void, removeItem: (key: string) => void,
+ *   snapshot: () => Record<string, string> }}
+ */
 function memoryStorage(initial = {}) {
   const items = new Map(Object.entries(initial));
   return { getItem: key => items.get(key) ?? null, setItem: (key, value) => { items.set(key, value); }, removeItem: key => { items.delete(key); },
     snapshot: () => Object.fromEntries(items) };
 }
 
+/** @param {string} title @param {string} body */
 const page = (title, body) => `<!doctype html><meta charset="utf-8"><title>${title}</title>
 <body style="font:16px/1.6 system-ui,sans-serif;max-width:32em;margin:15vh auto;padding:0 16px"><h1 style="font-size:22px">${title}</h1><p>${body}</p></body>`;
 
 /**
  * Wait for one OAuth redirect to http://127.0.0.1:<port>/callback/<state>. Resolves with the authorization code.
  * Requests without this run's random state get 404 and do not end the wait, so another local page cannot cancel it.
+ * @param {{ port: number, state: string, timeoutMs?: number, onListening?: () => void }} options @returns {Promise<string>}
  */
 export function waitForCallback({ port, state, timeoutMs = LOGIN_TIMEOUT_MS, onListening }) {
   if (!/^[a-f0-9]{32}$/.test(state ?? '')) return Promise.reject(new Error('login-callback-failed'));
   return new Promise((resolve, reject) => {
     let settled = false;
+    /** @param {Error | null} error @param {string} [code] */
     const finish = (error, code) => {
       if (settled) return; settled = true; clearTimeout(timer);
       server.close(); server.closeAllConnections?.();
-      if (error) reject(error); else resolve(code);
+      if (error) reject(error); else resolve(/** @type {string} */ (code)); // given with a null error
     };
     const server = createServer((request, response) => {
-      const url = new URL(request.url, `http://127.0.0.1:${port}`);
+      const url = new URL(/** @type {string} */ (request.url), `http://127.0.0.1:${port}`); // always set on a server request
       if (request.method !== 'GET' || url.pathname !== `/callback/${state}`) { response.writeHead(404).end(); return; }
       const code = url.searchParams.get('code'), problem = url.searchParams.get('error_code') ?? url.searchParams.get('error');
       response.writeHead(200, { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store' });
@@ -91,11 +113,12 @@ export function waitForCallback({ port, state, timeoutMs = LOGIN_TIMEOUT_MS, onL
       }
     });
     const timer = setTimeout(() => finish(new Error('login-timeout')), timeoutMs);
-    server.once('error', error => finish(new Error(error.code === 'EADDRINUSE' ? 'login-port-busy' : 'login-callback-failed')));
+    server.once('error', error => finish(new Error(/** @type {NodeJS.ErrnoException} */ (error).code === 'EADDRINUSE' ? 'login-port-busy' : 'login-callback-failed')));
     server.listen(port, '127.0.0.1', () => onListening?.());
   });
 }
 
+/** @param {string} url */
 function openBrowser(url) {
   // Arguments, never a shell string: the URL contains '&'.
   const [command, args] = process.platform === 'win32' ? ['rundll32', ['url.dll,FileProtocolHandler', url]]
@@ -103,11 +126,15 @@ function openBrowser(url) {
   try { spawn(command, args, { stdio: 'ignore', detached: true }).on('error', () => {}).unref(); } catch { /* the URL is printed too */ }
 }
 
+/** @param {string} sessionPath */
 async function readSession(sessionPath) {
   try { return JSON.parse(await readFile(sessionPath, 'utf8')); } catch { return null; }
 }
 
-/** Load the existing session into `auth` for --link. A refresh it causes is saved at once: the old refresh token is spent. */
+/**
+ * Load the existing session into `auth` for --link. A refresh it causes is saved at once: the old refresh token is spent.
+ * @param {SupabaseClient} auth @param {string} sessionPath @param {string} url @param {string} publishableKey
+ */
 async function adoptExistingSession(auth, sessionPath, url, publishableKey) {
   if (!await readSession(sessionPath)) throw new Error('link-session-required');
   return withSessionLock(sessionPath, async () => {
@@ -121,6 +148,10 @@ async function adoptExistingSession(auth, sessionPath, url, publishableKey) {
   });
 }
 
+/**
+ * @param {{ argv?: string[], log?: (message: string) => void, open?: (url: string) => void, createAuthClient?: typeof createClient,
+ *   request?: typeof apiRequest }} [options]
+ */
 export async function login({ argv = process.argv.slice(2), log = console.error, open = openBrowser, createAuthClient = createClient, request = apiRequest } = {}) {
   const sessionPath = defaultSessionPath(), link = argv.includes('--link'), replace = argv.includes('--replace');
   const { url, publishableKey, port } = await projectSettings({ argv, sessionPath });
@@ -142,7 +173,7 @@ export async function login({ argv = process.argv.slice(2), log = console.error,
   return completeSignIn({ auth, code, link, linkedUser, replace, previousUser, sessionPath, url, publishableKey, log, request });
 }
 
-/** Exchange the code, refuse a different user unless asked, write the session file, and report account status. */
+/** Exchange the code, refuse a different user unless asked, write the session file, and report account status. @param {SignIn & { auth: SupabaseClient, code: string }} options */
 async function completeSignIn({ auth, code, ...rest }) {
   const exchanged = await auth.auth.exchangeCodeForSession(code);
   const session = exchanged.data?.session;
@@ -150,7 +181,7 @@ async function completeSignIn({ auth, code, ...rest }) {
   return saveSignIn({ session, ...rest });
 }
 
-/** Refuse a different user unless asked, write the session file, and report account status. */
+/** Refuse a different user unless asked, write the session file, and report account status. @param {SignIn & { session: Session }} options */
 async function saveSignIn({ session, link = false, linkedUser = null, replace, previousUser, sessionPath, url, publishableKey, log, request }) {
   // Linking must keep the same user, or the fighters it owns would no longer be this session's.
   if (link && session.user.id !== linkedUser) throw new Error('link-user-mismatch');
@@ -164,7 +195,7 @@ async function saveSignIn({ session, link = false, linkedUser = null, replace, p
     const result = await request(url, session.access_token, 'me');
     log(result.account?.invited ? '로그인이 확인되었습니다. 사전 승인 없이 선수를 제출할 수 있습니다.'
       : '이 계정은 현재 이용이 제한되어 있습니다. 홈페이지에서 계정 상태를 확인하세요.');
-  } catch (problem) {
+  } catch (/** @type {any} */ problem) {
     log(problem.message === 'route-not-found' ? '서버가 계정 상태 조회를 지원하지 않습니다. 제출할 때 다시 확인합니다.'
       : '계정 상태를 확인하지 못했습니다. 제출할 때 다시 확인합니다.');
   }
@@ -175,6 +206,7 @@ async function saveSignIn({ session, link = false, linkedUser = null, replace, p
 /**
  * Step 1 of a pasted-address login. Starts PKCE with the same allow-listed loopback redirect, saves the verifier and
  * state to a 0600 file beside the session file, prints the Google address, and exits without waiting.
+ * @param {{ argv?: string[], log?: (message: string) => void, createAuthClient?: typeof createClient }} [options]
  */
 export async function startPasteLogin({ argv = [], log = console.error, createAuthClient = createClient } = {}) {
   if (argv.includes('--link')) throw new Error('paste-link-unsupported');
@@ -198,16 +230,21 @@ export async function startPasteLogin({ argv = [], log = console.error, createAu
   return { pendingPath, authorizationUrl: data.url, redirectPrefix: `http://127.0.0.1:${port}/callback/`, expiresInMs: PASTE_LOGIN_TTL_MS };
 }
 
+/** @param {string} sessionPath */
 export const pendingDeviceLoginPath = sessionPath => path.join(path.dirname(sessionPath), 'pending-device-login.json');
 const DEVICE_CODE = /^afd_[a-f0-9]{64}$/, USER_CODE = /^[BCDFGHJKLMNPQRSTVWXZ]{4}-[BCDFGHJKLMNPQRSTVWXZ]{4}$/;
 
-/** An unauthenticated JSON POST to the AI Fighter API (device routes only; no user token exists yet). */
+/**
+ * An unauthenticated JSON POST to the AI Fighter API (device routes only; no user token exists yet).
+ * @param {string} url @param {string} publishableKey @param {string} route @param {object} [body]
+ */
 const devicePost = (url, publishableKey, route, body) => apiRequest(url, publishableKey, route,
   { method: 'POST', body: JSON.stringify(body ?? {}), headers: { apikey: publishableKey, 'content-type': 'application/json' } });
 
 /**
  * Device-connection sign-in, step 1: for a workspace whose 127.0.0.1 callback the user's browser cannot reach.
  * The secret device code stays in a 0600 file here; the printed link carries only the public pairing code.
+ * @param {{ argv?: string[], log?: (message: string) => void, post?: typeof devicePost, page?: string, sessionPath?: string, next?: string }} [options]
  */
 export async function startDeviceLogin({ argv = [], log = console.error, post = devicePost, page = PUBLIC_CREATOR_PAGE,
   sessionPath = defaultSessionPath(), next = '승인한 뒤에는 이 작업 공간에서 npm run login -- --device-wait 를 실행합니다.' } = {}) {
@@ -216,7 +253,7 @@ export async function startDeviceLogin({ argv = [], log = console.error, post = 
   // A second start must not replace the only copy of a request that may already be approved.
   let existing;
   try { existing = JSON.parse(await readFile(pendingPath, 'utf8')); }
-  catch (error) { if (error.code !== 'ENOENT') throw new Error('pending-device-login-invalid'); }
+  catch (/** @type {any} */ error) { if (error.code !== 'ENOENT') throw new Error('pending-device-login-invalid'); }
   if (existing !== undefined) {
     if (existing?.version !== 1 || !Number.isFinite(Date.parse(existing.expiresAt))) throw new Error('pending-device-login-invalid');
     // An approved or redeemed request outlives the pairing code: finish it with --device-wait instead of a new approval.
@@ -225,7 +262,7 @@ export async function startDeviceLogin({ argv = [], log = console.error, post = 
   const { url, publishableKey } = await projectSettings({ argv, sessionPath });
   let started;
   try { started = await post(url, publishableKey, 'device-logins'); }
-  catch (error) {
+  catch (/** @type {any} */ error) {
     // A server without the route predates device login: report it, never fall back to pasting a callback.
     if (error.status === 404 || ['not-found', 'route-not-found'].includes(error.message)) throw new Error('device-login-unavailable');
     if (isTransportCode(error.message)) throw error;
@@ -251,6 +288,8 @@ export async function startDeviceLogin({ argv = [], log = console.error, post = 
 /**
  * Step 2: poll until the user approves, then redeem the one-use magic-link token into a normal session file.
  * Stops at `timeoutSeconds` while still pending (the request stays open for another wait), or at expiry.
+ * @param {{ timeoutSeconds?: number, log?: (message: string) => void, post?: typeof devicePost, request?: typeof apiRequest, sessionPath?: string,
+ *   replace?: boolean, createAuthClient?: typeof createClient, now?: () => number, sleep?: (ms: number) => Promise<unknown> }} [options]
  */
 export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.error, post = devicePost, request = apiRequest,
   sessionPath = defaultSessionPath(), replace = false,
@@ -262,6 +301,7 @@ export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.erro
   const close = () => rm(pendingPath, { force: true });
   // Each step after approval is saved here before the next one runs. The server answers the token only once, so a
   // network failure, or a sign-in that needs --replace, resumes from the saved step instead of a new approval.
+  /** @param {object} change */
   const record = async change => { Object.assign(pending, change); await writeSessionFile(pendingPath, pending); };
   if (pending.session) return finishDeviceLogin({ pending, replace, close, sessionPath, log, request });
   const expiry = Date.parse(pending.expiresAt), deadline = Math.min(expiry, now() + timeoutSeconds * 1000);
@@ -272,14 +312,14 @@ export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.erro
       const reply = await post(pending.url, pending.publishableKey, 'device-logins/token', { deviceCode: pending.deviceCode });
       if (reply?.status === 'approved') answer = reply;
       else if (reply?.status !== 'pending') throw new Error('invalid-api-response');
-    } catch (error) {
+    } catch (/** @type {any} */ error) {
       if (['device-login-expired', 'device-login-consumed', 'device-login-not-found'].includes(error.message)) { await close(); throw new Error(error.message); }
       if (error.message === 'slow-down') interval += 5000;
       else throw error; // Keep the pending file; connectivity recovery resumes this request, never a new login.
     }
     if (answer) break;
     if (now() + interval > deadline) {
-      const error = new Error(now() + interval > expiry ? 'device-login-expired' : 'device-login-pending');
+      const error = /** @type {Error & { retryAfterSeconds?: number }} */ (new Error(now() + interval > expiry ? 'device-login-expired' : 'device-login-pending'));
       error.retryAfterSeconds = Math.ceil(interval / 1000);
       throw error;
     }
@@ -293,7 +333,7 @@ export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.erro
   catch { throw new Error('device-login-redeem-retry'); }
   // Unreachable Auth (status 0 or 5xx) keeps the token for another try; a refused token cannot be used again.
   if (verified.error) {
-    if (verified.error.name === 'AuthRetryableFetchError' || !(verified.error.status >= 400 && verified.error.status < 500)) throw new Error('device-login-redeem-retry');
+    if (verified.error.name === 'AuthRetryableFetchError' || !(/** @type {number} */ (verified.error.status) >= 400 && /** @type {number} */ (verified.error.status) < 500)) throw new Error('device-login-redeem-retry'); // no status: retry
     await close(); throw new Error('device-login-redeem-failed');
   }
   const session = verified.data?.session;
@@ -302,7 +342,11 @@ export async function waitDeviceLogin({ timeoutSeconds = 600, log = console.erro
     user: { id: session.user.id, ...(session.user.email ? { email: session.user.email } : {}) } } });
   return finishDeviceLogin({ pending, replace, close, sessionPath, log, request });
 }
-/** The redeemed session becomes the session file; only then does the pending request go. `--replace` may resume it. */
+/**
+ * The redeemed session becomes the session file; only then does the pending request go. `--replace` may resume it.
+ * @param {{ pending: any, replace: boolean, close: () => Promise<void>, sessionPath: string, log: (message: string) => void, request: typeof apiRequest }} options
+ *   `pending` is the parsed pending-login file, checked by waitDeviceLogin.
+ */
 async function finishDeviceLogin({ pending, replace, close, sessionPath, log, request }) {
   const previousUser = jwtPayload((await readSession(sessionPath))?.accessToken)?.sub ?? null;
   const result = await saveSignIn({ session: pending.session, replace: pending.replace || replace, previousUser, sessionPath, url: pending.url, publishableKey: pending.publishableKey, log, request });
@@ -310,7 +354,7 @@ async function finishDeviceLogin({ pending, replace, close, sessionPath, log, re
   return result;
 }
 
-/** The loopback callback address inside pasted text, bound to the pending state and port; never a bare code. */
+/** The loopback callback address inside pasted text, bound to the pending state and port; never a bare code. @param {unknown} text @param {{ port: number, state: string }} pending */
 export function parsePastedCallback(text, { port, state }) {
   const found = String(text ?? '').match(/https?:\/\/(?:127\.0\.0\.1|localhost)(?::\d+)?\/callback\/[^\s"'<>]*/);
   if (!found) throw new Error('pasted-address-invalid');
@@ -323,7 +367,10 @@ export function parsePastedCallback(text, { port, state }) {
   return code;
 }
 
-/** Step 2: exchange the pasted address with the saved verifier, then write the session exactly as a normal login. */
+/**
+ * Step 2: exchange the pasted address with the saved verifier, then write the session exactly as a normal login.
+ * @param {{ pasted?: string, log?: (message: string) => void, createAuthClient?: typeof createClient, request?: typeof apiRequest, now?: () => number }} [options]
+ */
 export async function finishPasteLogin({ pasted, log = console.error, createAuthClient = createClient, request = apiRequest, now = Date.now } = {}) {
   const sessionPath = defaultSessionPath(), pendingPath = pendingLoginPath(sessionPath);
   const pending = await readSession(pendingPath);
@@ -349,6 +396,7 @@ export async function finishPasteLogin({ pasted, log = console.error, createAuth
 /**
  * End this session on the server, then delete the file. A running MCP process still holds the refresh token in
  * memory; revoking the session on the server is what stops it from refreshing and writing the file back.
+ * @param {{ log?: (message: string) => void, createAuthClient?: typeof createClient }} [options]
  */
 export async function logout({ log = console.error, createAuthClient = createClient } = {}) {
   const sessionPath = defaultSessionPath();
@@ -375,6 +423,7 @@ export async function logout({ log = console.error, createAuthClient = createCli
     : '서버의 세션을 끝내지 못했습니다. 로컬 연결은 해제했으며 다음 MCP 요청부터 로그인이 필요합니다.');
 }
 
+/** @type {Record<string, string>} */
 const messages = {
   'project-url-required': 'Supabase 프로젝트 주소가 필요합니다. AI_FIGHTER_SUPABASE_URL 또는 --url 로 지정하세요.',
   'publishable-key-required': '공개(publishable 또는 anon) 키가 필요합니다. AI_FIGHTER_PUBLISHABLE_KEY 또는 --key 로 지정하세요. 비밀 키와 service_role 키는 받지 않습니다.',
@@ -413,7 +462,7 @@ const messages = {
   'pasted-address-mismatch': '입력한 주소가 이번 로그인과 맞지 않습니다. 가장 최근에 받은 링크로 로그인한 뒤의 주소를 이 터미널에서 입력하세요.',
 };
 
-/** One line typed into this process's own terminal, so the address stays out of argv and shell history. */
+/** One line typed into this process's own terminal, so the address stays out of argv and shell history. @param {string} prompt @returns {Promise<string>} */
 function readTerminalLine(prompt) {
   return new Promise(resolve => {
     const lines = createInterface({ input: process.stdin, output: process.stderr });

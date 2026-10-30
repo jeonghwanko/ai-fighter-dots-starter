@@ -1,3 +1,4 @@
+// @ts-check
 // The same validated project tools in PC and hosted workspaces, without installing a second plugin.
 import { readFile, realpath, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -6,6 +7,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js';
 import { createServer } from '../mcp/server.mjs';
 
+/** @param {{ workspace?: string, name?: string, args?: Record<string, unknown>, contextRequest?: typeof fetch }} [options] */
 export async function creationTool({ workspace, name, args = {}, contextRequest } = {}) {
   if (!workspace || !path.isAbsolute(workspace)) throw Error('absolute-workspace-required');
   const root = await realpath(workspace);
@@ -21,6 +23,7 @@ export async function creationTool({ workspace, name, args = {}, contextRequest 
   } finally { await client.close(); await server.close(); }
 }
 
+/** @param {string[]} argv */
 export async function main(argv) {
   // Arguments are in a JSON file so prompts and shell metacharacters are never executed as code.
   const [operation, workspace, name, input, ...extra] = argv;
@@ -35,7 +38,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     const result = await main(process.argv.slice(2));
     console.log(JSON.stringify(result, null, 2));
     if (result.isError) process.exitCode = 1;
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     // Do not echo file contents, login data or arbitrary server exception text.
     console.error(JSON.stringify({ ok: false, code: /^[a-z][a-z-]+$/.test(error.message) ? error.message : 'workspace-command-failed' }));
     process.exitCode = 1;

@@ -1,3 +1,4 @@
+// @ts-check
 // Decide AI_FIGHTER_CLIENT_IP_SOURCE from evidence: call the deployed client-ip-probe function with and without
 // spoofed headers and report which source (api/client-limit.mjs) a client cannot control.
 //   node scripts/probe-client-ip.mjs https://<project-ref>.supabase.co/functions/v1/client-ip-probe
@@ -13,8 +14,10 @@ const CASES = { plain: {}, forwarded: { 'x-forwarded-for': SPOOF.xff }, cloudfla
  * `echoes`: case name → the probe's JSON, or `{ rejectedByEdge: true }` when the edge refused that spoofed request
  * (Cloudflare answers a client-sent CF-Connecting-IP with 403 `error code: 1000`, seen 2026-10-27). A refused spoof
  * never reaches the function, so it is evidence the client cannot set that header. Pure, so it is tested without a network.
+ * @param {Record<string, { rejectedByEdge?: boolean, cfConnectingIp?: string | null, forwardedFor?: string | null }>} echoes
  */
 export function judge(echoes) {
+  /** @type {Record<string, { trusted: boolean, reason: string | null, seen: Record<string, string | null> }>} */
   const verdicts = {};
   const reached = Object.fromEntries(Object.entries(echoes).filter(([, echo]) => !echo.rejectedByEdge));
   for (const source of ['cf-connecting-ip', 'forwarded-last']) {
@@ -35,6 +38,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
     console.error('Usage: node scripts/probe-client-ip.mjs https://<project-ref>.supabase.co/functions/v1/client-ip-probe');
     process.exit(2);
   }
+  /** @type {Parameters<typeof judge>[0]} */
   const echoes = {};
   for (const [name, headers] of Object.entries(CASES)) {
     const response = await fetch(url, { headers, redirect: 'error', signal: AbortSignal.timeout(15_000) });

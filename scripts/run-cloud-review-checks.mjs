@@ -1,3 +1,4 @@
+// @ts-check
 // Live, non-publishing checks using the explicitly authorized dedicated reviewer.
 // Passwords and OAuth tokens stay in memory; evidence is scrubbed before saving.
 import assert from 'node:assert/strict';
@@ -5,6 +6,14 @@ import { createHash, randomBytes } from 'node:crypto';
 import { readFile, writeFile, mkdir } from 'node:fs/promises';
 import path from 'node:path';
 import { createClient } from '@supabase/supabase-js';
+
+/**
+ * @typedef {{ title: string, tool: string, arguments: Record<string, unknown>, response: any, status: 'passed' }} Step  response: the tool's scrubbed JSON
+ * @typedef {{ endpoint: string, startedAt: string, presentation: string, account: string, steps: Step[], limitations: string[],
+ *   authentication?: string, boundaries?: { unauthenticatedPrivateCall: number, identitySelector: boolean, paymentTools: string[],
+ *   registrationRequiresSubmissionId: unknown, finalPublicationMarkedDestructive: unknown }, status?: 'passed' | 'failed', failure?: string,
+ *   testGrantRevoked?: boolean, finishedAt?: string }} Evidence
+ */
 
 const credentialPath = process.env.ODDBOUT_REVIEW_CREDENTIAL_FILE;
 if (!credentialPath) throw new Error('ODDBOUT_REVIEW_CREDENTIAL_FILE is required');
@@ -23,6 +32,7 @@ if (expectedFighterId || expectedSubmissionId || expectedManifestSha) {
 const client = createClient(supabase, 'sb_publishable_6UkV7tRAQ1P4qss5cTYSwQ_kVxSIv_V', {
   auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
 });
+/** @type {Evidence} */
 const evidence = { endpoint, startedAt: new Date().toISOString(),
   presentation: 'Actual hosted MCP protocol checks, not a ChatGPT conversation recording',
   account: 'Dedicated review account', steps: [], limitations: [
@@ -31,8 +41,10 @@ const evidence = { endpoint, startedAt: new Date().toISOString(),
     'Negative checks verify server boundaries; they do not certify model responses to prompts.'
   ] };
 const out = path.resolve(process.argv[2] || 'output/cloud-review/evidence.json');
-let oauthClient, accessToken, seq = 1;
+let /** @type {string | undefined} */ oauthClient, /** @type {string | undefined} */ accessToken, seq = 1;
+/** @type {(data: unknown) => any} */
 const scrub = data => JSON.parse(JSON.stringify(data).replaceAll(credentials.email, '<REVIEW_ACCOUNT_EMAIL>').replaceAll(credentials.id, '<REVIEW_ACCOUNT_ID>'));
+/** @param {string} method @param {object} params @param {string | null} [token] */
 async function rpc(method, params, token = accessToken) {
   const response = await fetch(endpoint, { method: 'POST', headers: {
     'content-type': 'application/json', accept: 'application/json, text/event-stream',
@@ -40,6 +52,7 @@ async function rpc(method, params, token = accessToken) {
   }, body: JSON.stringify({ jsonrpc: '2.0', id: seq++, method, params }) });
   return { status: response.status, body: await response.json() };
 }
+/** @param {string} title @param {string} tool @param {Record<string, unknown>} args @param {(value: any) => void} verify  value: the tool's JSON result */
 async function step(title, tool, args, verify) {
   const result = await rpc('tools/call', { name: tool, arguments: args });
   assert.equal(result.status, 200);
@@ -64,24 +77,24 @@ try {
   assert.ok(oauthClient, 'No review client ID');
   const verifier = randomBytes(48).toString('base64url'), state = randomBytes(24).toString('base64url');
   const authorize = new URL(discovery.authorization_endpoint);
-  authorize.search = new URLSearchParams({ client_id: oauthClient, redirect_uri: redirectUri, response_type: 'code',
-    scope: 'openid email profile', state, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' });
+  authorize.search = /** @type {any} */ (new URLSearchParams({ client_id: oauthClient, redirect_uri: redirectUri, response_type: 'code',
+    scope: 'openid email profile', state, code_challenge: createHash('sha256').update(verifier).digest('base64url'), code_challenge_method: 'S256' })); // set as its string
   const start = await fetch(authorize, { redirect: 'manual' });
   assert.ok([302,303].includes(start.status), `Review authorization HTTP ${start.status}`);
-  const consent = new URL(start.headers.get('location'));
+  const consent = new URL(/** @type {string} */ (start.headers.get('location')));
   assert.equal(consent.origin, 'https://oddbout.com');
   const authorizationId = consent.searchParams.get('authorization_id');
   assert.ok(authorizationId);
   const details = await client.auth.oauth.getAuthorizationDetails(authorizationId);
   assert.ok(!details.error && details.data, 'Review consent details unavailable');
-  assert.equal(details.data.redirect_uri, redirectUri);
+  assert.equal(/** @type {import('@supabase/supabase-js').OAuthAuthorizationDetails} */ (details.data).redirect_uri, redirectUri);
   const approved = await client.auth.oauth.approveAuthorization(authorizationId, { skipBrowserRedirect: true });
   assert.ok(!approved.error && approved.data?.redirect_url, 'Review consent failed');
   const callback = new URL(approved.data.redirect_url);
   assert.equal(callback.origin + callback.pathname, redirectUri);
   assert.equal(callback.searchParams.get('state'), state);
   const exchanged = await fetch(discovery.token_endpoint, { method: 'POST', headers: { 'content-type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams({
-    grant_type: 'authorization_code', code: callback.searchParams.get('code'), client_id: oauthClient, redirect_uri: redirectUri, code_verifier: verifier,
+    grant_type: 'authorization_code', code: /** @type {string} */ (callback.searchParams.get('code')), client_id: oauthClient, redirect_uri: redirectUri, code_verifier: verifier,
   }) });
   assert.ok(exchanged.ok, `Review token exchange HTTP ${exchanged.status}`);
   accessToken = (await exchanged.json()).access_token;
@@ -95,7 +108,7 @@ try {
   await step('Read fighter requirements', 'get_fighter_spec', { section: 'overview' }, r => assert.equal(r.ok, true));
   await step('List owned fighters', 'list_my_fighters', {}, r => {
     assert.equal(r.ok, true);
-    if (expectedFighterId) assert.deepEqual(r.fighters.map(f => f.id), [expectedFighterId]);
+    if (expectedFighterId) assert.deepEqual(/** @type {any[]} */ (r.fighters).map(f => f.id), [expectedFighterId]);
     else assert.deepEqual(r.fighters, []);
   });
   if (expectedFighterId) {
@@ -133,7 +146,7 @@ try {
   await step('Handle an unknown submission accurately', 'get_fighter_submission', { submissionId: '00000000-0000-4000-8000-000000000000' }, r => {
     assert.equal(r.ok, false); assert.equal(r.code, 'not-found');
   });
-  const tools = (await rpc('tools/list', {})).body.result.tools;
+  const tools = /** @type {any[]} */ ((await rpc('tools/list', {})).body.result.tools);
   const denied = await rpc('tools/call', { name: 'get_profile', arguments: {} }, null);
   assert.equal(denied.status, 401);
   evidence.boundaries = { unauthenticatedPrivateCall: 401,

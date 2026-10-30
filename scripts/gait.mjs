@@ -1,3 +1,4 @@
+// @ts-check
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import { existsSync } from 'node:fs';
@@ -9,21 +10,30 @@ import { walkPlan, loadSequence, combineReview, commonGameRequest, validatePlan,
 import { spritePython } from './sprite-gen.mjs';
 import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 
+/** @typedef {Awaited<ReturnType<typeof loadSequence>> & { sha256: string, measurementFile?: string }} Sequence  loadSequence sets sha256; review, measurementFile. */
+
 const root = fileURLToPath(new URL('../', import.meta.url));
+/** @type {(file: string) => Promise<any>} */
 const json = file => readFile(file, 'utf8').then(JSON.parse);
+/** @type {(file: string, value: unknown) => Promise<void>} */
 const save = (file, value) => writeFile(file, JSON.stringify(value, null, 2) + '\n');
-const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+/** @type {(value: unknown) => string} */
+const escape = value => String(value).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[/** @type {'&' | '<' | '>' | '"' | "'"} */ (c)]);
 
 // A labelled pose guide only, never character artwork or a submitted asset.
+/** @param {{ phases: { index: number, pose: string }[] }} plan */
 export function phaseGuide(plan) {
   const w = 240, h = 290, scale = 0.5;
+  /** @param {number} index @param {number} offset */
   const leg = (index, offset) => {
     const t = (index + offset) % 16, swing = Math.max(0, t - 8) / 8;
     return { x: t <= 8 ? 320 - 16 * t : 192 + 128 * (swing - Math.sin(2 * Math.PI * swing) / (2 * Math.PI)),
       y: t <= 8 ? 450 : 450 - 65 * Math.sin(Math.PI * swing) };
   };
+  /** @param {number} index */
   const pose = index => {
     const hip = { x: 256, y: 315 + 6 * Math.sin(index * Math.PI / 4) }, top = hip.y - 124;
+    /** @param {{ x: number, y: number }} foot @param {string} color */
     const limb = (foot, color) => {
       const dx = foot.x - hip.x, dy = foot.y - hip.y, d = Math.hypot(dx, dy), bend = Math.sqrt(Math.max(0, 80 * 80 - d * d / 4));
       const knee = { x: (hip.x + foot.x) / 2 + dy / d * bend, y: (hip.y + foot.y) / 2 - dx / d * bend };
@@ -35,6 +45,7 @@ export function phaseGuide(plan) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w * columns}" height="${h * rows}" viewBox="0 0 ${w * columns} ${h * rows}"><rect width="100%" height="100%" fill="#f5f7fb"/>${plan.phases.map((p, i) => `<g transform="translate(${i % columns * w},${Math.floor(i / columns) * h})"><text x="12" y="20" font-family="sans-serif" font-size="16">${i}: ${escape(p.pose)}</text>${pose(p.index)}<text x="12" y="272" font-family="sans-serif" font-size="12">Orange: NEAR / Purple: FAR</text></g>`).join('')}</svg>`;
 }
 
+/** @param {string} out */
 export async function init(out) {
   await mkdir(out, { recursive: false });
   const plan = walkPlan();
@@ -49,6 +60,7 @@ export async function init(out) {
   const keyPhases = [0, 4, 8, 12].map(i => plan.phases[i]);
   await sharp(Buffer.from(phaseGuide(plan))).png().toFile(guideFile);
   await sharp(Buffer.from(phaseGuide({ ...plan, phases: keyPhases }))).png().toFile(keysFile);
+  /** @param {string} stage @param {{ pose: string, support: string[] }[]} phases @param {string} file */
   const motion = async (stage, phases, file) => ({ kind: 'walk', stage, phases: phases.map(({ pose, support }) => ({ pose, support })),
     references: [{ role: 'phase-guide', file, sha256: digest(await readFile(file)) }] });
   const request = { version: 1,
@@ -64,6 +76,7 @@ export async function init(out) {
   return { ok: true, out, note: 'Generate and inspect keyposes-request first. Bind the actually reviewed image before sequence generation. The generic walk guide is a phase instruction; adapt proportions to the accepted character.' };
 }
 
+/** @param {string} requestFile @param {string} imageFile @param {string} reviewFile */
 export async function bindKeyposes(requestFile, imageFile, reviewFile) {
   const request = await json(requestFile), review = await json(reviewFile);
   if (!['identity', 'anatomy', 'alternation', 'contacts', 'bodyContinuity'].every(key => review[key] === 'pass') || !review.notes?.trim())
@@ -72,11 +85,15 @@ export async function bindKeyposes(requestFile, imageFile, reviewFile) {
   await sharp(bytes).metadata();
   const states = Object.values(request.states ?? {}).filter(state => state.motion?.stage === 'sequence');
   if (states.length !== 1) throw Error('Bind one motion request at a time');
-  states[0].motion.references = [...states[0].motion.references.filter(ref => ref.role !== 'keyposes'), { role: 'keyposes', file, sha256: digest(bytes), review }];
+  states[0].motion.references = [.../** @type {any[]} */ (states[0].motion.references).filter(ref => ref.role !== 'keyposes'), { role: 'keyposes', file, sha256: digest(bytes), review }];
   await save(requestFile, request);
   return { ok: true, requestFile, note: 'Reference bound to these image bytes. Full sequence motion quality remains unverified.' };
 }
 
+/**
+ * @param {Sequence} sequence @param {{ facing: string }} plan @param {any} stance  An annotation: parsed JSON, checked here.
+ * @param {string} out @param {string} annotationsBase
+ */
 async function measure(sequence, plan, stance, out, annotationsBase) {
   if (!Array.isArray(stance.box) || stance.box.length !== 4 || !stance.box.every(Number.isInteger) ||
       !Number.isInteger(stance.start) || !Number.isInteger(stance.end)) throw Error('Each stance needs integer start/end and box [x,y,width,height].');
@@ -86,9 +103,9 @@ async function measure(sequence, plan, stance, out, annotationsBase) {
     if (typeof stance.footEvidence !== 'string' || !stance.footEvidence.trim()) throw Error('footEvidence must name a reviewed evidence JSON file.');
     args.push('--foot', stance.foot, '--foot-evidence', path.resolve(annotationsBase, stance.footEvidence));
   }
-  args.push('--source', sequence.measurementFile,
+  args.push('--source', /** @type {string} */ (sequence.measurementFile), // review sets it first
     '--contacts', `${stance.start}:${stance.end}`, '--foot-box', stance.box.join(','), '--facing', plan.facing, '--out', out);
-  await new Promise((resolve, reject) => {
+  await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     // A measurement of one stance interval takes seconds; a bound keeps a stuck engine from holding the review forever.
     const child = spawn(spritePython, args, { cwd: root, env: { ...process.env, PYTHONUTF8: '1' }, windowsHide: true, timeout: 5 * 60_000 });
     let error = '';
@@ -96,10 +113,14 @@ async function measure(sequence, plan, stance, out, annotationsBase) {
     child.on('error', reject);
     child.on('close', (code, signal) => code === 0 ? resolve()
       : reject(Error(signal ? `inspect-motion stopped after 5 minutes (${signal})` : 'inspect-motion failed: ' + error.slice(-3000))));
-  });
+  }));
   return json(out);
 }
 
+/**
+ * @param {{ frames: { width: number, height: number, data: Buffer }[], durations: number[] }} sequence
+ * @param {{ label?: string, phases: { pose: string }[], geometry: { groundY: number } }} plan @param {unknown} report @param {string} out
+ */
 export async function preview(sequence, plan, report, out) {
   const images = await Promise.all(sequence.frames.map(f => sharp(f.data, { raw: { width: f.width, height: f.height, channels: 4 } }).png().toBuffer()));
   const data = { images: images.map(b => 'data:image/png;base64,' + b.toString('base64')), durations: sequence.durations, plan, report };
@@ -120,8 +141,9 @@ export async function preview(sequence, plan, report, out) {
   await sharp({ create: { width: cellW * columns, height: cellH * Math.ceil(images.length / columns), channels: 4, background: '#e7ecf2' } }).composite(tiles).png().toFile(path.join(out, 'contact-sheet.png'));
 }
 
+/** @param {string} planFile @param {string} out @param {string} [annotationsFile] */
 async function review(planFile, out, annotationsFile) {
-  const plan = await json(planFile), sequence = await loadSequence(plan.source, path.dirname(path.resolve(planFile)));
+  const plan = await json(planFile), sequence = /** @type {Sequence} */ (await loadSequence(plan.source, path.dirname(path.resolve(planFile))));
   validatePlan(plan, sequence);
   await mkdir(out, { recursive: true });
   const annotations = annotationsFile ? await json(annotationsFile) : null, reports = [];
@@ -135,7 +157,7 @@ async function review(planFile, out, annotationsFile) {
   sequence.measurementFile = path.join(snapshotDir, 'sequence.json');
   await save(sequence.measurementFile, { kind: 'sprite-gen-asset', version: 1, frames: sequence.frames.map((_, i) => ({ file: `${i}.png`, duration: sequence.durations[i] / 1000 })) });
   for (const [i, stance] of (annotations?.stances ?? []).entries()) reports.push(await measure(sequence, plan, stance,
-    path.resolve(out, `stance-${i}.json`), path.dirname(path.resolve(annotationsFile))));
+    path.resolve(out, `stance-${i}.json`), path.dirname(path.resolve(/** @type {string} */ (annotationsFile))))); // stances come from it
   const report = combineReview(sequence, plan, annotations, reports);
   await save(path.join(out, 'review.json'), report);
   await save(path.join(out, 'annotations-template.json'), { version: 1, sequenceSha256: sequence.sha256,
@@ -149,6 +171,7 @@ async function review(planFile, out, annotationsFile) {
  * (the final game pack), strip (the cut's strip.json from video-loop / video-cycle-align), verdict (the judge's JSON: identity, anatomy,
  * loop, notes), judge (who judged), stridePixels (walk) }.
  */
+/** @param {string} configFile @param {string} out */
 async function writeLoopReview(configFile, out) {
   const config = await json(configFile), base = path.dirname(path.resolve(configFile));
   const sequence = await loadSequence(config.source, base);
@@ -160,9 +183,10 @@ async function writeLoopReview(configFile, out) {
 
 /** One `sprite-gen scale-check` run. Exit 1 with a report is a finished measurement with frames left for an eye check; exit 1
  * without one is a refusal (the report is removed first, so an earlier run's report can never stand in for this one). */
+/** @param {{ report: string, args: string[] }} run */
 async function runScaleCheck(run) {
   await rm(run.report, { force: true });
-  await new Promise((resolve, reject) => {
+  await /** @type {Promise<void>} */ (new Promise((resolve, reject) => {
     const child = spawn(spritePython, ['-m', 'sprite_gen.cli', ...run.args],
       { cwd: root, env: { ...process.env, PYTHONUTF8: '1' }, windowsHide: true, timeout: 30 * 60_000 });
     let error = '';
@@ -170,7 +194,7 @@ async function runScaleCheck(run) {
     child.on('error', reject);
     child.on('close', (code, signal) => code === 0 || (code === 1 && existsSync(run.report)) ? resolve()
       : reject(Error(signal ? `scale-check stopped after 30 minutes (${signal})` : 'scale-check failed: ' + error.slice(-3000))));
-  });
+  }));
   return json(run.report);
 }
 
@@ -181,11 +205,13 @@ async function runScaleCheck(run) {
  * could not measure stops the request until someone looks at the board and gives `scaleCheck.fix`, keyed by asset id
  * (`"walk"` for a cycle, `"combo/2"` for one frame, `"combo"` for every frame of a clip).
  */
+/** @param {string} configFile @param {string} out */
 export async function gameRequest(configFile, out) {
   const config = await json(configFile), base = path.dirname(path.resolve(configFile)), outDir = path.dirname(path.resolve(out));
   // a request this command made before must not outlive a run that stops: game-pack would pack it
   await rm(out, { force: true }); await rm(out + '.scale.json', { force: true });
   const result = await commonGameRequest(config, base); // the request's own checks come before minutes of measuring
+  /** @type {false | string[]} */
   let scaleCheck = false;
   if (config.scaleCheck !== false) {
     const errors = scaleCheckConfigErrors(config);
@@ -193,12 +219,12 @@ export async function gameRequest(configFile, out) {
     if (!existsSync(spritePython)) throw Error('Run npm run sprite:setup first: game-request measures frames with the bundled sprite-gen.');
     const runs = scaleCheckRuns(config, base, out), reports = [];
     for (const run of runs) reports.push(await runScaleCheck(run));
-    const { entries, unsettled, errors: fixErrors } = scaleCheckEntries(config, base, runs, reports, outDir);
+    const { entries, unsettled, errors: fixErrors } = /** @type {{ entries: Record<string, object>, unsettled: string[], errors: string[] }} */ (scaleCheckEntries(config, base, runs, reports, outDir));
     if (fixErrors.length) return { ok: false, code: 'SCALE_CHECK_CONFIG', errors: fixErrors };
     if (unsettled.length) return { ok: false, code: 'SCALE_CHECK_EYE_CHECK', unsettled, boards: runs.map(run => run.board),
       reports: runs.map(run => run.report),
       next: 'Look at the boards; give scaleCheck.fix in the config by asset id ("walk" for a cycle, "combo/2" for one frame), then run game-request again.' };
-    result.request.assets.forEach(asset => { asset.scale_check = entries[asset.id]; });
+    result.request.assets.forEach(asset => { /** @type {Record<string, unknown>} */ (asset).scale_check = entries[asset.id]; });
     result.note = 'One measured neutral reference scale, and every frame brought to the reference figure size by scale-check (head-measured). Shared canvas is checked; anatomy still needs visual review.';
     scaleCheck = runs.map(run => path.relative(outDir, run.report));
   }
@@ -208,6 +234,7 @@ export async function gameRequest(configFile, out) {
   return { ok: true, out, referenceBodyHeight: result.referenceBodyHeight, scaleCheck };
 }
 
+/** @param {string[]} args */
 async function main(args) {
   const [command, first, second, third] = args;
   if (command === 'init' && first) return init(first);

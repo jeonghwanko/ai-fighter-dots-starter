@@ -146,16 +146,10 @@ GET /duels/:id는 완료 결과를, GET /rankings는 승인 선수 최대 20명�
 `af_settings.paused`는 새 경기 예약도 중단한다. 이 상한은 기존 프로젝트의 모든 비용을 보장하거나
 공개 서비스의 남용 방지를 대신하지 않는다. 현재는 소수의 승인 선수로 시험하는 베타다.
 
-테스트용 두 번째 패키지를 만들고 Dot에 노출되는 실제 stdio MCP로 제출하는 예:
-
-```powershell
-node scripts/create-example.mjs output/challenger-bot challenger
-$env:AI_FIGHTER_CLIENT_CONFIG = 'C:/private/ai-fighter/second-creator.json'
-node scripts/submit-sample.mjs output/challenger-bot/fighter.json
-```
-
-다른 초대 제작자 세션이 필요하다. 제작자당 선수 1명 제한은 유지한다.
-검증 작업자가 실행 중이어야 등록이 완료된다. 스크립트는 요청 키를 보존하므로 같은 명령의 재시도는 중복 등록하지 않는다.
+테스트용 두 번째 패키지는 `node scripts/create-example.mjs output/challenger-bot challenger`로 만들고,
+다른 초대 제작자 세션에서 Dot에 노출되는 실제 stdio MCP의 제출 도구로 제출한다. 베타 때 이 제출을 대신하던
+`scripts/submit-sample.mjs`는 2026-10-30에 지웠다(git 기록에 있다). 제작자당 선수 1명 제한은 유지한다.
+검증 작업자가 실행 중이어야 등록이 완료된다.
 등록 성공은 대결 승인을 뜻하지 않는다. 운영자는 검증한 해시에만 별도 승인한다.
 
 게임 연결 흐름:
@@ -241,12 +235,8 @@ MCP는 유효한 접근 토큰을 추가 인증 요청 없이 다시 쓴다. 만
 `<파일>.lock`을 잡은 프로세스 하나만 갱신한다. 30초 넘은 잠금은 비정상 종료의 흔적으로 보고 지운다.
 업로드·다운로드 제한 시간은 30초에 64 KiB당 1초를 더한다.
 갱신이 취소되었으면 다시 로그인해야 한다.
-검증용 두 계정과 작업자 토큰을 만드는 스크립트는
-[provision-test-accounts.mjs](../scripts/provision-test-accounts.mjs)다.
-이는 테스트 계정용 운영자 도구이며 일반 사용자 로그인 기능이 아니다.
-운영자 환경 변수 `SUPABASE_URL`, `SUPABASE_SECRET_KEY`, `SUPABASE_PUBLISHABLE_KEY`,
-`AI_FIGHTER_PRIVATE_DIR`가 필요하다. 출력 폴더는 새 폴더여야 하며 이 스크립트를 MCP에 연결하지 않는다.
-Windows에서는 폴더의 상속 ACL도 제거하고 현재 OS 계정만 접근하도록 설정한다.
+베타 때 검증용 두 계정과 작업자 토큰을 만들던 운영자 도구 `scripts/provision-test-accounts.mjs`는
+2026-10-30에 지웠다(git 기록에 있다). 일반 사용자 로그인 기능이 아니었다.
 
 ```powershell
 $env:AI_FIGHTER_CLIENT_CONFIG = 'C:/private/ai-fighter/client.json'
@@ -453,15 +443,8 @@ OS 격리, 자동 정리·복구 운영은 후속 검증이다.
 
 이후 같은 패키지를 `arena-player-v1`로 승인하여 로컬 게임에서 목록·선택·입장·조작·피해·KO 승리까지 시험했다.
 결과는 서버 선수 ID로 한 번만 저장됐고 새로고침 후 유지됐다. 공개 샘플 시험은 승인·전달 경계를 포함해 33개 통과했다.
-배포 후 읽기 전용 검증은 아래처럼 실행한다. 소유자의 `AI_FIGHTER_CLIENT_CONFIG`도 지정하면
-실제 stdio MCP의 선수 조회·제출 조회가 같은 승인 상태를 반환하는지 함께 확인한다.
-
-```powershell
-$env:AI_FIGHTER_API_BASE = 'https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fighter'
-$env:AI_FIGHTER_TEST_ID = 'APPROVED_FIGHTER_UUID'
-node scripts/live-roster-test.mjs
-```
-
+베타 배포 후에는 읽기 전용 검증 `scripts/live-roster-test.mjs`(2026-10-30에 지움, git 기록에 있다)로
+실제 stdio MCP의 선수 조회·제출 조회가 같은 승인 상태를 반환하는지도 확인했다.
 이 시험은 공개 목록, 동일 해시의 JSON, 필수 파일 11개의 실제 바이트·해시와 MCP 승인 조회를 통과했다.
 
 같은 날 로컬 AI Fighter의 실제 GPU WebGL 경기에서 Sparring Bot의 자동 조종도 검증했다.

@@ -1,10 +1,13 @@
+// @ts-check
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { buildCloudPluginSite } from './build-cloud-plugin-site.mjs';
 const root = fileURLToPath(new URL('../', import.meta.url));
+/** @param {string} output */
 export async function buildCloudConnect(output) {
+  /** @type {(source: string, target: string) => Promise<void>} */
   const copyText = async (source, target) => writeFile(target, (await readFile(source, 'utf8')).replaceAll('\r\n', '\n'));
   await mkdir(join(output, 'cloud-connect'), { recursive: true });
   let html = (await readFile(join(root, 'web/cloud-connect/connect.html'), 'utf8')).replaceAll('\r\n', '\n');

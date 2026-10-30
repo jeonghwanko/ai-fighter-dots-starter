@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // 커뮤니티 생성 호스트 (H2, 2026-10-28): a creator's own Linux PC and subscriptions make the fighters other creators ask of him.
 // `npm run host -- <command>`; host:setup, host:login and host:start are shortcuts. The generator is host/ (og, the worker, its
 // stages, motions.py) — the same files ODDBOUT's own PC runs. This file applies to host, installs the generator into its own
@@ -15,6 +16,16 @@ import { JOIN_CODE } from '../api/generations.mjs';
 import { readProject } from '../mcp/connection-readiness.mjs';
 import { defaultSessionPath, login, startDeviceLogin, waitDeviceLogin } from './login.mjs';
 
+/**
+ * @typedef {{ code: number, output: string }} OgResult
+ * @typedef {{ missing: string[], warnings: string[], python: string, toolPath: string, gpu?: boolean }} SystemCheck
+ * @typedef {{ root: string, out: (line: string) => void, hostDir?: string, request: import('../api/client.mjs').RemoteClient['request'],
+ *   apiBase: () => Promise<string>, og: (args: string[], options?: { stdin?: string, capture?: boolean }) => Promise<OgResult>,
+ *   system: () => SystemCheck, linger: () => boolean, project: () => Promise<import('../mcp/connection-readiness.mjs').Project | null>,
+ *   join: (code: string) => Promise<{ name: string, key: string, apiBase: string, approved: boolean }>,
+ *   signin: { browser: (argv: string[]) => Promise<unknown>, startDevice: (argv: string[]) => Promise<unknown>, waitDevice: (replace: boolean) => Promise<unknown> } }} HostDeps
+ */
+
 const KIT = fileURLToPath(new URL('../', import.meta.url));
 /** What a host's install runs; tests and the operator's installer stay in the checkout. */
 export const HOST_FILES = Object.freeze(['og', 'generation-worker.mjs', 'generation-stages.mjs', 'sprite-outcome.mjs', 'ledger-report.mjs', 'motions.py']);
@@ -23,9 +34,13 @@ const SYSTEM_DIRS = new Set(['/usr/local/bin', '/usr/bin', '/bin']);
 
 export const defaultRoot = (env = process.env) =>
   env.ODDBOUT_HOST_ROOT || path.join(env.XDG_DATA_HOME || path.join(homedir(), '.local', 'share'), 'oddbout-host');
+/** @type {(root: string) => boolean} */
 export const installed = root => existsSync(path.join(root, 'host.env')) && existsSync(path.join(root, 'bin', 'og'));
 
-/** `KEY=value` lines og reads one key at a time (never sourced). Values are checked here: og puts some on PATH. */
+/**
+ * `KEY=value` lines og reads one key at a time (never sourced). Values are checked here: og puts some on PATH.
+ * @param {{ nodeBin: string, python?: string, toolPath?: string, slots?: number, memory?: string }} options
+ */
 export function hostEnv({ nodeBin, python = '', toolPath = '', slots = 3, memory = '8G' }) {
   const dir = /^\/[^:\n=]*$/;
   if (!dir.test(nodeBin) || (python && !dir.test(python)) || (toolPath && !toolPath.split(':').every(d => dir.test(d)))) throw new Error('host-env-path');
@@ -33,11 +48,12 @@ export function hostEnv({ nodeBin, python = '', toolPath = '', slots = 3, memory
   return ['# Written by npm run host:setup (scripts/host.mjs). og reads these keys one by one; it never sources this file.',
     `NODE_BIN=${nodeBin}`, `PYTHON=${python}`, `TOOL_PATH=${toolPath}`, `SLOTS=${slots}`, `MEMORY=${memory}`, ''].join('\n');
 }
+/** @param {string} text */
 export function readHostEnv(text) {
   return Object.fromEntries(text.split('\n').filter(line => /^[A-Z_]+=/.test(line)).map(line => [line.slice(0, line.indexOf('=')), line.slice(line.indexOf('=') + 1)]));
 }
 
-/** The install's generator files from this checkout's host/, line endings made Unix (a Windows checkout writes CRLF). */
+/** The install's generator files from this checkout's host/, line endings made Unix (a Windows checkout writes CRLF). @param {string} root @param {string} [from] */
 export async function installFiles(root, from = path.join(KIT, 'host')) {
   await mkdir(path.join(root, 'bin'), { recursive: true, mode: 0o700 });
   for (const name of HOST_FILES) {
@@ -50,7 +66,7 @@ export async function installFiles(root, from = path.join(KIT, 'host')) {
   }
 }
 
-/** Job folders without `.closed`: og setup refuses to change the kit under them, and so does an update. */
+/** Job folders without `.closed`: og setup refuses to change the kit under them, and so does an update. @param {string} root */
 export function openJobs(root) {
   const output = path.join(root, 'kit', 'output');
   if (!existsSync(output)) return [];
@@ -58,20 +74,23 @@ export function openJobs(root) {
     .filter(d => existsSync(path.join(output, d.name, 'request.json')) && !existsSync(path.join(output, d.name, '.closed'))).map(d => d.name);
 }
 
-/** `og health` output → both providers ready? */
+/** `og health` output → both providers ready? @type {(output: string) => boolean} */
 export const healthy = output => /^og: codex ok\b/m.test(output) && /^og: grok ok\b/m.test(output);
 
+/** @type {(name: string) => string} */
 const which = name => {
   const found = spawnSync('bash', ['-c', 'command -v -- "$1"', '_', name], { encoding: 'utf8' });
   return found.status === 0 ? found.stdout.trim() : '';
 };
+/** @type {(command: string, args: string[]) => boolean} */
 const works = (command, args) => spawnSync(command, args, { encoding: 'utf8', timeout: 20_000 }).status === 0;
 
 /** What this PC lacks for the generator (sprite-gen's setup and og's own tools), and what only deserves a warning. */
 export function checkSystem({ find = which, run = works, platform = process.platform, node = process.versions.node, memory = totalmem() } = {}) {
-  const missing = [], warnings = [];
+  const missing = /** @type {string[]} */ ([]), warnings = /** @type {string[]} */ ([]);
   if (platform !== 'linux') return { missing: ['Linux (이 꾸러미는 Linux 전용이다 — systemd 사용자 서비스와 flock을 쓴다)'], warnings, python: '', toolPath: '' };
   if (Number(node.split('.')[0]) < 22) missing.push(`Node 22 이상(지금 ${node})`);
+  /** @type {Record<string, string>} */
   const tools = {};
   for (const name of ['bash', 'git', 'zip', 'unzip', 'flock', 'timeout', 'systemd-run', 'systemctl', 'ffmpeg', 'ffprobe', 'img2webp']) {
     tools[name] = find(name);
@@ -94,7 +113,9 @@ export function checkSystem({ find = which, run = works, platform = process.plat
   return { missing, warnings, python, toolPath, gpu };
 }
 
+/** @type {(args: string[], name: string) => string | undefined} */
 const flag = (args, name) => { const i = args.indexOf(name); return i >= 0 ? args[i + 1] : undefined; };
+/** @type {Record<string, string>} */
 const MESSAGES = {
   'client-sign-in-required': 'ODDBOUT 로그인이 필요하다: npm run host -- signin (브라우저가 없으면 --device)',
   // The device sign-in's ends, in this command's words (the kit's own say npm run login).
@@ -117,6 +138,7 @@ const MESSAGES = {
   'host-env-limits': '--slots 는 2 또는 3, --memory 는 4G~64G 다.',
   'host-env-path': 'node·Python·도구 경로에 쌍점(:)이나 줄바꿈이 있다. 다른 곳에 설치된 것을 쓴다.',
 };
+/** @type {(error: Error) => string} */
 const explain = error => MESSAGES[error.message] ?? `요청 실패: ${error.message}`;
 
 export const USAGE = `npm run host -- <명령>   (커뮤니티 생성 호스트, docs/GENERATION-HOST.md)
@@ -140,10 +162,12 @@ export const USAGE = `npm run host -- <명령>   (커뮤니티 생성 호스트,
  * One command. deps: root, out(line), request(route, { method, body }) (the creator's API session, throws Error(code)),
  * apiBase() (the session's https …/functions/v1/ai-fighter), og(args, { stdin, capture }) → { code, output }, system() (checkSystem),
  * linger() → boolean, project() (deploy/creator-site.json, readProject), signin { browser(argv), startDevice(argv), waitDevice(replace) }.
+ * @param {string[]} argv @param {HostDeps} deps @returns {Promise<number>}
  */
 export async function runHost(argv, deps) {
   const { root, out, og } = deps;
   const [command = 'help', ...args] = argv;
+  /** @param {string} route @param {string} [method] @param {object} [body] */
   const api = async (route, method = 'GET', body) => deps.request(route, { method, ...(body ? { body: JSON.stringify(body), headers: { 'content-type': 'application/json' } } : {}) });
   const needInstall = () => { if (installed(root)) return true; out(`이 PC에 설치가 없다(${root}): npm run host:setup`); return false; };
   // Both subscriptions answered, then the user unit. Approval is not needed: not approved, the worker makes its owner's own requests.
@@ -156,6 +180,7 @@ export async function runHost(argv, deps) {
     out('워커가 켜졌다. 1분 안에 사이트의 내 호스트가 온라인이 된다. 내 선수 신청에서 "내 PC"를 고를 수 있다.');
     return 0;
   }
+  /** @param {any} host  The API's host record, or none. */
   const showHost = host => out(host
     ? `호스트 ${host.name} (${host.id}) — ${host.approved ? '승인됨' : '승인 대기'}, ${host.enabled ? '켜짐' : '꺼짐(pause)'}, 아무 호스트 신청 ${host.acceptsAny ? '받음' : '안 받음'}, `
       + `하루 한도 ${host.dailyLimit}${host.todayLeft != null ? `·오늘 남은 ${host.todayLeft}` : ''}, ${host.online ? '온라인' : '오프라인'}, 과금 ${host.billing}`
@@ -171,7 +196,7 @@ export async function runHost(argv, deps) {
         if (args.includes('--device')) {
           // A link made before (this command stopped, the terminal closed) is waited on again, not replaced: it may be approved already.
           try { await deps.signin.startDevice(flags); }
-          catch (error) { if (error.message !== 'device-login-already-pending') throw error; out('앞서 만든 승인 링크(10분 유효)를 이어서 기다린다.'); }
+          catch (/** @type {any} */ error) { if (error.message !== 'device-login-already-pending') throw error; out('앞서 만든 승인 링크(10분 유효)를 이어서 기다린다.'); }
           await deps.signin.waitDevice(args.includes('--replace'));
         }
         else await deps.signin.browser([...flags, ...args.filter(a => a === '--replace')]);
@@ -195,7 +220,7 @@ export async function runHost(argv, deps) {
         return 0;
       }
       case 'status': {
-        try { showHost((await api('generations/host')).host); } catch (error) { out(explain(error)); }
+        try { showHost((await api('generations/host')).host); } catch (/** @type {any} */ error) { out(explain(error)); }
         if (installed(root)) {
           out((await og(['status'], { capture: true })).output.trim());
           out((await og(['worker', 'status'], { capture: true })).output.split('\n').slice(0, 3).join('\n').trim());
@@ -307,20 +332,24 @@ export async function runHost(argv, deps) {
         }
         if (installed(root)) await og(['worker', 'uninstall'], { capture: true });
         try { await api('generations/host/keys', 'DELETE'); await api('generations/host', 'PATCH', { enabled: false }); }
-        catch (error) { out(`서버 쪽은 하지 못했다(${explain(error)}) — 열쇠는 90일 뒤 저절로 끝난다.`); }
+        catch (/** @type {any} */ error) { out(`서버 쪽은 하지 못했다(${explain(error)}) — 열쇠는 90일 뒤 저절로 끝난다.`); }
         await rm(root, { recursive: true, force: true });
         out(`${root} 를 지웠다.`);
         return 0;
       }
       default: out(USAGE); return command === 'help' ? 0 : 1;
     }
-  } catch (error) { out(explain(error)); return 1; }
+  } catch (/** @type {any} */ error) { out(explain(error)); return 1; }
 }
 
-/** og in the install, its output to the terminal or captured; stdin only when given. */
+/**
+ * og in the install, its output to the terminal or captured; stdin only when given.
+ * @param {string} root @param {string[]} args @param {{ stdin?: string, capture?: boolean }} [options] @returns {Promise<OgResult>}
+ */
 function runOg(root, args, { stdin, capture = false } = {}) {
   return new Promise(resolve => {
-    const child = spawn(path.join(root, 'bin', 'og'), args, { stdio: [stdin === undefined ? 'inherit' : 'pipe', capture ? 'pipe' : 'inherit', capture ? 'pipe' : 'inherit'] });
+    // Its streams are used only where piped.
+    const child = /** @type {import('node:child_process').ChildProcessWithoutNullStreams} */ (spawn(path.join(root, 'bin', 'og'), args, { stdio: [stdin === undefined ? 'inherit' : 'pipe', capture ? 'pipe' : 'inherit', capture ? 'pipe' : 'inherit'] }));
     let output = '';
     if (capture) { child.stdout.on('data', d => { output += d; }); child.stderr.on('data', d => { output += d; }); }
     if (stdin !== undefined) child.stdin.end(stdin);
@@ -334,6 +363,7 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
   const root = path.resolve(at >= 0 ? argv[at + 1] : defaultRoot());
   if (at >= 0) argv.splice(at, 2);
   const sessionPath = defaultSessionPath();
+  /** @type {import('../api/client.mjs').RemoteClient | undefined} */
   let remote;
   runHost(argv, {
     root, out: line => console.log(line), hostDir: path.join(KIT, 'host'),

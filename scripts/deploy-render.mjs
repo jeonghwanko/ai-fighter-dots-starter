@@ -1,3 +1,4 @@
+// @ts-check
 import { fileURLToPath } from 'node:url';
 import { git, waitForJson } from './hosting-lib.mjs';
 
@@ -13,7 +14,7 @@ if (option === '--dry-run') {
   console.log(JSON.stringify({ status: 'verified-only', commit, service: 'ai-fighter-validator' }));
 } else {
   let hook;
-  try { hook = new URL(process.env.AI_FIGHTER_RENDER_DEPLOY_HOOK); } catch { throw new Error('Missing Render deploy hook'); }
+  try { hook = new URL(/** @type {string} */ (process.env.AI_FIGHTER_RENDER_DEPLOY_HOOK)); } catch { throw new Error('Missing Render deploy hook'); }
   if (hook.origin !== 'https://api.render.com' || hook.pathname !== '/deploy/srv-dbbohr8m7kps73flja7g' ||
       hook.username || hook.password || !hook.searchParams.get('key')) throw new Error('Unexpected Render deploy hook');
   hook.searchParams.set('ref', commit);

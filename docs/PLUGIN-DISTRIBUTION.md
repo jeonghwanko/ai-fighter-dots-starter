@@ -63,7 +63,6 @@ in the attempt directory. It performs no dependency installation, login, generat
 
 The ZIP has `launcher.mjs` at its root; this helper extracts it as `<destination>/plugin/launcher.mjs`.
 Initialize a separate per-user runtime/workspace and run `--status`, then install locked dependencies explicitly.
-The existing `check-plugin-bundle.mjs <destination>/plugin` exercises an isolated install without generation.
 Windows/local extraction is not evidence of a successful Dots VM download or Library recovery.
 See [ENVIRONMENT-ONBOARDING.md](ENVIRONMENT-ONBOARDING.md#library-전송-장애-이후의-전달-계획-2026-10-26)
 for the phased plan and the separate, not-yet-implemented private user-file path.

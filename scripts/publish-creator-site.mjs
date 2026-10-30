@@ -1,3 +1,4 @@
+// @ts-check
 import { cp, mkdtemp, readdir, realpath, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { resolve, join, dirname } from 'node:path';
@@ -28,6 +29,7 @@ if (option === '--dry-run') {
       if (!Array.isArray(keys) || !keys.some(key => key.startsWith('ssh-ed25519 '))) throw new Error('Missing GitHub SSH host keys');
       await writeFile(keyFile, process.env.AI_FIGHTER_PAGES_DEPLOY_KEY + '\n', { mode: 0o600 });
       await writeFile(hostsFile, keys.map(key => `github.com ${key}\n`).join(''));
+      /** @type {(path: string) => string} */
       const quote = path => "'" + path.replaceAll('\\', '/').replaceAll("'", "'\\''") + "'";
       process.env.GIT_SSH_COMMAND = `ssh -i ${quote(keyFile)} -o IdentitiesOnly=yes -o StrictHostKeyChecking=yes -o UserKnownHostsFile=${quote(hostsFile)}`;
       delete process.env.AI_FIGHTER_PAGES_DEPLOY_KEY;

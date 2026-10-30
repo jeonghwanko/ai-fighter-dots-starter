@@ -15,13 +15,11 @@ const instruction = '링크를 열어 본인 Google 계정으로 로그인하고
 
 /**
  * @typedef {{ remote?: import('../api/client.mjs').RemoteClient, root?: string, sessionPath?: string, probe?: typeof import('./connection-readiness.mjs').probePublic,
- *   start?: StartLogin, wait?: typeof waitDeviceLogin, page?: string }} ConnectionOptions
- * @typedef {(options: { sessionPath: string, argv: string[], page: string, log: () => void }) => Promise<unknown>} StartLogin
- *   startDeviceLogin as used here; scripts/login.mjs's untyped `argv = []` reads as never[].
+ *   start?: typeof startDeviceLogin, wait?: typeof waitDeviceLogin, page?: string }} ConnectionOptions
  */
 /** @param {ConnectionOptions} [options] */
 export function connectionHandler({ remote, root = kitRoot, sessionPath = defaultSessionPath(), probe,
-  start = /** @type {StartLogin} */ (startDeviceLogin), wait = waitDeviceLogin, page = PUBLIC_CREATOR_PAGE } = {}) {
+  start = startDeviceLogin, wait = waitDeviceLogin, page = PUBLIC_CREATOR_PAGE } = {}) {
   let busy = false;
   const status = () => checkLogin({ root, sessionPath, probe, remoteActive: Boolean(remote), request: remote?.request });
   const preview = async () => {

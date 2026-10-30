@@ -1,12 +1,15 @@
+// @ts-check
 // Offline evidence-record check only: no generation, upload, tool discovery or retry.
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+/** @param {unknown} value */
 const text = value => typeof value === 'string' && value.trim().length > 0;
 const limitation = 'Checks record consistency only; does not authenticate evidence references or verify live generation, model support, account identity, display, pixels or user feedback.';
 const scope = { evidenceScope: 'record-only', limitation };
 
+/** @param {any} record read from disk: checked here @param {{ phase: string, conversationId: string }} options */
 export function checkCreationDelivery(record, { phase, conversationId }) {
   if (!['preflight', 'review'].includes(phase) || !text(conversationId)) throw Error('Phase and current conversation ID are required');
   const blockers = [];
@@ -50,15 +53,16 @@ export function checkCreationDelivery(record, { phase, conversationId }) {
     blockers, ...scope };
 }
 
+/** @param {string[]} args */
 export async function main(args) {
   if (args.length !== 3) throw Error('Usage: npm run creation:delivery -- <preflight|review> <record.json> <current-conversation-id>');
   const [phase, file, conversationId] = args;
   const result = checkCreationDelivery(JSON.parse(await readFile(file, 'utf8')), { phase, conversationId });
   console.log(JSON.stringify(result, null, 2));
-  return (phase === 'preflight' ? result.ready : result.canAdvanceAppearance) ? 0 : 1;
+  return (phase === 'preflight' ? /** @type {{ ready: boolean }} */ (result).ready : /** @type {{ canAdvanceAppearance: boolean }} */ (result).canAdvanceAppearance) ? 0 : 1;
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try { process.exitCode = await main(process.argv.slice(2)); }
-  catch (error) { console.error(error.message); process.exitCode = 2; }
+  catch (/** @type {any} */ error) { console.error(error.message); process.exitCode = 2; }
 }

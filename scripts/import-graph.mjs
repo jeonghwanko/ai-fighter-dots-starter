@@ -1,3 +1,4 @@
+// @ts-check
 // The plugin bundle's import graph. The specifier parser lives in edge-bundle.mjs, which must stay a standalone file
 // (the game's Edge deploy stages it alone); both bundles share it so a file list cannot miss a module form.
 import { access, readFile } from 'node:fs/promises';
@@ -7,7 +8,7 @@ import { importSpecifiers } from './edge-bundle.mjs';
 const SCRIPT = /\.(?:mjs|js|ts)$/;
 
 export { importSpecifiers };
-/** The npm package a bare specifier names (`@scope/name/sub` → `@scope/name`), or null for `node:` builtins. */
+/** The npm package a bare specifier names (`@scope/name/sub` → `@scope/name`), or null for `node:` builtins. @type {(specifier: string) => string | null} */
 export const packageName = specifier => specifier.startsWith('node:') ? null
   : specifier.split('/').slice(0, specifier.startsWith('@') ? 2 : 1).join('/');
 
@@ -15,11 +16,12 @@ export const packageName = specifier => specifier.startsWith('node:') ? null
  * Every repository-relative file reachable from `entries` through relative imports, entries included.
  * Non-script entries (docs, JSON, Python) are kept as given. Returns the sorted closure and the bare specifiers seen.
  * A relative import that leaves `root` or names a missing file fails here, before anything is copied or deployed.
+ * @param {string} root @param {string[]} entries
  */
 export async function importClosure(root, entries) {
   const seen = new Set(), bare = new Set(), pending = [...entries];
   while (pending.length) {
-    const file = pending.pop();
+    const file = /** @type {string} */ (pending.pop());
     if (seen.has(file)) continue;
     seen.add(file);
     if (!SCRIPT.test(file)) continue;

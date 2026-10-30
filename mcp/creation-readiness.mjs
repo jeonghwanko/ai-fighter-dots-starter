@@ -25,7 +25,6 @@ import { readRecord, safePath } from '../scripts/dots-safety.mjs';
  *   inspectPinnedRuntime?: typeof inspectDotsRuntime }} KitOptions
  * @typedef {{ status: string, branch: string | null, behind: number | null, ahead: number | null, remoteChecked: boolean, engine: Engine | null,
  *   changedFiles: string[], nextCommands: string[], restartRequired: boolean, reason?: string | null, versionPolicy?: string }} KitResult
- * @typedef {{ blockers?: string[], kit?: { version?: string, distribution?: string, commit?: string, manifestSha256?: string } }} DotsReport
  */
 
 // codex/creator-hosting was the kit branch until 2026-10-29; it is frozen there and a checkout on it is told to move.
@@ -105,8 +104,8 @@ async function checkPinnedDotsKit({ root = kitRoot, workspaceRoot, spriteRoot,
     return { ...result, reason: 'dots-workspace-binding-invalid' };
   let report;
   try {
-    report = /** @type {DotsReport} */ (await inspectPinnedRuntime({ runtime: root, workspace: workspaceRoot, provider: 'none',
-      ...(bundlePin ? { manifestSha256: binding.manifestSha256 } : {}) })); // dots-workspace.mjs is unchecked: its inferred report lacks these
+    report = await inspectPinnedRuntime({ runtime: root, workspace: workspaceRoot, provider: 'none',
+      ...(bundlePin ? { manifestSha256: binding.manifestSha256 } : {}) });
   } catch { return { ...result, reason: 'dots-runtime-inspection-failed' }; }
   if (report.blockers?.length) return { ...result, reason: report.blockers[0] };
   if (!Array.isArray(report.blockers) || !report.kit || report.kit.version !== binding.version ||
@@ -304,8 +303,7 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   const [{ infrastructure, ...connection }, kitItem, toolsItem, environmentItem] = await Promise.all([loginItem,
     needsGeneration ? checkKit({ progress, workspaceRoot: store?.root, ...kit }) : notRequired,
     // ffmpeg, ffprobe and img2webp -exact are required; RIFE only warns (loops cut as filmed).
-    // The type inferred for checkTools (sprite-tools.mjs is unchecked) omits the options it passes on to inspectTools.
-    needsGeneration ? checkTools(/** @type {Parameters<typeof checkTools>[0]} */ ({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools })) : notRequired,
+    needsGeneration ? checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools }) : notRequired,
     // Recorded environment preconditions are reported for the agent to resolve; they do not make generation ready here.
     !needsGeneration ? notRequired : workspace
       ? workspace.inspect().then(found => ({ ...found, matchesChoice: saved?.account === choice, certifiesGeneration: false }))

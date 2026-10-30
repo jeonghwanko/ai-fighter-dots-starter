@@ -1,3 +1,4 @@
+// @ts-check
 // Read-only diagnostics for VM setup and old hosts that cannot yet discover the readiness MCP tool.
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';

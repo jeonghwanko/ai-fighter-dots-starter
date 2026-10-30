@@ -1,9 +1,11 @@
+// @ts-check
 // Offline record checker. It does not call a model, generation provider, CLI or network.
 import fs from 'node:fs';
 import path from 'node:path';
 import { isDeepStrictEqual } from 'node:util';
 import { createHash } from 'node:crypto';
 
+/** @type {Record<string, string>} */
 const options = {};
 for (let i = 2; i < process.argv.length; i += 2) {
   const key = process.argv[i];
@@ -18,8 +20,9 @@ const casePath = path.resolve(options['--cases'] ?? 'test/fixtures/creation-dial
 const responsePath = path.resolve(options['--responses']);
 const caseBytes = fs.readFileSync(casePath);
 const responseBytes = fs.readFileSync(responsePath);
-const fixture = JSON.parse(caseBytes);
-const sample = JSON.parse(responseBytes);
+// JSON.parse reads a Buffer as its text.
+const fixture = JSON.parse(/** @type {any} */ (caseBytes));
+const sample = JSON.parse(/** @type {any} */ (responseBytes));
 for (const input of [fixture, sample]) {
   if (input.version !== 1 || input.mode !== 'dialogue-simulation-only' || input.actualGenerationAllowed !== false) {
     throw new Error('Only version 1, explicitly generation-disabled simulation records are accepted');
@@ -37,7 +40,7 @@ for (const response of sample.responses) {
   if (!known.has(response.id) || responses.has(response.id)) throw new Error(`Unknown or duplicate response ${response.id}`);
   responses.set(response.id, response);
 }
-const results = fixture.cases.map(test => {
+const results = /** @type {any[]} */ (fixture.cases).map(test => {
   const response = responses.get(test.id);
   const errors = [];
   if (!response) return {id:test.id, pass:false, errors:['Response missing']};
@@ -54,7 +57,7 @@ const results = fixture.cases.map(test => {
   }
   return {id:test.id, pass:errors.length === 0, errors};
 });
-const scenarios = [...new Set(fixture.cases.map(test=>test.scenario))].sort();
+const scenarios = [...new Set(/** @type {any[]} */ (fixture.cases).map(test=>test.scenario))].sort();
 const expectedIds = Array.from({length:16},(_,i)=>`U${String(i+1).padStart(2,'0')}`);
 if (!isDeepStrictEqual(scenarios, expectedIds)) throw new Error('All sixteen scenario families must be present');
 const report = {
@@ -64,7 +67,7 @@ const report = {
   hashes:{cases:createHash('sha256').update(caseBytes).digest('hex'),responses:createHash('sha256').update(responseBytes).digest('hex')},
   families:scenarios.length, branches:results.length,
   passed:results.filter(x=>x.pass).length, failed:results.filter(x=>!x.pass).length,
-  recordedExecutedTools:sample.responses.reduce((n,x)=>n+(x.executedTools?.length??0),0),
+  recordedExecutedTools:/** @type {any[]} */ (sample.responses).reduce((n,x)=>n+(x.executedTools?.length??0),0),
   results
 };
 if (options['--out']) fs.writeFileSync(path.resolve(options['--out']),JSON.stringify(report,null,2)+'\n');

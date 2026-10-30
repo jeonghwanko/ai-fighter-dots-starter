@@ -1,3 +1,4 @@
+// @ts-check
 import { link, lstat, mkdir, readFile, unlink, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -7,13 +8,14 @@ import { base64, importVmPublicKey, openVmGrant, SOURCE_LIMIT } from '../api/cre
 import { runtimeFetch } from '../api/runtime-fetch.mjs';
 import { safePath, readRecord } from './dots-safety.mjs';
 
+/** @param {string} workspace @param {string} [requestId] */
 export async function createVmRequest(workspace, requestId = crypto.randomUUID()) {
   workspace = await safePath(workspace);
   if (!UUID.test(requestId)) throw Error('invalid-request-id');
   const dir = await safePath(`.oddbout-private/transfers/${requestId}`, { root: workspace });
   const keyPath = path.join(dir, 'key.json');
   let record;
-  try { record = await readRecord(keyPath); } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  try { record = await readRecord(keyPath); } catch (/** @type {any} */ e) { if (e.code !== 'ENOENT') throw e; }
   if (!record) {
     const pair = await crypto.subtle.generateKey({ name: 'RSA-OAEP', modulusLength: 2048, publicExponent: new Uint8Array([1,0,1]), hash: 'SHA-256' }, true, ['encrypt','decrypt']);
     const publicBytes = await crypto.subtle.exportKey('spki', pair.publicKey);
@@ -28,6 +30,7 @@ export async function createVmRequest(workspace, requestId = crypto.randomUUID()
   if (process.platform !== 'win32' && (await lstat(keyPath)).mode & 0o077) throw Error('transfer-key-permissions');
   return request;
 }
+/** @param {string} workspace @param {any} envelope read from disk: openVmGrant checks it @param {{ fetcher?: typeof runtimeFetch, now?: number }} [options] */
 export async function receiveVmSource(workspace, envelope, { fetcher = runtimeFetch, now = Date.now() } = {}) {
   workspace = await safePath(workspace);
   if (!UUID.test(envelope?.requestId ?? '')) throw Error('invalid-request-id');
@@ -40,7 +43,7 @@ export async function receiveVmSource(workspace, envelope, { fetcher = runtimeFe
     const info = await lstat(target);
     if (!info.isFile() || info.size !== grant.bytes) throw Error('existing-source-changed');
     bytes = new Uint8Array(await readFile(target)); reused = true;
-  } catch (e) { if (e.code !== 'ENOENT') throw e; }
+  } catch (/** @type {any} */ e) { if (e.code !== 'ENOENT') throw e; }
   if (!bytes) {
     let response;
     try { response = await fetcher(grant.url, { method: 'GET', redirect: 'error', credentials: 'omit', signal: AbortSignal.timeout(30000) }); }
@@ -60,7 +63,7 @@ export async function receiveVmSource(workspace, envelope, { fetcher = runtimeFe
     await writeFile(pending, bytes, { flag: 'wx', mode: 0o600 });
     // Atomic, no-clobber admission. A failed write/link leaves its own pending file for recovery.
     try { await link(pending, target); }
-    catch (e) {
+    catch (/** @type {any} */ e) {
       if (e.code !== 'EEXIST') throw e;
       const info = await lstat(target);
       if (!info.isFile() || info.isSymbolicLink() || info.size !== grant.bytes || await sha256(await readFile(target)) !== grant.sha256)
@@ -78,6 +81,7 @@ export async function receiveVmSource(workspace, envelope, { fetcher = runtimeFe
   await writeFile(out, JSON.stringify(receipt, null, 2) + '\n', { flag: 'wx', mode: 0o600 });
   return { ok: true, ...receipt };
 }
+/** @param {string[]} argv */
 export async function main(argv) {
   const [mode, workspace, value] = argv;
   if (!['request','receive'].includes(mode) || !workspace || argv.length > 3 || mode === 'receive' && !value) throw Error('usage: dots-source request <workspace> [request-id] | receive <workspace> <envelope.json>');
@@ -87,5 +91,5 @@ export async function main(argv) {
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try { await main(process.argv.slice(2)); }
-  catch (e) { console.error(JSON.stringify({ ok: false, code: /^[a-z][a-z-]+$/.test(e.message) ? e.message : 'source-transfer-failed' })); process.exitCode = 1; }
+  catch (/** @type {any} */ e) { console.error(JSON.stringify({ ok: false, code: /^[a-z][a-z-]+$/.test(e.message) ? e.message : 'source-transfer-failed' })); process.exitCode = 1; }
 }

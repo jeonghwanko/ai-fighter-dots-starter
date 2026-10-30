@@ -1,3 +1,4 @@
+// @ts-check
 // Edge deploy payload: the entry point, its import map and lock, and every relative module it imports.
 // The file list comes from the import graph, so a new import cannot be left out of the deploy.
 import { readFile } from 'node:fs/promises';
@@ -7,7 +8,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 // The game's Edge deploy (crashbang-heroes `npm run fighter:edge`) stages this file alone, so it imports no other
 // repository module; scripts/import-graph.mjs reuses this parser for the plugin bundle (test/edge-bundle.test.mjs).
 const SPECIFIER = /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|(?:^|[\s;])import\s*['"]([^'"]+)['"]|\bimport\(\s*['"]([^'"]+)['"]\s*\)/g;
-/** Module specifiers a source imports: static, re-exported, side-effect and literal dynamic imports. */
+/** Module specifiers a source imports: static, re-exported, side-effect and literal dynamic imports. @type {(source: string) => string[]} */
 export const importSpecifiers = source => [...source.matchAll(SPECIFIER)].map(match => match[1] ?? match[2] ?? match[3]);
 
 const REPOSITORY = fileURLToPath(new URL('../', import.meta.url));
@@ -22,7 +23,7 @@ export async function edgeFiles({ root = REPOSITORY, entry = ENTRY, importMap = 
   const mapped = JSON.parse(await readFile(path.join(root, importMap), 'utf8')).imports ?? {};
   const seen = new Set(), pending = [entry];
   while (pending.length) {
-    const file = pending.pop();
+    const file = /** @type {string} */ (pending.pop());
     if (seen.has(file)) continue;
     seen.add(file);
     if (file.endsWith('.json')) continue;

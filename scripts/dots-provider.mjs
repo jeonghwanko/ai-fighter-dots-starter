@@ -1,8 +1,10 @@
+// @ts-check
 import { readFile } from 'node:fs/promises';
 import { readRecord, safePath, sha256 } from './dots-safety.mjs';
 
 // A source inspection can establish incompatibility, never establish a working image bridge.
 // Future adapters need an audited, official output contract. No caller-supplied supportsImages flag.
+/** @param {string} runtime @param {string} [provider] */
 export async function inspectProvider(runtime, provider = 'codex') {
   if (!['codex', 'grok', 'none'].includes(provider)) throw Error('unsupported-provider-choice');
   if (provider === 'none') return { provider, status: 'not-selected', readyForGeneration: false };
@@ -18,16 +20,20 @@ export async function inspectProvider(runtime, provider = 'codex') {
     reason: protectedAccess ? 'protected-session-output-contract' : 'official-host-file-bridge-unverified', readyForGeneration: false,
     nextAction: 'Use a verified official host output adapter; never inspect, relocate or delete protected sessions.' };
 }
+/** @param {string} runtime @param {string} workspace @param {NodeJS.ProcessEnv} [env] */
 export async function isDotsWorkspace(runtime, workspace, env = process.env) {
   if (env.AI_FIGHTER_EXECUTION_HOST === 'dots') return true;
   for (const [root, file] of [[runtime, '.dots-runtime.json'], [workspace, 'output/creation-environment/environment.json']]) {
     try { if ((await readRecord(await safePath(file, { root }))).host === 'dots') return true; }
-    catch (e) { if (e.code !== 'ENOENT') throw Error('dots-host-record-invalid'); }
+    catch (/** @type {any} */ e) { if (e.code !== 'ENOENT') throw Error('dots-host-record-invalid'); }
   }
   return false;
 }
 const routed = new Set(['gen', 'gen-set', 'gen-motion', 'video', 'video-set', 'video-resume']);
 const routeOptions = ['--provider', '--still-provider', '--walk-start', '--states', '--base', '--body-plan'];
+/** @overload @param {string[]} args @param {string} key @param {{ repeat: true }} options @returns {string[]} */
+/** @overload @param {string[]} args @param {string} key @returns {string | undefined} */
+/** @param {string[]} args @param {string} key @param {{ repeat?: boolean }} [options] @returns {string[] | string | undefined} */
 export function commandOption(args, key, { repeat = false } = {}) {
   const values = [];
   for (let i = 1; i < args.length; i++) {
@@ -43,6 +49,7 @@ export function commandOption(args, key, { repeat = false } = {}) {
   if (!repeat && values.length > 1) throw Error('duplicate-provider-option');
   return repeat ? values : values[0];
 }
+/** @param {string | undefined} value @param {NodeJS.ProcessEnv} env @param {string} [reason] */
 function imageProvider(value, env, reason = 'dots-image-provider-required') {
   const selected = value ?? env.SPRITE_GEN_DEFAULT_PROVIDER?.trim();
   // No auth/default-choice lookup or fallback here. An ambiguous invocation must name its route.
@@ -50,6 +57,10 @@ function imageProvider(value, env, reason = 'dots-image-provider-required') {
   if (!['codex', 'grok'].includes(selected)) throw Error('dots-subscription-provider-required');
   return selected;
 }
+/**
+ * @param {string[]} args @param {NodeJS.ProcessEnv} [env]
+ * @returns {{ operation: string, provider: string | null, outputRoute?: string, imageProvider?: string }}
+ */
 export function commandRoute(args, env = process.env) {
   const command = args[0];
   if (!routed.has(command)) return { operation: 'other', provider: null };
@@ -72,6 +83,7 @@ export function commandRoute(args, env = process.env) {
   return { operation: 'generate-video-set', provider: 'grok', outputRoute: 'grok-video-file',
     ...(redraw ? { imageProvider: imageProvider(still, env, 'dots-video-set-still-provider-required') } : {}) };
 }
+/** @param {string} runtime @param {string} workspace @param {string[]} args @param {NodeJS.ProcessEnv} [env] @param {{ inspect?: typeof inspectProvider }} [options] */
 export async function guardDotsExecution(runtime, workspace, args, env = process.env, { inspect = inspectProvider } = {}) {
   if (!routed.has(args[0]) || !await isDotsWorkspace(runtime, workspace, env)) return;
   const route = commandRoute(args, env);

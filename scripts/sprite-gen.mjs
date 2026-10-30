@@ -1,3 +1,4 @@
+// @ts-check
 import { access, readFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
 import os from 'node:os';
@@ -8,9 +9,12 @@ import spec from '../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { guardDotsExecution } from './dots-provider.mjs';
 import { INSTALL_OUTCOME_UNKNOWN } from './dots-safety.mjs';
 
+/** @typedef {import('./sprite-tools.mjs').Install} Install */
+
 export const kitRoot = fileURLToPath(new URL('../', import.meta.url));
 export const spriteRoot = path.join(kitRoot, 'vendor', 'sprite-gen');
 export const spritePython = path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+/** @param {string} file */
 const exists = async file => { try { await access(file); return true; } catch { return false; } };
 
 // The motion engine ships in sprite-gen-agent's own history; a checkout of an older upstream pin lacks it.
@@ -45,14 +49,17 @@ const SETUP_TIMEOUT_MS = { git: 10 * 60_000, venv: 5 * 60_000, pip: 20 * 60_000,
 // waits for it instead of dying first, so whoever stopped the run reads a finished report (vendor/sprite-gen docs/gen.md
 // "Outcome"). A stop sent to this process alone is passed on; one sent to the process group reaches sprite-gen itself, and
 // it acts on the first only. Ctrl-C (SIGINT) reaches the whole terminal group and is not passed on.
+/** @type {NodeJS.Signals[]} */
 const FORWARDED = ['SIGTERM', 'SIGHUP'];
+/** @type {NodeJS.Signals[]} */
 const WAITED = [...FORWARDED, 'SIGINT'];
+/** @param {string} command @param {string[]} args @param {{ cwd?: string, timeout?: number }} [options] @returns {Promise<number>} */
 export function run(command, args, { cwd = kitRoot, timeout = 0 } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, stdio: 'inherit', shell: false, windowsHide: true, timeout,
       env: { ...toolEnv(spriteRoot), PYTHONUTF8: '1', SPRITE_GEN_ROOT: spriteRoot } });
     // Setup steps keep their bound and the default stop; a generation command (no timeout) is waited for.
-    const handlers = timeout ? [] : WAITED.filter(name => process.platform !== 'win32' || name !== 'SIGHUP').map(name => {
+    const handlers = timeout ? [] : WAITED.filter(name => process.platform !== 'win32' || name !== 'SIGHUP').map(/** @returns {[NodeJS.Signals, () => void]} */ name => {
       const handler = () => { if (FORWARDED.includes(name)) { try { child.kill(name); } catch {} } };
       process.on(name, handler);
       return [name, handler];
@@ -68,6 +75,7 @@ export function run(command, args, { cwd = kitRoot, timeout = 0 } = {}) {
   });
 }
 
+/** @param {string[]} args */
 export async function main(args) {
   if (args[0] === 'status') { console.log(JSON.stringify(await spriteStatus(), null, 2)); return 0; }
   if (args[0] === 'setup') {
@@ -83,15 +91,17 @@ export async function main(args) {
     if (!(await exists(path.join(spriteRoot, 'SKILL.md')))) throw new Error('sprite-gen source missing. Clone AI Fighter with --recurse-submodules. GitHub ZIP archives do not include submodules.');
     if (!(await exists(spritePython))) {
       // A global Python is used only to create this repository's isolated environment.
+      /** @type {[string, string[]][]} */
       const candidates = process.env.AI_FIGHTER_BOOTSTRAP_PYTHON ? [[process.env.AI_FIGHTER_BOOTSTRAP_PYTHON, []]]
         : process.platform === 'win32' ? [['py', ['-3']], ['python', []], ['python3', []]] : [['python3', []], ['python', []]];
+      /** @type {[string, string[]] | undefined} */
       let bootstrap;
       for (const [command, prefix] of candidates) {
         try {
           if (await run(command, [...prefix, '-c', 'import sys,venv; sys.exit(0 if sys.version_info >= (3,11) else 1)'], { timeout: 10000 }) === 0) {
             bootstrap = [command, prefix]; break;
           }
-        } catch (error) { if (error.code !== 'ENOENT') throw error; }
+        } catch (/** @type {any} */ error) { if (error.code !== 'ENOENT') throw error; }
       }
       if (!bootstrap) throw new Error('Python 3.11+ with venv support is required. Set AI_FIGHTER_BOOTSTRAP_PYTHON to its executable.');
       const created = await run(bootstrap[0], [...bootstrap[1], '-m', 'venv', path.join(spriteRoot, '.venv')], { timeout: SETUP_TIMEOUT_MS.venv });
@@ -116,15 +126,17 @@ export async function main(args) {
 /**
  * After sprite-gen: the tools a run needs that the kit can fetch without sudo (img2webp with -exact, RIFE), then a report
  * of what the person preparing the workspace must still install. Exit 1 only when a kit download failed for a required tool.
+ * @param {{ includeRife?: boolean, inspect?: typeof inspectTools, inspectOptional?: typeof inspectRife, installWebp?: typeof installImg2webp,
+ *   execute?: typeof run, log?: (message: string) => void }} [options]
  */
 export async function setupTools({ includeRife = true, inspect = inspectTools, inspectOptional = inspectRife,
   installWebp = installImg2webp, execute = run, log = console.error } = {}) {
   const options = { spriteRoot, python: spritePython };
   let tools = await inspect({ ...options, rife: false });
   let failed = 0;
-  if (tools.img2webp.status !== 'ok' && tools.img2webp.install.actor === 'agent') {
+  if (tools.img2webp.status !== 'ok' && /** @type {Install} */ (tools.img2webp.install).actor === 'agent') { // set unless ok
     try { log(`img2webp: installed ${await installWebp(options)}`); }
-    catch (error) { log(error.message); failed = 1; }
+    catch (/** @type {any} */ error) { log(error.message); failed = 1; }
   }
   // RIFE: sprite-gen's own installer. A finished install is only checked again; a failed check frame (no Vulkan) is a warning.
   let rife = { status: 'not-checked', required: false };
@@ -147,8 +159,10 @@ export async function setupTools({ includeRife = true, inspect = inspectTools, i
   return failed;
 }
 
+/** @param {string[]} args @param {string} cwd */
 export async function requireMotionContract(args, cwd) {
   if (!['gen-set', 'gen-motion'].includes(args[0])) return;
+  /** @param {string} key */
   const option = key => {
     const matches = args.flatMap((value, index) => value === key || value.startsWith(key + '=') ? [index] : []);
     if (matches.length > 1) throw Error(`Duplicate option: ${key}`);
@@ -157,8 +171,8 @@ export async function requireMotionContract(args, cwd) {
   };
   if (args[0] === 'gen-motion') {
     if (!option('--plan')) return; // the engine owns CLI errors/help
-    const plan = JSON.parse(await readFile(path.resolve(cwd, option('--plan')), 'utf8'));
-    const expected = ['walk', 'run'].includes(plan.motion) ? spec.motions[plan.motion].frames : null;
+    const plan = JSON.parse(await readFile(path.resolve(cwd, /** @type {string} */ (option('--plan'))), 'utf8')); // present: checked above
+    const expected = ['walk', 'run'].includes(plan.motion) ? spec.motions[/** @type {'walk' | 'run'} */ (plan.motion)].frames : null;
     if (expected === null || plan.frames?.length !== expected)
       throw Error(`AI Fighter pose plan needs ${expected ?? `${spec.motions.walk.frames} walk / ${spec.motions.run.frames} run`} frames; diagnostic poses belong to that full plan`);
     if (option('--frame') && !args.includes('--reconcile') && plan.version !== 2)
@@ -166,7 +180,7 @@ export async function requireMotionContract(args, cwd) {
     return;
   }
   if (!option('--run-dir')) return; // the engine owns CLI errors
-  const request = JSON.parse(await readFile(path.resolve(cwd, option('--run-dir'), 'sprite-request.json'), 'utf8'));
+  const request = JSON.parse(await readFile(path.resolve(cwd, /** @type {string} */ (option('--run-dir')), 'sprite-request.json'), 'utf8')); // present: checked above
   const selected = option('--states')?.split(',').map(value => value.trim()).filter(Boolean) ?? [];
   for (const [state, entry] of Object.entries(request.states ?? {})) {
     if (selected.length && !selected.includes(state)) continue;
@@ -183,5 +197,5 @@ export async function requireMotionContract(args, cwd) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
   try { process.exitCode = await main(process.argv.slice(2)); }
-  catch (error) { console.error(error.code === 'ENOENT' ? 'Required executable not found. Install Git and Python 3.11+, or set AI_FIGHTER_BOOTSTRAP_PYTHON to your Python executable.' : error.message); process.exitCode = 1; }
+  catch (/** @type {any} */ error) { console.error(error.code === 'ENOENT' ? 'Required executable not found. Install Git and Python 3.11+, or set AI_FIGHTER_BOOTSTRAP_PYTHON to your Python executable.' : error.message); process.exitCode = 1; }
 }

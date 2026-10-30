@@ -21,6 +21,7 @@
   "include": [
     "api/**/*.mjs",
     "worker/**/*.mjs",
-    "mcp/**/*.mjs"
+    "mcp/**/*.mjs",
+    "scripts/**/*.mjs"
   ]
 }

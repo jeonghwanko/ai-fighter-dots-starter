@@ -1,3 +1,4 @@
+// @ts-check
 import { createHash } from 'node:crypto';
 import { spawn } from 'node:child_process';
 import { cp, lstat, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
@@ -8,6 +9,7 @@ import { importClosure, packageName } from './import-graph.mjs';
 import { bootstrapPython } from './bootstrap-python.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
+/** @type {(value: Buffer) => string} */
 const sha = value => createHash('sha256').update(value).digest('hex');
 // Entry points, data and docs. Modules they import are added from the import graph (`runtimeFileList`),
 // so a new relative import cannot be left out of the kit (0.5.0 shipped without tools/ai-fighter/projected-ground.mjs).
@@ -30,6 +32,7 @@ const runtimeDirectories = ['mcp', 'contracts/ai-fighter'];
 // The cloud MCP (with its tool families in mcp/cloud/) and its file-input probe run only in the Edge function
 // (supabase/functions/ai-fighter-mcp) and import the server API.
 const edgeOnlyFiles = ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs'];
+/** @type {(file: string) => boolean} */
 const edgeOnly = file => edgeOnlyFiles.includes(file) || file.startsWith('mcp/cloud/');
 const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
   'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run', 'creation:tool',
@@ -38,19 +41,22 @@ const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:stat
 // Presentation media in the upstream documentation is not runtime/package data.
 // Keep all source, package assets, workflow text and licenses.
 export const bundlePolicy = Object.freeze({ id: 'source-without-doc-media-v1', omittedVendorPrefixes: ['docs/assets/'] });
+/** @type {(relative: string) => boolean} */
 export const includeVendorFile = relative => !bundlePolicy.omittedVendorPrefixes.some(prefix => relative.startsWith(prefix));
 
+/** @param {string} command @param {string[]} args @param {{ cwd?: string, capture?: boolean }} [options] @returns {Promise<string>} */
 function run(command, args, { cwd = root, capture = false } = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(command, args, { cwd, shell: false, windowsHide: true,
       stdio: capture ? ['ignore', 'pipe', 'pipe'] : ['ignore', 'inherit', 'inherit'] });
     let stdout = '', stderr = '';
-    if (capture) { child.stdout.on('data', chunk => stdout += chunk); child.stderr.on('data', chunk => stderr += chunk); }
+    if (capture) { /** @type {import('node:stream').Readable} */ (child.stdout).on('data', chunk => stdout += chunk); /** @type {import('node:stream').Readable} */ (child.stderr).on('data', chunk => stderr += chunk); }
     child.once('error', reject);
     // 'close', not 'exit': captured output is complete only after the pipes close (git ls-files drives the file list).
     child.once('close', code => code === 0 ? resolve(stdout) : reject(Error(`${path.basename(command)} exited ${code}: ${stderr.trim()}`)));
   });
 }
+/** @param {string} directory @param {string} [prefix] @returns {Promise<string[]>} */
 async function files(directory, prefix = '') {
   const result = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -62,6 +68,7 @@ async function files(directory, prefix = '') {
   }
   return result.sort();
 }
+/** @param {string} relative @param {string} sourceRoot @param {string} targetRoot */
 async function copy(relative, sourceRoot, targetRoot) {
   const source = await localPath(sourceRoot, relative);
   if (!(await lstat(source)).isFile()) throw Error(`Expected a regular source file: ${relative}`);
@@ -81,7 +88,10 @@ export async function runtimeFileList({ sourceRoot = root } = {}) {
   if (leaked.length) throw Error(`The local runtime imports Edge-only modules: ${leaked.join(', ')}`);
   return closure;
 }
-/** The kit must be reproducible from its recorded commit: refuse uncommitted, untracked or deleted shipped paths. */
+/**
+ * The kit must be reproducible from its recorded commit: refuse uncommitted, untracked or deleted shipped paths.
+ * @param {string[]} paths @param {{ sourceRoot?: string }} [options]
+ */
 export async function assertCommitted(paths, { sourceRoot = root } = {}) {
   const dirty = (await run('git', ['status', '--porcelain', '--', ...paths], { cwd: sourceRoot, capture: true })).trimEnd();
   if (dirty) throw Error(`Commit runtime changes before bundling:\n${dirty}`);
@@ -89,6 +99,7 @@ export async function assertCommitted(paths, { sourceRoot = root } = {}) {
 /**
  * Fails unless every module in a built runtime resolves there: relative imports to bundled files,
  * bare imports to the runtime package.json dependencies. Runs on the copied files, so it checks what ships.
+ * @param {string} runtime
  */
 export async function checkRuntimeImports(runtime) {
   const { dependencies = {} } = JSON.parse(await readFile(path.join(runtime, 'package.json'), 'utf8'));
@@ -98,12 +109,13 @@ export async function checkRuntimeImports(runtime) {
   if (missing.length) throw Error(`Runtime imports packages it does not depend on: ${[...new Set(missing)].join(', ')}`);
 }
 
+/** @param {string} destination */
 export async function buildPluginBundle(destination) {
   if (!destination.startsWith('output/')) throw Error('plugin-output-must-be-under-output');
   const out = await localPath(root, destination);
   if (await lstat(out).then(() => true, error => { if (error.code !== 'ENOENT') throw error; return false; })) throw Error('plugin-output-exists');
   // Read the pinned tree; never include the checkout venv, credentials, caches or untracked outputs.
-  const pinned = (await run('git', ['ls-tree', 'HEAD', 'vendor/sprite-gen'], { capture: true })).match(/^160000 commit ([a-f0-9]{40})\s/)[1];
+  const pinned = /** @type {RegExpMatchArray} */ ((await run('git', ['ls-tree', 'HEAD', 'vendor/sprite-gen'], { capture: true })).match(/^160000 commit ([a-f0-9]{40})\s/))[1];
   const vendor = path.join(root, 'vendor', 'sprite-gen');
   const spriteGenSource = (await run('git', ['config', '-f', '.gitmodules', 'submodule.vendor/sprite-gen.url'], { capture: true })).trim();
   if ((await run('git', ['rev-parse', 'HEAD'], { cwd: vendor, capture: true })).trim() !== pinned)
@@ -136,7 +148,7 @@ export async function buildPluginBundle(destination) {
   await checkRuntimeImports(runtime);
   // Source-only: native Node packages are installed in the user's writable runtime on that host.
   // Bundling Windows node_modules would break Dots/Linux and make the plugin desktop-only again.
-  const hashes = {};
+  const hashes = /** @type {Record<string, string>} */ ({});
   for (const file of await files(runtime)) hashes[file] = sha(await readFile(path.join(runtime, file)));
   await writeFile(path.join(plugin, 'runtime-manifest.json'), JSON.stringify({ schemaVersion: 1,
     distribution: 'source', platform: 'any', arch: 'any', spriteGenCommit: pinned, spriteGenSource,
@@ -168,5 +180,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   try {
     if (process.argv.length > 3) throw Error('Usage: npm run plugin:bundle -- [output/new-distribution]');
     console.log(JSON.stringify(await buildPluginBundle(process.argv[2] || 'output/ai-fighter-portable'), null, 2));
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
+  } catch (/** @type {any} */ error) { console.error(error.message); process.exitCode = 1; }
 }

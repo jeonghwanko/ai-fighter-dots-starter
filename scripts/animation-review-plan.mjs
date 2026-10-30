@@ -1,3 +1,4 @@
+// @ts-check
 // Label-blind plan preparation only. No credentials, network, or enrollment.
 import { createHash } from 'node:crypto';
 import { readFile, writeFile, stat } from 'node:fs/promises';
@@ -6,9 +7,18 @@ import { fileURLToPath } from 'node:url';
 import { nativeSequenceEvidence, decisionsRequest, DECISIONS, RULES, questions } from '../api/decisions-review.mjs';
 import { SEQUENCE_METHODS, SEQUENCE_RULES, PAIRED_SEQUENCE_METHOD, BENCHMARK_BODY_BYTES, BENCHMARK_TIMEOUT_MS } from '../api/sequence-benchmark.mjs';
 
+/**
+ * @typedef {{ id: string, sourceGroup: string, split: 'calibration' | 'held-out', sourceEvidenceSha256: string, sourceRequestSha256: string,
+ *   frameCount: number, methods: Record<string, { requestSha256: string, presentationSha256: string }> }} PlanCase
+ * @typedef {{ version: 1, protocol: typeof COMPARISON_PROTOCOL, cases: PlanCase[], planSha256: string }} ComparisonPlan
+ */
+
+/** @type {(bytes: string | Uint8Array) => string} */
 const digest = bytes => createHash('sha256').update(bytes).digest('hex');
+/** @type {(value: any, names: readonly string[]) => boolean} */
 const exact = (value, names) => value && typeof value === 'object' && !Array.isArray(value)
   && Object.keys(value).length === names.length && names.every(name => Object.hasOwn(value, name));
+/** @type {(value: unknown) => boolean} */
 const hash = value => typeof value === 'string' && /^[a-f0-9]{64}$/.test(value);
 const fail = () => { throw Error('Invalid label-free comparison plan'); };
 export const COMPARISON_PROTOCOL = Object.freeze({ version: 1, evidencePolicy: 'native-2-64-v1', model: DECISIONS.model,
@@ -22,6 +32,7 @@ export const COMPARISON_PROTOCOL = Object.freeze({ version: 1, evidencePolicy: '
   blindingPolicy: 'candidate-authors-blinded-operator-may-have-seen-labels',
   comparison: 'paired-source-evidence-recorded-gate', sourceFamilyPolicy: 'preserve-declared-family-and-split' });
 
+/** @param {any} plan  Parsed JSON, checked here. @returns {ComparisonPlan} */
 export function validateComparisonPlan(plan) {
   if (!exact(plan, ['version', 'protocol', 'cases', 'planSha256']) || plan.version !== 1
     || JSON.stringify(plan.protocol) !== JSON.stringify(COMPARISON_PROTOCOL) || !Array.isArray(plan.cases)
@@ -47,6 +58,7 @@ export function validateComparisonPlan(plan) {
 
 // entries contain ONLY source provenance, immutable original request bytes and design intent.
 // Human labels/notes are deliberately absent from this API and its strict accepted keys.
+/** @param {{ id: string, sourceGroup: string, split: string, raw: Uint8Array, intent: import('../api/decisions-review.mjs').ReviewJob }[]} entries  Checked here. */
 export async function freezeComparison(entries) {
   if (!Array.isArray(entries) || !entries.length || entries.length > 1000) fail();
   const cases = [], inventories = new Map();
@@ -57,11 +69,12 @@ export async function freezeComparison(entries) {
     const inventory = digest(JSON.stringify(evidence.binding.map(({ role, sha256, width, height }) => JSON.stringify({ role, sha256, width, height })).sort()));
     if (inventories.has(inventory) && inventories.get(inventory) !== entry.split) fail();
     inventories.set(inventory, entry.split);
+    /** @type {PlanCase['methods']} */
     const methods = {};
     const built = await decisionsRequest({ job: entry.intent, evidence, sequenceConfig: { method: PAIRED_SEQUENCE_METHOD, planSha256: '0'.repeat(64) } });
-    const sourceEvidenceSha256 = built.binding.sequenceBenchmark.sourceEvidenceSha256;
+    const sourceEvidenceSha256 = /** @type {Record<string, any>} */ (built.binding.sequenceBenchmark).sourceEvidenceSha256; // paired: always bound
     for (const method of SEQUENCE_METHODS) {
-      methods[method] = { requestSha256: built.binding.requestSha256, presentationSha256: built.binding.sequenceBenchmark.arms[method].presentationSha256 };
+      methods[method] = { requestSha256: built.binding.requestSha256, presentationSha256: /** @type {Record<string, any>} */ (built.binding.sequenceBenchmark).arms[method].presentationSha256 };
     }
     cases.push({ id: entry.id, sourceGroup: entry.sourceGroup, split: entry.split, sourceEvidenceSha256,
       sourceRequestSha256: digest(entry.raw), frameCount: evidence.binding.length - 1, methods });
@@ -70,6 +83,7 @@ export async function freezeComparison(entries) {
   return validateComparisonPlan({ ...core, planSha256: digest(JSON.stringify(core)) });
 }
 
+/** @param {string[]} args */
 export async function main(args) {
   const [selectionFile, output] = args;
   if (args.length !== 2) throw Error('Usage: animation-review-plan.mjs <label-free-selection.json> <new-plan.json>');

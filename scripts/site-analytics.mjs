@@ -1,9 +1,23 @@
+// @ts-check
 const virtualId = 'virtual:oddbout-analytics';
 const resolvedId = '\0oddbout-analytics';
 
+/**
+ * The page globals Analytics uses: Google's tag queue and the sign-in binding site-milestones.mjs calls.
+ * @typedef {typeof window & { dataLayer: IArguments[], oddboutAnalyticsStarted?: boolean, [gaDisable: string]: unknown,
+ *   gtag: { (command: 'get', target: string, field: string, done: (value: any) => void): void, (...args: unknown[]): void },
+ *   oddboutBindAnalytics?: (api: string, token: string, key: string) => Promise<void> }} AnalyticsWindow
+ * The Vite plugin hooks the site build uses (also site-milestones.mjs and site-social.mjs).
+ * @typedef {{ name: string, enforce?: 'pre', configResolved?: (config: { root: string }) => void,
+ *   resolveId?: (id: string) => string | undefined, load?: (id: string) => string | undefined,
+ *   transform?: (code: string, id: string) => string | null,
+ *   transformIndexHtml?: { order: 'pre', handler: (html: string, context: { filename: string }) => string } }} SitePlugin
+ */
+
+/** @param {string} measurementId @param {string} hostname @param {string | null} apiBase */
 function startAnalytics(measurementId, hostname, apiBase) {
   if (window.location.hostname !== hostname || window.location.protocol !== 'https:' ||
-      window.location.pathname.endsWith('/admin.html') || window.oddboutAnalyticsStarted) return;
+      window.location.pathname.endsWith('/admin.html') || /** @type {AnalyticsWindow} */ (window).oddboutAnalyticsStarted) return;
   const current = new URL(window.location.href);
   const fragment = new URLSearchParams(current.hash.slice(1));
   const privateKeys = ['code', 'state', 'handoff', 'dot', 'token', 'access_token', 'refresh_token', 'id_token', 'error_description'];
@@ -20,15 +34,17 @@ function startAnalytics(measurementId, hostname, apiBase) {
     const source = new URL(document.referrer);
     if (['http:', 'https:'].includes(source.protocol)) referrer = source.origin + '/';
   } catch {}
-  const permitted = () => navigator.globalPrivacyControl !== true && !window['ga-disable-' + measurementId];
-  window.oddboutBindAnalytics = async (api, token, key) => {
+  const permitted = () => /** @type {Navigator & { globalPrivacyControl?: boolean }} */ (navigator).globalPrivacyControl !== true && !/** @type {AnalyticsWindow} */ (window)['ga-disable-' + measurementId];
+  /** @type {AnalyticsWindow} */ (window).oddboutBindAnalytics = async (api, token, key) => {
     if (!apiBase || api !== apiBase || typeof token !== 'string') return;
     try {
+      /** @type {{ enabled: boolean, clientId?: string, sessionId?: string }} */
       let body = { enabled: false };
       if (permitted()) {
+        /** @type {(field: string) => Promise<any>} */
         const get = field => new Promise(resolve => {
           const timer = setTimeout(() => resolve(null), 2500);
-          window.gtag('get', measurementId, field, value => { clearTimeout(timer); resolve(value); });
+          /** @type {AnalyticsWindow} */ (window).gtag('get', measurementId, field, value => { clearTimeout(timer); resolve(value); });
         });
         const [clientId, sessionId] = await Promise.all([get('client_id'), get('session_id')]);
         if (!/^\d{1,20}\.\d{1,20}$/.test(clientId ?? '') || !/^\d{1,20}$/.test(String(sessionId ?? '')) || !permitted()) return;
@@ -43,32 +59,34 @@ function startAnalytics(measurementId, hostname, apiBase) {
     window.dispatchEvent(new CustomEvent('oddbout:analytics-ready'));
     return;
   }
-  window.oddboutAnalyticsStarted = true;
-  window.dataLayer = window.dataLayer || [];
-  window.gtag = function () { window.dataLayer.push(arguments); };
+  /** @type {AnalyticsWindow} */ (window).oddboutAnalyticsStarted = true;
+  /** @type {AnalyticsWindow} */ (window).dataLayer = /** @type {AnalyticsWindow} */ (window).dataLayer || [];
+  /** @type {AnalyticsWindow} */ (window).gtag = function () { /** @type {AnalyticsWindow} */ (window).dataLayer.push(arguments); };
   const page = { page_location: current.href, page_referrer: referrer };
-  window.gtag('js', new Date());
-  window.gtag('set', { ...page, allow_google_signals: false, allow_ad_personalization_signals: false });
-  window.gtag('config', measurementId, { ...page, send_page_view: false,
+  /** @type {AnalyticsWindow} */ (window).gtag('js', new Date());
+  /** @type {AnalyticsWindow} */ (window).gtag('set', { ...page, allow_google_signals: false, allow_ad_personalization_signals: false });
+  /** @type {AnalyticsWindow} */ (window).gtag('config', measurementId, { ...page, send_page_view: false,
     allow_google_signals: false, allow_ad_personalization_signals: false });
   window.addEventListener('oddbout:milestone', event => {
     if (!permitted()) return;
-    const { name, parameters = {} } = event.detail ?? {};
+    const { name, parameters = {} } = /** @type {CustomEvent} */ (event).detail ?? {};
     if (!['game_start', 'match_complete', 'creation_start'].includes(name)) return;
+    /** @type {Record<string, string>} */
     const safe = { ...page, send_to: measurementId };
     if (['play', 'watch', 'tournament', 'exhibition'].includes(parameters.mode)) safe.mode = parameters.mode;
     if (['ko', 'decision', 'forfeit', 'timeout', 'win', 'loss'].includes(parameters.result)) safe.result = parameters.result;
     if (name === 'creation_start') safe.method = 'request_copy';
-    window.gtag('event', name, safe);
+    /** @type {AnalyticsWindow} */ (window).gtag('event', name, safe);
   });
   window.dispatchEvent(new CustomEvent('oddbout:analytics-ready'));
-  window.gtag('event', 'page_view', { ...page, page_title: document.title });
+  /** @type {AnalyticsWindow} */ (window).gtag('event', 'page_view', { ...page, page_title: document.title });
   const script = document.createElement('script');
   script.async = true; script.referrerPolicy = 'no-referrer';
   script.src = 'https://www.googletagmanager.com/gtag/js?id=' + measurementId;
   document.head.append(script);
 }
 
+/** @param {string} measurementId @param {string} siteUrl @param {string | null} [apiBase] */
 export function analyticsSource(measurementId, siteUrl, apiBase = null) {
   if (!/^G-[A-Z0-9]{6,20}$/.test(measurementId ?? '')) throw new Error('Invalid GA4 measurement ID');
   const site = new URL(siteUrl);
@@ -76,6 +94,7 @@ export function analyticsSource(measurementId, siteUrl, apiBase = null) {
   return `(${startAnalytics.toString()})(${JSON.stringify(measurementId)}, ${JSON.stringify(site.hostname)}, ${JSON.stringify(apiBase)});`;
 }
 
+/** @param {string} html @param {boolean} [privacy] */
 export function analyticsHtml(html, privacy = false) {
   if (privacy) {
     const anchor = '<h3>Technical information</h3>';
@@ -88,6 +107,7 @@ export function analyticsHtml(html, privacy = false) {
   return html.replace('</head>', `<script type="module">import ${JSON.stringify(virtualId)};</script>\n</head>`);
 }
 
+/** @param {string | undefined} measurementId @param {string} siteUrl @param {string | null} [apiBase] @returns {SitePlugin | null} */
 export function googleAnalyticsPlugin(measurementId, siteUrl, apiBase = null) {
   if (!measurementId) return null;
   const source = analyticsSource(measurementId, siteUrl, apiBase);

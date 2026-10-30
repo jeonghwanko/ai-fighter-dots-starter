@@ -1,4 +1,5 @@
 #!/usr/bin/env node
+// @ts-check
 // Hosted generation measurement (docs/MEASUREMENT.md). Reads the JSON from scripts/measure-export.sql (db.json) and, optionally, the
 // host ledger (`og report --json`), and writes kpis.json and clip-labels.jsonl. It never connects to anything and reads no requester text.
 // node scripts/measure-export.mjs --db db.json [--ledger ledger.json] --out-dir output/measure-YYYYMMDD
@@ -6,25 +7,54 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 
+/** @type {Record<string, string>} */
 const READY = { appearance_ready: 'appearance', motion_ready: 'motions' };
 const ANSWERS = new Set(['appearance-answer', 'motion-answer', 'register', 'cancelled']);
 const ENDED = new Set(['submitted', 'rejected', 'failed', 'needs_review', 'cancelled', 'expired']);
 const LOOKS = ['look-a', 'look-b'];
 
-/** The worker's folder name for a job (generation-stages.mjs `ogJobId`): the ledger is kept by it. */
+/**
+ * @typedef {{ id: string, status: string, createdAt: string, errorCode?: string | null, appearanceRevisions?: number | null,
+ *   motionRevisions?: number | null, previewClips?: string[] }} Job
+ * @typedef {{ jobId: string, id: number, at: string, kind: string, data: any }} JobEvent  data: the event's JSON, by kind
+ * @typedef {{ jobId: string, scope?: string, status?: string | null, createdAt: string, usage?: { input_tokens?: unknown } | null,
+ *   checks?: Record<string, unknown> }} Review
+ * @typedef {{ kind: string, version: number, exportedAt: string, since: string, jobs: Job[], events: JobEvent[], reviews: Review[] }} Db  The JSON of measure-export.sql.
+ * @typedef {{ jobs?: { job: string, providers?: Record<string, { runs?: number }> }[] }} Ledger  `og report --json`
+ * @typedef {{ job: Job, events: JobEvent[], stageMs: Record<string, number[]>, claims: Record<string, number>, waitsMs: number[],
+ *   calls: Record<string, number[]>, kit: string | null, engine: string | null, stageReviews: { stage: string, code: string }[],
+ *   stageRetries: { stage: string, code: string }[], operatorRetries: number, operatorWaitsMs: number[], cancelledAfterReview: boolean,
+ *   workerPicks: number, gaits: any[], firstAppearance?: JobEvent | null, reachedAppearance?: boolean, reachedMotions?: boolean,
+ *   firstMotionDecision?: JobEvent | null, register?: JobEvent | null, created?: JobEvent | null, delegated?: boolean | null }} Timeline
+ *   gaits: the `gait` events' data. The fields from firstAppearance on are set once the events are read.
+ * @typedef {Record<string, number>} Counts
+ * @typedef {{ branches: number, outcomes: Counts, codes: Counts, passedTake: Counts, fromWalk: number, cuts: number, refusedBy: Counts,
+ *   judgeFailed: Counts, filmedFrames: Counts, deliveredFrames: Counts, jolts: number[] }} GaitRow
+ * @typedef {{ status: string | null, defect: number, clear: number, unverified: number, anyDefect: boolean }} LabelReview
+ * @typedef {{ job: string, kit: string | null, engine: string | null, scope: string, version: number, label: 'accepted' | 'rejected' | 'not-chosen',
+ *   review: LabelReview | null }} Label
+ */
+
+/** The worker's folder name for a job (generation-stages.mjs `ogJobId`): the ledger is kept by it. @type {(job: Pick<Job, 'id' | 'createdAt'>) => string} */
 export const ogJobId = job => `${new Date(job.createdAt).toISOString().slice(0, 10).replaceAll('-', '')}-gen-${job.id.replaceAll('-', '')}`;
+/** @type {(a: string, b: string) => number} */
 const ms = (a, b) => Date.parse(b) - Date.parse(a);
+/** @type {(n: number, d: number) => number | null} */
 const rate = (n, d) => (d ? n / d : null);
+/** @param {number[]} values */
 function spread(values) {
-  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b), at = p => sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)];
+  const sorted = values.filter(Number.isFinite).sort((a, b) => a - b), at = /** @type {(p: number) => number} */ (p => sorted[Math.min(sorted.length - 1, Math.ceil(p * sorted.length) - 1)]);
   return sorted.length ? { n: sorted.length, p50: at(0.5), p95: at(0.95), mean: sorted.reduce((s, v) => s + v, 0) / sorted.length } : { n: 0 };
 }
+/** @type {(map: Counts, key: string, by?: number) => Counts} */
 const count = (map, key, by = 1) => { map[key] = (map[key] ?? 0) + by; return map; };
+/** @type {(list: number[]) => ReturnType<typeof spread>} */
 const minutes = list => spread(list.map(v => v / 60000));
 
-/** One job's events in order, read once: what the user answered, how long each stage and each wait took, which release made it. */
+/** One job's events in order, read once: what the user answered, how long each stage and each wait took, which release made it. @param {Job} job @param {JobEvent[]} events */
 export function timeline(job, events) {
   const own = events.filter(e => e.jobId === job.id).sort((a, b) => (a.id ?? 0) - (b.id ?? 0) || a.at.localeCompare(b.at));
+  /** @type {Timeline} */
   const t = { job, events: own, stageMs: {}, claims: {}, waitsMs: [], calls: {}, kit: null, engine: null,
     stageReviews: [], stageRetries: [], operatorRetries: 0, operatorWaitsMs: [], cancelledAfterReview: false, workerPicks: 0, gaits: [] };
   let claimed = null, ready = null, reviewed = null;
@@ -51,6 +81,7 @@ export function timeline(job, events) {
     if (e.kind === 'cancelled' && reviewed) { t.cancelledAfterReview = true; reviewed = null; }
     if (e.kind === 'gait' && ['walk', 'run'].includes(data.gait)) t.gaits.push(data);   // how a walk or run ended, every cut tried
   }
+  /** @type {(kind: string) => JobEvent | undefined} */
   const first = kind => own.find(e => e.kind === kind);
   t.firstAppearance = first('appearance-answer') ?? null;
   const firstMotionReady = own.find(e => e.kind === 'finished' && e.data?.status === 'motion_ready');
@@ -63,15 +94,19 @@ export function timeline(job, events) {
   return t;
 }
 
-/** The numbers of docs/MEASUREMENT.md over a set of jobs. Each rate names its denominator; with no jobs behind it a rate is null. */
+/**
+ * The numbers of docs/MEASUREMENT.md over a set of jobs. Each rate names its denominator; with no jobs behind it a rate is null.
+ * @param {Timeline[]} timelines @param {{ reviews?: Review[], ledger?: Ledger | null }} [options]
+ */
 export function kpis(timelines, { reviews = [], ledger = null } = {}) {
   const ids = new Set(timelines.map(t => t.job.id)), jobs = timelines.map(t => t.job);
   const answeredLook = timelines.filter(t => t.firstAppearance), decidedMotion = timelines.filter(t => t.firstMotionDecision);
   const reachedMotions = timelines.filter(t => t.reachedMotions).length, registered = timelines.filter(t => t.register);
   const reachedReady = timelines.filter(t => t.reachedAppearance || t.reachedMotions);
+  /** @type {Counts} */
   const clipRevisions = {};
   for (const t of timelines) for (const e of t.events) if (e.kind === 'motion-answer') count(clipRevisions, e.data?.clip ?? 'unknown');
-  const stageMs = {}, claims = {}, calls = {};
+  const stageMs = /** @type {Record<string, number[]>} */ ({}), claims = /** @type {Record<string, number[]>} */ ({}), calls = /** @type {Record<string, number[]>} */ ({});
   for (const t of timelines) {
     for (const [stage, list] of Object.entries(t.stageMs)) (stageMs[stage] ??= []).push(...list);
     for (const [stage, n] of Object.entries(t.claims)) (claims[stage] ??= []).push(n);
@@ -80,6 +115,7 @@ export function kpis(timelines, { reviews = [], ledger = null } = {}) {
   const statuses = {}, errors = {};
   for (const j of jobs) { count(statuses, j.status); if (['failed', 'needs_review'].includes(j.status)) count(errors, j.errorCode ?? 'none'); }
   const ledgerOf = new Map((ledger?.jobs ?? []).map(j => [j.job, j]));
+  /** @type {Record<string, number[]>} */
   const runsPerRegistered = {};
   for (const t of registered) {
     for (const [provider, v] of Object.entries(ledgerOf.get(ogJobId(t.job))?.providers ?? {})) (runsPerRegistered[provider] ??= []).push(v.runs ?? 0);
@@ -91,6 +127,7 @@ export function kpis(timelines, { reviews = [], ledger = null } = {}) {
   }
   const reviewedJobs = timelines.filter(t => t.stageReviews.length), known = timelines.filter(t => t.delegated !== null);
   // Walk and run (the `gait` events): how each branch ended, the take that passed, why each cut was refused, the frames filmed and delivered.
+  /** @type {Record<string, GaitRow>} */
   const gaits = {};
   for (const t of timelines) for (const g of t.gaits) {
     const row = gaits[g.gait] ??= { branches: 0, outcomes: {}, codes: {}, passedTake: {}, fromWalk: 0, cuts: 0, refusedBy: {}, judgeFailed: {}, filmedFrames: {}, deliveredFrames: {}, jolts: [] };
@@ -110,8 +147,8 @@ export function kpis(timelines, { reviews = [], ledger = null } = {}) {
   for (const r of ownReviews) { count(reviewStatus, r.status ?? 'unknown'); count(reviewScopes, r.scope ?? 'unknown'); }
   return {
     jobs: jobs.length,
-    appearanceFirstChoice: { rate: rate(answeredLook.filter(t => !t.firstAppearance.data?.revise).length, answeredLook.length), of: answeredLook.length },
-    motionFirstAccept: { rate: rate(decidedMotion.filter(t => t.firstMotionDecision.kind === 'register').length, decidedMotion.length), of: decidedMotion.length },
+    appearanceFirstChoice: { rate: rate(answeredLook.filter(t => !/** @type {JobEvent} */ (t.firstAppearance).data?.revise).length, answeredLook.length), of: answeredLook.length },
+    motionFirstAccept: { rate: rate(decidedMotion.filter(t => /** @type {JobEvent} */ (t.firstMotionDecision).kind === 'register').length, decidedMotion.length), of: decidedMotion.length },
     clipRevisions: Object.fromEntries(Object.entries(clipRevisions).map(([clip, n]) => [clip, { n, perJobAtMotions: rate(n, reachedMotions) }])),
     revisionsPerRegistered: spread(registered.map(t => (t.job.appearanceRevisions ?? 0) + (t.job.motionRevisions ?? 0))),
     endStates: statuses,
@@ -131,7 +168,7 @@ export function kpis(timelines, { reviews = [], ledger = null } = {}) {
     stageMinutes: Object.fromEntries(Object.entries(stageMs).map(([stage, list]) => [stage, minutes(list)])),
     claimsPerStage: Object.fromEntries(Object.entries(claims).map(([stage, list]) => [stage, spread(list)])),
     userWaitMinutes: minutes(timelines.flatMap(t => t.waitsMs)),
-    minutesToRegister: minutes(registered.filter(t => t.created).map(t => ms(t.created.at, t.register.at))),
+    minutesToRegister: minutes(registered.filter(t => t.created).map(t => ms(/** @type {JobEvent} */ (t.created).at, /** @type {JobEvent} */ (t.register).at))),
     calls: Object.fromEntries(Object.entries(calls).map(([tool, [runs, failed, seconds]]) => [tool, { runs, failed, seconds }])),
     providerRunsPerRegistered: ledger ? Object.fromEntries(Object.entries(runsPerRegistered).map(([p, list]) => [p, spread(list)])) : null,
     decisions: { reviews: ownReviews.length, byStatus: reviewStatus, byScope: reviewScopes,
@@ -144,21 +181,26 @@ export function kpis(timelines, { reviews = [], ledger = null } = {}) {
  * before; the version a revision names is `rejected`, the versions current at registration `accepted`. A look round both of whose looks
  * were sent back is `rejected`; the chosen look `accepted`, the other `not-chosen` (a preference, not a defect). Clips of a job that never
  * registered stay unlabeled. Each label carries the Decisions review of that clip version when there is one.
+ * @param {Timeline[]} timelines @param {Review[]} [reviews]
  */
 export function clipLabels(timelines, reviews = []) {
+  /** @type {Label[]} */
   const rows = [];
   for (const t of timelines) {
-    const versions = {}, mine = reviews.filter(r => r.jobId === t.job.id);
+    const versions = /** @type {Counts} */ ({}), mine = reviews.filter(r => r.jobId === t.job.id);
     let round = 0;
+    /** @type {(scope: string, at: string) => number} */
     const versionAt = (scope, at) => LOOKS.includes(scope)
       ? t.events.filter(e => e.kind === 'appearance-answer' && e.data?.revise && ms(e.at, at) > 0).length
       : t.events.filter(e => e.kind === 'motion-answer' && e.data?.clip === scope && ms(e.at, at) > 0).length;
+    /** @type {(scope: string, version: number) => LabelReview | null} */
     const review = (scope, version) => {
       const r = mine.filter(x => x.scope === scope && versionAt(scope, x.createdAt) === version).at(-1);
       if (!r) return null;
-      const statuses = Object.values(r.checks ?? {}), n = s => statuses.filter(v => v === s).length;
+      const statuses = Object.values(r.checks ?? {}), n = /** @type {(s: string) => number} */ (s => statuses.filter(v => v === s).length);
       return { status: r.status ?? null, defect: n('defect'), clear: n('clear'), unverified: n('unverified'), anyDefect: n('defect') > 0 };
     };
+    /** @type {(scope: string, version: number, label: Label['label']) => number} */
     const row = (scope, version, label) => rows.push({ job: t.job.id, kit: t.kit, engine: t.engine, scope, version, label, review: review(scope, version) });
     for (const e of t.events) {
       if (e.kind === 'appearance-answer') {
@@ -175,19 +217,22 @@ export function clipLabels(timelines, reviews = []) {
 /**
  * Would a "no defect found" screen have agreed with the users? Only labeled clips whose review completed count. Weak labels: a user
  * sends a clip back for taste as well as for a defect, and accepts a clip with a small flaw; read it with docs/MEASUREMENT.md.
+ * @param {Label[]} rows
  */
 export function screening(rows) {
   const scored = rows.filter(r => ['accepted', 'rejected'].includes(r.label) && r.review?.status === 'completed');
   const m = { rejectedFlagged: 0, rejectedMissed: 0, acceptedFlagged: 0, acceptedPassed: 0 };
-  for (const r of scored) m[`${r.label}${r.review.anyDefect ? 'Flagged' : r.label === 'rejected' ? 'Missed' : 'Passed'}`] += 1;
+  for (const r of scored) m[/** @type {keyof typeof m} */ (`${r.label}${/** @type {LabelReview} */ (r.review).anyDefect ? 'Flagged' : r.label === 'rejected' ? 'Missed' : 'Passed'}`)] += 1; // scored above
   return { clips: scored.length, ...m, detectionRate: rate(m.rejectedFlagged, m.rejectedFlagged + m.rejectedMissed),
     falseBlockRate: rate(m.acceptedFlagged, m.acceptedFlagged + m.acceptedPassed), labels: 'user decisions, clip level; not independent question labels' };
 }
 
+/** @param {Db} db @param {Ledger | null} [ledger] */
 export function report(db, ledger = null) {
   if (db?.kind !== 'oddbout-measure-db' || db.version !== 1) throw new Error('measure-export: expected the JSON of scripts/measure-export.sql');
   const all = db.jobs.map(job => timeline(job, db.events));
   const labels = clipLabels(all, db.reviews);
+  /** @type {Record<string, Timeline[]>} */
   const byKit = {};
   for (const t of all) (byKit[t.kit ?? 'unknown'] ??= []).push(t);
   return {
@@ -199,10 +244,13 @@ export function report(db, ledger = null) {
   };
 }
 
+/** @param {string[]} argv */
 async function main(argv) {
+  /** @type {(name: string) => string | undefined} */
   const arg = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
   const dbFile = arg('--db'), ledgerFile = arg('--ledger'), outDir = arg('--out-dir');
   if (!dbFile || !outDir) { console.error('usage: measure-export.mjs --db db.json [--ledger ledger.json] --out-dir <dir>'); return 2; }
+  /** @type {(file: string) => Promise<any>} */
   const read = async file => JSON.parse((await readFile(file, 'utf8')).replace(/^﻿/, ''));
   let db = await read(dbFile);
   if (Array.isArray(db) && db[0]?.export) db = db[0].export;   // the SQL editor's download: one row, one `export` column
@@ -211,7 +259,7 @@ async function main(argv) {
   await mkdir(outDir, { recursive: true });
   await writeFile(path.join(outDir, 'kpis.json'), JSON.stringify(summary, null, 2) + '\n');
   await writeFile(path.join(outDir, 'clip-labels.jsonl'), labels.map(row => JSON.stringify(row)).join('\n') + (labels.length ? '\n' : ''));
-  const a = summary.all, pct = v => (v === null ? '—' : `${Math.round(v * 100)}%`);
+  const a = summary.all, pct = /** @type {(v: number | null) => string} */ (v => (v === null ? '—' : `${Math.round(v * 100)}%`));
   console.log(`jobs ${a.jobs} (ended ${summary.ended})  look first choice ${pct(a.appearanceFirstChoice.rate)} of ${a.appearanceFirstChoice.of}  ` +
     `motions first accept ${pct(a.motionFirstAccept.rate)} of ${a.motionFirstAccept.of}  failed/review ${pct(a.failureOrReviewRate.rate)}  ` +
     `stage reviews ${a.stageReviews.total} in ${a.stageReviews.jobs} job(s)  operator retries ${a.operatorRetries}  ` +
