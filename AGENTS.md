@@ -179,3 +179,6 @@ This repository lets each user create their own fighter through Dot. Read
 our fork of Alex Kim's [sprite-gen](https://github.com/aldegad/sprite-gen) that carries the motion engine.
 Keep its Apache-2.0 LICENSE and NOTICE. Do not update the pin or modify vendor code as part of ordinary character creation.
 Engine changes are committed to sprite-gen-agent first; then move the pin. Setup and bundling refuse local vendor edits.
+A pull does not move the submodule: set `git config submodule.recurse true` once per clone, or run `git submodule update`
+after each pull. Otherwise the old checkout shows as `M vendor/sprite-gen`, and `git add -A` stages it as a rollback.
+CI refuses a pin that does not move forward along sprite-gen-agent main.
