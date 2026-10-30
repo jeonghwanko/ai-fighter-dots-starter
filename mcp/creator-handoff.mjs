@@ -2,6 +2,7 @@
 /** The public AI Fighter creator homepage on free GitHub Pages. */
 export const PUBLIC_CREATOR_PAGE = 'https://oddbout.com/creator.html';
 const LEGACY_CREATOR_PAGES = new Set(['https://rupin.pryzm.gg/creator.html',
+  'https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html', // the repository's name before it became oddbout-starter
   'https://jeonghwanko.github.io/oddbout-starter/creator.html']);
 
 /** The page a link opens: the public homepage, or a loopback HTTP homepage for local development. */
