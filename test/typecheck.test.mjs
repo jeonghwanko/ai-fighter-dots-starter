@@ -17,6 +17,15 @@ test('every module tsc covers opts into type checking', async () => {
   assert.deepEqual(unchecked, []);
 });
 
+test('the game repository\'s byte copies are type-checked without a marker (tsconfig.vendored.json: checkJs)', async () => {
+  // contracts/ and server/ are pinned byte copies (contracts/ai-fighter/SOURCE.json), so they cannot start with `// @ts-check`. A second config
+  // turns checkJs on for them instead; the game repository checks the same files under its own tsconfig.server.json, where the types are written.
+  const config = JSON.parse(await readFile(new URL('../tsconfig.vendored.json', import.meta.url), 'utf8'));
+  assert.deepEqual(config.include, ['contracts/**/*.mjs', 'server/**/*.mjs']);
+  assert.equal(config.compilerOptions.checkJs, true);
+  assert.equal(config.extends, './tsconfig.json');
+});
+
 test('Deno checks api/ at the same strictness as tsc, in every Edge function', async () => {
   // Deno honours // @ts-check too: `deno check supabase/functions/<name>/index.ts` reads these files with that function's
   // deno.json. Only ai-fighter's was aligned at first; ai-fighter-mcp checked them under Deno's default until 2026-10-29.
@@ -29,7 +38,9 @@ test('Deno checks api/ at the same strictness as tsc, in every Edge function', a
   }
 });
 
-test('tsc finds no type errors in api/, worker/, mcp/ and scripts/ under strict (npm run typecheck)', () => {
-  const run = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: root, encoding: 'utf8' });
-  assert.equal(run.status, 0, run.stdout + run.stderr);
+test('tsc finds no type errors in api/, worker/, mcp/, scripts/, contracts/ and server/ under strict (npm run typecheck)', () => {
+  for (const config of ['tsconfig.json', 'tsconfig.vendored.json']) {
+    const run = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', config], { cwd: root, encoding: 'utf8' });
+    assert.equal(run.status, 0, config + '\n' + run.stdout + run.stderr);
+  }
 });

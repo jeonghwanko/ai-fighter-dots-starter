@@ -166,6 +166,9 @@ This repository lets each user create their own fighter through Dot. Read
   deno.json; after typing a file an Edge function bundles, run it locally too.
   scripts/edge-bundle.mjs reads a JSDoc `import('…')` type as an import: in those files, name only modules the bundle
   already ships or its deno.json maps (an unmapped one makes `fighter:mcp plan` fail).
+- `contracts/` and `server/` are byte copies of the game's files (`contracts/ai-fighter/SOURCE.json` pins them), so they carry no `// @ts-check` marker;
+  `tsconfig.vendored.json` turns `checkJs` on for them and `npm run typecheck` runs it too. Fix a type error in the game repository
+  (`kaito_web/tsconfig.server.json` checks the same files), then copy the files here and `npm run contract:vendored -- --pin`.
 - Deploy the production `ai-fighter` Edge function only from the game repository with `npm run fighter:edge -- plan`,
   review its source/engine/live-version changes, then use `deploy --plan <id>` with the same options.
   Never upload this checkout directly through Supabase CLI/MCP or a hand-built payload: its duel engine is a null adapter.
