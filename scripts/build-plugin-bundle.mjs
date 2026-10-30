@@ -27,8 +27,10 @@ const runtimeFiles = [
   'docs/EXECUTION-HOST.md', 'docs/CONNECTION-READINESS.md', 'docs/ODDBOUT-PLUGIN.md',
 ];
 const runtimeDirectories = ['mcp', 'contracts/ai-fighter'];
-// The cloud MCP and its file-input probe run only in the Edge function (supabase/functions/ai-fighter-mcp) and import the server API.
+// The cloud MCP (with its tool families in mcp/cloud/) and its file-input probe run only in the Edge function
+// (supabase/functions/ai-fighter-mcp) and import the server API.
 const edgeOnlyFiles = ['mcp/cloud.mjs', 'mcp/file-input-probe.mjs', 'mcp/creator-sources.mjs'];
+const edgeOnly = file => edgeOnlyFiles.includes(file) || file.startsWith('mcp/cloud/');
 const runtimeScripts = ['start', 'login', 'logout', 'sprite:setup', 'sprite:status', 'sprite',
   'fighter:pack', 'fighter:gait', 'fighter:contact', 'validate', 'creation:context', 'creation:delivery', 'creation:check', 'creation:run', 'creation:tool',
   'dots:doctor', 'dots:bootstrap', 'dots:resume', 'dots:start', 'dots:source'];
@@ -74,8 +76,8 @@ export async function runtimeFileList({ sourceRoot = root } = {}) {
   // Tracked files only: editor leftovers and untracked experiments in these directories never ship.
   const tracked = await run('git', ['ls-files', '-z', '--', ...runtimeDirectories], { cwd: sourceRoot, capture: true });
   declared.push(...tracked.split('\0').filter(Boolean));
-  const { files: closure } = await importClosure(sourceRoot, declared.filter(file => !edgeOnlyFiles.includes(file)));
-  const leaked = closure.filter(file => edgeOnlyFiles.includes(file));
+  const { files: closure } = await importClosure(sourceRoot, declared.filter(file => !edgeOnly(file)));
+  const leaked = closure.filter(edgeOnly);
   if (leaked.length) throw Error(`The local runtime imports Edge-only modules: ${leaked.join(', ')}`);
   return closure;
 }
