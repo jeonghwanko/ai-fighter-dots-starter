@@ -165,7 +165,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
   // 출전 (2026-10-30): a validated fighter is 제작 중 until his owner enters him; only then do other people meet him. Both calls answer the
   // same when repeated (supabase/migrations/20261030130000_ai_fighter_entry.sql).
   /** @type {Readonly<Record<string, number>>} */
-  const ENTRY_STATUS = { 'account-disabled': 403, 'rate-limit': 429, 'not-found': 404, 'fighter-changed': 409, 'fighter-not-ready': 409, 'invalid-entry': 422 };
+  const ENTRY_STATUS = { 'account-disabled': 403, 'rate-limit': 429, 'not-found': 404, 'fighter-changed': 409, 'fighter-not-ready': 409, 'profile-set-required': 409, 'invalid-entry': 422 };
   // The account first, as the site's route does (`af_authorize`: a disabled account, the per-minute budget) — 적대적 리뷰 2026-10-30: a
   // disabled account entered its fighter here while the site refused it.
   /** @param {string} name @param {Record<string, unknown>} args */
@@ -184,7 +184,8 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
   register('enter_fighter', '출전하기', 'Enter the connected user\'s registered fighter (출전): other people then meet him in the roster, '
     + 'ranked duels, cups and their rankings. A validated fighter starts in production (제작 중): out of other people\'s cups, ranked duels and lists while his owner previews and practises him. '
     + 'First show the user each of the eleven required motions; enter only on his request once he confirmed every one. '
-    + 'Pass the package hash he watched (get_registered_fighter) and those motions. A new package returns him to production.',
+    + 'Pass the package hash he watched (get_registered_fighter) and those motions. A new package returns him to production. '
+    + 'profile-set-required: submit his profile set first (submit_profile_set) and enter once it passed validation.',
     { fighterId: UUID_ARG(), expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
       reviewedClips: z.array(z.enum(/** @type {[string, ...string[]]} */ ([...ENTRY_CLIPS]))).length(ENTRY_CLIPS.length) },
     ({ fighterId, expectedManifestSha256, reviewedClips }) => {

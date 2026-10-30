@@ -8,7 +8,7 @@ import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUserId } from
 
 const CORS = { methods: 'POST, DELETE, OPTIONS', headers: 'Authorization, Content-Type' };
 const STATUS = Object.freeze({ 'authentication-required': 401, 'account-disabled': 403, 'not-found': 404, 'rate-limit': 429,
-  'fighter-changed': 409, 'fighter-not-ready': 409, 'invalid-entry': 422 });
+  'fighter-changed': 409, 'fighter-not-ready': 409, 'profile-set-required': 409, 'invalid-entry': 422 });
 /** The motions an entry must name: every required clip of the contract, each once. */
 export const ENTRY_CLIPS = Object.freeze(Object.keys(spec.motions));
 

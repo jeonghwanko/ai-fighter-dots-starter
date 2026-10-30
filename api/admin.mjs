@@ -1,5 +1,7 @@
 // @ts-check
 import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUserId } from './http.mjs';
+import { PUBLIC_BUCKET, profileSetKey, publicProfileSetPath, publishProfileSet } from './profile-sets.mjs';
+import { BUCKET } from './submissions.mjs';
 
 const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };
 /** @type {(body: any, status?: number) => Response} */
@@ -15,6 +17,36 @@ async function smallBody(request, keys) {
   catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
   if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !keys.includes(key))) throw new Problem(400, 'invalid-review');
   return body;
+}
+/**
+ * The operator's review list (선수 프로필 세트, 2026-10-31): each set with its files signed for ten minutes in one Storage call — the front
+ * painting, the validator's card and face, and his current package's idle sheet to compare with. A file Storage cannot sign is null.
+ * @param {any} db @param {any[]} sets
+ */
+async function reviewList(db, sets) {
+  /** @type {string[]} */
+  const paths = [];
+  /** @type {(path: string | null | undefined) => number} */
+  const want = path => (typeof path === 'string' && path ? paths.push(path) - 1 : -1);
+  const wanted = sets.map(set => ({ front: want(profileSetKey(set.ownerId, set.id, 'front')),
+    card: set.derived?.card ? want(profileSetKey(set.ownerId, set.id, 'card')) : -1,
+    face: set.derived?.face ? want(profileSetKey(set.ownerId, set.id, 'face')) : -1, preview: want(set.previewKey) }));
+  /** @type {Map<string, string>} */
+  const signed = new Map();
+  if (paths.length) {
+    const { data } = await db.storage.from(BUCKET).createSignedUrls(paths, 600);
+    for (const item of Array.isArray(data) ? data : []) if (item && !item.error && typeof item.signedUrl === 'string') signed.set(item.path, item.signedUrl);
+  }
+  /** @type {(index: number) => string | null} */
+  const url = index => (index >= 0 ? signed.get(paths[index]) ?? null : null);
+  return sets.map((set, index) => {
+    const card = set.derived?.card, face = set.derived?.face, at = wanted[index];
+    return { id: set.id, fighterId: set.fighterId, fighterName: set.name ?? '', ownerEmail: set.email ?? '', status: set.status,
+      submittedAt: set.submittedAt ?? set.createdAt, front: { url: url(at.front), width: set.manifest?.front?.width ?? null, height: set.manifest?.front?.height ?? null },
+      card: card ? { url: url(at.card), width: card.width, height: card.height, face: card.face } : null,
+      face: face ? { url: url(at.face), size: face.size } : null, previewUrl: url(at.preview),
+      reason: set.reason ?? null, current: set.current === true, entered: set.entered === true, validatedAt: set.validatedAt ?? null, reviewedAt: set.reviewedAt ?? null };
+  });
 }
 /** @param {{ db: any }} options @returns {import('./http.mjs').Route} */
 export function createAdminHandler({ db }) {
@@ -80,6 +112,41 @@ export function createAdminHandler({ db }) {
       if (parts.length === 4 && parts[1] === 'generations' && ['retry', 'cancel'].includes(parts[3]) && request.method === 'POST') {
         if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');
         return reply({ ok: true, job: await rpc(parts[3] === 'retry' ? 'af_admin_generation_retry' : 'af_admin_generation_cancel', { p_actor: actor, p_id: parts[2] }) });
+      }
+      // 선수 프로필 세트 (2026-10-31): the sets the validator passed wait here; approving copies their derived files to the public bucket.
+      if (parts.length === 2 && parts[1] === 'profile-sets' && request.method === 'GET') {
+        const status = new URL(request.url).searchParams.get('status') ?? 'review';
+        if (!['review', 'approved', 'rejected'].includes(status)) throw new Problem(400, 'invalid-query');
+        return reply({ ok: true, profileSets: await reviewList(db, await rpc('af_admin_profile_sets', { p_actor: actor, p_status: status })) });
+      }
+      if (parts.length === 4 && parts[1] === 'profile-sets' && ['approve', 'reject'].includes(parts[3]) && request.method === 'POST') {
+        if (!UUID.test(parts[2])) throw new Problem(400, 'invalid-review');
+        const id = parts[2].toLowerCase();
+        if (parts[3] === 'approve') {
+          const set = await rpc('af_admin_profile_set', { p_actor: actor, p_id: id });
+          if (!['review', 'approved'].includes(set.status)) throw new Problem(409, 'review-conflict');
+          // Public first, then the roster names it: a failed approval leaves no roster entry, and the files this call wrote are removed.
+          const written = await publishProfileSet(db, set);
+          try { return reply({ ok: true, status: (await rpc('af_admin_profile_set_approve', { p_actor: actor, p_id: id })).status }); }
+          catch (error) {
+            if (written.length) await db.storage.from(PUBLIC_BUCKET).remove(written).catch(() => {});
+            throw error;
+          }
+        }
+        let body;
+        try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 4000))); }
+        catch (error) { if (error instanceof Problem) throw error; throw new Problem(400, 'invalid-body'); }
+        if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => key !== 'reason') || typeof body.reason !== 'string')
+          throw new Problem(400, 'invalid-review');
+        const reason = body.reason.trim();
+        if (!reason || reason.length > 300 || reason.includes('\0') || !reason.isWellFormed()) throw new Problem(400, 'invalid-review');
+        const rejected = await rpc('af_admin_profile_set_reject', { p_actor: actor, p_id: id, p_reason: reason });
+        // A rejected current set leaves the roster; its public files go with it.
+        if (rejected.previous === 'approved') {
+          const files = ['card', 'face'].map(name => rejected.derived?.[name]?.sha256).filter(sha => typeof sha === 'string' && /^[a-f0-9]{64}$/.test(sha));
+          if (files.length) await db.storage.from(PUBLIC_BUCKET).remove(files.map(sha => publicProfileSetPath(rejected.fighterId, sha))).catch(() => {});
+        }
+        return reply({ ok: true, status: rejected.status });
       }
       return reply({ ok: false, code: 'not-found' }, 404);
     } catch (error) {

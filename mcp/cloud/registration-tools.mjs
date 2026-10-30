@@ -33,7 +33,8 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       return { ok: true, data: section === 'schema' ? schema : {
         steps: ['appearance review', 'locomotion review', 'attack review', 'defense/reaction review',
           'optional style review (skill, entrance and victory clips, fighting style; may be skipped)', 'final review', 'prepare_fighter_registration',
-          'upload_fighter_asset for each pending asset', 'submit_fighter_registration', 'get_fighter_submission'],
+          'upload_fighter_asset for each pending asset', 'submit_fighter_registration', 'get_fighter_submission',
+          'prepare_profile_set, upload_profile_set_asset, submit_profile_set with the front painting the user chose (overview: profileSet)'],
         delivery: 'Use the current conversation’s actual image previews and approved files. A file path or a readiness flag is not a preview.',
         package: 'Produce fighter.json and assets/<id>.webp with the kit game-pack/pack commands, then pass actual host file attachments. '
           + 'For an existing approved package, preserve the original bytes and verify them; '
