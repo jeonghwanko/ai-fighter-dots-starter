@@ -78,6 +78,22 @@ export async function reviewOnServer({ api, job, dir, stage, scope, images, fit 
   }
 }
 
+/**
+ * A row the image model drew with a cell missing stops `sprite extract` (2026-10-30, the first free fighter's test: stance-a's cell 3 held
+ * 10 pixels), and `gen-set` takes a finished row as it is, so an operator's retry met the same image and stopped again. Each row the failed
+ * extract names (`extract-failure.json`, its errors `<state>: …`) is drawn once more and the run extracted again, at most EXTRACT_REDRAWS
+ * times; an extract that names no row of the request, or still fails, goes to an operator as before (`rows-extract`).
+ */
+export const EXTRACT_REDRAWS = 2;
+/** The request's rows a failed extract names, in its order, or none. */
+export async function extractFailedRows(run) {
+  const read = async name => JSON.parse(await readFile(path.join(run, name), 'utf8'));
+  const [failure, request] = await Promise.all([read('extract-failure.json').catch(() => null), read('sprite-request.json').catch(() => null)]);
+  const states = new Set(Object.keys(request?.states ?? {}));
+  const named = (Array.isArray(failure?.errors) ? failure.errors : []).map(error => /^([^\s:]+):/.exec(String(error))?.[1]);
+  return [...new Set(named.filter(state => state && states.has(state)))];
+}
+
 /** The text model for the brief and the image model for the looks (the subscription's; `gpt-6.1-sol` is refused on a ChatGPT login). */
 export const MODELS = Object.freeze({ text: 'gpt-6-sol', image: 'gpt-6-sol' });
 // Codex features that reach files, a shell, a browser, the computer, plugins, hooks, sub-agents or a new image: all off for the brief
@@ -548,6 +564,19 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
 
   const sprite = (...args) => ['npm', 'run', 'sprite', '--', ...args];
   const readJson = async file => JSON.parse(await readFile(file, 'utf8'));
+  /** `sprite extract` on a run of rows, the rows it failed drawn again first (EXTRACT_REDRAWS): null when it passed, else the stage's end. */
+  async function extractRows(run, concurrency) {
+    for (let redraws = 0; ; redraws += 1) {
+      if ((await og(sprite('extract', '--run-dir', run))).code === 0) return null;
+      const rows = redraws < EXTRACT_REDRAWS ? await extractFailedRows(run) : [];
+      if (!rows.length) return { review: 'rows-extract' };
+      const since = Date.now();
+      const { code } = await og(sprite('gen-set', '--run-dir', run, '--states', rows.join(','), '--force', '--provider', 'codex',
+        '--model', MODELS.image, '--concurrency', concurrency));
+      if (code === 75) return ASKED;
+      if (code !== 0) return failedRun('rows', code, path.join(run, 'reports', 'gen-set', 'set.report.json'), since);
+    }
+  }
 
   /** The look the creator chose, as the appearance stage left it (or its uploaded WebP). */
   async function chosenLook(job, dir) {
@@ -755,7 +784,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const { code } = await og(sprite('gen-set', '--run-dir', run, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '1'));
       if (code === 75) return ASKED;
       if (code !== 0) return failedRun('rows', code, path.join(run, 'reports', 'gen-set', 'set.report.json'), since);
-      if ((await og(sprite('extract', '--run-dir', run))).code !== 0) return { review: 'rows-extract' };
+      const extracted = await extractRows(run, '1');
+      if (extracted) return extracted;
       overrides.push({ run, row, cells });
     }
     return { overrides };
@@ -875,7 +905,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const { code } = await og(sprite('gen-set', '--run-dir', rows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '2'));
       if (code === 75) return ASKED;
       if (code !== 0) return failedRun('rows', code, path.join(rows, 'reports', 'gen-set', 'set.report.json'), since);
-      if ((await og(sprite('extract', '--run-dir', rows))).code !== 0) return { review: 'rows-extract' };
+      const extracted = await extractRows(rows, '2');
+      if (extracted) return extracted;
       // The creator's changes to action clips, in order: each remade row's named cells replace the first run's.
       const overrides = [];
       for (const change of changes.filter(c => !GAIT_FRAMES[c.clip])) {
