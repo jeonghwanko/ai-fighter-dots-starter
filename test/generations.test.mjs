@@ -52,6 +52,9 @@ test('a request: off until the worker is healthy, pictures with rights, one host
     assert.equal(upload.width, 512);
     assert.equal((await ask(crypto.randomUUID(), { refs: [upload.id] })).body.code, 'rights-required');
     assert.equal((await call('POST', 'generations', { description: 'x', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() })).body.code, 'invalid-description');
+    // One line from four characters (2026-10-30): the site asks one line.
+    assert.equal((await call('POST', 'generations/check', { description: '고양이', language: 'ko' })).body.code, 'invalid-description');
+    assert.deepEqual((await call('POST', 'generations/check', { description: '고양이 복서', language: 'ko' })).body, { ok: true });
     const key = crypto.randomUUID(), made = await ask(key, { refs: [upload.id], rightsConfirmed: true });
     assert.equal(made.status, 200); assert.equal(made.body.job.status, 'queued');
     assert.equal((await ask(key, { refs: [upload.id], rightsConfirmed: true })).body.job.id, made.body.job.id);
@@ -62,13 +65,17 @@ test('a request: off until the worker is healthy, pictures with rights, one host
     assert.equal((await call('POST', 'generations', { description: '다른 사람의 그림을 쓰는 선수 신청', language: 'ko', refs: [upload.id], rightsConfirmed: true },
       'other-token-0123456789', { 'idempotency-key': crypto.randomUUID() })).body.code, 'invalid-refs');
     assert.ok(theirs.id);
-    // A rejected request frees the account again; the service's daily limit holds.
+    // A rejected request frees the account again. A full day queues a request to ODDBOUT (첫 선수 무료, 2026-10-30); only past the
+    // waiting requests' limit is it refused.
     const claim = (await work('POST', 'claim', {})).body.job;
     assert.equal((await work('POST', 'finish', { jobId: claim.id, leaseToken: claim.leaseToken, outcome: 'rejected', result: { code: 'real-person' } })).body.status, 'rejected');
     assert.equal((await call('GET', 'generations')).body.used, false);
     await sql.query('update public.af_generation_hosts set daily_limit = 1 where official');
     await sql.query("insert into public.af_generation_jobs(owner_id,idempotency_key,description,language) values($1,$2,'남이 이미 신청한 선수 하나','ko')", [other, crypto.randomUUID()]);
+    await sql.query('update public.af_generation_settings set queue_limit = 1');
     assert.equal((await ask(crypto.randomUUID())).body.code, 'generation-capacity');
+    await sql.query('update public.af_generation_settings set queue_limit = 30');
+    assert.equal((await ask(crypto.randomUUID())).body.job.status, 'queued');
   } finally { await sql.close(); }
 });
 
@@ -173,7 +180,7 @@ test('cancel, leases that run out and creators who do not answer', async () => {
     }
     assert.equal((await work('POST', 'claim', {})).body.stage, 'idle');
     assert.equal((await call('GET', `generations/${job.id}`)).body.job.error, 'stage-attempts');
-    // A creator who leaves the looks unanswered for a week: expired, and his hosted fighter is free.
+    // A creator who leaves the looks unanswered for a week: expired, and his free fighter is used (its looks were painted, 2026-10-30).
     await sql.query("delete from public.af_generation_jobs");
     job = (await ask()).body.job;
     held = (await work('POST', 'claim', {})).body.job;
@@ -183,7 +190,7 @@ test('cancel, leases that run out and creators who do not answer', async () => {
     await sql.query("update public.af_generation_jobs set waiting_since = now() - interval '8 days' where id = $1", [job.id]);
     await work('POST', 'claim', {});
     assert.equal((await call('GET', `generations/${job.id}`)).body.job.status, 'expired');
-    assert.equal((await call('GET', 'generations')).body.used, false);
+    assert.equal((await call('GET', 'generations')).body.used, true);
   } finally { await sql.close(); }
 });
 
@@ -210,10 +217,10 @@ test('retries count toward a stage\'s three leases and wait; progress is a heart
     assert.equal((await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.hosted, false);
     await work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken, progress: 50 });
     assert.equal((await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.hosted, true);
-    // A cancel before the worker did anything is not a request toward the service's day.
+    // The official host's day counts the jobs it started (their looks, 2026-10-30): neither of these reached them.
     await sql.query("update public.af_generation_jobs set brief = null, status = 'cancelled', lease_token = null where id = $1", [second.id]);
     const today = (await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.today;
-    assert.equal(today, 1);
+    assert.equal(today, 0);
     // A submitted package that failed its check frees the account's one hosted fighter.
     const third = (await ask()).body.job;
     assert.equal((await ask()).body.code, 'generation-quota');
@@ -231,9 +238,11 @@ test('retries count toward a stage\'s three leases and wait; progress is a heart
 
 
 test('맡기기: the worker picks the look and the job goes on to the motions; with no pick, or a job not left to it, the creator is asked', async () => {
-  const { sql, call, work, healthy } = await generation();
+  const { sql, owner, call, work, healthy } = await generation();
   try {
     await healthy();
+    // Three requests whose looks are painted and then cancelled: three free fighters (each cancel after its looks keeps one used).
+    await sql.query('update public.af_creators set hosted_credits = 3 where owner_id = $1', [owner]);
     const ask = (body, token) => call('POST', 'generations', { description: '모자를 쓴 너구리 레슬러', language: 'ko', ...body }, token, { 'idempotency-key': crypto.randomUUID() });
     assert.equal((await ask({ delegate: 'yes' })).body.code, 'invalid-body');
     const job = (await ask({ delegate: true })).body.job;
@@ -283,5 +292,94 @@ test('the free hosted fighter reads as used however many own-PC jobs came after 
     assert.equal(overview.used, true);
     const ask = await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() });
     assert.equal(ask.body.code, 'generation-quota');
+  } finally { await sql.close(); }
+});
+
+// 첫 선수 무료 (2026-10-30): the free fighter is used once its looks are painted; our side's ends give it back; the operator grants more.
+test('the free fighter: used by painted looks even if cancelled, given back by our side\'s ends, more by the operator', async () => {
+  const { sql, owner, call, work, healthy } = await generation();
+  try {
+    await healthy();
+    const ask = () => call('POST', 'generations', { description: '이름: 냥잽\n빨간 글러브를 낀 고양이 복서', language: 'ko', delegate: true },
+      undefined, { 'idempotency-key': crypto.randomUUID() });
+    const step = async status => { const c = (await work('POST', 'claim', {})).body.job; assert.equal(c?.status, status); return c; };
+    const finish = (c, outcome, result) => work('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome, result });
+    const credits = async () => (await call('GET', 'generations')).body.credits;
+    assert.deepEqual(await credits(), { granted: 1, used: 0, left: 1 });
+    // Cancelled while it waits for its brief: nothing painted, nothing used.
+    let job = (await ask()).body.job;
+    assert.equal(job.charged, false);
+    assert.deepEqual(await credits(), { granted: 1, used: 1, left: 0 }); // an open request holds it
+    await call('DELETE', `generations/${job.id}`);
+    assert.deepEqual(await credits(), { granted: 1, used: 0, left: 1 });
+    // Painted, then cancelled: used.
+    job = (await ask()).body.job;
+    await finish(await step('queued'), 'ok', { brief: { profile: { name: '냥잽' } } });
+    assert.equal((await finish(await step('appearance'), 'ok', { candidates: ['look-a-0', 'look-b-0'], choice: 'a' })).body.status, 'motions');
+    assert.equal((await call('GET', `generations/${job.id}`)).body.job.charged, true);
+    await call('DELETE', `generations/${job.id}`);
+    assert.deepEqual(await credits(), { granted: 1, used: 1, left: 0 });
+    assert.equal((await call('GET', 'generations')).body.used, true);
+    assert.equal((await ask()).body.code, 'generation-quota');
+    // The operator grants one more; a painted job that waited for the operator and was cancelled gives it back, as a failed one does.
+    await sql.query('update public.af_creators set hosted_credits = 2 where owner_id = $1', [owner]);
+    job = (await ask()).body.job;
+    await finish(await step('queued'), 'ok', { brief: { profile: {} } });
+    await finish(await step('appearance'), 'ok', { candidates: ['look-a-0', 'look-b-0'], choice: 'b' });
+    assert.equal((await finish(await step('motions'), 'review', { code: 'run-not-clean' })).body.status, 'needs_review');
+    assert.deepEqual(await credits(), { granted: 2, used: 2, left: 0 });
+    await call('DELETE', `generations/${job.id}`);
+    assert.deepEqual(await credits(), { granted: 2, used: 1, left: 1 });
+    const cancelled = (await sql.query("select data from public.af_generation_events where job_id = $1 and kind = 'cancelled'", [job.id])).rows[0].data;
+    assert.deepEqual(cancelled, { charged: false });
+    await sql.query("update public.af_generation_jobs set created_at = now() - interval '2 days' where owner_id = $1", [owner]); // his three a day
+    job = (await ask()).body.job;
+    await finish(await step('queued'), 'ok', { brief: { profile: {} } });
+    await finish(await step('appearance'), 'ok', { candidates: ['look-a-0', 'look-b-0'], choice: 'a' });
+    assert.equal((await finish(await step('motions'), 'failed', { code: 'pack-failed' })).body.status, 'failed');
+    assert.deepEqual(await credits(), { granted: 2, used: 1, left: 1 });
+  } finally { await sql.close(); }
+});
+
+test('a full day queues requests to ODDBOUT: the brief runs, the looks wait their turn, a started job\'s stages do not', async () => {
+  const { sql, other, call, work, healthy } = await generation();
+  try {
+    await healthy();
+    await sql.query('update public.af_generation_hosts set daily_limit = 1 where official');
+    const ask = token => call('POST', 'generations', { description: '모자를 쓴 너구리 레슬러', language: 'ko' }, token, { 'idempotency-key': crypto.randomUUID() });
+    const claim = async () => (await work('POST', 'claim', {})).body.job ?? null;
+    const finish = (c, outcome, result) => work('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome, result });
+    const mine = (await ask()).body.job;
+    assert.equal(mine.queue.position, 1); assert.equal(mine.queue.startedToday, 0);
+    await finish(await claim(), 'ok', { brief: { profile: {} } });
+    const started = await claim();
+    assert.equal(started.id, mine.id); assert.equal(started.status, 'appearance');
+    await finish(started, 'ok', { candidates: ['look-a-0', 'look-b-0'] });
+    assert.equal((await call('GET', `generations/${mine.id}`)).body.job.queue, null);
+    // Another creator's request is taken and briefed, then waits for tomorrow's start.
+    const theirs = (await ask('other-token-0123456789')).body.job;
+    assert.equal(theirs.status, 'queued'); assert.deepEqual(theirs.queue, { position: 1, dailyLimit: 1, startedToday: 1 });
+    await finish(await claim(), 'ok', { brief: { profile: {} } });
+    assert.equal(await claim(), null);
+    const waiting = (await call('GET', `generations/${theirs.id}`, undefined, 'other-token-0123456789')).body.job;
+    assert.equal(waiting.status, 'appearance'); assert.equal(waiting.queue.position, 1);
+    const caps = (await call('GET', 'generations/capabilities', undefined, null)).body.capabilities;
+    assert.equal(caps.today, 1); assert.equal(caps.waiting, 1); assert.equal(caps.queueLimit, 30);
+    // His started job's change is not held back.
+    await call('POST', `generations/${mine.id}/appearance`, { revise: 'smaller ears' });
+    const again = await claim();
+    assert.equal(again.id, mine.id);
+    await finish(again, 'ok', { candidates: ['look-a-1', 'look-b-1'] });
+    // A third creator is refused past the waiting limit; a day later the waiting one starts.
+    const third = crypto.randomUUID();
+    await sql.query('insert into auth.users(id) values($1)', [third]);
+    await sql.query('insert into public.af_creators(owner_id) values($1)', [third]);
+    await sql.query('update public.af_generation_settings set queue_limit = 1');
+    await assert.rejects(sql.query('select public.af_generation_check($1)', [third]), /generation-capacity/);
+    await sql.query("update public.af_generation_jobs set started_at = now() - interval '25 hours' where id = $1", [mine.id]);
+    const next = await claim();
+    assert.equal(next.id, theirs.id); assert.equal(next.status, 'appearance');
+    assert.ok((await sql.query('select started_at from public.af_generation_jobs where id = $1', [theirs.id])).rows[0].started_at);
+    assert.equal(other.length, 36);
   } finally { await sql.close(); }
 });

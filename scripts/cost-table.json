@@ -1,0 +1,18 @@
+{
+  "currency": "USD",
+  "note": "The operator's estimate per og command (docs/MEASUREMENT.md, 원가). null: not priced yet, listed under unpriced. 0: local work that costs nothing. monthly: subscriptions spread over the jobs started in the window.",
+  "perRun": {
+    "codex": null,
+    "sprite gen": null,
+    "sprite gen-set": null,
+    "sprite video-set": null,
+    "sprite prepare": 0,
+    "sprite extract": 0,
+    "sprite scale-check": 0,
+    "sprite video-cycle-align": 0,
+    "sprite video-loop": 0,
+    "sprite game-pack": 0
+  },
+  "perMinute": {},
+  "monthly": {}
+}

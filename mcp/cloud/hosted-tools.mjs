@@ -18,7 +18,8 @@ import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile } from './common.m
  * @typedef {{ status: string, delegate?: boolean, error?: string | null, choice?: string | null,
  *   revisionsLeft?: { appearance?: number, motions?: number }, preview?: { note?: string }[],
  *   submission?: { stage: string, fighterId?: string | null } | null,
- *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown } }} HostedJob
+ *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown },
+ *   queue?: { position: number, dailyLimit: number, startedToday: number } | null }} HostedJob
  */
 
 /**
@@ -60,6 +61,10 @@ export function hostedNext(job) {
     case 'queued': case 'appearance':
       if (job.status === 'appearance' && job.host?.choice !== 'oddbout' && job.host && !job.host.assigned)
         return `Waiting for ${job.host.choice === 'host' ? `the host ${job.host.requested?.name ?? ''}` : 'a host'} to take it. Tell the user, and check later with get_hosted_fighter.`;
+      // 첫 선수 무료 (2026-10-30): on a full day a request to ODDBOUT waits its turn for its looks.
+      if (job.queue && job.queue.position > Math.max(job.queue.dailyLimit - job.queue.startedToday, 0))
+        return `ODDBOUT starts ${job.queue.dailyLimit} fighters a day and today's are started: this request is number ${job.queue.position} in line. `
+          + 'Tell the user it starts by itself when its turn comes (he may close the chat), and check later with get_hosted_fighter.';
       return job.delegate
         ? 'ODDBOUT is writing the profile, painting two looks and picking one itself, '
           + 'then it makes the eleven motions (about 15 to 30 minutes in all). '
@@ -116,7 +121,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'any or another person\'s host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: '
     + 'true. Pass his words (what the fighter is and looks like) and, if he gave them, '
     + 'up to two of his own pictures with his confirmation that he has the rights to them. '
-    + 'One hosted fighter per account is free. Requires the user\'s request. '
+    + 'One hosted fighter per account is free; it is used once its looks are painted (a cancel after that keeps it used). '
+    + 'On a full day the request waits in line. Requires the user\'s request. '
     + 'Save the verified account id and idempotencyKey before calling, and the returned job.id. '
     + 'If the response is lost, recover with get_hosted_fighter using that key; '
     + 'do not replay this creation call while its outcome is unknown. '
@@ -218,6 +224,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       return withNext(await post(`generations/${jobId}/register`, { profile: confirmed }));
     }, { write: true, publish: true, openWorld: true, idempotent: true });
   register('cancel_hosted_fighter', '맡긴 선수 취소', 'Cancel the connected user\'s hosted fighter request; '
-    + 'work in progress stops at its next step and his free fighter is free again. Only on his explicit request.',
+    + 'work in progress stops at its next step. His free fighter comes back only if no look was painted yet (job.charged false) '
+    + 'or a person at ODDBOUT was checking it. Only on his explicit request.',
     { jobId: JOB }, async ({ jobId }) => withNext(await invoke(`generations/${jobId}`, 'DELETE')), { write: true, publish: true, idempotent: true });
 }

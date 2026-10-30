@@ -12,6 +12,8 @@ test('a host applies, is approved, gets a key and takes the requests meant for h
   const theirs = 'other-token-0123456789';
   try {
     await healthy();
+    // His requests to another person's host have their looks painted and are cancelled: each keeps a free fighter used (2026-10-30).
+    await sql.query('update public.af_creators set hosted_credits = 3 where owner_id = $1', [owner]);
     assert.equal((await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.hosts, 0);
     // Applying: terms first; not approved, so no key yet.
     assert.equal((await call('POST', 'generations/host', { name: '고양이 공방', billing: 'api-key' }, theirs)).body.code, 'host-terms-required');

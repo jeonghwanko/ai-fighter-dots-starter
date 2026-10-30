@@ -63,8 +63,12 @@ test('milestones discard personal parameters and never allow browser registratio
  fire('game_start',{mode:'play',email:'private@email.example',fighterId:'private-id'});
  fire('match_complete',{result:'ko',token:'private-token'});fire('creation_start',{method:'private-text'});
  fire('character_registered',{});
+ fire('hosted_request',{delegate:true,queued:'private-text',description:'private words'});fire('hosted_ready',{name:'private-name'});
+ fire('fighter_entered',{fighterId:'private-id'});fire('extra_generation_interest',{});
  const events=page.window.dataLayer.map(args=>Array.from(args)).filter(args=>args[0]==='event');
- assert.deepEqual(Array.from(events,args=>args[1]),['page_view','game_start','match_complete','creation_start']);
+ assert.deepEqual(Array.from(events,args=>args[1]),['page_view','game_start','match_complete','creation_start','hosted_request','hosted_ready','fighter_entered','extra_generation_interest']);
+ const hosted=events.find(args=>args[1]==='hosted_request')[2];
+ assert.equal(hosted.delegate,'yes'); assert.equal(hosted.queued,'no');
  assert.ok(!JSON.stringify(events).includes('private'));
 });
 

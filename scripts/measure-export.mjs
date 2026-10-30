@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // @ts-check
 // Hosted generation measurement (docs/MEASUREMENT.md). Reads the JSON from scripts/measure-export.sql (db.json) and, optionally, the
-// host ledger (`og report --json`), and writes kpis.json and clip-labels.jsonl. It never connects to anything and reads no requester text.
-// node scripts/measure-export.mjs --db db.json [--ledger ledger.json] --out-dir output/measure-YYYYMMDD
+// host ledger (`og report --json`) and the operator's cost table (scripts/cost-table.json), and writes kpis.json and clip-labels.jsonl.
+// It never connects to anything and reads no requester text.
+// node scripts/measure-export.mjs --db db.json [--ledger ledger.json] [--costs scripts/cost-table.json] --out-dir output/measure-YYYYMMDD
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -15,7 +16,12 @@ const LOOKS = ['look-a', 'look-b'];
 
 /**
  * @typedef {{ id: string, status: string, createdAt: string, errorCode?: string | null, appearanceRevisions?: number | null,
- *   motionRevisions?: number | null, previewClips?: string[] }} Job
+ *   motionRevisions?: number | null, previewClips?: string[], hostChoice?: string, delegate?: boolean, chargedAt?: string | null,
+ *   refunded?: boolean, startedAt?: string | null, firstForOwner?: boolean, signupToRequestHours?: number | null,
+ *   fighter?: { enteredAt?: string | null, duels7d?: number, cupBouts?: number | null } | null }} Job
+ *   hostChoice … fighter: 첫 선수 무료 (2026-10-30); absent from older exports.
+ * @typedef {{ currency?: string, perRun?: Record<string, number | null>, perMinute?: Record<string, number | null>,
+ *   monthly?: Record<string, number> }} Costs  scripts/cost-table.json: the operator's estimate per og command
  * @typedef {{ jobId: string, id: number, at: string, kind: string, data: any }} JobEvent  data: the event's JSON, by kind
  * @typedef {{ jobId: string, scope?: string, status?: string | null, createdAt: string, usage?: { input_tokens?: unknown } | null,
  *   checks?: Record<string, unknown> }} Review
@@ -94,11 +100,59 @@ export function timeline(job, events) {
   return t;
 }
 
+/** A fighter that met people in its first week after entering: a duel, or any cup bout. @param {Timeline} t */
+const played = t => (t.job.fighter?.duels7d ?? 0) > 0 || (t.job.fighter?.cupBouts ?? 0) > 0;
+
+/**
+ * One job's estimated cost from its stages' og runs (`finished.calls`) and the cost table. A command the table does not price
+ * (null or missing) adds nothing and is named in `unpriced`.
+ * @param {Timeline} t @param {Costs} costs
+ */
+export function jobCost(t, costs) {
+  let total = 0;
+  const unpriced = new Set();
+  for (const [tool, [runs, , seconds]] of Object.entries(t.calls)) {
+    const run = costs.perRun?.[tool], minute = costs.perMinute?.[tool];
+    if (typeof run !== 'number' && typeof minute !== 'number') { if (runs) unpriced.add(tool); continue; }
+    total += (typeof run === 'number' ? run * runs : 0) + (typeof minute === 'number' ? minute * seconds / 60 : 0);
+  }
+  return { total, unpriced };
+}
+
+/**
+ * The first free fighter (첫 선수 무료, 2026-10-30): how far his first request to ODDBOUT went, how long it waited, what it cost on our
+ * subscriptions. Jobs on his own PC or another host are not ours to pay. Older exports lack the fields and count nothing here.
+ * @param {Timeline[]} timelines @param {Costs | null} costs @param {number | null} days  the export's window
+ */
+function freeFighter(timelines, costs, days) {
+  const ours = timelines.filter(t => (t.job.hostChoice ?? 'oddbout') === 'oddbout'), firsts = ours.filter(t => t.job.firstForOwner === true);
+  const entered = firsts.filter(t => t.job.fighter?.enteredAt), started = ours.filter(t => t.job.startedAt);
+  const registered = ours.filter(t => t.register || t.job.fighter);
+  let cost = null;
+  if (costs) {
+    const each = ours.map(t => ({ t, ...jobCost(t, costs) })), total = each.reduce((sum, c) => sum + c.total, 0);
+    const monthly = Object.values(costs.monthly ?? {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
+    cost = { currency: costs.currency ?? null, total, perJob: spread(each.filter(c => c.t.job.chargedAt).map(c => c.total)),
+      perRegistered: rate(total, registered.length), perEntered: rate(total, ours.filter(t => t.job.fighter?.enteredAt).length),
+      wasted: each.filter(c => c.t.job.chargedAt && !c.t.job.refunded && ['cancelled', 'expired'].includes(c.t.job.status)).reduce((sum, c) => sum + c.total, 0),
+      subscriptionPerStarted: monthly && days !== null ? rate(monthly * days / 30, started.length) : null,
+      unpriced: [...new Set(each.flatMap(c => [...c.unpriced]))].sort() };
+  }
+  return {
+    freeFunnel: { requested: firsts.length, charged: firsts.filter(t => t.job.chargedAt).length, motionReady: firsts.filter(t => t.reachedMotions).length,
+      registered: firsts.filter(t => t.register || t.job.fighter).length, entered: entered.length, played7d: entered.filter(played).length },
+    participationRate: { rate: rate(entered.filter(played).length, entered.length), of: entered.length },
+    queueWaitHours: spread(started.map(t => ms(t.job.createdAt, /** @type {string} */ (t.job.startedAt)) / 3_600_000)),
+    signupToRequestHours: spread(firsts.map(t => Number(t.job.signupToRequestHours))),
+    cost,
+  };
+}
+
 /**
  * The numbers of docs/MEASUREMENT.md over a set of jobs. Each rate names its denominator; with no jobs behind it a rate is null.
- * @param {Timeline[]} timelines @param {{ reviews?: Review[], ledger?: Ledger | null }} [options]
+ * @param {Timeline[]} timelines @param {{ reviews?: Review[], ledger?: Ledger | null, costs?: Costs | null, days?: number | null }} [options]
  */
-export function kpis(timelines, { reviews = [], ledger = null } = {}) {
+export function kpis(timelines, { reviews = [], ledger = null, costs = null, days = null } = {}) {
   const ids = new Set(timelines.map(t => t.job.id)), jobs = timelines.map(t => t.job);
   const answeredLook = timelines.filter(t => t.firstAppearance), decidedMotion = timelines.filter(t => t.firstMotionDecision);
   const reachedMotions = timelines.filter(t => t.reachedMotions).length, registered = timelines.filter(t => t.register);
@@ -173,6 +227,7 @@ export function kpis(timelines, { reviews = [], ledger = null } = {}) {
     providerRunsPerRegistered: ledger ? Object.fromEntries(Object.entries(runsPerRegistered).map(([p, list]) => [p, spread(list)])) : null,
     decisions: { reviews: ownReviews.length, byStatus: reviewStatus, byScope: reviewScopes,
       inputTokens: ownReviews.reduce((s, r) => s + (Number(r.usage?.input_tokens) || 0), 0) },
+    ...freeFighter(timelines, costs, days),
   };
 }
 
@@ -227,19 +282,20 @@ export function screening(rows) {
     falseBlockRate: rate(m.acceptedFlagged, m.acceptedFlagged + m.acceptedPassed), labels: 'user decisions, clip level; not independent question labels' };
 }
 
-/** @param {Db} db @param {Ledger | null} [ledger] */
-export function report(db, ledger = null) {
+/** @param {Db} db @param {Ledger | null} [ledger] @param {Costs | null} [costs] */
+export function report(db, ledger = null, costs = null) {
   if (db?.kind !== 'oddbout-measure-db' || db.version !== 1) throw new Error('measure-export: expected the JSON of scripts/measure-export.sql');
   const all = db.jobs.map(job => timeline(job, db.events));
   const labels = clipLabels(all, db.reviews);
   /** @type {Record<string, Timeline[]>} */
   const byKit = {};
   for (const t of all) (byKit[t.kit ?? 'unknown'] ??= []).push(t);
+  const days = Number.isFinite(ms(db.since, db.exportedAt)) ? ms(db.since, db.exportedAt) / 86_400_000 : null;
   return {
     kpis: { kind: 'oddbout-measure', version: 1, exportedAt: db.exportedAt, since: db.since, ledger: Boolean(ledger),
       ended: all.filter(t => ENDED.has(t.job.status)).length,
-      all: kpis(all, { reviews: db.reviews, ledger }), screening: screening(labels),
-      byKit: Object.fromEntries(Object.entries(byKit).map(([kit, list]) => [kit, kpis(list, { reviews: db.reviews, ledger })])) },
+      all: kpis(all, { reviews: db.reviews, ledger, costs, days }), screening: screening(labels),
+      byKit: Object.fromEntries(Object.entries(byKit).map(([kit, list]) => [kit, kpis(list, { reviews: db.reviews, ledger, costs, days })])) },
     labels,
   };
 }
@@ -248,14 +304,14 @@ export function report(db, ledger = null) {
 async function main(argv) {
   /** @type {(name: string) => string | undefined} */
   const arg = name => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : undefined; };
-  const dbFile = arg('--db'), ledgerFile = arg('--ledger'), outDir = arg('--out-dir');
-  if (!dbFile || !outDir) { console.error('usage: measure-export.mjs --db db.json [--ledger ledger.json] --out-dir <dir>'); return 2; }
+  const dbFile = arg('--db'), ledgerFile = arg('--ledger'), costsFile = arg('--costs'), outDir = arg('--out-dir');
+  if (!dbFile || !outDir) { console.error('usage: measure-export.mjs --db db.json [--ledger ledger.json] [--costs cost-table.json] --out-dir <dir>'); return 2; }
   /** @type {(file: string) => Promise<any>} */
   const read = async file => JSON.parse((await readFile(file, 'utf8')).replace(/^﻿/, ''));
   let db = await read(dbFile);
   if (Array.isArray(db) && db[0]?.export) db = db[0].export;   // the SQL editor's download: one row, one `export` column
   if (typeof db?.export === 'object') db = db.export;
-  const { kpis: summary, labels } = report(db, ledgerFile ? await read(ledgerFile) : null);
+  const { kpis: summary, labels } = report(db, ledgerFile ? await read(ledgerFile) : null, costsFile ? await read(costsFile) : null);
   await mkdir(outDir, { recursive: true });
   await writeFile(path.join(outDir, 'kpis.json'), JSON.stringify(summary, null, 2) + '\n');
   await writeFile(path.join(outDir, 'clip-labels.jsonl'), labels.map(row => JSON.stringify(row)).join('\n') + (labels.length ? '\n' : ''));
@@ -264,6 +320,10 @@ async function main(argv) {
     `motions first accept ${pct(a.motionFirstAccept.rate)} of ${a.motionFirstAccept.of}  failed/review ${pct(a.failureOrReviewRate.rate)}  ` +
     `stage reviews ${a.stageReviews.total} in ${a.stageReviews.jobs} job(s)  operator retries ${a.operatorRetries}  ` +
     `labels ${labels.length}  screened clips ${summary.screening.clips}`);
+  const f = a.freeFunnel;
+  console.log(`first free fighter: requested ${f.requested} → painted ${f.charged} → motions ${f.motionReady} → registered ${f.registered} → `
+    + `entered ${f.entered} → played in a week ${f.played7d}` + (a.cost ? `  cost per registered ${a.cost.perRegistered ?? '—'} ${a.cost.currency ?? ''}`
+    + (a.cost.unpriced.length ? `  unpriced: ${a.cost.unpriced.join(', ')}` : '') : ''));
   console.log(`wrote ${path.join(outDir, 'kpis.json')} and clip-labels.jsonl`);
   return 0;
 }
