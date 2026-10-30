@@ -160,8 +160,10 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       delegate: row.delegate === true, createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
       revisionsLeft: { appearance: 2 - row.appearance_revisions, motions: 3 - row.motion_revisions },
-      // Its looks are painted: a cancel or an expiry from here keeps his free fighter used (our side's ends give it back).
-      charged: Boolean(row.charged_at) && !row.refunded_at, queue: isObject(queue) ? queue : null,
+      // Its looks are painted and a cancel or an expiry from here keeps his free fighter used: not when an operator is looking
+      // (needs_review: a cancel gives it back) and not once it failed or was refused (리뷰 2026-10-30).
+      charged: Boolean(row.charged_at) && !row.refunded_at && !['needs_review', 'failed', 'rejected'].includes(row.status),
+      queue: isObject(queue) ? queue : null,
       preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null, ...(PREVIEW_NOTES.includes(p.note) ? { note: p.note } : {}) })),
       submission,
       drafts: drafts.map(d => ({ clip: d.clip, url: urls.get(artifactPath(row.id, d.name)) ?? null })),

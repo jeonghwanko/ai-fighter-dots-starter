@@ -328,6 +328,8 @@ test('the free fighter: used by painted looks even if cancelled, given back by o
     await finish(await step('appearance'), 'ok', { candidates: ['look-a-0', 'look-b-0'], choice: 'b' });
     assert.equal((await finish(await step('motions'), 'review', { code: 'run-not-clean' })).body.status, 'needs_review');
     assert.deepEqual(await credits(), { granted: 2, used: 2, left: 0 });
+    // A cancel here gives it back, so the job does not say it is charged.
+    assert.equal((await call('GET', `generations/${job.id}`)).body.job.charged, false);
     await call('DELETE', `generations/${job.id}`);
     assert.deepEqual(await credits(), { granted: 2, used: 1, left: 1 });
     const cancelled = (await sql.query("select data from public.af_generation_events where job_id = $1 and kind = 'cancelled'", [job.id])).rows[0].data;
@@ -359,6 +361,14 @@ test('a full day queues requests to ODDBOUT: the brief runs, the looks wait thei
     // Another creator's request is taken and briefed, then waits for tomorrow's start.
     const theirs = (await ask('other-token-0123456789')).body.job;
     assert.equal(theirs.status, 'queued'); assert.deepEqual(theirs.queue, { position: 1, dailyLimit: 1, startedToday: 1 });
+    // Briefs waiting together keep the order they were asked in.
+    const later = crypto.randomUUID();
+    await sql.query('insert into auth.users(id) values($1)', [later]);
+    await sql.query('insert into public.af_creators(owner_id) values($1)', [later]);
+    const after = (await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, created_at)
+      values ($1, $2, '늦게 온 고양이 복서', 'ko', now() + interval '1 second') returning id`, [later, crypto.randomUUID()])).rows[0].id;
+    assert.equal((await sql.query('select (public.af_generation_queue($1)->>\'position\')::int as p', [after])).rows[0].p, 2);
+    await sql.query('delete from public.af_generation_jobs where id = $1', [after]);
     await finish(await claim(), 'ok', { brief: { profile: {} } });
     assert.equal(await claim(), null);
     const waiting = (await call('GET', `generations/${theirs.id}`, undefined, 'other-token-0123456789')).body.job;

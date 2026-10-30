@@ -26,7 +26,7 @@ update public.af_generation_jobs j set started_at = coalesce((select min(e.at) f
   where j.assigned_host is not null and j.started_at is null;
 -- Open jobs whose looks are already painted are used from now on, as a new job would be.
 update public.af_generation_jobs set charged_at = updated_at
-  where status in ('appearance_ready', 'motions', 'motion_ready', 'submitting', 'needs_review') and jsonb_array_length(candidates) > 0
+  where status in ('appearance', 'appearance_ready', 'motions', 'motion_ready', 'submitting', 'needs_review') and jsonb_array_length(candidates) > 0
     and charged_at is null;
 
 -- A job that uses one of its owner's free fighters: not one of our side's ends (refused, failed, a package that failed its check, given
@@ -65,12 +65,15 @@ create function public.af_generation_waiting() returns integer language sql stab
   select count(*)::integer from public.af_generation_jobs where host_choice = 'oddbout' and started_at is null and status in ('queued', 'appearance');
 $$;
 
--- Where a waiting request to ODDBOUT stands: its place in the order the official host takes them (the oldest brief first; one whose brief
--- runs comes after those), the host's daily limit and the jobs it started in the last day. None for any other job.
+-- Where a waiting request to ODDBOUT stands: its place in the order the official host takes them (the oldest finished brief first; one
+-- whose brief runs comes after those, in the order they were asked), the host's daily limit and the jobs it started in the last day. None
+-- for any other job.
 create function public.af_generation_queue(p_id uuid) returns jsonb language sql stable security invoker set search_path = '' as $$
   select case when j.host_choice = 'oddbout' and j.started_at is null and j.status in ('queued', 'appearance') then jsonb_build_object(
       'position', 1 + (select count(*)::integer from public.af_generation_jobs w where w.host_choice = 'oddbout' and w.started_at is null
-        and w.status = 'appearance' and w.id <> j.id and (j.status = 'queued' or (w.updated_at, w.id) < (j.updated_at, j.id))),
+        and w.id <> j.id and (
+          (w.status = 'appearance' and (j.status = 'queued' or (w.updated_at, w.id) < (j.updated_at, j.id)))
+          or (w.status = 'queued' and j.status = 'queued' and (w.created_at, w.id) < (j.created_at, j.id)))),
       'dailyLimit', o.daily_limit, 'startedToday', public.af_generation_host_today(o.id)) end
   from public.af_generation_jobs j, public.af_generation_hosts o where j.id = p_id and o.official;
 $$;
@@ -128,7 +131,8 @@ begin
 end $$;
 
 -- Restated whole from 20261028170100 with the official host's day added: past its daily limit it starts no new request to ODDBOUT (the
--- looks of one it has not started); the brief and a started job's stages go on. A job's first stage past the brief marks it started.
+-- looks of one it has not started); the brief and a started job's stages go on. A job's first stage past the brief marks it started. The
+-- official host's claims hold a lock of their own while they count the day.
 create or replace function public.af_generation_claim_for(p_host uuid) returns public.af_generation_jobs
 language plpgsql security invoker set search_path = '' as $$
 declare row public.af_generation_jobs; h public.af_generation_hosts; others boolean; room boolean;
@@ -141,6 +145,8 @@ begin
     where public.af_generation_working(status) and stage_leases >= 3 and coalesce(lease_expires_at, '-infinity') < now();
   others := exists(select 1 from public.af_generation_hosts o where not o.official and o.accepts_any and public.af_generation_host_online(o)
     and public.af_generation_host_today(o.id) < o.daily_limit);
+  -- The official host's claims go one at a time: two workers must not both take the day's last start.
+  if h.official then perform pg_advisory_xact_lock(74280504); end if;
   room := not h.official or public.af_generation_host_today(h.id) < h.daily_limit;
   select j.* into row from public.af_generation_jobs j
     where public.af_generation_working(j.status) and (j.lease_expires_at is null or j.lease_expires_at < now())
