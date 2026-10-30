@@ -36,6 +36,12 @@ NumPy and Pillow only: it runs on the kit's sprite-gen venv (`<kit>/vendor/sprit
       The `fighter:pack` plan of the whole fighter: reviewPolicy engine-loop, the walk and run loop reviews under <out-dir>/loop/.
   preview <package-dir> <out-dir>
       One animated WebP per clip of the packed fighter, as the game plays its sequence (for the creator's check).
+  drafts <assemble-dir> <out-dir> [skip,clips]
+      One animated WebP per clip the assembly has (the action rows'), before the package: the creator watches them while the gaits film.
+      `skip`: clips already drafted early (below) from the same cells.
+  early-drafts <rows-run> <look.png> <out-dir>
+      The same previews, early (2026-10-30): for each clip whose every cell lies in a row <rows-run> has extracted so far, as the
+      assembly would draw it (the same scale, canvas and beats), without writing the assembly. A clip already in <out-dir> is not drawn again.
 
 Beats follow kaito_web/tools/art/fighter-gpt/template.py (the GPT guests' combo, slam, dash, block, hit, groggy and fall), with their
 jolt offsets drawn as shifted copies of the cell (the v1 package has no runtime jolt).
@@ -297,6 +303,51 @@ def _row_cells(run_dir: Path, row: str, take: list[str] | None = None):
     return cells, {"refHeight": ref[3] - ref[1], "scale": round(scale, 4)}
 
 
+def _look_cell(look_path: Path):
+    """The look (idle) at the common scale, as a cell: (image, ground point), and its measure."""
+    look = np.asarray(Image.open(look_path).convert("RGBA"))
+    box = _bbox(look[..., 3], 32)
+    figure = Image.fromarray(look).crop(box)
+    scale = BODY / figure.height
+    fx = _foot_x(look) - box[0]
+    return (_scaled(figure, scale), (fx * scale, figure.height * scale)), {"height": figure.height, "scale": round(scale, 4)}
+
+
+def _steps(clip):
+    return [(s[0], s[1], s[2] if len(s) > 2 else (0, 0)) for s in clip["steps"]]
+
+
+def _canvas(name, clip, clips, cells, canvases):
+    """The clip's canvas as (left, top, right, bottom) around its ground point: the union of its cells placed on that point, plus the jolts and
+    a margin. A get-up uses fall's (`canvasOf`), a clip whose canvas another shares covers that clip's cells too. A new canvas is kept in `canvases`."""
+    steps = _steps(clip)
+    if clip.get("canvasOf"):
+        left, top, right, bottom = canvases[clip["canvasOf"]]
+        for c, _, _ in steps:
+            image, (ax, ay) = cells[c]
+            if -ax < left or -ay < top or image.width - ax > right or image.height - ay > bottom:
+                raise SystemExit(f"{name}: {c} leaves {clip['canvasOf']}'s canvas")
+        return left, top, right, bottom
+    shared = [c for other in clips.values() if other.get("canvasOf") == name for c, *_ in other["steps"]]
+    used = [c for c, _, _ in steps] + shared
+    reach = max(abs(d) for _, _, j in steps for d in j) * (BODY / TEMPLATE_BODY) + 1
+    left = min(-cells[c][1][0] for c in used) - reach - MARGIN
+    top = min(-cells[c][1][1] for c in used) - reach - MARGIN
+    right = max(cells[c][0].width - cells[c][1][0] for c in used) + reach + MARGIN
+    bottom = max(cells[c][0].height - cells[c][1][1] for c in used) + reach + MARGIN
+    canvases[name] = (int(np.floor(left)), int(np.floor(top)), int(np.ceil(right)), int(np.ceil(bottom)))
+    return canvases[name]
+
+
+def _frame(cells, c, box, ox, oy):
+    """One cell on the clip's canvas, shifted by the step's jolt."""
+    left, top, right, bottom = box
+    image, (ax, ay) = cells[c]
+    canvas = Image.new("RGBA", (right - left, bottom - top), (0, 0, 0, 0))
+    canvas.alpha_composite(image, (round(-left - ax) + ox, round(-top - ay) + oy))
+    return canvas
+
+
 def assemble(run_dir: Path, look_path: Path, out: Path, overrides: list | None = None, show_dir: Path | None = None):
     """`overrides`: the creator's changes in order, each {run, row, cells} — a row made again whose named cells replace the first run's.
     `show_dir`: the show row's run (the entrance and victory); without it, or without its cells, those optional clips are left out."""
@@ -318,13 +369,7 @@ def assemble(run_dir: Path, look_path: Path, out: Path, overrides: list | None =
             raise SystemExit(f"{change['row']}: the remade row lacks {sorted(set(change['cells']) - set(made))}")
         cells.update(made)
         report["overrides"].append({**change, **measured})
-    look = np.asarray(Image.open(look_path).convert("RGBA"))
-    box = _bbox(look[..., 3], 32)
-    figure = Image.fromarray(look).crop(box)
-    scale = BODY / figure.height
-    fx = _foot_x(look) - box[0]
-    cells["look"] = (_scaled(figure, scale), (fx * scale, figure.height * scale))
-    report["look"] = {"height": figure.height, "scale": round(scale, 4)}
+    cells["look"], report["look"] = _look_cell(look_path)
 
     clips = {name: clip for name, clip in _clips().items() if not clip.get("show") or all(s[0] in cells for s in clip["steps"])}
     report["showClips"] = sorted(name for name, clip in clips.items() if clip.get("show"))
@@ -334,37 +379,16 @@ def assemble(run_dir: Path, look_path: Path, out: Path, overrides: list | None =
     canvases = {}
     assets = []
     for name, clip in clips.items():
-        steps = [(s[0], s[1], s[2] if len(s) > 2 else (0, 0)) for s in clip["steps"]]
-        # The clip's canvas: the union of its cells placed on one ground point, plus the jolts and a margin; the get-up uses fall's.
-        if clip.get("canvasOf"):
-            left, top, right, bottom = canvases[clip["canvasOf"]]
-            for c, _, _ in steps:
-                image, (ax, ay) = cells[c]
-                if -ax < left or -ay < top or image.width - ax > right or image.height - ay > bottom:
-                    raise SystemExit(f"{name}: {c} leaves {clip['canvasOf']}'s canvas")
-        else:
-            # A clip whose canvas another shares (fall and its get-up) covers that clip's cells too.
-            shared = [c for other in clips.values() if other.get("canvasOf") == name for c, *_ in other["steps"]]
-            used = [c for c, _, _ in steps] + shared
-            reach = max(abs(d) for _, _, j in steps for d in j) * jolt + 1
-            left = min(-cells[c][1][0] for c in used) - reach - MARGIN
-            top = min(-cells[c][1][1] for c in used) - reach - MARGIN
-            right = max(cells[c][0].width - cells[c][1][0] for c in used) + reach + MARGIN
-            bottom = max(cells[c][0].height - cells[c][1][1] for c in used) + reach + MARGIN
-            left, top, right, bottom = int(np.floor(left)), int(np.floor(top)), int(np.ceil(right)), int(np.ceil(bottom))
-            canvases[name] = (left, top, right, bottom)
-        size = (right - left, bottom - top)
+        steps = _steps(clip)
+        left, top, right, bottom = _canvas(name, clip, clips, cells, canvases)
         frames, files = {}, []
         for c, ms, (dx, dy) in steps:
             ox, oy = round(dx * jolt), round(dy * jolt)
             key = f"{c}@{ox},{oy}"
             if key not in frames:
-                image, (ax, ay) = cells[c]
-                canvas = Image.new("RGBA", size, (0, 0, 0, 0))
-                canvas.alpha_composite(image, (round(-left - ax) + ox, round(-top - ay) + oy))
                 frames[key] = f"{name}/{len(frames):02d}-{c}.png"
                 (out / "clips" / name).mkdir(exist_ok=True)
-                canvas.save(out / "clips" / frames[key])
+                _frame(cells, c, (left, top, right, bottom), ox, oy).save(out / "clips" / frames[key])
             files.append({"file": frames[key], "duration": ms / 1000})
         descriptor = {"kind": "sprite-gen-asset", "version": 1, "frames": files, "anchor": [-left, -top], "loop": clip["loop"]}
         (out / "clips" / f"{name}.json").write_text(json.dumps(descriptor, indent=1) + "\n")
@@ -789,17 +813,57 @@ def _animated(frames, durations_ms, out: Path, scale=0.5, background=(236, 240, 
     images[0].save(out, save_all=True, append_images=images[1:], duration=[max(20, round(d)) for d in durations_ms], loop=0, quality=80, method=PREVIEW_METHOD)
 
 
-def drafts(asm: Path, out: Path):
+def drafts(asm: Path, out: Path, skip=()):
     """The clips the assembly has now (the action rows'), as previews before the package (2026-10-28): the creator watches them while
-    the walk and run are still filming. The package's own previews replace them at the end."""
+    the walk and run are still filming. The package's own previews replace them at the end. `skip`: clips already drafted early."""
     out.mkdir(parents=True, exist_ok=True)
     written = []
-    for name in [n for n in _clips() if n != "fall-getup"]:
+    for name in [n for n in _clips() if n != "fall-getup" and n not in skip]:
         source = asm / "clips" / f"{name}.json"
         if not source.exists():
             continue
         frames = json.loads(source.read_text())["frames"]
         _animated([Image.open(asm / "clips" / f["file"]).convert("RGBA") for f in frames], [f["duration"] * 1000 for f in frames], out / f"{name}.webp")
+        written.append(name)
+    return written
+
+
+def early_drafts(run_dir: Path, look_path: Path, out: Path):
+    """The action clips whose every cell lies in a row `run_dir` has extracted so far (2026-10-30): drawn as `assemble` draws them (the same
+    scale, canvas and beats, frames kept in memory) and written as `drafts` writes them, while the other rows are still being drawn. A clip that
+    spans two rows (the combo) waits for both. A clip already in `out` is not drawn again. `run_dir` is a scratch run holding the finished rows
+    only (the worker extracts them there, never in the rows' own run: gen-set is still writing it)."""
+    manifest = json.loads((run_dir / "frames" / "frames-manifest.json").read_text())
+    cells = {}
+    for row in ROWS:
+        if any(r["state"] == row and r.get("ok") for r in manifest["rows"]):
+            cells.update(_row_cells(run_dir, row)[0])
+    clips = {name: clip for name, clip in _clips().items() if not clip.get("show")}
+    ready = {}
+    for name, clip in clips.items():
+        needs = {c for c, *_ in clip["steps"]} | {c for other in clips.values() if other.get("canvasOf") == name for c, *_ in other["steps"]}
+        if needs <= cells.keys() | {"look"}:
+            ready[name] = clip
+    todo = [name for name in ready if name != "fall-getup" and not (out / f"{name}.webp").exists()]
+    if not todo:
+        return []
+    cells["look"] = _look_cell(look_path)[0]
+    out.mkdir(parents=True, exist_ok=True)
+    jolt, canvases, written = BODY / TEMPLATE_BODY, {}, []
+    for name, clip in ready.items():
+        if name == "fall-getup":
+            continue
+        box = _canvas(name, clip, clips, cells, canvases)
+        if name not in todo:
+            continue
+        frames, images, durations = {}, [], []
+        for c, ms, (dx, dy) in _steps(clip):
+            key = (c, round(dx * jolt), round(dy * jolt))
+            if key not in frames:
+                frames[key] = _frame(cells, c, box, key[1], key[2])
+            images.append(frames[key])
+            durations.append(ms)
+        _animated(images, durations, out / f"{name}.webp")
         written.append(name)
     return written
 
@@ -856,8 +920,10 @@ def main(argv):
         pack_plan(Path(rest[0]), json.loads(Path(rest[1]).read_text()), rest[2], *rest[3:])
     elif command == "preview" and len(rest) == 2:
         print(json.dumps(preview(Path(rest[0]), Path(rest[1]))))
-    elif command == "drafts" and len(rest) == 2:
-        print(json.dumps(drafts(Path(rest[0]), Path(rest[1]))))
+    elif command == "drafts" and len(rest) in (2, 3):
+        print(json.dumps(drafts(Path(rest[0]), Path(rest[1]), [c for c in (rest[2].split(",") if len(rest) == 3 else []) if c])))
+    elif command == "early-drafts" and len(rest) == 3:
+        print(json.dumps(early_drafts(Path(rest[0]), Path(rest[1]), Path(rest[2]))))
     elif command == "strip-preview" and len(rest) == 2:
         strip_preview(Path(rest[0]), Path(rest[1]))
     else:

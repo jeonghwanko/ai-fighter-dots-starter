@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
@@ -397,7 +397,8 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.equal(py.findLast(a => a[0] === 'assemble')[5], '');
   const screens = [];
   api.decisions = async (_, evidence) => { screens.push(evidence); throw Error('review outage'); };
-  assert.equal((await stages.motions({ ...job, decisionsReview: { mode: 'shadow' } }, dir)).outcome, 'ok');
+  const reviewed = await stages.motions({ ...job, decisionsReview: { mode: 'shadow' } }, dir);
+  assert.equal(reviewed.outcome, 'ok', JSON.stringify(reviewed));
   assert.deepEqual(screens.map(e => [e.scope, e.images.length]), [['walk', 17], ['run', 13]]);
   assert.deepEqual(screens[0].images.slice(1).map(i => i.durationMs), Array.from({ length: 16 }, (_, i) => 70 + i));
   assert.ok(py.filter(a => a[0] === 'decision-frames').every(a => a[1].endsWith(path.join('pack', 'game-pack.json'))));
@@ -407,7 +408,8 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
 // `uncut[gait]`: its clip films frames but no cut — `crash` (video-loop stops with no report) or `refuse` (its report says why).
 // `showGenSet()`: the show row's gen-set exit (no report), or null for no show row.
 async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, alignFails = {}, job: change = {}, spec = null, ownFrames = { walk: 24, run: 14 },
-  uncut = {}, showGenSet = null, stop = null, alignPauseMs = 0, before = null, specDelayMs = 0, videoReport = null }) {
+  uncut = {}, showGenSet = null, stop = null, alignPauseMs = 0, before = null, specDelayMs = 0, videoReport = null,
+  rowStates = null, earlyPollMs, hooks = {}, onArtifact = null }) {
   const dir = await mkdtemp(path.join(tmpdir(), 'gen-scale-')), calls = [], events = [];
   await before?.(dir);
   await mkdir(path.join(dir, 'looks'), { recursive: true });
@@ -418,7 +420,11 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
     if (stop?.signal.aborted) throw Object.assign(new Error('stage-stopped'), { code: 'stage-stopped' });
     calls.push(args);
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
-    if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), '{}'); }
+    const hooked = await hooks.og?.(args, flag, tool, dir);
+    if (hooked) return hooked;
+    if (tool === 'prepare') { await mkdir(flag(args, '--out-dir'), { recursive: true });
+      await writeFile(path.join(flag(args, '--out-dir'), 'sprite-request.json'), JSON.stringify(rowStates && !flag(args, '--out-dir').endsWith('show-rows')
+        ? { states: Object.fromEntries(rowStates.map(state => [state, {}])) } : {})); }
     if (tool === 'gen') await writeFile(flag(args, '--out'), 'relaxed');
     if (tool === 'gen-set' && flag(args, '--run-dir').endsWith('show-rows')) {
       // A number: that exit and no report. An object: { code, report } — the set report gen-set writes.
@@ -465,6 +471,8 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
   const motionsPy = async ([command, ...rest]) => {
     if (stop?.signal.aborted) throw Object.assign(new Error('stage-stopped'), { code: 'stage-stopped' });
     calls.push(['motions.py', command, ...rest]);
+    const hooked = await hooks.motionsPy?.(command, rest);
+    if (hooked) return hooked;
     if (command === 'request' || (command === 'request-show' && showGenSet)) await writeFile(rest[1], JSON.stringify({ request: { states: {} }, description: 'a cat' }));
     if (command === 'assemble') { await mkdir(rest[2], { recursive: true });
       await writeFile(path.join(rest[2], 'game-request.json'), JSON.stringify({ version: 1,
@@ -476,14 +484,95 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
     if (command === 'preview') { await mkdir(rest[1], { recursive: true }); for (const clip of PREVIEW_CLIPS) await writeFile(path.join(rest[1], `${clip}.webp`), clip); }
     return { code: 0 };
   };
-  const api = { artifact: async () => ({ ok: true }), progress: async (j, value, event) => { if (event) events.push(event); return { ok: true }; },
+  const api = { artifact: async (j, name) => { onArtifact?.(name); return { ok: true }; }, progress: async (j, value, event) => { if (event) events.push(event); return { ok: true }; },
     ...(spec || specDelayMs ? { spec: async () => { await new Promise(done => setTimeout(done, specDelayMs)); return spec; } } : {}) };
   const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs,
-    signal: stop?.signal ?? null });
+    ...(earlyPollMs ? { earlyPollMs } : {}), signal: stop?.signal ?? null });
   const job = { id: '0123abcd-0000', language: 'ko', brief, choice: 'a', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0, ...change };
   const done = await stages.motions(job, dir);
   return { done, calls, events, dir, again: () => stages.motions(job, dir) };
 }
+
+// Drafts as the keypose rows finish (2026-10-30): gen-set draws four rows (the fake: one every 60 ms), and the stage looks for finished rows
+// every 10 ms. The clips: fightIdle needs stance-a, combo needs combo-a and combo-b, groggy needs hurt-a.
+const EARLY_CLIPS = { fightIdle: ['stance-a'], combo: ['combo-a', 'combo-b'], groggy: ['hurt-a'] };
+async function earlyStage({ extractCode = 0, earlyCode = 0, redraw = false } = {}) {
+  const timeline = [], rowStates = ['stance-a', 'combo-a', 'combo-b', 'hurt-a'];
+  const hooks = {
+    og: async (args, flag, tool, dir) => {
+      const run = tool === 'gen-set' || tool === 'extract' ? flag(args, '--run-dir') : '';
+      if (tool === 'gen-set' && run === path.join(dir, 'motion', 'rows')) {
+        for (const state of rowStates) {
+          await new Promise(done => setTimeout(done, 60));
+          await mkdir(path.join(run, 'raw'), { recursive: true }); await mkdir(path.join(run, 'reports', 'gen-set'), { recursive: true });
+          await writeFile(path.join(run, 'raw', `${state}.png`), `${state}-drawn`);
+          await writeFile(path.join(run, 'reports', 'gen-set', `${state}.json`), JSON.stringify({ provider: 'codex', ok: true }));
+        }
+        // A row drawn again by the extract's redraw is a different image: the early drafts no longer stand for it.
+        if (redraw) await writeFile(path.join(run, 'raw', 'stance-a.png'), 'stance-a-drawn-again');
+        timeline.push('gen-set-ended');
+        return { code: 0 };
+      }
+      if (tool === 'extract' && run.endsWith('rows-early')) { timeline.push(`extract ${flag(args, '--states')}`); return { code: extractCode }; }
+    },
+    motionsPy: async (command, rest) => {
+      if (command === 'early-drafts') {
+        timeline.push('early-drafts');
+        if (earlyCode) return { code: earlyCode };
+        const have = new Set((await readdir(path.join(rest[0], 'raw'))).map(f => f.replace(/\.png$/, '')));
+        await mkdir(rest[2], { recursive: true });
+        for (const [clip, needs] of Object.entries(EARLY_CLIPS))
+          if (needs.every(row => have.has(row)) && !existsSync(path.join(rest[2], `${clip}.webp`))) await writeFile(path.join(rest[2], `${clip}.webp`), `early-${clip}`);
+        return { code: 0 };
+      }
+      if (command === 'drafts') {
+        timeline.push(`drafts ${rest[2] ?? ''}`);
+        await mkdir(rest[1], { recursive: true });
+        for (const clip of Object.keys(EARLY_CLIPS)) if (!(rest[2] ?? '').split(',').includes(clip)) await writeFile(path.join(rest[1], `${clip}.webp`), `final-${clip}`);
+        return { code: 0 };
+      }
+    },
+  };
+  const made = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), rowStates, earlyPollMs: 10, hooks,
+    onArtifact: name => { if (name.startsWith('draft-') && !/-(walk|run)-/.test(name)) timeline.push(`up ${name}`); } });
+  return { ...made, timeline };
+}
+
+test('drafts go up as the rows finish, and the final drafts leave out what went up early', async () => {
+  const { done, calls, timeline } = await earlyStage();
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  const up = name => timeline.indexOf(`up draft-${name}-0`);
+  // Before gen-set ended: the stance's clip after one row, the combo after both of its rows; the last row's clip waits for the final drafts.
+  assert.ok(up('fightidle') >= 0 && up('fightidle') < timeline.indexOf('gen-set-ended'));
+  assert.ok(up('combo') > up('fightidle') && up('combo') < timeline.indexOf('gen-set-ended'));
+  assert.ok(up('groggy') > timeline.indexOf('gen-set-ended'));
+  // Every clip once: the final drafts made only the one the early ones did not.
+  assert.deepEqual(timeline.filter(t => t.startsWith('up draft-')).sort(), ['up draft-combo-0', 'up draft-fightidle-0', 'up draft-groggy-0']);
+  assert.ok(timeline.includes('drafts fightIdle,combo') || timeline.includes('drafts combo,fightIdle'));
+  // The rows' images are gen-set's alone: one call, two at a time, no row drawn again; the early extracts ran in a scratch run beside them.
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const sets = calls.filter(a => a.includes('gen-set') && flag(a, '--run-dir').endsWith(`${path.sep}rows`));
+  assert.equal(sets.length, 1); assert.equal(flag(sets[0], '--concurrency'), '2'); assert.ok(!sets[0].includes('--force'));
+  assert.ok(calls.every(a => !a.includes('extract') || !flag(a, '--run-dir').endsWith(`${path.sep}rows`) || !a.includes('--states')));
+  assert.ok(timeline.some(t => t.startsWith('extract ')));
+});
+
+test('a row drawn again after the early drafts: they do not stand for it, and every clip is drafted once more', async () => {
+  const { done, timeline } = await earlyStage({ redraw: true });
+  assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  assert.ok(timeline.includes('drafts '));
+  assert.ok(timeline.filter(t => t === 'up draft-fightidle-0').length === 2);
+});
+
+test('an early draft that fails never stops the stage: the final drafts make every clip', async () => {
+  for (const options of [{ extractCode: 1 }, { earlyCode: 1 }]) {
+    const { done, timeline, dir } = await earlyStage(options);
+    assert.equal(done.outcome, 'ok', JSON.stringify(options));
+    assert.ok(timeline.includes('drafts '), JSON.stringify(options));
+    assert.deepEqual([...new Set(timeline.filter(t => t.startsWith('up draft-')))].sort(), ['up draft-combo-0', 'up draft-fightidle-0', 'up draft-groggy-0']);
+    assert.match(await readFile(path.join(dir, 'motion', 'early-drafts.log'), 'utf8'), options.extractCode ? /extract refused/ : /early-drafts failed/);
+  }
+});
 
 test('a run the gate refuses is made from the walk that passed, played faster, and its preview says so', async () => {
   const { done, calls, dir } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), brokenRun: true });
@@ -714,6 +803,56 @@ test('the motions stop for an operator when scale-check refuses or a canvas keep
 });
 
 const kitPython = path.join(import.meta.dirname, '..', 'vendor/sprite-gen/.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
+test('early-drafts: a clip comes once every row it lies in is extracted, and its preview is the one the assembly makes (same bytes)', { skip: !existsSync(kitPython) }, async () => {
+  const { execFile } = await import('node:child_process');
+  const sharp = (await import('sharp')).default;
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-early-drafts-'));
+  const py = (...args) => new Promise((resolve, reject) => execFile(kitPython, ['-I', path.join(import.meta.dirname, 'motions.py'), ...args],
+    { env: { ...process.env, PYTHONUTF8: '1' } }, (error, stdout, stderr) => error ? reject(Error(stderr)) : resolve(stdout)));
+  const ROWS = { 'stance-a': 5, 'combo-a': 5, 'combo-b': 5, 'slam-a': 5, 'hurt-a': 5, 'ko-a': 6 };
+  // The extracted rows as sprite-gen leaves them (640 px cells, the first pose the standing look): a block of a different size per pose.
+  const look = path.join(dir, 'look.png');
+  await sharp({ create: { width: 300, height: 500, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: { create: { width: 120, height: 400, channels: 4, background: { r: 200, g: 90, b: 50, alpha: 1 } } }, left: 90, top: 60 }]).png().toFile(look);
+  const rows = path.join(dir, 'rows'), early = path.join(dir, 'early');
+  const extract = async (run, names) => {
+    const manifest = await readFile(path.join(run, 'frames', 'frames-manifest.json'), 'utf8').then(JSON.parse, () => ({ ok: true, cell: { width: 640, height: 640 }, rows: [] }));
+    for (const state of names) {
+      const n = Object.keys(ROWS).indexOf(state), files = [];
+      for (let i = 0; i < ROWS[state]; i++) {
+        const file = `frames/${state}/frame-${String(i).padStart(2, '0')}.png`, height = i === 0 ? 400 : 250 + 25 * ((i + n) % 5), width = 90 + 15 * ((i + 2 * n) % 4);
+        await mkdir(path.join(run, 'frames', state), { recursive: true });
+        await sharp({ create: { width: 640, height: 640, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+          .composite([{ input: { create: { width, height, channels: 4, background: { r: 40 * i, g: 60 + 30 * n, b: 120, alpha: 1 } } }, left: 300 - (i % 2) * 20, top: 560 - height }]).png().toFile(path.join(run, file));
+        files.push(file);
+      }
+      manifest.rows.push({ state, ok: true, files });
+    }
+    await mkdir(path.join(run, 'frames'), { recursive: true });
+    await writeFile(path.join(run, 'frames', 'frames-manifest.json'), JSON.stringify(manifest));
+  };
+  const clipsIn = async out => (await readdir(out).catch(() => [])).map(f => f.replace(/\.webp$/, '')).sort();
+  // Two rows in: the stance's clips (and the look's idle); the combo needs combo-b, the hit and groggy need hurt-a.
+  await extract(early, ['stance-a', 'combo-a']);
+  const drafts = path.join(dir, 'drafts-early');
+  assert.deepEqual(JSON.parse(await py('early-drafts', early, look, drafts)).sort(), ['block', 'fightIdle', 'idle']);
+  await extract(early, ['combo-b', 'hurt-a']);
+  assert.deepEqual(JSON.parse(await py('early-drafts', early, look, drafts)).sort(), ['combo', 'dash', 'groggy', 'hit']);
+  // A clip already drafted is not drawn again; the fall's get-up is never drafted on its own.
+  assert.deepEqual(JSON.parse(await py('early-drafts', early, look, drafts)), []);
+  await extract(early, ['slam-a', 'ko-a']);
+  assert.deepEqual(JSON.parse(await py('early-drafts', early, look, drafts)).sort(), ['fall', 'slam']);
+  // The assembly of the same rows and its drafts: every early preview is the same file, and skipping them leaves none to make.
+  await extract(rows, Object.keys(ROWS));
+  await py('assemble', rows, look, path.join(dir, 'asm'));
+  await py('drafts', path.join(dir, 'asm'), path.join(dir, 'final'));
+  assert.deepEqual(await clipsIn(drafts), await clipsIn(path.join(dir, 'final')));
+  for (const clip of await clipsIn(drafts))
+    assert.ok((await readFile(path.join(drafts, `${clip}.webp`))).equals(await readFile(path.join(dir, 'final', `${clip}.webp`))), `${clip} differs`);
+  await py('drafts', path.join(dir, 'asm'), path.join(dir, 'rest'), (await clipsIn(drafts)).slice(1).join(','));
+  assert.deepEqual(await clipsIn(path.join(dir, 'rest')), (await clipsIn(drafts)).slice(0, 1));
+});
+
 test('scale-fit: a guessed frame takes its clip median, a gait one scale in its own body_h, and a shared canvas grows with its clip', { skip: !existsSync(kitPython) }, async () => {
   const { execFile } = await import('node:child_process');
   const sharp = (await import('sharp')).default;
