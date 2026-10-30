@@ -1,3 +1,4 @@
+// @ts-check
 import { createServer } from 'node:http';
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -6,13 +7,21 @@ import { makePackageValidator } from '../mcp/package-access.mjs';
 import { runWithConfig } from './run.mjs';
 import { cloudGateway } from './cloud-gateway.mjs';
 
-/** HTTP-triggered worker. Supabase owns the durable queue and five-minute leases. */
+/**
+ * HTTP-triggered worker. Supabase owns the durable queue and five-minute leases.
+ * @param {{ wakeToken: string | undefined, run: () => Promise<{ stage: string, submissionId?: string }>, log?: (line: string) => void,
+ *   commit?: string | null }} options
+ */
 export function createWorkerServer({ wakeToken, run, log = console.log, commit = null }) {
   if (!/^[a-f0-9]{64}$/.test(wakeToken ?? '')) throw new Error('invalid-wake-token');
-  let active = null, stopping = false, requested = false;
+  /** @type {Promise<void> | null} */
+  let active = null;
+  let stopping = false, requested = false;
   // The last queue outcome, for /health. A rejected worker credential cannot recover by retrying, so it is
   // reported distinctly instead of as an ordinary retry (the token expires; see docs/CREATOR-HOSTING.md).
+  /** @type {{ status: string, since: string | null }} */
   let queue = { status: 'unknown', since: null };
+  /** @param {string} status */
   const observe = status => { if (queue.status !== status) queue = { status, since: new Date().toISOString() }; };
   async function drain() {
     do {
@@ -25,7 +34,7 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
           log(JSON.stringify({ stage: result.stage, submissionId: result.submissionId }));
           if (result.stage === 'idle' || result.stage === 'retry-later') break;
         }
-      } catch (error) {
+      } catch (/** @type {any} */ error) {
         const rejected = error?.status === 401 || error?.status === 403;
         observe(rejected ? 'credential-rejected' : 'api-unavailable');
         log(JSON.stringify({ stage: rejected ? 'worker-credential-rejected' : 'retry-later' }));
@@ -34,6 +43,7 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
   }
   const server = createServer(async (req, res) => {
     if (await cloudGateway(req, res)) return;
+    /** @type {(status: number, body: object) => void} */
     const reply = (status, body) => {
       res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' });
       res.end(JSON.stringify(body));
@@ -50,7 +60,8 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
     if (seconds === 0 || age < -30 || age > 180) return reply(401, { ok: false });
     // The managed pg_net queue can be readable by database roles. It receives only
     // a short-lived HMAC, never the durable wake key stored in Vault and Render.
-    const expected = Buffer.from(`Bearer ${createHmac('sha256', wakeToken).update(timestamp).digest('hex')}`);
+    // Both strings by now: the wake token was checked above, and a timestamp that is not ten digits was refused.
+    const expected = Buffer.from(`Bearer ${createHmac('sha256', /** @type {string} */ (wakeToken)).update(/** @type {string} */ (timestamp)).digest('hex')}`);
     const supplied = Buffer.from(req.headers.authorization ?? '');
     if (supplied.length !== expected.length || !timingSafeEqual(supplied, expected)) {
       return reply(401, { ok: false });

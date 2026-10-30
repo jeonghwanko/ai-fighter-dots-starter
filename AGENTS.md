@@ -156,7 +156,7 @@ This repository lets each user create their own fighter through Dot. Read
   last commit message, body included, even quoted: the required check then never reports. Do not dispatch extra runs unless asked.
 - `main` is the working branch: branch from it and open pull requests against it. `codex/creator-hosting` was the kit and
   service branch until 2026-10-29 and is frozen at the commit that moved everything to `main`; never push to it.
-- Every `api/` module starts with `// @ts-check`; `npm run typecheck` (also in `npm test`) runs tsc over them under `strict`.
+- Every `api/` and `worker/` module starts with `// @ts-check`; `npm run typecheck` (also in `npm test`) runs tsc over them under `strict`.
   Satisfy it with JSDoc types or casts, not runtime changes; a caught value is `catch (/** @type {any} */ error)`. Every
   Edge function's deno.json has the same `strict: true`, so `deno check supabase/functions/<name>/index.ts` agrees;
   the Edge deploy itself does not type-check.

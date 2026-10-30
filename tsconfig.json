@@ -19,6 +19,7 @@
     "skipLibCheck": true
   },
   "include": [
-    "api/**/*.mjs"
+    "api/**/*.mjs",
+    "worker/**/*.mjs"
   ]
 }
