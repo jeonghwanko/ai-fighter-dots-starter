@@ -37,23 +37,37 @@ export const bearerToken = request => request.headers.get('authorization')?.matc
  * @param {Request} request
  * @returns {Promise<string | null>}
  */
-export async function verifiedUserId(db, request) {
+export async function verifiedUserId(db, request) { return (await verifiedUser(db, request))?.owner ?? null; }
+
+/**
+ * verifiedUserId with the sign-in session the token belongs to (its `session_id`, null when it names none): an action bound to a live
+ * session (site deletion, 2026-10-30) asks the database whether that session still exists, which also catches a sign-out.
+ * @param {any} db
+ * @param {Request} request
+ * @returns {Promise<{ owner: string, session: string | null } | null>}
+ */
+export async function verifiedUser(db, request) {
   const token = bearerToken(request);
   if (!token) return null;
+  /** @type {(claims: any) => string | null} */
+  const session = claims => UUID.test(claims?.session_id ?? '') ? claims.session_id.toLowerCase() : null;
   if (typeof db.auth.getClaims === 'function') {
     const { data, error } = await db.auth.getClaims(token);
     const claims = data?.claims;
-    return !error && claims && !claims.client_id && claims.role !== 'af_mcp' && claims.is_anonymous !== true && UUID.test(claims.sub ?? '') ? claims.sub : null;
+    return !error && claims && !claims.client_id && claims.role !== 'af_mcp' && claims.is_anonymous !== true && UUID.test(claims.sub ?? '')
+      ? { owner: claims.sub, session: session(claims) } : null;
   }
   const { data, error } = await db.auth.getUser(token);
-  // Older clients lack getClaims. Only use decoding here to DENY connector tokens; getUser still verifies identity.
+  // Older clients lack getClaims. Decoding here only DENIES connector tokens, or reads the session of a token getUser verified as this user.
+  let claims = null;
   if (token.split('.').length === 3) {
     try {
-      const claims = JSON.parse(atob(token.split('.')[1].replaceAll('-', '+').replaceAll('_', '/')));
+      claims = JSON.parse(atob(token.split('.')[1].replaceAll('-', '+').replaceAll('_', '/')));
       if (claims.client_id || claims.role === 'af_mcp') return null;
     } catch { return null; }
   }
-  return !error && data?.user && !data.user.is_anonymous && UUID.test(data.user.id ?? '') ? data.user.id : null;
+  return !error && data?.user && !data.user.is_anonymous && UUID.test(data.user.id ?? '')
+    ? { owner: data.user.id, session: claims?.sub === data.user.id ? session(claims) : null } : null;
 }
 
 /**
