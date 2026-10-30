@@ -73,7 +73,9 @@
    기간은 SQL의 `w`에서 바꾼다(기본 30일). 편집기의 JSON 내려받기(`[{"export": …}]`)도 그대로 읽는다.
 2. 호스트 장부(선택): `sudo -u oddbout-gen /srv/oddbout-gen/bin/og report --json > ledger.json`
 3. `node scripts/measure-export.mjs --db db.json --ledger ledger.json --costs scripts/cost-table.json --out-dir output/measure-YYYYMMDD`
-   (`--costs`는 선택. 원가표의 `null` 단가를 먼저 채운다. 구독은 정액이라 이 값은 청구서가 아니라 추정이다)
+   (`--costs`는 선택. 원가표는 운영자가 대강 정한 값이다(2026-10-30, 근거는 표의 `basis`). 구독은 정액이라 이 값은 청구서가 아니라 추정이다.
+   `perRun`은 구독을 하루 한도까지 다 쓸 때의 작업당 원가이고, `subscriptionPerStarted`는 실제로 시작한 작업 수에 나눈 구독 몫이다.
+   단계별 실행 수(`calls`)는 2026-10-29 작업자부터 남으므로 그 전 작업의 `perRun` 원가는 0으로 나온다)
 
 `kpis.json`과 `clip-labels.jsonl`이 나온다. 스크립트는 어디에도 접속하지 않는다.
 
