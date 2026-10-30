@@ -97,6 +97,9 @@ test('per-language names are edited like the rest of the profile, shown on the r
   const f = await profileFixture();
   try {
     const first = await f.register(), id = first.fighter_id;
+    // The roster lists entered fighters (출전, 2026-10-30); an edit keeps the art, and so the entry.
+    await f.sql.query('select public.af_enter_fighter($1,$2,$3,$4)', [f.owner, id, first.manifest_sha,
+      ['idle', 'walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall']]);
     const names = { ko: '레드글러브 냥', en: 'Redglove Nyang' };
     const set = await f.request(id, first.manifest_sha, { names }, crypto.randomUUID());
     assert.equal(set.status, 200, await set.clone().text());

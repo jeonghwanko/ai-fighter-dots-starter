@@ -4,7 +4,7 @@ import {createHandler,sha256} from '../api/handler.mjs';
 import {migratedDatabase} from './helpers/fighter-database.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with {type:'json'};
 
-/** Two duel-approved fighters in a migrated PGlite, and a db adapter shaped like the Supabase client. */
+/** Two duel-approved, entered fighters in a migrated PGlite, and a db adapter shaped like the Supabase client. */
 async function duelFixture() {
   // The shared platform stand-in, so a migration needing a new auth column (client_name) is added once, and its safeupdate replay.
   const sql=await migratedDatabase();
@@ -14,8 +14,8 @@ async function duelFixture() {
     await sql.query('insert into auth.users values($1)',[owner]);await sql.query('insert into af_creators(owner_id) values($1)',[owner]);
     await sql.query(`insert into af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status)
       values($1,$2,$3,$4,$5,$6,1,'registered')`,[sub,owner,crypto.randomUUID(),manifestText,example,hash]);
-    await sql.query(`insert into af_fighters(id,submission_id,owner_id,manifest_sha,profile,review_state,runtime_approved,runtime_scope,runtime_manifest_sha,review_evidence,duel_approved,duel_manifest_sha)
-      values($1,$2,$3,$4,$5,'approved',true,'arena-player-v1',$4,$6,true,$4)`,[id,sub,owner,hash,name==='A'?{name,names:{ko:'에이'}}:{name},{authorization:'test',validation:'test',duelValidation:'test'}]);
+    await sql.query(`insert into af_fighters(id,submission_id,owner_id,manifest_sha,profile,review_state,runtime_approved,runtime_scope,runtime_manifest_sha,review_evidence,duel_approved,duel_manifest_sha,entered_at)
+      values($1,$2,$3,$4,$5,'approved',true,'arena-player-v1',$4,$6,true,$4,now())`,[id,sub,owner,hash,name==='A'?{name,names:{ko:'에이'}}:{name},{authorization:'test',validation:'test',duelValidation:'test'}]);
   }
   const functions={af_reserve_duel:['p_key','p_a','p_b','p_engine'],af_complete_duel:['p_id','p_engine','p_result'],af_fail_duel:['p_id','p_engine','p_code'],af_duel_rankings:[]};
   const db={rpc:async(name,args)=>{try {
@@ -170,5 +170,22 @@ test('a retried unfinished match is admitted again, and runs refused for their f
     assert.equal((await post(crypto.randomUUID())).status,200);
     await sql.query("update af_duels set failure='engine-error' where request_key=$1",[key]);
     assert.equal((await (await post(crypto.randomUUID())).json()).code,'duels-failing');
+  } finally {await sql.close();}
+});
+
+test('a fighter in production (not entered, 2026-10-30) neither meets other people in ranked duels nor holds a ranking place',async()=>{
+  const {sql,db,ids}=await duelFixture();
+  try {
+    const result={winner:0,how:'ko',ms:1000,hp:[0.5,0],contacts:[3,1],digest:'1234abcd'};
+    const handle=createHandler({db,engineVersion:'test-v1',simulateDuel:()=>result});
+    const post=()=>handle(new Request('https://test/ai-fighter/duels',{method:'POST',body:JSON.stringify({a:ids[0],b:ids[1],idempotencyKey:crypto.randomUUID()})}));
+    assert.equal((await post()).status,200);
+    await sql.query('update af_fighters set entered_at=null where id=$1',[ids[1]]);
+    const refused=await post();
+    assert.equal(refused.status,409); assert.equal((await refused.json()).code,'duel-not-approved');
+    // His record stays his; only the ranking leaves him out.
+    const rank=await (await handle(new Request('https://test/ai-fighter/rankings'))).json();
+    assert.deepEqual(rank.rankings.map(x=>x.name),['A']);
+    assert.deepEqual((await sql.query('select appearances::int,rank from af_duel_statistics() where id=$1',[ids[1]])).rows[0],{appearances:1,rank:null});
   } finally {await sql.close();}
 });

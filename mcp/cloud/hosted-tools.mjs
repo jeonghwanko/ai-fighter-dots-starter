@@ -78,7 +78,10 @@ export function hostedNext(job) {
     case 'submitting':
       return 'ODDBOUT is packaging the fighter and submitting it under the user\'s account. Call get_hosted_fighter with waitSeconds.';
     case 'submitted':
-      if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}. Tell the user; it now fights in ODDBOUT.`;
+      // 출전 (2026-10-30): a registered fighter is in production until the user watches his motions and enters him.
+      if (job.submission?.stage === 'registered') return `Registered: fighter ${job.submission.fighterId}, in production. Tell the user: he can watch `
+        + 'every motion on his fighter page and enter him there (출전); other people meet him only after that. enter_fighter does it here '
+        + 'once he confirmed each of the eleven motions.';
       if (job.submission?.stage === 'rejected') return 'The server check refused the package. A person at ODDBOUT will look at it; the user\'s free fighter is free again.';
       return 'The server is checking the package. Call get_hosted_fighter with waitSeconds.';
     case 'needs_review': return 'A person at ODDBOUT is checking this step. Nothing to do now; check later.';
