@@ -1,11 +1,18 @@
 {
-  "currency": "USD",
-  "note": "The operator's estimate per og command (docs/MEASUREMENT.md, 원가). null: not priced yet, listed under unpriced. 0: local work that costs nothing. monthly: subscriptions spread over the jobs started in the window.",
+  "currency": "KRW",
+  "note": "The operator's rough estimate per og command (docs/MEASUREMENT.md, 원가). null: not priced yet, listed under unpriced. 0: local work that costs nothing. monthly: subscriptions spread over the jobs started in the window.",
+  "basis": {
+    "set": "2026-10-30, the operator's own rough definition, not a bill",
+    "usdKrw": 1350,
+    "subscriptions": "ChatGPT Pro ₩299,000 a month (codex: images and judging), SuperGrok $100 a month (grok: walk and run videos)",
+    "perRun": "a month of the subscription over the runs of 90 jobs (the official host's 3 a day for 30 days), one job at about 14 codex runs and 28 grok runs (the host ledger's 20261028-gen-e0ccc5d2): ChatGPT ₩299,000 / 90 / 14 ≈ ₩240, SuperGrok ₩135,000 / 90 / 28 ≈ ₩55. So perRun is the cost of a job when the subscriptions are used to the full; subscriptionPerStarted is the share when they are not",
+    "notCounted": "Claude Max $100 a month: generation does not use it (only pixel-draw, which P0 does not run). Gemini: no subscription"
+  },
   "perRun": {
-    "codex": null,
-    "sprite gen": null,
-    "sprite gen-set": null,
-    "sprite video-set": null,
+    "codex": 240,
+    "sprite gen": 240,
+    "sprite gen-set": 240,
+    "sprite video-set": 55,
     "sprite prepare": 0,
     "sprite extract": 0,
     "sprite scale-check": 0,
@@ -14,5 +21,8 @@
     "sprite game-pack": 0
   },
   "perMinute": {},
-  "monthly": {}
+  "monthly": {
+    "chatgpt-pro": 299000,
+    "supergrok": 135000
+  }
 }
