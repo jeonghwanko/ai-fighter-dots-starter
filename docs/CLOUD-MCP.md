@@ -215,7 +215,7 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 6. 반환된 `next`와 현재 사용자 요청에 따라 같은 작업을 이어간다. `submitted`도 아직 검사 중일 수 있으며
    `submission.stage: "registered"`와 등록 ID를 확인한 경우만 등록 완료로 안내한다.
 
-구현 근거는 `mcp/cloud.mjs`의 소유자별 기존 키 조회와 `get_hosted_fighter`, `api/generations.mjs`의 작업 조회·서명 URL 발급이다.
+구현 근거는 `mcp/cloud/hosted-tools.mjs`의 소유자별 기존 키 조회와 `get_hosted_fighter`, `api/generations.mjs`의 작업 조회·서명 URL 발급이다.
 `test/hosted-generation-mcp.test.mjs`는 오프라인 DB와 모의 Storage로 응답 유실 뒤 새 커넥터의 같은 작업 회수,
 작업 저장 전 조회·최근 다섯 개 밖의 키 조회·저장된 작업의 재호출에서 추가 신청·업로드가 없음을 검사한다.
 URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조회 차단도 검사한다. 이 테스트는 실제 Dots/Grok 로그인,

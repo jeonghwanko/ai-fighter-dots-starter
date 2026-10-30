@@ -154,7 +154,7 @@ If setup, generation, sign-in, registration, or gameplay fails, [open an issue](
 
 Bug reports, clearer setup instructions, and reproducible examples are welcome. Read [AGENTS.md](AGENTS.md) before using an assistant to change this repository.
 Pull requests target `main` and merge only after the `test` workflow passes; `npm test` runs the same suite locally, including the
-strict type check of `api/`.
+strict type check of `api/`, `worker/`, `mcp/` and `scripts/`.
 
 | Resource | Use it for |
 | --- | --- |
