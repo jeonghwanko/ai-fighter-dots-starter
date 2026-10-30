@@ -89,7 +89,7 @@ export function hostedNext(job) {
         + 'once he confirmed each of the eleven motions.';
       if (job.submission?.stage === 'rejected') return 'The server check refused the package. A person at ODDBOUT will look at it; the user\'s free fighter is free again.';
       return 'The server is checking the package. Call get_hosted_fighter with waitSeconds.';
-    case 'needs_review': return 'A person at ODDBOUT is checking this step. Nothing to do now; check later.';
+    case 'needs_review': return 'A person at ODDBOUT is checking this step. Nothing to do now; check later. If he cancels while it waits, his free fighter comes back.';
     case 'rejected': return `ODDBOUT declined this request${error}. It does not use the user's free fighter; a different request may be made.`;
     case 'failed': return `This request failed${error}. The user's free fighter is free again; he may ask once more.`;
     default: return `This request is ${job.status}; it is over.`;
@@ -203,9 +203,10 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     ({ jobId, choose, revise }) => (choose === undefined) === (revise === undefined) ? { ok: false, code: 'invalid-answer' }
       : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(withNext), { write: true, idempotent: false });
   register('revise_hosted_motion', '동작 하나 고치기', 'Ask ODDBOUT to make one motion of the connected user\'s hosted fighter again with his sentence; the other motions stay. '
-    + 'Requires the user\'s request. Not idempotent: '
+    + 'Not idle: the standing pose is the look itself. Requires the user\'s request. Not idempotent: '
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
-    { jobId: JOB, clip: z.enum(Object.keys(spec.motions)), note: z.string().min(2).max(GENERATION_LIMITS.note) },
+    // Not idle: it is the look itself (choose_hosted_look changes the look, before the motions).
+    { jobId: JOB, clip: z.enum(/** @type {[string, ...string[]]} */ (Object.keys(spec.motions).filter(clip => clip !== 'idle'))), note: z.string().min(2).max(GENERATION_LIMITS.note) },
     ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(withNext), { write: true, idempotent: false });
   register('register_hosted_fighter', '맡긴 선수 등록', 'Register the connected user\'s hosted fighter once he approved its motions: '
     + 'ODDBOUT packages it and submits it under his account, through the same server check as any fighter. '
@@ -224,7 +225,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       return withNext(await post(`generations/${jobId}/register`, { profile: confirmed }));
     }, { write: true, publish: true, openWorld: true, idempotent: true });
   register('cancel_hosted_fighter', '맡긴 선수 취소', 'Cancel the connected user\'s hosted fighter request; '
-    + 'work in progress stops at its next step. His free fighter comes back only if no look was painted yet (job.charged false) '
-    + 'or a person at ODDBOUT was checking it. Only on his explicit request.',
+    + 'work in progress stops at its next step. His free fighter comes back only if no look was painted yet (job.charged false), '
+    + 'a person at ODDBOUT was checking it, or ODDBOUT\'s worker is offline. Only on his explicit request.',
     { jobId: JOB }, async ({ jobId }) => withNext(await invoke(`generations/${jobId}`, 'DELETE')), { write: true, publish: true, idempotent: true });
 }

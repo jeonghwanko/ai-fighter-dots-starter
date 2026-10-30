@@ -1,11 +1,12 @@
 -- Hosted generation measurement export (docs/MEASUREMENT.md). Read-only: one JSON document for scripts/measure-export.mjs.
 -- Run it in the Supabase SQL editor (or psql as a role that reads these tables) and save the single cell as db.json.
 -- It carries no requester text: no description, appearance or motion note, owner, brief, profile or picture.
--- 첫 선수 무료 (2026-10-30): each job also says where it went, when its looks were painted and it started, whether it was his first
--- request and how long after signing up, and what its fighter did once entered (duels in its first week, cup bouts if the arena
+-- 첫 선수 무료 (2026-10-30): each job also says where it went, when its looks were painted and it started, which account it belongs
+-- to (`ownerKey`: a rank of the owner among the picked jobs — stable in this export only, not the owner id, email or a hash of them) and
+-- how long after signing up it was asked, and what its fighter did once entered (duels in its first week, cup bouts if the arena
 -- relay's totals are in this database). Change the window in `w` as needed.
 with w as (select now() - interval '30 days' as since),
-picked as (select j.* from public.af_generation_jobs j, w where j.created_at >= w.since)
+picked as (select j.*, dense_rank() over (order by j.owner_id) as owner_key from public.af_generation_jobs j, w where j.created_at >= w.since)
 select jsonb_build_object(
   'kind', 'oddbout-measure-db',
   'version', 1,
@@ -16,7 +17,7 @@ select jsonb_build_object(
       'choice', j.choice, 'appearanceRevisions', j.appearance_revisions, 'motionRevisions', j.motion_revisions,
       'errorCode', j.error_code, 'previewClips', (select coalesce(jsonb_agg(p->>'clip'), '[]'::jsonb) from jsonb_array_elements(j.preview) p),
       'hostChoice', j.host_choice, 'delegate', j.delegate, 'chargedAt', j.charged_at, 'refunded', j.refunded_at is not null, 'startedAt', j.started_at,
-      'firstForOwner', not exists(select 1 from public.af_generation_jobs e where e.owner_id = j.owner_id and (e.created_at, e.id) < (j.created_at, j.id)),
+      'ownerKey', j.owner_key,
       'signupToRequestHours', (select round((extract(epoch from j.created_at - u.created_at) / 3600)::numeric, 1) from auth.users u where u.id = j.owner_id),
       'fighter', (select jsonb_build_object('enteredAt', f.entered_at,
           'duels7d', (select count(*) from public.af_duels d where d.completed_at is not null and f.id in (d.a, d.b)

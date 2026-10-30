@@ -17,9 +17,9 @@ const LOOKS = ['look-a', 'look-b'];
 /**
  * @typedef {{ id: string, status: string, createdAt: string, errorCode?: string | null, appearanceRevisions?: number | null,
  *   motionRevisions?: number | null, previewClips?: string[], hostChoice?: string, delegate?: boolean, chargedAt?: string | null,
- *   refunded?: boolean, startedAt?: string | null, firstForOwner?: boolean, signupToRequestHours?: number | null,
+ *   refunded?: boolean, startedAt?: string | null, ownerKey?: number | null, signupToRequestHours?: number | null,
  *   fighter?: { enteredAt?: string | null, duels7d?: number, cupBouts?: number | null } | null }} Job
- *   hostChoice … fighter: 첫 선수 무료 (2026-10-30); absent from older exports.
+ *   hostChoice … fighter: 첫 선수 무료 (2026-10-30); absent from older exports. ownerKey: the account, a rank stable in one export only.
  * @typedef {{ currency?: string, perRun?: Record<string, number | null>, perMinute?: Record<string, number | null>,
  *   monthly?: Record<string, number> }} Costs  scripts/cost-table.json: the operator's estimate per og command
  * @typedef {{ jobId: string, id: number, at: string, kind: string, data: any }} JobEvent  data: the event's JSON, by kind
@@ -120,30 +120,48 @@ export function jobCost(t, costs) {
 }
 
 /**
- * The first free fighter (첫 선수 무료, 2026-10-30): how far his first request to ODDBOUT went, how long it waited, what it cost on our
- * subscriptions. Jobs on his own PC or another host are not ours to pay. Older exports lack the fields and count nothing here.
- * @param {Timeline[]} timelines @param {Costs | null} costs @param {number | null} days  the export's window
+ * The first free fighter (첫 선수 무료, 2026-10-30): did a new account's free fighter turn into play, how long its request waited,
+ * what it cost on our subscriptions. The funnel counts accounts (`ownerKey`) with an ODDBOUT job; a step counts for an account when any of
+ * its ODDBOUT jobs reached it. Jobs on his own PC or another host are not ours to pay. Older exports lack the fields and count nothing here.
+ * @param {Timeline[]} timelines @param {Costs | null} costs @param {number | null} days  the export's window, null: no subscription share
  */
 function freeFighter(timelines, costs, days) {
-  const ours = timelines.filter(t => (t.job.hostChoice ?? 'oddbout') === 'oddbout'), firsts = ours.filter(t => t.job.firstForOwner === true);
-  const entered = firsts.filter(t => t.job.fighter?.enteredAt), started = ours.filter(t => t.job.startedAt);
+  const ours = timelines.filter(t => (t.job.hostChoice ?? 'oddbout') === 'oddbout'), started = ours.filter(t => t.job.startedAt);
+  /** @type {Map<number, Timeline[]>} */
+  const byAccount = new Map();
+  for (const t of ours) {
+    const key = t.job.ownerKey;
+    if (typeof key === 'number') byAccount.set(key, [...(byAccount.get(key) ?? []), t]);
+  }
+  const accounts = [...byAccount.values()];
+  /** @type {(reached: (t: Timeline) => unknown) => number} */
+  const reaching = reached => accounts.filter(jobs => jobs.some(reached)).length;
+  /** @type {(t: Timeline) => boolean} */
+  const entered = t => Boolean(t.job.fighter?.enteredAt);
+  /** @type {(t: Timeline) => boolean} */
+  const playedAfterEntering = t => entered(t) && played(t);
+  /** @type {(jobs: Timeline[]) => Timeline} */
+  const firstJob = jobs => jobs.reduce((a, b) => (Date.parse(b.job.createdAt) < Date.parse(a.job.createdAt) ? b : a));
   const registered = ours.filter(t => t.register || t.job.fighter);
+  const enteredAccounts = reaching(entered), playedAccounts = reaching(playedAfterEntering);
   let cost = null;
   if (costs) {
     const each = ours.map(t => ({ t, ...jobCost(t, costs) })), total = each.reduce((sum, c) => sum + c.total, 0);
     const monthly = Object.values(costs.monthly ?? {}).reduce((sum, v) => sum + (Number(v) || 0), 0);
-    cost = { currency: costs.currency ?? null, total, perJob: spread(each.filter(c => c.t.job.chargedAt).map(c => c.total)),
-      perRegistered: rate(total, registered.length), perEntered: rate(total, ours.filter(t => t.job.fighter?.enteredAt).length),
-      wasted: each.filter(c => c.t.job.chargedAt && !c.t.job.refunded && ['cancelled', 'expired'].includes(c.t.job.status)).reduce((sum, c) => sum + c.total, 0),
-      subscriptionPerStarted: monthly && days !== null ? rate(monthly * days / 30, started.length) : null,
-      unpriced: [...new Set(each.flatMap(c => [...c.unpriced]))].sort() };
+    const unpriced = [...new Set(each.flatMap(c => [...c.unpriced]))].sort(), complete = unpriced.length === 0;
+    // A total that leaves a command that ran unpriced reads low and looks final: with one unpriced, every sum is null.
+    cost = { currency: costs.currency ?? null, complete, total: complete ? total : null,
+      perJob: complete ? spread(each.filter(c => c.t.job.chargedAt).map(c => c.total)) : null,
+      perRegistered: complete ? rate(total, registered.length) : null, perEntered: complete ? rate(total, ours.filter(entered).length) : null,
+      wasted: complete ? each.filter(c => c.t.job.chargedAt && !c.t.job.refunded && ['cancelled', 'expired'].includes(c.t.job.status)).reduce((sum, c) => sum + c.total, 0) : null,
+      subscriptionPerStarted: monthly && days !== null ? rate(monthly * days / 30, started.length) : null, unpriced };
   }
   return {
-    freeFunnel: { requested: firsts.length, charged: firsts.filter(t => t.job.chargedAt).length, motionReady: firsts.filter(t => t.reachedMotions).length,
-      registered: firsts.filter(t => t.register || t.job.fighter).length, entered: entered.length, played7d: entered.filter(played).length },
-    participationRate: { rate: rate(entered.filter(played).length, entered.length), of: entered.length },
+    freeFunnel: { requested: accounts.length, charged: reaching(t => t.job.chargedAt), motionReady: reaching(t => t.reachedMotions),
+      registered: reaching(t => t.register || t.job.fighter), entered: enteredAccounts, played7d: playedAccounts },
+    participationRate: { rate: rate(playedAccounts, enteredAccounts), of: enteredAccounts },
     queueWaitHours: spread(started.map(t => ms(t.job.createdAt, /** @type {string} */ (t.job.startedAt)) / 3_600_000)),
-    signupToRequestHours: spread(firsts.map(t => Number(t.job.signupToRequestHours))),
+    signupToRequestHours: spread(accounts.flatMap(jobs => { const hours = firstJob(jobs).job.signupToRequestHours; return typeof hours === 'number' ? [hours] : []; })),
     cost,
   };
 }
@@ -295,7 +313,8 @@ export function report(db, ledger = null, costs = null) {
     kpis: { kind: 'oddbout-measure', version: 1, exportedAt: db.exportedAt, since: db.since, ledger: Boolean(ledger),
       ended: all.filter(t => ENDED.has(t.job.status)).length,
       all: kpis(all, { reviews: db.reviews, ledger, costs, days }), screening: screening(labels),
-      byKit: Object.fromEntries(Object.entries(byKit).map(([kit, list]) => [kit, kpis(list, { reviews: db.reviews, ledger, costs, days })])) },
+      // days: null — the subscription share spreads the whole month over the whole export, not over one kit's jobs.
+      byKit: Object.fromEntries(Object.entries(byKit).map(([kit, list]) => [kit, kpis(list, { reviews: db.reviews, ledger, costs, days: null })])) },
     labels,
   };
 }
