@@ -5,6 +5,7 @@ import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
 import { CUP_WAIT_MS, UUID_ARG, arenaCall } from './common.mjs';
+import { ENTRY_CLIPS, entryRequest } from '../../api/fighter-entry.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
  * @typedef {import('./common.mjs').Arena} Arena
@@ -51,7 +52,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
   register('get_style_guide', '싸우는 성격 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. '
     + 'Values and limits are the contract\'s (spec.combatStyle). This changes nothing.',
     {}, async () => ({ ok: true, contract: spec.combatStyle, guide: STYLE_GUIDE }), { publicTool: true });
-  register('list_fighters', 'ODDBOUT 선수 명단', 'List ODDBOUT\'s fighters: the built-in roster and the listed registered fighters (id and name). '
+  register('list_fighters', 'ODDBOUT 선수 명단', 'List ODDBOUT\'s fighters: the built-in roster and the listed, entered registered fighters (id and name). '
     + 'Use the ids for records, spars and bouts.',
     {}, async () => {
       // The arena's list and the roster's first page at once (the two hops were 650 ms in a row).
@@ -93,13 +94,14 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       return { ok: false, code: 'invalid-bout' };
     }, { publicTool: true });
   register('spar', '스파링', 'Spar: one bout between two fighters on their current packages, read back with its record (as read_bout). '
-    + 'Not ranked and not kept. Use it to see how a fighter fights, before and after a style change. '
+    + 'Not ranked and not kept. Use it to see how a fighter fights, before and after a style change. Registered fighters must be entered. '
     + 'Give a seed to fight the same bout again.',
     { fighterId: ID, opponentId: ID, seed: z.number().int().min(0).max(0xffffffff).optional() },
     ({ fighterId, opponentId, seed }) => call('agent/spar', { owner: /** @type {Identity} */ (identity).owner, a: fighterId, b: opponentId, ...(seed === undefined ? {} : { seed }) }));
   register('enter_cup', '16강 컵 출전', 'Enter the connected user\'s registered fighter in a 16-fighter cup. '
     + 'The server draws the other fifteen from the built-in roster and fights every bout; '
-    + 'the results count in the cup rankings. Requires the user\'s request. Returns the finished cup (a few seconds); '
+    + 'the results count in the cup rankings. Only an entered fighter (enter_fighter) enters. Requires the user\'s request. '
+    + 'Returns the finished cup (a few seconds); '
     + 'if it is still running, read it with get_cup.',
     { fighterId: UUID_ARG() }, async ({ fighterId }) => {
       const issued = await call('agent/cup', { owner: /** @type {Identity} */ (identity).owner, fighter: fighterId });
@@ -160,4 +162,37 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'Use a new UUID per change and the same UUID to retry it.',
     { fighterId: UUID_ARG(), style: z.union([z.record(z.string(), z.unknown()), z.null()]), idempotencyKey: UUID_ARG() },
     ({ fighterId, style, idempotencyKey }) => edit(fighterId, { style }, idempotencyKey), { write: true, publish: true, openWorld: true, idempotent: true });
+  // 출전 (2026-10-30): a validated fighter is 제작 중 until his owner enters him; only then do other people meet him. Both calls answer the
+  // same when repeated (supabase/migrations/20261030130000_ai_fighter_entry.sql).
+  /** @type {Readonly<Record<string, number>>} */
+  const ENTRY_STATUS = { 'account-disabled': 403, 'rate-limit': 429, 'not-found': 404, 'fighter-changed': 409, 'fighter-not-ready': 409, 'invalid-entry': 422 };
+  // The account first, as the site's route does (`af_authorize`: a disabled account, the per-minute budget) — 적대적 리뷰 2026-10-30: a
+  // disabled account entered its fighter here while the site refused it.
+  /** @param {string} name @param {Record<string, unknown>} args */
+  const entryCall = async (name, args) => {
+    const { data, error } = await db.rpc(name, args);
+    if (!error) return data;
+    const status = ENTRY_STATUS[error.message];
+    throw status ? new Problem(status, error.message) : new Problem(503, 'database-unavailable');
+  };
+  /** @param {string} name @param {Record<string, unknown>} args */
+  const entry = async (name, args) => {
+    const owner = /** @type {Identity} */ (identity).owner;
+    await entryCall('af_authorize', { p_owner: owner });
+    return entryCall(name, { p_owner: owner, ...args });
+  };
+  register('enter_fighter', '출전하기', 'Enter the connected user\'s registered fighter (출전): other people then meet him in the roster, '
+    + 'ranked duels, cups and their rankings. A validated fighter starts in production (제작 중): out of other people\'s cups, ranked duels and lists while his owner previews and practises him. '
+    + 'First show the user each of the eleven required motions; enter only on his request once he confirmed every one. '
+    + 'Pass the package hash he watched (get_registered_fighter) and those motions. A new package returns him to production.',
+    { fighterId: UUID_ARG(), expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),
+      reviewedClips: z.array(z.enum(/** @type {[string, ...string[]]} */ ([...ENTRY_CLIPS]))).length(ENTRY_CLIPS.length) },
+    ({ fighterId, expectedManifestSha256, reviewedClips }) => {
+      const { sha, clips } = entryRequest({ expectedManifestSha256, reviewedClips });
+      return entry('af_enter_fighter', { p_fighter: fighterId, p_sha: sha, p_clips: clips });
+    }, { write: true, publish: true, openWorld: true, idempotent: true });
+  register('withdraw_fighter', '출전 취소', 'Return the connected user\'s entered fighter to production (제작 중): other people stop meeting him '
+    + 'in the roster, ranked duels and cups; his record stays. Requires the user\'s request.',
+    { fighterId: UUID_ARG() }, ({ fighterId }) => entry('af_withdraw_fighter', { p_fighter: fighterId }),
+    { write: true, publish: true, openWorld: true, idempotent: true });
 }

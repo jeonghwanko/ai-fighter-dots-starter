@@ -3,11 +3,13 @@ import assert from 'node:assert/strict';
 import { createHandler } from '../api/handler.mjs';
 const rows = Array.from({ length: 25 }, (_, i) => ({ id: '00000000-0000-4000-8000-' + String(i).padStart(12, '0'),
   created_at: new Date(Date.UTC(2026, 9, i + 1)).toISOString(), manifest_sha: 'a'.repeat(64), runtime_manifest_sha: 'a'.repeat(64),
-  runtime_approved: true, runtime_scope: 'arena-player-v1', review_state: 'approved', listed: true, profile: { name: 'Fighter ' + i } }));
+  runtime_approved: true, runtime_scope: 'arena-player-v1', review_state: 'approved', listed: true, profile: { name: 'Fighter ' + i },
+  entered_at: '2026-10-30T00:00:00Z' }));
 function handler(source) {
   return createHandler({ db: { from() {
     let data = [...source], order = [];
     const q = { select: () => q, eq: (key, value) => { data = data.filter(row => row[key] === value); return q; },
+      not: (key, operator, value) => { assert.deepEqual([operator, value], ['is', null]); data = data.filter(row => row[key] != null); return q; },
       order: (key, { ascending = true } = {}) => { order.push([key, ascending]); return q; },
       or: filter => {
         const match = /^created_at\.lt\.(.+),and\(created_at\.eq\.\1,id\.gt\.([a-f0-9-]+)\)$/.exec(filter);
@@ -28,7 +30,7 @@ test('public roster returns newest first, paginates beyond 20, and omits private
   assert.equal(second.hasMore, false); assert.equal(second.nextCursor, null); assert.equal(second.fighters.length, 5);
   assert.equal(first.fighters[0].name, 'Fighter 24');
   assert.equal(new Set([...first.fighters, ...second.fighters].map(row => row.id)).size, 25);
-  assert.deepEqual(Object.keys(first.fighters[0]).sort(), ['duelApproved', 'id', 'manifestSha256', 'name', 'runtimeScope'].sort());
+  assert.deepEqual(Object.keys(first.fighters[0]).sort(), ['duelApproved', 'entered', 'id', 'manifestSha256', 'name', 'runtimeScope'].sort());
 });
 test('new registrations and removals between requests do not skip unseen fighters', async () => {
   const source = [...rows], handle = handler(source), first = await (await handle(request())).json();
@@ -50,9 +52,10 @@ test('invalid cursors cannot inject PostgREST filters', async () => {
     assert.equal((await handle(request(cursor))).status, 400);
   }
 });
-test('removed, pending, unlisted and hash-mismatched packages are excluded without losing the next page', async () => {
+test('removed, pending, unlisted, in-production and hash-mismatched packages are excluded without losing the next page', async () => {
   const source = rows.map((row, i) => i >= 5 ? { ...row, runtime_manifest_sha: 'b'.repeat(64) } : row);
-  source.push({ ...rows[0], review_state: 'removed' }, { ...rows[1], runtime_approved: false }, { ...rows[2], listed: false });
+  source.push({ ...rows[0], review_state: 'removed' }, { ...rows[1], runtime_approved: false }, { ...rows[2], listed: false },
+    { ...rows[3], entered_at: null });
   const handle = handler(source), first = await (await handle(request())).json();
   assert.equal(first.fighters.length, 0); assert.equal(first.hasMore, true);
   const second = await (await handle(request(first.nextCursor))).json();

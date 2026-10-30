@@ -276,7 +276,7 @@ test('every write tool says whether a retry is safe; the ones that make somethin
   const writes = Object.fromEntries(tools.filter(t => !t.annotations.readOnlyHint).map(t => [t.name, t.annotations.idempotentHint]));
   assert.deepEqual(writes, {
     prepare_fighter_deletion: true, delete_fighter: true, prepare_fighter_registration: true, upload_fighter_asset: true, submit_fighter_registration: true,
-    enter_cup: false, update_fighter_profile: true, update_fighter_style: true,
+    enter_cup: false, update_fighter_profile: true, update_fighter_style: true, enter_fighter: true, withdraw_fighter: true,
     update_fighter_canon: true, post_workshop_note: false, resolve_workshop_note: true, set_fighter_relation: true, manage_world: false, write_world_post: true,
     request_hosted_fighter: false, choose_hosted_look: false, revise_hosted_motion: false, register_hosted_fighter: true, cancel_hosted_fighter: true,
     store_creator_source: true, prepare_creator_source_download: true,
@@ -388,4 +388,32 @@ test('the sign-in-first address asks every request for a sign-in; mcp.oddbout.co
     assert.equal((await post(CLOUD_RESOURCE, 'tools/list', false, headers)).status, 200);
   }
   assert.equal((await handle(new Request(`${SIGN_IN_RESOURCE}/elsewhere`, { method: 'POST' }))).status, 404);
+});
+
+test('an agent enters his fighter on the watched package and withdraws him; list_fighters shows him only while entered (출전, 2026-10-30)', async () => {
+  const f = await profileFixture();
+  try {
+    const registered = await f.register(), fighter = registered.fighter_id;
+    const db = { ...f.db, auth: { getClaims: async () => ({ data: { claims: { ...claims(), sub: f.owner } } }) },
+      rpc: (name, args) => name === 'af_mcp_session_active' ? { data: true } : f.db.rpc(name, args) };
+    const arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async () => Response.json({ ok: true, fighters: [] }) };
+    const handle = createCloudHandler({ db, arena });
+    const listed = async () => (await call(handle, 'list_fighters')).structuredContent.registered.some(row => row.id === fighter);
+    const clips = ['idle', 'walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'];
+    assert.equal(await listed(), false);
+    assert.equal((await call(handle, 'list_my_fighters')).structuredContent.fighters[0].entered_at, null);
+    assert.equal((await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: registered.manifest_sha, reviewedClips: clips.slice(1) })).isError, true);
+    // The account first, as the site's route does (적대적 리뷰 2026-10-30).
+    await f.sql.query('update public.af_creators set enabled=false where owner_id=$1', [f.owner]);
+    const disabled = await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: registered.manifest_sha, reviewedClips: clips });
+    assert.equal(disabled.structuredContent.code, 'account-disabled');
+    await f.sql.query('update public.af_creators set enabled=true where owner_id=$1', [f.owner]);
+    const stale = await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: 'f'.repeat(64), reviewedClips: clips });
+    assert.equal(stale.structuredContent.code, 'fighter-changed');
+    const entered = (await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: registered.manifest_sha, reviewedClips: clips })).structuredContent;
+    assert.equal(entered.stage, 'entered', JSON.stringify(entered));
+    assert.equal(await listed(), true);
+    assert.equal((await call(handle, 'withdraw_fighter', { fighterId: fighter })).structuredContent.stage, 'in-production');
+    assert.equal(await listed(), false);
+  } finally { await f.sql.close(); }
 });

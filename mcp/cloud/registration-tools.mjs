@@ -67,7 +67,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
           + 'Verify generation/display separately in the current conversation.' : 'Account registration access is unavailable; inspect the account response.' };
     });
   register('list_my_fighters', '내 캐릭터', 'List only the connected user’s registered fighters.', {}, async () => {
-    const { data, error } = await db.from('af_fighters').select('id,profile,status,review_state,created_at').eq('owner_id', /** @type {Identity} */ (identity).owner)
+    const { data, error } = await db.from('af_fighters').select('id,profile,status,review_state,created_at,entered_at').eq('owner_id', /** @type {Identity} */ (identity).owner)
       .is('deleted_at', null).order('created_at', { ascending: false }).limit(50);
     if (error) throw new Problem(503, 'database-unavailable'); return { ok: true, fighters: data };
   });
@@ -124,8 +124,9 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       if (bytes.length !== asset.bytes || await sha256(bytes) !== asset.sha256) throw new Problem(422, 'asset-hash-or-size');
       return invoke(`submissions/${submissionId}/assets/${assetId}`, 'PUT', bytes, { 'content-type': 'image/webp' });
     }, { write: true, openWorld: true, idempotent: true, files: ['file'] });
-  register('submit_fighter_registration', '캐릭터 등록', 'Publish the user-approved uploaded package after authoritative validation. '
+  register('submit_fighter_registration', '캐릭터 등록', 'Register the user-approved uploaded package after authoritative validation. '
     + 'Requires the user’s explicit registration request. All asset uploads and visual reviews must be complete. '
+    + 'A registered fighter starts in production; other people meet him after his owner enters him. '
     + 'Queued/validating is not registered; follow get_fighter_submission until final.',
     { submissionId: UUID_ARG() }, ({ submissionId }) => invoke(`submissions/${submissionId}/submit`, 'POST'), { write: true, publish: true, openWorld: true, idempotent: true });
   register('get_fighter_submission', '등록 진행 상태', 'Read your submission. Only registered confirms registration; rejected contains the validation failure. '

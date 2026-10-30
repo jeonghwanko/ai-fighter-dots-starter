@@ -118,7 +118,7 @@ API 기본 경로는 `https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fight
 
 `duel_approved`는 기본 false다. true로 바꾸려면 기존 출전 승인, 동일 해시의 `duel_manifest_sha`,
 검토 근거의 `duelValidation`이 모두 필요하다. 제작자는 이 필드를 변경할 권한이 없다.
-목록과 패키지 API는 해시가 일치하는 경우에만 `duelApproved: true`를 반환한다.
+목록과 패키지 API는 해시가 일치하고 주인이 출전시킨(`entered_at`, 2026-10-30) 경우에만 `duelApproved: true`를 반환한다. 제작 중인 선수는 `entered: false`다.
 게임은 입장 직전에 두 선수의 패키지를 다시 확인한다. 캐시가 있어도 승인이 취소된 선수는 출전하지 못한다.
 
 로컬 게임에서 선수를 선택하고 **등록 선수 대결 · F9**를 누르면 승인된 다른 등록 선수와 매칭한다.
@@ -280,8 +280,9 @@ Dot에서 첫 실제 등록:
 | 메서드·경로 | 인증 | 역할 |
 | --- | --- | --- |
 | GET /spec | 없음 | 서버 규격·베타 등록 가능 여부 |
-| GET /roster | 없음 | 출전 승인된 선수의 ID·이름·해시·범위. 최대 20명. 운영자가 목록에서 뺀 선수(`af_fighters.listed = false`)는 빠진다. 클라우드 MCP로 만든 선수는 `madeWith`(만든 에이전트) |
-| GET /roster/:id | 없음 | 승인된 JSON 원문과 10분 만료 다운로드 URL. 목록에서 뺀 선수도 준다 |
+| GET /roster | 없음 | 출전한(`entered_at`) 승인 선수의 ID·이름·해시·범위. 최대 20명. 운영자가 목록에서 뺀 선수(`af_fighters.listed = false`)와 제작 중인 선수는 빠진다. 클라우드 MCP로 만든 선수는 `madeWith`(만든 에이전트) |
+| GET /roster/:id | 없음 | 승인된 JSON 원문과 10분 만료 다운로드 URL, `entered`. 목록에서 뺀 선수와 제작 중인 선수도 준다(주인의 미리보기·연습) |
+| POST·DELETE /fighters/:id/entry | 사용자 JWT | 출전(확인한 해시와 필수 동작 11개)·출전 취소. 반복해도 같은 답 |
 | POST /duels | 공개 게스트 요청 | 승인된 두 선수의 서버 계산·저장. a, b, idempotencyKey만 허용 |
 | GET /duels/:id | 없음 | 확정된 경기의 ID·시드·해시·엔진 버전·결과 |
 | GET /rankings | 없음 | 승인 선수별 승패·점수·공동 순위. 최대 20명 |

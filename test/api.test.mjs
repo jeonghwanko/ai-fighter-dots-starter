@@ -9,6 +9,9 @@ test('public spec announces open registration while anonymous writes fail', asyn
   assert.equal(spec.data.registration.available, true);
   assert.equal(spec.data.registration.mode, 'open');
   assert.equal(spec.data.registration.approvalRequired, false);
+  // A validated fighter waits for his owner's entry (출전, 2026-10-30); the site turns its entry screen on from this.
+  assert.equal(spec.data.registration.publication, 'owner-entry-after-file-validation');
+  assert.equal(spec.data.registration.fighterEntry, 'v1');
   const result = await handle(new Request('https://test/ai-fighter/submissions', { method: 'POST', body: '{}' }));
   assert.equal(result.status, 401);
 });

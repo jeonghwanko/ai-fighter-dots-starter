@@ -55,7 +55,8 @@ test('owned statistics use all completed matches beyond top 20, preserve public 
     const expected = { id: ids[20], appearances: 4, won: 1, lost: 3, points: 3, rank: 21 };
     assert.deepEqual(await result.json(), { ok: true, statistics: expected });
     assert.deepEqual((await (await request()).json()).statistics, expected); // A read cannot increment appearances.
-    assert.deepEqual((await (await request(ids[21], 'fixture-zero-owner-token')).json()).statistics, { id: ids[21], appearances: 0, won: 0, lost: 0, points: 0, rank: 22 });
+    // A fighter with no completed match stayed out of the entry (20261030130000, "전적 있는 선수만 출전"): in production, so unranked.
+    assert.deepEqual((await (await request(ids[21], 'fixture-zero-owner-token')).json()).statistics, { id: ids[21], appearances: 0, won: 0, lost: 0, points: 0, rank: null });
     assert.equal((await request(ids[0], 'fixture-owner-token', 'GET', `?owner=${other}`)).status, 404);
     assert.equal((await request(crypto.randomUUID())).status, 404);
     assert.equal((await request(ids[20], null)).status, 401);

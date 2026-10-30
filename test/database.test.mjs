@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { migratedDatabase } from './helpers/fighter-database.mjs';
+import { applyMigration, migratedDatabase, migrationNames, supabasePlatform } from './helpers/fighter-database.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type: 'json' };
 import { sha256, VALIDATOR_VERSION } from '../api/handler.mjs';
 
@@ -286,5 +286,121 @@ test('an owner replaces their fighter in place: same ID and record, old duels ke
     assert.equal(refused.status, 'rejected'); assert.equal(refused.validation.code, 'fighter-removed');
     assert.equal((await fighterOf(first.fighter_id)).manifest_sha, after.manifest_sha);
     await assert.rejects(create(owner, manifest({ profile: { concept: 'After removal' } }), first.fighter_id), /fighter-removed/);
+  } finally { await db.close(); }
+});
+
+test('a validated fighter starts in production; his owner enters him on the watched package and a new package returns him (출전, 2026-10-30)', async () => {
+  const db = await migratedDatabase();
+  try {
+    const [owner, other] = [crypto.randomUUID(), crypto.randomUUID()], bytes = example.assets.reduce((sum, a) => sum + a.bytes, 0);
+    await db.query('insert into auth.users values($1),($2)', [owner, other]);
+    await db.query('insert into public.af_creators(owner_id) values($1),($2)', [owner, other]);
+    const value = r => r.rows[0].value;
+    const register = async (text, fighter = null) => {
+      const row = value(await db.query('select to_jsonb(public.af_create_submission($1,$2,$3,$4,$5,$6)) as value',
+        [owner, crypto.randomUUID(), text, await sha256(new TextEncoder().encode(text)), bytes, fighter]));
+      for (const a of example.assets) await db.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta', `${owner}/${row.id}/${a.id}.webp`, { size: a.bytes }]);
+      await db.query('select public.af_submit($1,$2)', [owner, row.id]);
+      const claim = value(await db.query('select to_jsonb(public.af_claim($1)) as value', [row.id]));
+      return value(await db.query('select to_jsonb(public.af_finish($1,$2,$3,true,$4)) as value', [row.id, claim.lease_token, row.manifest_sha,
+        { validatorVersion: VALIDATOR_VERSION, stage: 'bytes-hashes-and-full-decode', errors: [] }]));
+    };
+    const fighterOf = async id => (await db.query('select * from public.af_fighters where id=$1', [id])).rows[0];
+    const clips = ['idle', 'walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall'];
+    const enter = (who, id, sha, list = clips) => db.query('select public.af_enter_fighter($1,$2,$3,$4) as value', [who, id, sha, list]).then(value);
+    const first = await register(JSON.stringify(example)), fighter = await fighterOf(first.fighter_id);
+    assert.equal(fighter.entered_at, null); assert.equal(fighter.duel_approved, true);
+    await assert.rejects(enter(other, fighter.id, fighter.manifest_sha), /not-found/);
+    await assert.rejects(enter(owner, fighter.id, 'f'.repeat(64)), /fighter-changed/);
+    await assert.rejects(enter(owner, fighter.id, fighter.manifest_sha, []), /invalid-entry/);
+    const entered = await enter(owner, fighter.id, fighter.manifest_sha);
+    assert.equal(entered.stage, 'entered'); assert.ok(entered.enteredAt);
+    assert.equal((await enter(owner, fighter.id, fighter.manifest_sha)).enteredAt, entered.enteredAt);
+    const evidence = (await fighterOf(fighter.id)).review_evidence;
+    assert.equal(evidence.entry.manifestSha, fighter.manifest_sha); assert.deepEqual(evidence.entry.clips, clips);
+    assert.equal(evidence.authorization, 'open-registration');
+
+    // A replacement the validator refuses changes nothing: he stays entered on the package he was entered on.
+    const refusedText = JSON.stringify({ ...example, profile: { ...example.profile, concept: 'Refused art' } });
+    const refused = value(await db.query('select to_jsonb(public.af_create_submission($1,$2,$3,$4,$5,$6)) as value',
+      [owner, crypto.randomUUID(), refusedText, await sha256(new TextEncoder().encode(refusedText)), bytes, fighter.id]));
+    for (const a of example.assets) await db.query('insert into storage.objects values($1,$2,$3)', ['ai-fighter-beta', `${owner}/${refused.id}/${a.id}.webp`, { size: a.bytes }]);
+    await db.query('select public.af_submit($1,$2)', [owner, refused.id]);
+    const refusedClaim = value(await db.query('select to_jsonb(public.af_claim($1)) as value', [refused.id]));
+    await db.query('select public.af_finish($1,$2,$3,false,$4)', [refused.id, refusedClaim.lease_token, refused.manifest_sha,
+      { validatorVersion: VALIDATOR_VERSION, stage: 'bytes-hashes-and-full-decode', errors: ['EMPTY_FRAME'] }]);
+    assert.equal((await fighterOf(fighter.id)).entered_at.getTime(), new Date(entered.enteredAt).getTime());
+    // An operator's removal hides him (the gates need his approvals too); restoring the same package gives back the entry he had.
+    await db.query('insert into public.af_admins(owner_id) values($1)', [other]);
+    await db.query("select public.af_moderate_fighter($1,$2,0,'remove','test')", [other, fighter.id]);
+    assert.equal((await db.query('select public.af_duel_admitted(f) as ok from public.af_fighters f where id=$1', [fighter.id])).rows[0].ok, false);
+    await db.query("select public.af_moderate_fighter($1,$2,1,'restore','test')", [other, fighter.id]);
+    assert.deepEqual((await db.query('select entered_at is not null as entered, public.af_duel_admitted(f) as ok from public.af_fighters f where id=$1',
+      [fighter.id])).rows[0], { entered: true, ok: true });
+
+    // A new package for him: other people stop meeting him until his owner watches it.
+    await register(JSON.stringify({ ...example, profile: { ...example.profile, concept: 'New art' } }), fighter.id);
+    const replaced = await fighterOf(fighter.id);
+    assert.equal(replaced.entered_at, null); assert.notEqual(replaced.manifest_sha, fighter.manifest_sha);
+    await enter(owner, fighter.id, replaced.manifest_sha);
+    assert.deepEqual(value(await db.query('select public.af_withdraw_fighter($1,$2) as value', [owner, fighter.id])),
+      { ok: true, stage: 'in-production', fighterId: fighter.id, enteredAt: null });
+    assert.equal((await fighterOf(fighter.id)).entered_at, null);
+
+    // A removed fighter is not ready; a profile-only fighter cannot hold an entry.
+    await db.query(`update public.af_fighters set review_state='rejected',runtime_approved=false,runtime_scope=null,runtime_manifest_sha=null,
+      duel_approved=false,duel_manifest_sha=null where id=$1`, [fighter.id]);
+    await assert.rejects(enter(owner, fighter.id, replaced.manifest_sha), /fighter-not-ready/);
+    await assert.rejects(db.query("update public.af_fighters set status='profile',entered_at=now() where id=$1", [fighter.id]), /af_fighters_entry_registered/);
+    for (const role of ['anon', 'authenticated']) {
+      await db.exec(`set role ${role}`);
+      await assert.rejects(enter(owner, fighter.id, replaced.manifest_sha), /permission denied/);
+      await db.exec('reset role');
+    }
+  } finally { await db.close(); }
+});
+
+test('the entry migration enters only registered fighters with a record (사용자 결정 2026-10-30, "전적 있는 선수만 출전")', async () => {
+  const db = await supabasePlatform();
+  try {
+    const names = await migrationNames(), at = names.indexOf('20261030130000_ai_fighter_entry.sql');
+    assert.ok(at > 0);
+    for (const name of names.slice(0, at)) await applyMigration(db, name);
+    const text = JSON.stringify(example), sha = await sha256(new TextEncoder().encode(text));
+    // One owner each: an account holds three fighters.
+    const fighter = async name => {
+      const owner = crypto.randomUUID(), sub = crypto.randomUUID(), id = crypto.randomUUID();
+      await db.query('insert into auth.users values($1)', [owner]);
+      await db.query('insert into public.af_creators(owner_id) values($1)', [owner]);
+      await db.query(`insert into public.af_submissions(id,owner_id,idempotency_key,manifest_text,manifest,manifest_sha,asset_bytes,status)
+        values($1,$2,$3,$4,$5,$6,1,'registered')`, [sub, owner, crypto.randomUUID(), text, example, sha]);
+      await db.query(`insert into public.af_fighters(id,submission_id,owner_id,manifest_sha,profile,review_state,runtime_approved,runtime_scope,
+        runtime_manifest_sha,review_evidence,duel_approved,duel_manifest_sha) values($1,$2,$3,$4,$5,'approved',true,'arena-player-v1',$4,$6,true,$4)`,
+        [id, sub, owner, sha, { name }, { authorization: 'test', validation: 'test', duelValidation: 'test' }]);
+      return id;
+    };
+    const ids = {};
+    for (const name of ['winner', 'loser', 'pendingOnly', 'cupOnly', 'fresh', 'deleted', 'removed']) ids[name] = await fighter(name);
+    const duel = (a, b, done) => db.query(`insert into public.af_duels(request_key,a,b,hash_a,hash_b,seed,engine,completed_at,winner,result)
+      values($1,$2,$3,$4,$4,7,'test-v1',${done ? `now(),$2,'{"winner":0}'` : 'null,null,null'})`, [crypto.randomUUID(), a, b, sha]);
+    await duel(ids.winner, ids.loser, true);
+    await duel(ids.pendingOnly, ids.winner, false);
+    await duel(ids.deleted, ids.removed, true);
+    // A deleted fighter may hold no entry (the new constraint): the backfill must leave him out, or the migration fails.
+    await db.query(`update public.af_fighters set deleted_at=now(),account_slot=null,review_state='rejected',runtime_approved=false,runtime_scope=null,
+      runtime_manifest_sha=null,duel_approved=false,duel_manifest_sha=null where id=$1`, [ids.deleted]);
+    await db.query(`update public.af_fighters set review_state='rejected',runtime_approved=false,runtime_scope=null,runtime_manifest_sha=null,
+      duel_approved=false,duel_manifest_sha=null where id=$1`, [ids.removed]);
+    // A cup record lives in the arena relay's totals; the stand-in has only the columns the backfill reads.
+    await db.exec('create table public.af_arena_fighter_totals(id text primary key, won bigint, lost bigint)');
+    await db.query('insert into public.af_arena_fighter_totals values($1,2,1),($2,0,0)', [ids.cupOnly, ids.fresh]);
+    await applyMigration(db, names[at]);
+    const rows = (await db.query("select profile->>'name' as name, entered_at is not null as entered from public.af_fighters")).rows;
+    assert.deepEqual(Object.fromEntries(rows.map(r => [r.name, r.entered])),
+      { winner: true, loser: true, pendingOnly: false, cupOnly: true, fresh: false, deleted: false, removed: true });
+    const evidence = Object.fromEntries((await db.query("select profile->>'name' as name, review_evidence->'entry' as entry from public.af_fighters")).rows
+      .map(r => [r.name, r.entry && { backfill: r.entry.backfill, reason: r.entry.reason }]));
+    assert.deepEqual([evidence.winner, evidence.cupOnly, evidence.fresh], [{ backfill: '20261030130000', reason: 'completed-duel' },
+      { backfill: '20261030130000', reason: 'cup-bout' }, null]);
   } finally { await db.close(); }
 });
