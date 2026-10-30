@@ -4,7 +4,7 @@ import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import sharp from 'sharp';
-import { alphaBounds, walkPlan, sequenceHash, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence, loopReview, requireLoopReview, scaleCheckRuns, scaleCheckEntries, scaleCheckConfigErrors, scalePer } from '../tools/ai-fighter/gait.mjs';
+import { alphaBounds, walkPlan, sequenceHash, inspectGeometry, combineReview, requireReview, commonGameRequest, loadSequence, loopReview, requireLoopReview, ENGINE_SEAM_MAX, scaleCheckRuns, scaleCheckEntries, scaleCheckConfigErrors, scalePer } from '../tools/ai-fighter/gait.mjs';
 import { preview } from '../scripts/gait.mjs';
 
 function frame(bottom = 70, mark = 0, height = 80) {
@@ -145,6 +145,16 @@ test('a loop review fails on an engine retake reason, unnamed feet, a failing ve
   assert.throws(() => requireLoopReview(judged, seq, 'walk'), /LOOP_REVIEW_REQUIRED/);
   const changed = { ...seq, durations: seq.durations.map((ms, i) => i ? ms : ms + 1) };
   assert.throws(() => requireLoopReview(pass, changed, 'walk'), /LOOP_REVIEW_STALE/);
+  // The judge's loop alone (2026-10-30): a seam the engine measured inside its gate takes the cut, and the review says so; one past the
+  // gate, or none measured, still fails on it.
+  const seamed = ratio => loopReview({ motion: 'walk', sequence: seq, strip: { cycle_align: { ...aligned, ...(ratio === undefined ? {} : { seam_ratio: ratio }) } },
+    visual: { ...verdicts, loop: 'fail' }, judge: 'test', stridePixels: 90 });
+  const taken = seamed(1.41);
+  assert.equal(taken.status, 'pass', JSON.stringify(taken.errors));
+  assert.equal(taken.loopBy, 'engine-seam');
+  assert.equal(requireLoopReview(taken, seq, 'walk'), taken);
+  for (const ratio of [ENGINE_SEAM_MAX + 0.3, undefined]) assert.deepEqual(seamed(ratio).errors.map(e => e.code), ['VISUAL_LOOP'], String(ratio));
+  assert.equal(pass.loopBy, undefined);
 });
 test('a loop review takes a gait at the frames it was filmed in, inside the contract range (gait-frames-1)', () => {
   const verdicts = { identity: 'pass', anatomy: 'pass', loop: 'pass', notes: 'Clean loop.' };

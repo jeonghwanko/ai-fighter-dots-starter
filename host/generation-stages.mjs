@@ -406,6 +406,16 @@ export function gaitStillPrompt(brief) {
 
 /** The judge's verdicts (motions.py JUDGE_SCHEMA; the kit's LOOP_VISUAL). Alternation is the engine's foot naming (`namedFeet`). */
 export const LOOP_VISUAL = Object.freeze(['identity', 'anatomy', 'loop']);
+/**
+ * The judge's `loop` alone does not refuse a cut whose seam the engine measured inside its gate (2026-10-30, the first free fighter's test:
+ * three walk takes repeating every 23 frames, beat jolt 0, seam 1.41/0.98/1.05 of a step, all refused for "a jump from the last frame to the
+ * first" — the judge sees still frames, where a fast stride's seam reads as a jump like any other step). Identity and anatomy the engine
+ * cannot see: those still refuse. The loop review takes the cut on the same rule (tools/ai-fighter/gait.mjs `visualTaken`, which the bin
+ * cannot import: the two are pinned equal by a test), and the creator sees the loop in the preview and may ask for it again.
+ */
+export const ENGINE_SEAM_MAX = 2;   // sprite-gen video/loop.py SEAM_RATIO_MAX
+export const loopTaken = (verdict, meta) => ['identity', 'anatomy'].every(key => verdict[key] === 'pass') &&
+  (verdict.loop === 'pass' || (Number.isFinite(meta?.cycle_align?.seam_ratio) && meta.cycle_align.seam_ratio <= ENGINE_SEAM_MAX));
 /** Every clip the creator checks, in the contract's order, and the walk/run loops' retake reasons as the engine recorded them. */
 export const PREVIEW_CLIPS = Object.freeze(['idle', 'walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall']);
 export const retakeReasons = strip => [strip.retake, strip.cycle_align?.retake].filter(Boolean)
@@ -625,7 +635,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         { stdin: await readFile(path.join(judge, 'judge-prompt.txt'), 'utf8') });
       verdict = code === 0 ? checkedVerdict(await readJson(verdictFile).catch(() => null)) : null;
     }
-    return verdict && LOOP_VISUAL.every(key => verdict[key] === 'pass') ? { strip, verdict: verdictFile, note: RUN_FROM_WALK } : null;
+    return verdict && loopTaken(verdict, meta) ? { strip, verdict: verdictFile, note: RUN_FROM_WALK } : null;
   }
 
   /** `change`: the creator's latest change to this gait ({ round, note }) — its takes film the change, quoted, and nothing else is tried.
@@ -741,7 +751,10 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
             verdict = judged === 0 ? checkedVerdict(await readJson(verdictFile).catch(() => null)) : null;
           }
           if (!verdict) return { retry: `judge-exit-${judged}` };
-          if (LOOP_VISUAL.every(key => verdict[key] === 'pass')) { tried.push({ take, cut: cutName, passed: true, ...cutFacts(meta) }); return { strip, verdict: verdictFile, take, tried }; }
+          if (loopTaken(verdict, meta)) {
+            tried.push({ take, cut: cutName, passed: true, ...(verdict.loop === 'pass' ? {} : { loopBy: 'engine-seam' }), ...cutFacts(meta) });
+            return { strip, verdict: verdictFile, take, tried };
+          }
           tried.push({ take, cut: cutName, judge: LOOP_VISUAL.filter(key => verdict[key] !== 'pass'), ...cutFacts(meta) });
           break;   // the judge saw this take: another cut of it would show the same motion
         }

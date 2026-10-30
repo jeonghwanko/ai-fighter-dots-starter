@@ -209,6 +209,15 @@ export function requireReview(review, sequence, motion) {
 // walk the engine read as alternating (no same-foot cut, feet named at both strikes) the same leg twice (2026-10-28).
 // It is never a same-foot stance claim; packs that take it say so in their report.
 export const LOOP_VISUAL = ['identity', 'anatomy', 'loop'];
+// The judge's `loop` alone does not refuse a cut whose seam the engine measured inside its own gate (2026-10-30, the first free fighter's
+// test: three walk takes repeating every 23 frames, beat jolt 0, seam 1.41/0.98/1.05 of a step, all refused for "a jump from the last frame
+// to the first"; the judge sees still frames, where a fast stride's seam reads as a jump like any other step). Identity and anatomy the
+// engine cannot see: those still refuse. The creator sees the loop in the preview and may ask for it again.
+export const ENGINE_SEAM_MAX = 2;   // sprite-gen video/loop.py SEAM_RATIO_MAX: the loop seam over the cycle's mean step
+export const seamMeasured = seam => typeof seam === 'number' && Number.isFinite(seam) && seam <= ENGINE_SEAM_MAX;
+/** The verdicts a cut is taken on: identity and anatomy from the judge, the seam from the judge or, when it refused, the engine. */
+export const visualTaken = (visual, seam) => ['identity', 'anatomy'].every(key => visual?.[key] === 'pass') &&
+  (visual?.loop === 'pass' || seamMeasured(seam));
 const retakeReasons = record => record ? (Array.isArray(record.reasons) ? record.reasons : record.reason ? [record.reason] : ['unnamed']) : [];
 
 /** The loop review of `sequence` (the game-pack animation) from its strip's metadata, the judge's verdicts and the measured stride. */
@@ -226,16 +235,19 @@ export function loopReview({ motion, sequence, strip, visual, judge, stridePixel
   const feet = strip?.cycle_align?.foot?.feet ?? null;
   if (!Array.isArray(feet) || feet.length !== 2 || new Set(feet).size !== 2 || !feet.every(f => ['left', 'right'].includes(f)))
     errors.push({ code: 'ENGINE_FEET_UNNAMED', feet });
-  for (const item of LOOP_VISUAL) if (visual?.[item] !== 'pass') errors.push({ code: 'VISUAL_' + item.toUpperCase(), verdict: visual?.[item] ?? null });
+  const seam = strip?.cycle_align?.seam_ratio ?? null;
+  for (const item of LOOP_VISUAL)
+    if (visual?.[item] !== 'pass' && !(item === 'loop' && seamMeasured(seam))) errors.push({ code: 'VISUAL_' + item.toUpperCase(), verdict: visual?.[item] ?? null });
   if (typeof visual?.notes !== 'string' || !visual.notes.trim()) errors.push({ code: 'VISUAL_NOTES' });
   if (typeof judge !== 'string' || !judge.trim()) errors.push({ code: 'JUDGE_UNNAMED' });
   if (motion === 'walk' && !positive(stridePixels)) errors.push({ code: 'STRIDE_UNMEASURED' });
   return { kind: 'ai-fighter-loop-review', version: 1, motion, status: errors.length ? 'fail' : 'pass', sequenceSha256: sequenceHash(sequence),
     durationSeconds: sequence.durations.reduce((sum, ms) => sum + ms, 0) / 1000, errors,
-    engine: { kind: strip?.kind ?? null, cutFrames: strip?.cycle_align?.from ?? null, seam: strip?.cycle_align?.seam_ratio ?? null,
+    engine: { kind: strip?.kind ?? null, cutFrames: strip?.cycle_align?.from ?? null, seam,
       beatJolt: strip?.cycle_align?.beat?.jolt ?? null, retake, strikes: strip?.cycle_align?.strikes ?? null, feet,
       feetMargin: strip?.cycle_align?.foot?.margin ?? null },
     visual: visual ? Object.fromEntries([...LOOP_VISUAL, 'notes'].map(key => [key, visual[key] ?? null])) : null, judge: judge ?? null,
+    ...(visual && visual.loop !== 'pass' && seamMeasured(seam) ? { loopBy: 'engine-seam' } : {}),
     stridePixels: motion === 'walk' && positive(stridePixels) ? round(stridePixels) : null,
     scope: 'Engine loop checks and foot naming, a vision judge and a measured stride; no same-foot stance measurement (hosted generation).' };
 }
@@ -244,7 +256,7 @@ export function requireLoopReview(review, sequence, motion) {
   if (review?.kind !== 'ai-fighter-loop-review' || review.version !== 1 || review.motion !== motion || review.status !== 'pass' ||
       review.errors?.length !== 0) throw Error('LOOP_REVIEW_REQUIRED: ' + motion);
   if (review.sequenceSha256 !== sequenceHash(sequence)) throw Error('LOOP_REVIEW_STALE: ' + motion);
-  if (!LOOP_VISUAL.every(key => review.visual?.[key] === 'pass') || !review.visual?.notes?.trim() || !review.judge?.trim() ||
+  if (!visualTaken(review.visual, review.engine?.seam) || !review.visual?.notes?.trim() || !review.judge?.trim() ||
       !Array.isArray(review.engine?.retake) || review.engine.retake.length || new Set(review.engine.feet ?? []).size !== 2 ||
       (motion === 'walk' && !positive(review.stridePixels)))
     throw Error('LOOP_REVIEW_INCOMPLETE: ' + motion);
