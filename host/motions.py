@@ -749,7 +749,8 @@ def pack_plan(out: Path, brief: dict, local_id: str, package: str = "package"):
     return plan
 
 
-PREVIEW_METHOD = 4         # libwebp effort of the animated previews: 6 took 5x as long for 2.8 % fewer bytes (drafts 3.8 s → 0.7 s, 2026-10-30)
+PREVIEW_METHOD = 5         # libwebp effort of the animated previews: at 6 (with Pillow's alpha_quality 100) its slowest alpha search
+                           # made them 5x slower for 1 % fewer bytes (2026-10-30)
 
 
 def preview(package: Path, out: Path, scale=0.5, background=(236, 240, 246, 255)):

@@ -297,6 +297,21 @@ test('packing is deterministic, never overwrites and writes nothing for an inval
   assert.ok(missingHits.errors.some(e => e.path === '/clips/combo/hitSequenceIndices'), JSON.stringify(missingHits.errors));
   assert.deepEqual((await readdir(directory)).filter(name => name.includes('invalid')), ['plan-invalid.json']);
 });
+test('lossy packing (the hosted plan) keeps every alpha value exact and is deterministic', async () => {
+  const directory = await gamePack('lossy');
+  for (const [out, encoding] of [['exact', 'lossless'], ['lossy', 'lossy'], ['lossy-again', 'lossy']])
+    assert.equal((await run(directory, plan(directory, out, value => { value.encoding = encoding; value.quality = 90; }))).ok, true, out);
+  const alpha = async file => (await sharp(file).ensureAlpha().extractChannel(3).raw().toBuffer());
+  let edge = 0;
+  for (const file of example.assets.map(a => a.path)) {
+    const lossy = await readFile(path.join(directory, 'lossy', file));
+    assert.ok(lossy.equals(await readFile(path.join(directory, 'lossy-again', file))), `${file}: same bytes on a second run`);
+    const exact = await alpha(path.join(directory, 'exact', file));
+    assert.ok((await alpha(lossy)).equals(exact), `${file}: alpha differs from the lossless pack`);
+    edge += exact.filter(a => a > 0 && a < 255).length;
+  }
+  assert.ok(edge > 0, 'the fixture has anti-aliased edges, so quantised alpha would show');
+});
 test('a package that fails file validation is never published, so the corrected plan can reuse the folder', async () => {
   const directory = await gamePack('pixel-check');
   // In bounds for the contract, but over transparent pixels: only the decoded-pixel check can reject it.
