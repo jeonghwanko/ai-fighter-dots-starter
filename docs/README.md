@@ -7,8 +7,10 @@
 
 - **선수를 만들려는 사용자·제작 에이전트**: [START-HERE](START-HERE.md) → [DOT-CREATION](DOT-CREATION.md) →
   [AUTHORING](AUTHORING.md) 순서로 읽는다.
-- **이 저장소의 코드를 고치는 사람**: 먼저 [../AGENTS.md](../AGENTS.md)(작업 규칙·배포 경로)를 읽고, 그다음
-  [CREATION-UX](CREATION-UX.md)와 [GAIT-REVIEW](GAIT-REVIEW.md)를 읽는다.
+- **이 저장소의 코드를 고치는 사람**: 먼저 [../AGENTS.md](../AGENTS.md)(작업 규칙·저장소 지도·명령·배포 경로)를 읽고, 그다음
+  [CREATION-UX](CREATION-UX.md)와 [GAIT-REVIEW](GAIT-REVIEW.md)를 읽는다. 고치는 영역의 문서는 아래 표에서 찾는다.
+- **코딩 에이전트(Claude Code·Codex·Grok)**: Codex는 AGENTS.md를 자동으로 읽고, Grok은 신뢰한 폴더에서 읽는다(headless는
+  `--trust`). Claude Code는 CLAUDE.md의 `@AGENTS.md` 가져오기로 읽는다. 공통 규칙은 AGENTS.md 한 곳에만 쓴다.
 - **서비스나 생성 PC를 운영하는 사람**: [CREATOR-HOSTING](CREATOR-HOSTING.md), [CLOUD-MCP](CLOUD-MCP.md),
   [GENERATION-HOST](GENERATION-HOST.md)부터 읽는다. 운영 배포는 게임 저장소에서 한다(AGENTS.md).
 

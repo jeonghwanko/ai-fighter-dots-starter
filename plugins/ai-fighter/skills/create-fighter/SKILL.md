@@ -22,13 +22,13 @@ do not require a PC or leave the user's chosen VM scope. Packaging still uses th
 
 When the connected ODDBOUT tools list `request_hosted_fighter`, ODDBOUT can make the fighter on its own worker:
 no workspace, kit or generation account of the user's is needed. Offer it first when the user wants ODDBOUT to make
-the fighter or has no generation setup; the workspace route below stays his choice. Pass his words (and his own
-pictures with his confirmation of rights), then follow each result's `next`: show both looks and pass his pick or
-one change, show the motion previews and pass his approval or one motion change, register on his request.
-If he leaves the choices to ODDBOUT ("just make it"), pass `delegate: true`: ODDBOUT picks the look and he answers once, at the motions.
+the fighter or has no generation setup; the workspace route below stays the user's choice. Pass the user's words (and
+their own pictures with their confirmation of rights), then follow each result's `next`: show both looks and pass the
+user's pick or one change, show the motion previews and pass their approval or one motion change, register on their request.
+If the user leaves the choices to ODDBOUT ("just make it"), pass `delegate: true`: ODDBOUT picks the look and the user answers once, at the motions.
 Wait with `get_hosted_fighter` `waitSeconds` rather than repeated reads. Do not generate locally for a hosted job.
-If he runs a generation host on his own PC (`npm run host -- join` from the site), pass `host: mine`: his own subscription makes it, with no
-consent to give and without using his one free hosted fighter. Another person's host (`list_generation_hosts`) needs his consent first.
+If the user runs a generation host on their own PC (`npm run host -- join` from the site), pass `host: mine`: their own subscription makes it, with no
+consent to give and without using their one free hosted fighter. Another person's host (`list_generation_hosts`) needs the user's consent first.
 
 ## Start or resume
 

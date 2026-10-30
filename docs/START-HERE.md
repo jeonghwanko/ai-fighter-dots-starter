@@ -82,7 +82,9 @@ GPT만 사용 가능하면 둘 다 GPT로 제안한다. 사용자가 지정한 �
 
 1. 소스는 [oddbout-starter의 main 브랜치](https://github.com/jeonghwanko/oddbout-starter/tree/main)다.
    이 브랜치의 `AGENTS.md`, `docs/DOT-CREATION.md`, `docs/AUTHORING.md`를 읽는다. 기존 설치를 재사용할 때는
-   버전과 작업 중 변경을 확인하고, 이 대화 흐름이 있는 버전을 사용한다. 기본 `main`으로 바꾸지 않는다.
+   버전과 작업 중 변경을 확인한다. `main` 체크아웃의 갱신은 `check_creation_readiness`에 맡기고 직접 pull하지 않는다
+   (만들고 있는 캐릭터가 있으면 갱신을 미룬다). Dots 저장 환경과 플러그인 설치는 기록된 커밋·매니페스트를 그대로 쓰고
+   `main`으로 바꾸지 않는다. readiness가 알려 주는 `nextCommands`는 실행한다.
 2. 로컬 생성·패키징을 사용할 때 Git·Node 22.12+·Python 3.11+와 로컬 실행 기능을 확인한다. 필요한 설치는 에이전트가 처리한다.
    직접 표시가 지원되는 외형 시안에는 PC 설치를 선행 조건으로 두지 않는다. 실행하지 않은 설치·생성을 완료했다고 말하지 않는다.
    작업 공간(봇 서비스의 작업 VM 또는 사용자 PC)의 계정·격리·보존·보안·장애 대응은 [실행 환경 운영 지침](EXECUTION-HOST.md)을 따른다.
