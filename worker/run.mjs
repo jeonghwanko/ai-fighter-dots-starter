@@ -1,3 +1,4 @@
+// @ts-check
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -20,9 +21,21 @@ const FINISH_RETRY_MS = [1000, 3000];
  */
 class RetryLater extends Error {}
 
-/** Run `task` over items, `limit` at a time. The first failure cancels the rest; returns after every task stopped. */
+/**
+ * What worker/claim answers (api/handler.mjs): `idle`, or a leased job whose files carry signed download URLs.
+ * @typedef {{ stage: 'idle' } | { stage: 'validating', submissionId: string, leaseToken: string, manifestText: string,
+ *   manifestSha256: string, files: { id: string, downloadUrl: string }[] }} ClaimedJob
+ */
+
+/**
+ * Run `task` over items, `limit` at a time. The first failure cancels the rest; returns after every task stopped.
+ * @template T
+ * @param {T[]} items @param {number} limit @param {AbortController} cancel @param {(item: T) => Promise<void>} task
+ */
 async function eachLimited(items, limit, cancel, task) {
-  let next = 0, failure;
+  let next = 0;
+  /** @type {unknown} */
+  let failure;
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
     while (next < items.length && !failure) {
       try { await task(items[next++]); }
@@ -32,21 +45,30 @@ async function eachLimited(items, limit, cancel, task) {
   if (failure) throw failure;
 }
 
+/** @param {string} configPath @param {string} [submissionId] */
 export async function runOnce(configPath, submissionId) {
   const config = JSON.parse(await readFile(configPath, 'utf8'));
   return runWithConfig(config, submissionId);
 }
 
-/** Environment-backed web services need no credential file on their ephemeral disk. */
+/**
+ * Environment-backed web services need no credential file on their ephemeral disk.
+ * @param {{ url?: string, workerToken?: string }} config checked here: an unset environment variable arrives as undefined
+ * @param {string} [submissionId]
+ */
 export async function runWithConfig(config, submissionId) {
   if (!validProjectUrl(config.url) || !/^afw_[a-f0-9]{64}$/.test(config.workerToken ?? '')) throw new Error('invalid-worker-config');
-  const send = (route, body) => apiRequest(config.url, config.workerToken, route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  const project = /** @type {string} */ (config.url), token = /** @type {string} */ (config.workerToken); // both checked just above
+  /** @type {(route: string, body: object) => Promise<any>} */
+  const send = (route, body) => apiRequest(project, token, route, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+  /** @type {ClaimedJob} */
   const job = await send('worker/claim', { ...(submissionId ? { submissionId } : {}) });
   if (job.stage === 'idle') return job;
   const deadline = AbortSignal.timeout(JOB_DEADLINE_MS), cancel = new AbortController();
   const base = fileURLToPath(new URL('../output/worker-jobs/', import.meta.url));
   await mkdir(base, { recursive: true });
   const directory = await mkdtemp(path.join(base, 'job-'));
+  /** @type {{ ok: boolean, stage: string, errors: { code: string, path?: string }[] }} */
   let result;
   try {
     if (await sha256(new TextEncoder().encode(job.manifestText)) !== job.manifestSha256) throw new RetryLater('server-manifest-hash');
@@ -97,7 +119,7 @@ export async function runWithConfig(config, submissionId) {
   // Back off (1 s, then 3 s) so a brief outage does not discard a finished validation; both fit inside the lease.
   for (let attempt = 0; ; attempt++) {
     try { return await send('worker/finish', finish); }
-    catch (error) {
+    catch (/** @type {any} */ error) {
       if (error.status >= 400 && error.status < 500) return refused(error);
       if (attempt >= 2) throw error;
     }
@@ -112,8 +134,8 @@ export async function runWithConfig(config, submissionId) {
   async function refused(error) {
     if (error.status === 401 || error.status === 403 || error.message === 'stale-validation') throw error;
     const code = `finish-refused-${error.message.toLowerCase().replace(/[^a-z0-9-]/g, '-')}`.slice(0, 64);
-    const requeued = await send('worker/release', { submissionId: job.submissionId, leaseToken: job.leaseToken, code }).then(() => true, () => false);
-    return { ok: false, stage: 'retry-later', submissionId: job.submissionId, code, requeued };
+    const requeued = await send('worker/release', { submissionId: finish.submissionId, leaseToken: finish.leaseToken, code }).then(() => true, () => false);
+    return { ok: false, stage: 'retry-later', submissionId: finish.submissionId, code, requeued };
   }
 }
 if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.argv[1])).href) {
@@ -129,7 +151,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
       if (!watch || result.stage !== 'idle') console.log(JSON.stringify(result));
       // Idle or an infrastructure failure: back off. A finished job: claim the next at once.
       if (result.stage === 'idle' || result.stage === 'retry-later') { waitMs = idleMs; idleMs = Math.min(idleMs * 2, 120000); } else idleMs = 15000;
-    } catch (error) {
+    } catch (/** @type {any} */ error) {
       if (!watch || error.status === 401 || error.status === 403) throw error;
       console.error(JSON.stringify({ stage: 'retry-wait', code: 'worker-api-unavailable' }));
       waitMs = idleMs; idleMs = Math.min(idleMs * 2, 120000);
