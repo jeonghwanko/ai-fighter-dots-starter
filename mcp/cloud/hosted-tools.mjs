@@ -18,7 +18,8 @@ import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile } from './common.m
  * @typedef {{ status: string, delegate?: boolean, error?: string | null, choice?: string | null,
  *   revisionsLeft?: { appearance?: number, motions?: number }, preview?: { note?: string }[],
  *   submission?: { stage: string, fighterId?: string | null } | null,
- *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown } }} HostedJob
+ *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown },
+ *   queue?: { position: number, dailyLimit: number, startedToday: number } | null }} HostedJob
  */
 
 /**
@@ -60,6 +61,10 @@ export function hostedNext(job) {
     case 'queued': case 'appearance':
       if (job.status === 'appearance' && job.host?.choice !== 'oddbout' && job.host && !job.host.assigned)
         return `Waiting for ${job.host.choice === 'host' ? `the host ${job.host.requested?.name ?? ''}` : 'a host'} to take it. Tell the user, and check later with get_hosted_fighter.`;
+      // 첫 선수 무료 (2026-10-30): on a full day a request to ODDBOUT waits its turn for its looks.
+      if (job.queue && job.queue.position > Math.max(job.queue.dailyLimit - job.queue.startedToday, 0))
+        return `ODDBOUT starts ${job.queue.dailyLimit} fighters a day and today's are started: this request is number ${job.queue.position} in line. `
+          + 'Tell the user it starts by itself when its turn comes (he may close the chat), and check later with get_hosted_fighter.';
       return job.delegate
         ? 'ODDBOUT is writing the profile, painting two looks and picking one itself, '
           + 'then it makes the eleven motions (about 15 to 30 minutes in all). '
@@ -84,7 +89,7 @@ export function hostedNext(job) {
         + 'once he confirmed each of the eleven motions.';
       if (job.submission?.stage === 'rejected') return 'The server check refused the package. A person at ODDBOUT will look at it; the user\'s free fighter is free again.';
       return 'The server is checking the package. Call get_hosted_fighter with waitSeconds.';
-    case 'needs_review': return 'A person at ODDBOUT is checking this step. Nothing to do now; check later.';
+    case 'needs_review': return 'A person at ODDBOUT is checking this step. Nothing to do now; check later. If he cancels while it waits, his free fighter comes back.';
     case 'rejected': return `ODDBOUT declined this request${error}. It does not use the user's free fighter; a different request may be made.`;
     case 'failed': return `This request failed${error}. The user's free fighter is free again; he may ask once more.`;
     default: return `This request is ${job.status}; it is over.`;
@@ -116,7 +121,8 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'any or another person\'s host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: '
     + 'true. Pass his words (what the fighter is and looks like) and, if he gave them, '
     + 'up to two of his own pictures with his confirmation that he has the rights to them. '
-    + 'One hosted fighter per account is free. Requires the user\'s request. '
+    + 'One hosted fighter per account is free; it is used once its looks are painted (a cancel after that keeps it used). '
+    + 'On a full day the request waits in line. Requires the user\'s request. '
     + 'Save the verified account id and idempotencyKey before calling, and the returned job.id. '
     + 'If the response is lost, recover with get_hosted_fighter using that key; '
     + 'do not replay this creation call while its outcome is unknown. '
@@ -197,9 +203,10 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     ({ jobId, choose, revise }) => (choose === undefined) === (revise === undefined) ? { ok: false, code: 'invalid-answer' }
       : post(`generations/${jobId}/appearance`, choose !== undefined ? { choose } : { revise }).then(withNext), { write: true, idempotent: false });
   register('revise_hosted_motion', '동작 하나 고치기', 'Ask ODDBOUT to make one motion of the connected user\'s hosted fighter again with his sentence; the other motions stay. '
-    + 'Requires the user\'s request. Not idempotent: '
+    + 'Not idle: the standing pose is the look itself. Requires the user\'s request. Not idempotent: '
     + 'after an unknown outcome, read get_hosted_fighter instead of repeating this call.',
-    { jobId: JOB, clip: z.enum(Object.keys(spec.motions)), note: z.string().min(2).max(GENERATION_LIMITS.note) },
+    // Not idle: it is the look itself (choose_hosted_look changes the look, before the motions).
+    { jobId: JOB, clip: z.enum(/** @type {[string, ...string[]]} */ (Object.keys(spec.motions).filter(clip => clip !== 'idle'))), note: z.string().min(2).max(GENERATION_LIMITS.note) },
     ({ jobId, clip, note }) => post(`generations/${jobId}/motions`, { revise: { clip, note } }).then(withNext), { write: true, idempotent: false });
   register('register_hosted_fighter', '맡긴 선수 등록', 'Register the connected user\'s hosted fighter once he approved its motions: '
     + 'ODDBOUT packages it and submits it under his account, through the same server check as any fighter. '
@@ -218,6 +225,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       return withNext(await post(`generations/${jobId}/register`, { profile: confirmed }));
     }, { write: true, publish: true, openWorld: true, idempotent: true });
   register('cancel_hosted_fighter', '맡긴 선수 취소', 'Cancel the connected user\'s hosted fighter request; '
-    + 'work in progress stops at its next step and his free fighter is free again. Only on his explicit request.',
+    + 'work in progress stops at its next step. His free fighter comes back only if no look was painted yet (job.charged false), '
+    + 'a person at ODDBOUT was checking it, or ODDBOUT\'s worker is offline. Only on his explicit request.',
     { jobId: JOB }, async ({ jobId }) => withNext(await invoke(`generations/${jobId}`, 'DELETE')), { write: true, publish: true, idempotent: true });
 }

@@ -1,7 +1,7 @@
 export const prepared = '27 October 2026';
 export const effectiveDate = '2026-10-27';
 const email = '<a href="mailto:turbo08@gmail.com">turbo08@gmail.com</a>';
-const repo = 'https://github.com/jeonghwanko/ai-fighter-dots-starter';
+const repo = 'https://github.com/jeonghwanko/oddbout-starter';
 export const pages = [
   { file: 'index.html', title: 'Your fighter. Your creation.', eyebrow: 'LOCAL CREATION / HUMAN REVIEW',
     description: 'Create, revise and resume an AI Fighter in Codex, with your own generation accounts and a review at every meaningful step.',

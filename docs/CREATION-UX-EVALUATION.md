@@ -55,7 +55,7 @@
 
 ## 수정 후 새 대화 검증
 
-검증한 가이드는 [d6d561b](https://github.com/jeonghwanko/ai-fighter-dots-starter/commit/d6d561b89d36779e44f8db7567495575f7a58587) 버전이다.
+검증한 가이드는 [d6d561b](https://github.com/jeonghwanko/oddbout-starter/commit/d6d561b89d36779e44f8db7567495575f7a58587) 버전이다.
 앱 도구로 새 로컬 대화를 만들고 최초 메시지에는 START-HERE의 GitHub 링크 한 줄만 보냈다.
 첫 응답은 “한두 문장으로 설명하거나, 참고 이미지와 바꾸고 싶은 점을 보내주세요”라고 안내했고,
 외형 선택 후 대기·이동, 공격, 방어·피격을 묶음별로 확인하겠다고 설명했다. 생성은 시작하지 않았다.

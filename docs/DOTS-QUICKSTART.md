@@ -35,7 +35,7 @@ Official references (checked 2026-10-27): [cloud environments](https://learn.cha
 For a **new** workspace only, after the host has allowed the required installation destinations:
 
 ```sh
-git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git /workspace/oddbout-kit
+git clone --branch main --single-branch https://github.com/jeonghwanko/oddbout-starter.git /workspace/oddbout-kit
 cd /workspace/oddbout-kit
 git checkout --detach <reviewed-commit-containing-the-Dots-bootstrap>
 node scripts/dots-workspace.mjs doctor --workspace /workspace/my-fighter

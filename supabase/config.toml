@@ -1,4 +1,4 @@
-project_id = "ai-fighter-dots-starter"
+project_id = "oddbout-starter"
 
 [functions.ai-fighter]
 # The handler verifies Supabase Auth users and separately scoped worker credentials on every request.

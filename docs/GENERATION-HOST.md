@@ -43,8 +43,8 @@ oddbout.com 제작자 페이지의 My agents(`creator.html#view=agents`) → **�
 누른다. 나온 명령을 PC의 터미널에 붙여 넣는다.
 
 ```bash
-git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
-cd ai-fighter-dots-starter && git checkout main && npm ci
+git clone https://github.com/jeonghwanko/oddbout-starter.git
+cd oddbout-starter && git checkout main && npm ci
 npm run host -- join ohj_…                   # 붙이기 코드(30분 안에 한 번): 설치 → codex·grok 로그인(없으면) → 워커
 ```
 
@@ -88,6 +88,8 @@ PC의 설치 폴더는 PC에서 `npm run host -- remove --yes`로 지운다.
 
 - 워커는 1분마다 서버에 살아 있음을 알린다. 3분 동안 소식이 없으면 목록에서 오프라인이 된다.
 - 한 시간마다 두 구독에 아주 작은 실제 호출을 한다. 하나라도 안 되면 새 작업을 가져가지 않는다.
+  두 구독이 모두 필요한 이유: 신청은 처음 가져간 호스트가 외형·동작·제출까지 끝까지 맡고(다른 호스트로 넘기지 않는다), 걷기·달리기는 Grok 영상으로 만든다.
+  구독이 하나뿐인 호스트가 외형까지 만들어 두면 동작 단계에서 멈추므로, 하나가 안 되는 동안은 새 작업을 아예 받지 않는다.
 - 하루 한 번 끝난 작업 폴더를 지운다. 닫힌 지 7일 지난 작업과, 닫히지 않은 채 14일 동안 바뀐 파일이 없는 작업이다
   (`worker.env`의 `ODDBOUT_GENERATION_KEEP_DAYS`, 1~90).
 

@@ -1,6 +1,6 @@
 # Dot과 대화하며 내 캐릭터 만들기
 
-처음 보낼 주소는 [게임 규격과 안내가 함께 들어 있는 시작 문서](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md)를 권장합니다.
+처음 보낼 주소는 [게임 규격과 안내가 함께 들어 있는 시작 문서](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/START-HERE.md)를 권장합니다.
 이 상세 안내 주소를 먼저 받았다면 해당 시작 문서의 구조 데이터도 첫 응답 전에 읽습니다.
 첫 응답에 읽은 규격의 revision 앞 12자리를 짧게 밝힙니다. 문서만 열고 JSON을 읽은 것으로 처리하지 않습니다.
 
@@ -23,7 +23,7 @@ VM 도메인 허용·Republish는 초기 환경 준비자의 단계이며 캐릭
 ### 첫 응답
 
 - 이 시작 링크만 온 경우에도 시작 요청은 이미 받았다. “시작할까요?”를 추가하지 않고 바로 캐릭터 설명·참조 이미지를 받는다.
-- 먼저 [게임이 제공하는 구조 데이터](https://raw.githubusercontent.com/jeonghwanko/ai-fighter-dots-starter/refs/heads/codex/game-context/creation-context.json)를 읽는다.
+- 먼저 [게임이 제공하는 구조 데이터](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json)를 읽는다.
   MCP에서는 `get_fighter_spec(section: "context")`다. 모션·프레임·조작·경직·묶음 구성은 이 응답을 기준으로 한다.
   [구조 데이터와 진행 상태](GAME-CREATION-CONTEXT.md)에 따라 현재 묶음에 필요한 부분만 사용한다.
 - 먼저 사용자가 실제 캐릭터 제작을 원하는지, 제작 과정·가이드의 설계나 평가를 원하는지 읽는다.
@@ -80,7 +80,7 @@ GPT만 사용 가능하면 둘 다 GPT로 제안한다. 사용자가 지정한 �
 
 ### 도구 준비
 
-1. 소스는 [ai-fighter-dots-starter의 main 브랜치](https://github.com/jeonghwanko/ai-fighter-dots-starter/tree/main)다.
+1. 소스는 [oddbout-starter의 main 브랜치](https://github.com/jeonghwanko/oddbout-starter/tree/main)다.
    이 브랜치의 `AGENTS.md`, `docs/DOT-CREATION.md`, `docs/AUTHORING.md`를 읽는다. 기존 설치를 재사용할 때는
    버전과 작업 중 변경을 확인하고, 이 대화 흐름이 있는 버전을 사용한다. 기본 `main`으로 바꾸지 않는다.
 2. 로컬 생성·패키징을 사용할 때 Git·Node 22.12+·Python 3.11+와 로컬 실행 기능을 확인한다. 필요한 설치는 에이전트가 처리한다.

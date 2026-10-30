@@ -482,7 +482,7 @@ export async function packFighter(planFile) {
       clips: Object.fromEntries(clips.map(name => [name, packed[name].clip])),
     };
     const contract = validateFighter(fighter);
-    const report = { generator: 'ai-fighter-dots-starter pack-fighter', gamePackSha256: createHash('sha256').update(await readFile(gamePack)).digest('hex'),
+    const report = { generator: 'oddbout-starter pack-fighter', gamePackSha256: createHash('sha256').update(await readFile(gamePack)).digest('hex'),
       scale: { measuredBodyHeight: measured, targetBodyHeight: BODY, ratio: round(ratio), resampled: resized ? plan.resample : false },
       motions: Object.fromEntries(clips.map(name => [name, packed[name].report])),
       reviewPolicy: plan.reviewPolicy,

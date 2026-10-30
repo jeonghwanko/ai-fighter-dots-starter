@@ -6,7 +6,7 @@
 
 ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. 이 저장소에는 캐릭터를 만드는 오픈소스 도구가 들어 있습니다. AI와 대화하며 설명이나 참고 이미지를 원화와 애니메이션으로 만들고, 게임에 쓸 선수 패키지로 완성할 수 있습니다. 도구와 문서에서는 AI Fighter라는 이름도 사용합니다.
 
-[게임하기](https://oddbout.com/fighter.html) · [내 선수 관리](https://oddbout.com/creator.html?lang=ko) · [사이트 가이드](https://oddbout.com/docs.html?lang=ko) · [제작 시작 안내](docs/START-HERE.md) · [문제 제보](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
+[게임하기](https://oddbout.com/fighter.html) · [내 선수 관리](https://oddbout.com/creator.html?lang=ko) · [사이트 가이드](https://oddbout.com/docs.html?lang=ko) · [제작 시작 안내](docs/START-HERE.md) · [문제 제보](https://github.com/jeonghwanko/oddbout-starter/issues)
 
 ## 플레이 미리보기
 
@@ -14,7 +14,7 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 기존 ODDBOUT의 게임 플레이 영상입니다. 구독 기반 캐릭터 제작 과정은 아직 실험 중이며, 이 영상은 전체 제작 과정을 보여주는 데모는 아닙니다.
 
-[10초 영상 보기](docs/media/oddbout-gameplay.mp4) · [ODDBOUT 플레이](https://oddbout.com/fighter.html) · [질문과 피드백](https://github.com/jeonghwanko/ai-fighter-dots-starter/discussions)
+[10초 영상 보기](docs/media/oddbout-gameplay.mp4) · [ODDBOUT 플레이](https://oddbout.com/fighter.html) · [질문과 피드백](https://github.com/jeonghwanko/oddbout-starter/discussions)
 
 ## 무엇을 만들 수 있나요?
 
@@ -34,7 +34,7 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 | 길 | 하는 일 | 이럴 때 |
 | --- | --- | --- |
-| **ODDBOUT에 맡기기** | [내 선수](https://oddbout.com/creator.html?lang=ko)에서 선수를 설명합니다(10~600자, 쓸 권리가 있는 그림 두 장까지). ODDBOUT이 외형 두 장과 움직임을 그리면 고르고 고칠 점을 말한 뒤 등록합니다. | 가장 빠른 시작. 계정당 한 명 무료이고, 하루에 받는 신청 수가 정해져 있습니다. |
+| **ODDBOUT에 맡기기** | [내 선수](https://oddbout.com/creator.html?lang=ko)에서 만들고 싶은 선수를 한 줄로 적습니다(쓸 권리가 있는 그림은 선택). ODDBOUT이 외형과 움직임을 그리면 확인하고, 원하면 고칠 점을 말한 뒤 등록합니다. | 가장 빠른 시작. 계정당 한 명 무료입니다. 외형 그림이 나오면 무료권을 쓴 것으로 셉니다(우리 쪽 실패는 돌려줍니다). 하루 몫이 차면 신청은 차례를 기다립니다. |
 | **에이전트와 대화로** | [내 에이전트](https://oddbout.com/creator.html?lang=ko#view=agents)에서 Codex(ChatGPT · Dots·Codex CLI)·Grok·Claude(앱·Claude Code)·Gemini CLI를 ODDBOUT 클라우드 MCP에 연결하고([클라우드 연결](docs/CLOUD-MCP.md)), 대화에서 `@ODDBOUT`에게 말합니다. | 대화로 만들고 고치기. 그림 첨부는 ChatGPT에서만 됩니다. |
 | **내 PC로** | 내 에이전트 → 내 PC에서 호스트를 만들고, 내 ChatGPT·SuperGrok 구독이 있는 Linux PC에서 나온 세 줄 명령을 실행합니다([생성 호스트 안내](docs/GENERATION-HOST.md)). | 내 구독으로 더 만들기. 승인이 필요 없고 한 명 제한도 없습니다. |
 | **직접 만들기** | 로컬 도구를 쓸 수 있는 AI와 이 키트를 돌려 원화와 동작을 하나하나 고릅니다([아래](#로컬-키트로-캐릭터-만들기)). | 프레임마다 직접 정하고 싶을 때. |
@@ -62,7 +62,7 @@ ODDBOUT 플러그인 0.6.0 이상에는 이 연결이 이미 들어 있습니다
 제작하고 같은 연결 계정으로 등록합니다. 별도 AI Fighter Creator 플러그인은 필요하지 않습니다.
 [통합 플러그인 설치·전환 안내](docs/ODDBOUT-PLUGIN.md)를 참고하세요.
 
-내 PC나 작업 환경에서 명령을 실행하고 파일을 읽을 수 있는 Dot·Codex·Claude 등의 새 대화에 [시작 링크](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md)를 보내세요. 원하는 캐릭터 설명이나 참고 이미지를 함께 보내면 됩니다. 예를 들면:
+내 PC나 작업 환경에서 명령을 실행하고 파일을 읽을 수 있는 Dot·Codex·Claude 등의 새 대화에 [시작 링크](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/START-HERE.md)를 보내세요. 원하는 캐릭터 설명이나 참고 이미지를 함께 보내면 됩니다. 예를 들면:
 
 > 이 키트로 ODDBOUT에 쓸 파란 갑옷의 고양이 복서를 만들어줘.
 > 먼저 원화 한 장을 보여주고, 내 피드백으로 외형을 다듬어줘.
@@ -105,8 +105,8 @@ Dots VM 준비는 [bootstrap·doctor·resume 안내](docs/DOTS-QUICKSTART.md)와
 공개 서비스 연결 설정이 있는 **main** 브랜치를 사용합니다. 새로 설치할 때는 다음 명령을 실행하세요.
 
 ```sh
-git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
-cd ai-fighter-dots-starter
+git clone --branch main --single-branch https://github.com/jeonghwanko/oddbout-starter.git
+cd oddbout-starter
 npm ci --ignore-scripts
 npm run sprite:setup
 npm run sprite:status
@@ -141,10 +141,10 @@ npm run sprite:setup
 
 ## 문제 제보와 기여
 
-설치·생성·로그인·등록·게임 이용 중 문제가 생기면 실패한 단계, 기대한 결과와 실제 결과, 오류 메시지, 도구 버전이나 커밋을 [이슈](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)에 남겨주세요. 인증 정보와 비공개 파일은 제외합니다. 생성이나 업로드가 시간 초과된 경우에는 기존 요청과 결과물부터 확인한 뒤 재시도합니다.
+설치·생성·로그인·등록·게임 이용 중 문제가 생기면 실패한 단계, 기대한 결과와 실제 결과, 오류 메시지, 도구 버전이나 커밋을 [이슈](https://github.com/jeonghwanko/oddbout-starter/issues)에 남겨주세요. 인증 정보와 비공개 파일은 제외합니다. 생성이나 업로드가 시간 초과된 경우에는 기존 요청과 결과물부터 확인한 뒤 재시도합니다.
 
 버그 제보, 설치 안내 개선, 재현 가능한 예제를 환영합니다. AI와 함께 저장소를 수정할 때는 [AGENTS.md](AGENTS.md)를 먼저 읽어주세요.
-PR은 `main`으로 보내며, `test` 워크플로를 통과해야 머지됩니다. `npm test`로 같은 테스트(`api/` 엄격 타입 검사 포함)를 로컬에서 돌릴 수 있습니다.
+PR은 `main`으로 보내며, `test` 워크플로를 통과해야 머지됩니다. `npm test`로 같은 테스트(`api/`·`worker/`·`mcp/`·`scripts/` 엄격 타입 검사 포함)를 로컬에서 돌릴 수 있습니다.
 
 | 문서 | 내용 |
 | --- | --- |

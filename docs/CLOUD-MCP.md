@@ -170,7 +170,7 @@ MCP 점검(2026-10-27): 도구 목록 20 KB → 17 KB(UUID 칸의 짧은 패턴,
 
 ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만든다. 에이전트는 사용자의 답만 전한다. 그래서 Grok·ChatGPT처럼 작업 공간이
 없는 호스트도 선수를 만들 수 있고, Dots도 생성 단계를 하나하나 운전하지 않는다. 길은 제작자 페이지와 같은 API(`api/generations.mjs`)다.
-상태 기계·쿼터(계정당 무료 한 명, 하루 신청 셋, 서비스 하루 상한)·운영 스위치는 DB가 정한다.
+상태 기계·쿼터(계정당 무료 한 명 — 외형 그림이 나오면 쓴 것으로 센다, 하루 신청 셋, 공식 호스트가 하루에 시작하는 수와 대기열 상한)·운영 스위치는 DB가 정한다.
 도구는 함수 비밀 `ODDBOUT_HOSTED_GENERATION_TOOLS`가 `1`일 때만 목록에 나온다. 이 코드만 올리면 도구 목록은 그대로다.
 목록에 있어도 운영 스위치가 꺼져 있거나 워커가 없으면 신청은 `generation-unavailable`(그 이유 `reason`)로 끝나고 그림을 받지 않는다.
 
@@ -181,7 +181,7 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 | `choose_hosted_look` | 후보 `a`·`b` 고르기, 또는 한 문장 수정(두 장을 다시 그린다) |
 | `revise_hosted_motion` | 동작 하나를 한 문장으로 다시. 나머지 동작은 그대로 |
 | `register_hosted_fighter` | 사용자가 동작을 승인한 뒤 등록. 프로필은 워커 초안 위에 사용자가 바꾼 칸만 얹는다(언어별 이름·대사는 칸별로). 다른 선수와 같은 서버 검사를 거친다 |
-| `cancel_hosted_fighter` | 신청 취소. 무료 한 명이 다시 풀린다 |
+| `cancel_hosted_fighter` | 신청 취소. 외형 그림이 나오기 전, 운영자가 보던 신청, 그 신청을 맡은 생성 PC가 꺼져 있을 때면 무료 한 명이 다시 풀린다(`job.charged`) |
 
 성공한 작업 응답에는 `next`(`hostedNext`)가 있다(목록은 각 `jobs[].next`): 사용자에게 무엇을 보이고 물을지, 또는 얼마나 기다릴지.
 한 선수는 대략 신청 → 외형 두 장(몇 분) → 고르기 → 동작 11개(15~30분) → 확인 → 등록이다.
@@ -215,7 +215,7 @@ ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만
 6. 반환된 `next`와 현재 사용자 요청에 따라 같은 작업을 이어간다. `submitted`도 아직 검사 중일 수 있으며
    `submission.stage: "registered"`와 등록 ID를 확인한 경우만 등록 완료로 안내한다.
 
-구현 근거는 `mcp/cloud.mjs`의 소유자별 기존 키 조회와 `get_hosted_fighter`, `api/generations.mjs`의 작업 조회·서명 URL 발급이다.
+구현 근거는 `mcp/cloud/hosted-tools.mjs`의 소유자별 기존 키 조회와 `get_hosted_fighter`, `api/generations.mjs`의 작업 조회·서명 URL 발급이다.
 `test/hosted-generation-mcp.test.mjs`는 오프라인 DB와 모의 Storage로 응답 유실 뒤 새 커넥터의 같은 작업 회수,
 작업 저장 전 조회·최근 다섯 개 밖의 키 조회·저장된 작업의 재호출에서 추가 신청·업로드가 없음을 검사한다.
 URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조회 차단도 검사한다. 이 테스트는 실제 Dots/Grok 로그인,

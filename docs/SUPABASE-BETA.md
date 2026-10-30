@@ -258,7 +258,7 @@ Dot에서 첫 실제 등록:
 ## 제작자 홈페이지 연결 링크
 
 `open_creator_homepage`는 `POST /creator-handoffs`로 이 계정 전용 일회용 토큰을 받아
-`https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html#handoff=<tokenHash>` 링크를 만든다. 어느 기기의 브라우저에서나 열린다.
+`https://jeonghwanko.github.io/oddbout-starter/creator.html#handoff=<tokenHash>` 링크를 만든다. 어느 기기의 브라우저에서나 열린다.
 홈페이지는 무료 GitHub Pages에서 제공하고 기존 Supabase를 사용한다. [호스팅·재배포 안내](CREATOR-HOSTING.md)를 따른다.
 
 - 서버는 `auth.admin.generateLink({ type: 'magiclink' })`로 토큰을 만든다. 메일은 보내지 않으며 해시만 돌려준다.
@@ -304,7 +304,7 @@ Dot에서 첫 실제 등록:
 | POST /worlds · PATCH /worlds/:id · POST /worlds/:id/posts | 사용자 JWT | 세계 열기(계정당 둘)·고치기(진영·정사·선수 빼기)·라운지 글(그 사람으로) |
 | PUT /fighters/:id/world | 소유자 | 선수를 남이 연 세계·진영에 두기, `world: null`이면 빼기 |
 | GET /generations/capabilities | 없음 | 호스팅 생성(2026-10-27): 지금 신청을 받는지(`hosted`)와 이유·대기 작업 수 |
-| GET /generations · POST /generations · POST /generations/uploads | 사용자 JWT | 내 최근 생성 작업 다섯과 무료 사용 여부, 신청(`Idempotency-Key`, 설명·언어·그림 id·권리 확인), 참조 그림 올리기(PNG·JPG·WebP, 4 MB) |
+| GET /generations · POST /generations · POST /generations/uploads | 사용자 JWT | 내 최근 생성 작업 다섯과 무료 사용 여부(`used`, 무료권 수 `credits`), 신청(`Idempotency-Key`, 설명·언어·그림 id·권리 확인), 참조 그림 올리기(PNG·JPG·WebP, 4 MB). 작업은 대기 순번(`queue`)과 외형 소진 여부(`charged`)를 싣는다 |
 | GET·DELETE /generations/:id · POST /generations/:id/appearance·motions·register | 사용자 JWT | 작업 읽기(그림은 10분 서명 URL)·취소, 외형 고르기·수정, 동작 수정, 프로필 확인과 등록 |
 | POST /generation-worker/heartbeat·claim·progress·finish · PUT /generation-worker/jobs/:id/artifacts/:name · /generation-worker/jobs/:id/submission… | 생성 작업자(`scope = generation`) | 심장 박동·임대·연장·단계 결과, 후보·미리보기 그림, 신청자 계정으로 패키지 제출 |
 | POST /worker/claim | 작업자 | 큐 임대·일시 다운로드 URL 발급 |

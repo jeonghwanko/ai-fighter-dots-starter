@@ -38,8 +38,8 @@ fi
 SLICE_MEMORY=${SLICE_MEMORY:-8G}
 SLOTS=${SLOTS:-3}
 KIT=$G/kit
-KIT_URL=https://github.com/jeonghwanko/ai-fighter-dots-starter.git
-KIT_REF=${OG_KIT_REF:-892518854b0756b0018189aedcba6c90f6257f51}
+KIT_URL=https://github.com/jeonghwanko/oddbout-starter.git
+KIT_REF=${OG_KIT_REF:-a0ff66e23e529a781ea9fa46a225658137e19c09}
 CODEX_VERSION=0.165.0
 GROK_VERSION=1.0.52
 RUN_TIMEOUT=${OG_RUN_TIMEOUT:-5400}

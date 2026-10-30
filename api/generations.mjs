@@ -20,12 +20,14 @@ import { BENCHMARK_BODY_BYTES } from './sequence-benchmark.mjs';
  *   choice: string | null, appearance_note: string | null, appearance_revisions: number, motion_note: any, motion_revisions: number,
  *   preview: unknown, profile: any, submission_id: string | null, progress: number, error_code: string | null, lease_token: string | null,
  *   lease_expires_at: string | null, created_at: string, updated_at: string, delegate: boolean, host_choice: string,
- *   requested_host: string | null, assigned_host: string | null }} Job
+ *   requested_host: string | null, assigned_host: string | null, started_at?: string | null, charged_at?: string | null,
+ *   refunded_at?: string | null }} Job
  * @typedef {{ id: string, path: string, content_type: string, width: number, height: number }} Upload  A job's reference picture (af_generation_uploads).
  */
 
 export const GENERATION_BUCKET = 'af-generation';
-export const GENERATION_LIMITS = Object.freeze({ descriptionMin: 10, description: 600, refs: 2, refBytes: 4_000_000, refSide: Object.freeze([64, 4096]),
+// One line from four characters ("고양이 복서", 첫 선수 무료 2026-10-30): the site asks one line; the job's check says the same.
+export const GENERATION_LIMITS = Object.freeze({ descriptionMin: 4, description: 600, refs: 2, refBytes: 4_000_000, refSide: Object.freeze([64, 4096]),
   note: 200, artifactBytes: 8_000_000, result: 12_000, signedSeconds: 600 });
 const ARTIFACT = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const MOTIONS = Object.keys(spec.motions);
@@ -151,10 +153,18 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       if (error) throw new Problem(503, 'database-unavailable');
       if (data) submission = { id: data.id, stage: data.status, fighterId: data.fighter_id ?? null };
     }
+    // 첫 선수 무료 (2026-10-30): a request to ODDBOUT on a full day waits for its looks; where it stands, for the page's line.
+    const queue = row.host_choice === 'oddbout' && !row.started_at && ['queued', 'appearance'].includes(row.status)
+      ? await call('af_generation_queue', { p_id: row.id }) : null;
     return { id: row.id, status: row.status, progress: row.progress, error: row.error_code ?? null, description: row.description, language: row.language,
       delegate: row.delegate === true, createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
       revisionsLeft: { appearance: 2 - row.appearance_revisions, motions: 3 - row.motion_revisions },
+      // Its looks are painted and a cancel or an expiry from here keeps his free fighter used: not when an operator is looking
+      // (needs_review: a cancel gives it back), not once it failed or was refused, not for a package that failed its check (리뷰 2026-10-30).
+      charged: Boolean(row.charged_at) && !row.refunded_at && !['needs_review', 'failed', 'rejected'].includes(row.status)
+        && submission?.stage !== 'rejected',
+      queue: isObject(queue) ? queue : null,
       preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null, ...(PREVIEW_NOTES.includes(p.note) ? { note: p.note } : {}) })),
       submission,
       drafts: drafts.map(d => ({ clip: d.clip, url: urls.get(artifactPath(row.id, d.name)) ?? null })),
@@ -277,7 +287,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const jobs = await Promise.all((data ?? []).map(view));
       // Whether his one free hosted fighter is used, by the request check's own rule over all his jobs: read from the newest five, it
       // fell out of view past five fighters made on his own PC (API 점검 2026-10-29).
-      return { ok: true, jobs, used: await call('af_generation_free_used', { p_owner: owner }) === true,
+      // His free fighters (첫 선수 무료, 2026-10-30): granted, used and left; `used` is none left, as before.
+      const credits = await call('af_generation_credits', { p_owner: owner });
+      return { ok: true, jobs, used: await call('af_generation_free_used', { p_owner: owner }) === true, credits,
         capabilities: await call('af_generation_capabilities', {}) };
     }
     if (method === 'POST' && route === 'generations/uploads') {
@@ -322,7 +334,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       }
       if (parts[2] === 'motions') {
         const body = fields(await readJson(request, 2000), ['revise']), revise = fields(body.revise, ['clip', 'note']);
-        if (!MOTIONS.includes(revise.clip)) throw new Problem(422, 'invalid-answer');
+        // idle is the look itself, not a motion (the worker sends a change to it to the operator, and a cancel there would give the free
+        // fighter back — 리뷰 2026-10-30): a new look is the looks' change, before the motions.
+        if (!MOTIONS.includes(revise.clip) || revise.clip === 'idle') throw new Problem(422, 'invalid-answer');
         const note = text(revise.note, GENERATION_LIMITS.note, '/revise/note', { min: 2, code: 'invalid-answer' });
         return { ok: true, job: await view(await call('af_generation_motion', { p_owner: owner, p_id: job, p_clip: revise.clip, p_note: note })) };
       }
