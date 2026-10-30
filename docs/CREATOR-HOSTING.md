@@ -32,6 +32,10 @@ read the source checkout's environment files. It includes only the publishable
 Supabase key, copies the public assets, and checks the deployed asset paths.
 The standalone build replaces the legacy creator origin and rejects bundles
 containing the old host. Existing source checkout files are not edited.
+The builder does not read the game's `vite.config.ts`. It loads the game's own
+plugin lists when the source has them: `tools/ai-fighter/site-build-plugins.mjs`
+(plugins that shape the shipped bundle, such as the sound registry without its
+source records) and `tools/ai-fighter/bout-share-pages.mjs`. Older sources build without them.
 Publish the resulting files to the existing Pages branch after local review.
 
 The existing Supabase project `ztfxxhtmtrvxvuxlqmgz` continues to own login,
