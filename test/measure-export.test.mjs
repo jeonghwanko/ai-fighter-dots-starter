@@ -166,3 +166,42 @@ test('the command reads the SQL editor download and writes kpis.json and clip-la
     assert.ok(lines.length >= 7);
   } finally { await rm(dir, { recursive: true, force: true }); }
 });
+
+// 첫 선수 무료 (2026-10-30): the first request's funnel, the fighters that met people in their first week, and the cost table.
+test('the first free fighter: funnel, a week of play after entering, the wait for a start and the cost on our subscriptions', () => {
+  const D = '44444444-4444-4444-8444-444444444444', E = '55555555-5555-4555-8555-555555555555', F = '66666666-6666-4666-8666-666666666666';
+  const free = {
+    kind: 'oddbout-measure-db', version: 1, exportedAt: at(59), since: at(0),
+    jobs: [
+      // D: his first request, waited an hour for its start, registered, entered and fought a duel. E: a first request painted then cancelled.
+      // F: made on another host — not ours to pay, not in the funnel.
+      { id: D, status: 'submitted', createdAt: at(0), hostChoice: 'oddbout', delegate: true, chargedAt: at(2), startedAt: new Date(Date.parse(at(0)) + 3_600_000).toISOString(),
+        firstForOwner: true, signupToRequestHours: 0.5, fighter: { enteredAt: at(50), duels7d: 1, cupBouts: null } },
+      { id: E, status: 'cancelled', createdAt: at(1), hostChoice: 'oddbout', chargedAt: at(3), refunded: false, startedAt: at(1), firstForOwner: true, signupToRequestHours: 2 },
+      { id: F, status: 'submitted', createdAt: at(2), hostChoice: 'any', chargedAt: at(4), startedAt: at(2), firstForOwner: true, fighter: { enteredAt: at(40), duels7d: 0, cupBouts: 0 } },
+    ],
+    events: [
+      ev(D, 0, 'created', { delegate: true }), ev(D, 0, 'claimed', { status: 'appearance' }),
+      ev(D, 2, 'finished', { outcome: 'ok', status: 'motions', choice: 'a', calls: { 'sprite gen': [2, 0, 60], codex: [1, 0, 20] } }),
+      ev(D, 2, 'claimed', { status: 'motions' }), ev(D, 20, 'finished', { outcome: 'ok', status: 'motion_ready', calls: { 'sprite video-set': [2, 0, 600], 'sprite extract': [4, 0, 30] } }),
+      ev(D, 25, 'register'),
+      ev(E, 1, 'claimed', { status: 'appearance' }), ev(E, 3, 'finished', { outcome: 'ok', status: 'appearance_ready', calls: { 'sprite gen': [2, 0, 60] } }),
+      ev(E, 9, 'cancelled', { charged: true }),
+      ev(F, 2, 'claimed', { status: 'appearance' }), ev(F, 4, 'finished', { outcome: 'ok', status: 'appearance_ready', calls: { 'sprite gen': [2, 0, 60] } }),
+    ],
+    reviews: [],
+  };
+  const costs = { currency: 'USD', perRun: { 'sprite gen': 0.1, 'sprite video-set': 0.5, 'sprite extract': 0, codex: null }, monthly: { chatgpt: 200, grok: 30 } };
+  const k = report(free, null, costs).kpis.all;
+  assert.deepEqual(k.freeFunnel, { requested: 2, charged: 2, motionReady: 1, registered: 1, entered: 1, played7d: 1 });
+  assert.deepEqual(k.participationRate, { rate: 1, of: 1 });
+  assert.equal(k.queueWaitHours.n, 2); assert.equal(k.queueWaitHours.p95, 1);
+  assert.equal(k.signupToRequestHours.p50, 0.5);
+  // D: 2 × 0.1 + 2 × 0.5; E: 2 × 0.1 (painted, then cancelled: wasted). F ran on another host. codex is not priced yet.
+  assert.ok(Math.abs(k.cost.total - 1.4) < 1e-9); assert.ok(Math.abs(k.cost.wasted - 0.2) < 1e-9);
+  assert.ok(Math.abs(k.cost.perRegistered - 1.4) < 1e-9); assert.deepEqual(k.cost.unpriced, ['codex']);
+  assert.ok(k.cost.subscriptionPerStarted > 0);
+  // Without a cost table the funnel stands and the cost is null; older exports count nothing in it.
+  assert.equal(report(free).kpis.all.cost, null);
+  assert.deepEqual(report(db).kpis.all.freeFunnel, { requested: 0, charged: 0, motionReady: 0, registered: 0, entered: 0, played7d: 0 });
+});

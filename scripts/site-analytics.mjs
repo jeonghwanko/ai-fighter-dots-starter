@@ -67,12 +67,16 @@ function startAnalytics(measurementId, hostname, apiBase) {
   window.addEventListener('oddbout:milestone', event => {
     if (!permitted()) return;
     const { name, parameters = {} } = event.detail ?? {};
-    if (!['game_start', 'match_complete', 'creation_start'].includes(name)) return;
+    // 첫 선수 무료 (2026-10-30): the hosted request, the entry and the wish for one more fighter (the finished motions are counted from the
+    // database, measure-export's freeFunnel).
+    if (!['game_start', 'match_complete', 'creation_start', 'hosted_request', 'fighter_entered', 'extra_generation_interest'].includes(name)) return;
     /** @type {Record<string, string>} */
     const safe = { ...page, send_to: measurementId };
     if (['play', 'watch', 'tournament', 'exhibition'].includes(parameters.mode)) safe.mode = parameters.mode;
     if (['ko', 'decision', 'forfeit', 'timeout', 'win', 'loss'].includes(parameters.result)) safe.result = parameters.result;
     if (name === 'creation_start') safe.method = 'request_copy';
+    // The request's two choices as yes or no; nothing the creator wrote.
+    if (name === 'hosted_request') { safe.delegate = parameters.delegate === true ? 'yes' : 'no'; safe.queued = parameters.queued === true ? 'yes' : 'no'; }
     window.gtag('event', name, safe);
   });
   window.dispatchEvent(new CustomEvent('oddbout:analytics-ready'));
