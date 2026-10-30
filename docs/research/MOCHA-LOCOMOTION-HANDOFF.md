@@ -190,7 +190,7 @@ flight 표시9샘플의 양발 중 낮은 발 높이가 모두1px 미만, 최대
 | 모든 실제 발 프레임 | 위 폴더의 `review/{walk,run}-all-feet.png` |
 | 원화/이전/현재 외형 | 위 폴더의 `review/walk-identity-before-after.png` |
 | 실제 실행/latent/해시 | 위 폴더의 `execution-status.json`, `output-hashes.json`, `outputs/{walk,run}/*.latent` |
-| 코드 | `vendor/sprite-gen/sprite_gen/{gen,scene,spec}/`, `scripts/sprite-patch.mjs`, `patches/README.md` |
+| 코드 | `vendor/sprite-gen/sprite_gen/{gen,scene,spec}/`, 당시의 `scripts/sprite-patch.mjs`·`patches/README.md`(2026-10-27 sprite-gen-agent 고정으로 지움, git 기록에 있다) |
 | 제품/검수 계약 | `docs/CREATION-UX.md`, `docs/GAIT-REVIEW.md`, `docs/DOT-CREATION.md`, `AGENTS.md` |
 
 ## 판단 범위
