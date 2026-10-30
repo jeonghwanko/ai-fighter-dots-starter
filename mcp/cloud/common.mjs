@@ -29,6 +29,12 @@ export function compactText(value) {
 
 // Files come from the host's fileParams capability, never arbitrary URLs or VM paths.
 // Do not follow redirects: even an allowed origin must not redirect to a private network or another service.
+/**
+ * The two Azure origins the ChatGPT Library hands its files from (observed 2026-10-26, docs/research/FILE-INPUT-PROOF.md). Exact hosts
+ * only: never another Azure tenant or an inferred name. The file probe, the private source store and the hosted fighter request take them
+ * (the request since 2026-10-30, the user's decision); registration keeps the host's own file origins.
+ */
+export const LIBRARY_FILE_HOSTS = Object.freeze(['oaisdmntprnznorth.blob.core.windows.net', 'oaisdmntprwestus.blob.core.windows.net']);
 export function allowedFileUrl(value, additionalHosts = []) {
   try {
     const u = new URL(value);
@@ -46,11 +52,12 @@ export async function downloadHostFile(file, maximum, fetcher = fetch, additiona
 
 /** One arena call: a GET, or a POST with the agent key. A network failure or a body that is not JSON is `arena-unavailable`. */
 export const CUP_WAIT_MS = 25_000;
-export async function arenaCall(arena, path, body, owner, timeoutMs = 20000) {
+export async function arenaCall(arena, path, body, owner, timeoutMs = 20000, { signedOut = false } = {}) {
   // A read made for someone (`owner`: the connected owner, or `public`) carries the key: the arena counts it against that owner, not this
-  // function's one address (MCP 점검 2026-10-27 — every agent together had six reads a minute).
+  // function's one address (MCP 점검 2026-10-27 — every agent together had six reads a minute). `signedOut`: the owner is a host's anonymous
+  // user id, which its caller chooses — the arena counts the read on every signed-out agent's pool as well (2026-10-30).
   const headers = body !== undefined ? { 'content-type': 'application/json', 'x-arena-agent': arena.key }
-    : owner !== undefined ? { 'x-arena-agent': arena.key, 'x-arena-owner': owner } : {};
+    : owner !== undefined ? { 'x-arena-agent': arena.key, 'x-arena-owner': owner, ...(signedOut ? { 'x-arena-signed-out': '1' } : {}) } : {};
   let response;
   try {
     response = await (arena.fetcher ?? fetch)(`${arena.url}/${path}`, { method: body === undefined ? 'GET' : 'POST', redirect: 'error',

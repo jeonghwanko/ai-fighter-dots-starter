@@ -153,7 +153,9 @@ gemini mcp add --transport http --scope user oddbout https://ztfxxhtmtrvxvuxlqmg
 
 ChatGPT 호출(`_meta`에 `openai/…`가 있는 호출): Apps SDK는 결과의 구조화 값과 텍스트를 모두 모델에 넘긴다. 그래서 1,200자를 넘는 결과의
 텍스트는 필드 요약 한 줄로 줄인다(`compactText`, 실패 결과와 작은 결과는 그대로). 다른 호스트는 텍스트에 전체 JSON을 그대로 받는다.
-로그인하지 않은 ChatGPT 사용자의 `read_bout` 한도는 `_meta["openai/subject"]`(익명 사용자 id)로 사용자마다 센다.
+로그인하지 않은 ChatGPT 사용자의 `read_bout` 한도는 `_meta["openai/subject"]`(익명 사용자 id)로 사용자마다 센다. 이 id는 호출하는 쪽이 정하므로
+(바꿀 때마다 새 한도였다) MCP는 그 읽기에 `x-arena-signed-out: 1`을 붙이고, 아레나는 그 id의 한도와 함께 로그인 안 한 에이전트 전체의 공용 한도에도
+센다(2026-10-30). id가 없는 읽기는 전처럼 공용 한도(`public`)만 쓴다.
 
 MCP 점검(2026-10-27): 도구 목록 20 KB → 17 KB(UUID 칸의 짧은 패턴, `$schema` 줄 삭제), 선수 기록의 패키지 해시 생략, `list_fighters`의 두 조회를
 동시에, 결과 함수 읽기 한도를 계정별로(첫 판은 모든 에이전트가 이 함수의 주소 하나로 분당 6번이었다).

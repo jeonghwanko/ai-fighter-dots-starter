@@ -35,10 +35,12 @@ Two exact Azure origins were observed in native file-input calls:
 - `oaisdmntprnznorth.blob.core.windows.net`
 - `oaisdmntprwestus.blob.core.windows.net`
 
-The diagnostic tool alone allows those origins in addition to the existing
-host-file origins. Other Azure tenants, non-HTTPS URLs, user information,
-non-default ports, fragments and redirects remain rejected. Registration tool
-origin rules and VM network settings are unchanged. Rejected-origin diagnostics
+The diagnostic tool allowed those origins in addition to the existing
+host-file origins; the private source store and, since 2026-10-30 (the user's
+decision), the hosted fighter request's pictures take the same two hosts
+(`LIBRARY_FILE_HOSTS` in `mcp/cloud/common.mjs`). Other Azure tenants, non-HTTPS
+URLs, user information, non-default ports, fragments and redirects remain
+rejected. Registration tool origin rules and VM network settings are unchanged. Rejected-origin diagnostics
 include only origin properties, never signed paths, query strings or credentials.
 A completed diagnostic can return `ok=false` with `isError=false` so the host can
 retain its structured findings; callers must inspect `ok` and the match flags.
