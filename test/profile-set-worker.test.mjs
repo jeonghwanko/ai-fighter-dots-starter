@@ -3,6 +3,9 @@ import assert from 'node:assert/strict';
 import sharp from 'sharp';
 import { sha256 } from '../api/handler.mjs';
 import { PROFILE_SET_VALIDATOR_VERSION, PROFILE_SET_VERSION } from '../api/profile-sets.mjs';
+import { mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import path from 'node:path';
 import { runProfileSetWithConfig } from '../worker/profile-sets.mjs';
 
 const url = 'https://abcdefghijklmnopqrst.supabase.co', config = { url, workerToken: `afw_${'a'.repeat(64)}` };
@@ -66,4 +69,18 @@ test('a failing painting is a verdict (rejected with the reasons); a failed down
 test('an idle queue answers idle', async () => {
   globalThis.fetch = async () => Response.json({ ok: true, stage: 'idle' });
   assert.equal((await runProfileSetWithConfig(config)).stage, 'idle');
+});
+
+test('a check child that dies or runs out of time is the painting\'s verdict (rejected, with the reason), not a hand-back (리뷰 P2-6)', async () => {
+  const directory = await mkdtemp(path.join(tmpdir(), 'profile-set-child-'));
+  try {
+    const crash = path.join(directory, 'crash.mjs'), hang = path.join(directory, 'hang.mjs');
+    await writeFile(crash, 'process.exit(1);\n'); await writeFile(hang, 'setInterval(() => {}, 1000);\n');
+    for (const [childModule, code] of [[crash, 'CHECK_CRASHED'], [hang, 'CHECK_TIMEOUT']]) {
+      const calls = await serve(await painting());
+      assert.equal((await runProfileSetWithConfig(config, undefined, { childModule, timeoutMs: 300 })).stage, 'rejected');
+      assert.equal(calls.finish.passed, false); assert.deepEqual(calls.finish.result.errors, [{ code, path: '' }]);
+      assert.equal(calls.release, null);
+    }
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

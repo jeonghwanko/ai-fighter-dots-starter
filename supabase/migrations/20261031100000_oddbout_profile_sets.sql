@@ -13,7 +13,8 @@ create table public.af_profile_sets (
   owner_id uuid not null references public.af_creators(owner_id),
   idempotency_key uuid not null,
   status text not null default 'uploading'
-    check (status in ('uploading', 'queued', 'validating', 'review', 'approved', 'rejected', 'superseded')),
+    -- withdrawn: his fighter was deleted or removed by an operator while the set was open or approved.
+    check (status in ('uploading', 'queued', 'validating', 'review', 'approved', 'rejected', 'superseded', 'withdrawn')),
   manifest_text text not null check (octet_length(manifest_text) <= 4000),
   manifest_sha text not null check (manifest_sha ~ '^[a-f0-9]{64}$'),
   manifest jsonb not null,
@@ -28,6 +29,8 @@ create table public.af_profile_sets (
   created_at timestamptz not null default now(),
   submitted_at timestamptz, validated_at timestamptz,
   reviewed_by uuid references auth.users(id), reviewed_at timestamptz, approved_at timestamptz,
+  -- When the API removed the public copies of a set that was approved and no longer is (af_profile_set_stale_public).
+  unpublished_at timestamptz,
   unique (owner_id, idempotency_key),
   check (status <> 'approved' or derived is not null)
 );
@@ -41,11 +44,28 @@ grant all on public.af_profile_sets to service_role;
 grant select on public.af_profile_sets to authenticated;
 create policy af_profile_sets_read_own on public.af_profile_sets for select to authenticated using ((select auth.uid()) = owner_id);
 
--- His current approved set. Only the approve and reject functions write it.
+-- His current approved set. The approve and reject functions write it; deletion and an operator's removal clear it.
 alter table public.af_fighters add column profile_set_id uuid references public.af_profile_sets(id);
 
+-- What happened to a set outside its own row: approvals, rejections, withdrawals and a public copy the API could not remove (it retries at
+-- the next cleanup). Service role only.
+create table public.af_profile_set_events (
+  id bigint generated always as identity primary key,
+  fighter_id uuid not null references public.af_fighters(id),
+  profile_set_id uuid references public.af_profile_sets(id),
+  actor uuid references auth.users(id),
+  kind text not null check (kind in ('approve', 'reject', 'withdraw', 'public-cleanup-failed')),
+  data jsonb not null default '{}'::jsonb check (octet_length(data::text) <= 4000),
+  created_at timestamptz not null default now()
+);
+create index af_profile_set_events_fighter on public.af_profile_set_events(fighter_id, created_at desc);
+alter table public.af_profile_set_events enable row level security;
+revoke all on public.af_profile_set_events from public, anon, authenticated;
+grant all on public.af_profile_set_events to service_role;
+
 -- Public: the roster's derived files, at content-hash paths (`<fighter>/<sha256>.webp`). No client Storage policies: anyone reads a
--- public object by its address, nobody lists the bucket, and only the API writes it (on approval).
+-- public object by its address, nobody lists the bucket, and only the API writes it (on approval) and removes it (when the set is no longer
+-- his approved one: superseded, rejected, or withdrawn with his fighter).
 insert into storage.buckets(id, name, public, file_size_limit, allowed_mime_types)
 values ('af-profile-sets', 'af-profile-sets', true, 4000000, array['image/webp']);
 
@@ -122,12 +142,13 @@ begin
   select * into p from public.af_profile_sets where id = p_id for update;
   if not found then raise exception 'not-found'; end if;
   if p.lease_token is distinct from p_lease or p.manifest_sha <> p_sha then raise exception 'stale-validation'; end if;
-  if p.status in ('review', 'approved', 'rejected', 'superseded') then return p; end if;
+  if p.status in ('review', 'approved', 'rejected', 'superseded', 'withdrawn') then return p; end if;
   if p.status <> 'validating' or p.lease_until <= now() then raise exception 'stale-validation'; end if;
   if p_result->>'validatorVersion' is distinct from 'oddbout-profile-set-validator-0.1.0' then raise exception 'validator-version'; end if;
   if octet_length(p_result::text) > 16000 then raise exception 'validation-result-limit'; end if;
   if not p_passed then
-    update public.af_profile_sets set status = 'rejected', validation = p_result, reason = 'validation', lease_until = null,
+    update public.af_profile_sets set status = 'rejected', validation = p_result,
+      reason = left(coalesce(p_result->'errors'->0->>'code', 'validation'), 100), lease_until = null,
       validated_at = now() where id = p.id returning * into p;
     return p;
   end if;
@@ -136,7 +157,8 @@ begin
   if jsonb_typeof(card) is distinct from 'object' or jsonb_typeof(face) is distinct from 'object'
     or coalesce(card->>'sha256', '') !~ '^[a-f0-9]{64}$' or coalesce(face->>'sha256', '') !~ '^[a-f0-9]{64}$'
     or jsonb_typeof(card->'bytes') is distinct from 'number' or jsonb_typeof(face->'bytes') is distinct from 'number'
-    or jsonb_typeof(card->'width') is distinct from 'number' or card->'height' is distinct from '600'::jsonb
+    or jsonb_typeof(card->'width') is distinct from 'number' or not (card->'width' >= '1'::jsonb and card->'width' <= '600'::jsonb)
+    or card->'height' is distinct from '600'::jsonb
     or face->'size' is distinct from '192'::jsonb or jsonb_typeof(card->'face') is distinct from 'object'
     or octet_length(p_derived::text) > 2000 then
     raise exception 'validation-incomplete';
@@ -209,14 +231,16 @@ begin
 end $$;
 
 -- Approve a set in review: it becomes his current set and the one it replaces is superseded. Approving the current set again answers the same.
+-- Approve, reject, deletion and an operator's removal all lock the fighter first, then his sets: two of them never wait on each other.
 create function public.af_admin_profile_set_approve(p_actor uuid, p_id uuid) returns jsonb
 language plpgsql security invoker set search_path = '' as $$
-declare p public.af_profile_sets; f public.af_fighters;
+declare p public.af_profile_sets; f public.af_fighters; fighter uuid;
 begin
   if not public.af_admin_account(p_actor) then raise exception 'admin-required'; end if;
-  select * into p from public.af_profile_sets where id = p_id for update;
+  select fighter_id into fighter from public.af_profile_sets where id = p_id;
   if not found then raise exception 'not-found'; end if;
-  select * into f from public.af_fighters where id = p.fighter_id for update;
+  select * into f from public.af_fighters where id = fighter for update;
+  select * into p from public.af_profile_sets where id = p_id for update;
   if p.status = 'approved' and f.profile_set_id is not distinct from p.id then
     return jsonb_build_object('id', p.id, 'fighterId', p.fighter_id, 'status', p.status, 'derived', p.derived);
   end if;
@@ -225,34 +249,85 @@ begin
   update public.af_profile_sets set status = 'approved', reviewed_by = p_actor, reviewed_at = now(), approved_at = now(), reason = null
     where id = p.id returning * into p;
   update public.af_fighters set profile_set_id = p.id where id = p.fighter_id;
+  insert into public.af_profile_set_events(fighter_id, profile_set_id, actor, kind) values (p.fighter_id, p.id, p_actor, 'approve');
   return jsonb_build_object('id', p.id, 'fighterId', p.fighter_id, 'status', p.status, 'derived', p.derived);
 end $$;
 
--- Send a set back with a reason (style, likeness, content). Rejecting his current set takes it off the roster.
+-- Send a set back with a reason (style, likeness, content). Rejecting his current set takes it off the roster. A deleted fighter's sets are
+-- withdrawn with him, so they are not in review; his row is left alone (af_guard_deleted_fighter refuses every change to it).
 create function public.af_admin_profile_set_reject(p_actor uuid, p_id uuid, p_reason text) returns jsonb
 language plpgsql security invoker set search_path = '' as $$
-declare p public.af_profile_sets; was text;
+declare p public.af_profile_sets; was text; fighter uuid;
 begin
   if not public.af_admin_account(p_actor) then raise exception 'admin-required'; end if;
   if p_reason is null or char_length(btrim(p_reason)) = 0 or char_length(btrim(p_reason)) > 300 then raise exception 'invalid-review'; end if;
-  select * into p from public.af_profile_sets where id = p_id for update;
+  select fighter_id into fighter from public.af_profile_sets where id = p_id;
   if not found then raise exception 'not-found'; end if;
+  perform 1 from public.af_fighters where id = fighter for update;
+  select * into p from public.af_profile_sets where id = p_id for update;
   if p.status not in ('review', 'approved') then raise exception 'review-conflict'; end if;
   was := p.status;
   update public.af_profile_sets set status = 'rejected', reason = btrim(p_reason), reviewed_by = p_actor, reviewed_at = now()
     where id = p.id returning * into p;
-  update public.af_fighters set profile_set_id = null where id = p.fighter_id and profile_set_id = p.id;
+  update public.af_fighters set profile_set_id = null where id = p.fighter_id and profile_set_id = p.id and deleted_at is null;
+  insert into public.af_profile_set_events(fighter_id, profile_set_id, actor, kind, data)
+    values (p.fighter_id, p.id, p_actor, 'reject', jsonb_build_object('reason', p.reason, 'previous', was));
   return jsonb_build_object('id', p.id, 'fighterId', p.fighter_id, 'status', p.status, 'previous', was, 'derived', p.derived);
 end $$;
+
+-- Withdraw a fighter's open and approved sets (his deletion, an operator's removal). The caller holds his row's lock.
+create function public.af_profile_sets_withdraw(p_fighter uuid, p_actor uuid, p_reason text) returns integer
+language plpgsql security invoker set search_path = '' as $$
+declare n integer;
+begin
+  update public.af_profile_sets set status = 'withdrawn', reason = p_reason, lease_until = null
+    where fighter_id = p_fighter and status in ('uploading', 'queued', 'validating', 'review', 'approved');
+  get diagnostics n = row_count;
+  if n > 0 then
+    insert into public.af_profile_set_events(fighter_id, actor, kind, data) values (p_fighter, p_actor, 'withdraw', jsonb_build_object('reason', p_reason, 'sets', n));
+  end if;
+  return n;
+end $$;
+
+-- Sets once approved and no longer his approved one whose public copies the API has not removed yet: each with the hashes to remove. A hash
+-- his current approved set also uses is left out (the same painting approved again keeps its address).
+create function public.af_profile_set_stale_public(p_fighter uuid) returns jsonb
+language sql stable security invoker set search_path = '' as $$
+  select coalesce(jsonb_agg(jsonb_build_object('id', p.id, 'shas', (
+      select coalesce(jsonb_agg(sha), '[]'::jsonb) from (select p.derived->'card'->>'sha256' as sha union select p.derived->'face'->>'sha256') h
+      where h.sha ~ '^[a-f0-9]{64}$' and not exists(select 1 from public.af_profile_sets c where c.fighter_id = p.fighter_id and c.status = 'approved'
+        and h.sha in (c.derived->'card'->>'sha256', c.derived->'face'->>'sha256'))))), '[]'::jsonb)
+  from public.af_profile_sets p
+  where p.fighter_id = p_fighter and p.status <> 'approved' and p.approved_at is not null and p.unpublished_at is null;
+$$;
+-- The API removed those copies.
+create function public.af_profile_set_unpublished(p_fighter uuid, p_ids uuid[]) returns integer
+language plpgsql security invoker set search_path = '' as $$
+declare n integer;
+begin
+  update public.af_profile_sets set unpublished_at = now() where fighter_id = p_fighter and id = any(p_ids) and status <> 'approved' and unpublished_at is null;
+  get diagnostics n = row_count;
+  return n;
+end $$;
+-- The API could not remove them (Storage answered an error twice). The next cleanup of this fighter tries again.
+create function public.af_profile_set_cleanup_failed(p_fighter uuid, p_paths text[], p_error text) returns void
+language sql security invoker set search_path = '' as $$
+  insert into public.af_profile_set_events(fighter_id, kind, data)
+    values (p_fighter, 'public-cleanup-failed', jsonb_build_object('paths', to_jsonb(p_paths[1:20]), 'error', left(coalesce(p_error, ''), 200)));
+$$;
 
 revoke all on function public.af_profile_set_create(uuid, uuid, uuid, text, text, bigint), public.af_profile_set_submit(uuid, uuid),
   public.af_profile_set_claim(uuid), public.af_profile_set_finish(uuid, uuid, text, boolean, jsonb, jsonb),
   public.af_profile_set_release(uuid, uuid, text), public.af_admin_profile_sets(uuid, text), public.af_admin_profile_set(uuid, uuid),
-  public.af_admin_profile_set_approve(uuid, uuid), public.af_admin_profile_set_reject(uuid, uuid, text) from public, anon, authenticated;
+  public.af_admin_profile_set_approve(uuid, uuid), public.af_admin_profile_set_reject(uuid, uuid, text), public.af_profile_set_stale_public(uuid),
+  public.af_profile_set_unpublished(uuid, uuid[]), public.af_profile_set_cleanup_failed(uuid, text[], text), public.af_profile_sets_withdraw(uuid, uuid, text)
+  from public, anon, authenticated;
 grant execute on function public.af_profile_set_create(uuid, uuid, uuid, text, text, bigint), public.af_profile_set_submit(uuid, uuid),
   public.af_profile_set_claim(uuid), public.af_profile_set_finish(uuid, uuid, text, boolean, jsonb, jsonb),
   public.af_profile_set_release(uuid, uuid, text), public.af_admin_profile_sets(uuid, text), public.af_admin_profile_set(uuid, uuid),
-  public.af_admin_profile_set_approve(uuid, uuid), public.af_admin_profile_set_reject(uuid, uuid, text) to service_role;
+  public.af_admin_profile_set_approve(uuid, uuid), public.af_admin_profile_set_reject(uuid, uuid, text), public.af_profile_set_stale_public(uuid),
+  public.af_profile_set_unpublished(uuid, uuid[]), public.af_profile_set_cleanup_failed(uuid, text[], text), public.af_profile_sets_withdraw(uuid, uuid, text)
+  to service_role;
 
 -- As 20261030130000, and his approved set last (a view gains columns only at its end): its id and derived files.
 create or replace view public.af_roster_entries with (security_invoker = true) as
@@ -286,3 +361,71 @@ begin
   end if;
   return jsonb_build_object('ok', true, 'stage', 'entered', 'fighterId', f.id, 'enteredAt', f.entered_at);
 end $$;
+
+-- As 20261030130000, and his profile sets go with him: open and approved sets are withdrawn and his current set cleared in the same update
+-- that deletes him (af_guard_deleted_fighter refuses any later change to his row). The API removes the public copies after this commits.
+create or replace function public.af_delete_owned_fighter(p_owner uuid,p_fighter uuid,p_session uuid,p_client uuid,p_token uuid,p_confirm_name text) returns jsonb
+language plpgsql security invoker set search_path='' as $$
+declare f public.af_fighters; d public.af_fighter_deletions; current_snapshot jsonb; answer jsonb;
+begin
+  if not public.af_owner_session_active(p_owner,p_session,p_client) then raise exception 'authentication-required'; end if;
+  perform 1 from public.af_creators where owner_id=p_owner for update;
+  select * into f from public.af_fighters where id=p_fighter and owner_id=p_owner for update;
+  if not found then raise exception 'not-found'; end if;
+  select * into d from public.af_fighter_deletions where token=p_token and owner_id=p_owner and fighter_id=p_fighter
+    and session_id=p_session and client_id=p_client for update;
+  if not found then raise exception 'invalid-deletion-confirmation'; end if;
+  if p_confirm_name is distinct from d.confirm_name then raise exception 'deletion-name-mismatch'; end if;
+  -- A lost successful response is safe to retry with exactly the same confirmation.
+  if d.completed_at is not null then return d.result; end if;
+  if d.expires_at<=now() then raise exception 'deletion-confirmation-expired'; end if;
+  if f.deleted_at is not null then raise exception 'fighter-deleted'; end if;
+  current_snapshot:=jsonb_build_object('submission',f.submission_id,'manifest',f.manifest_sha,'profile',f.profile,'version',f.moderation_version);
+  if d.snapshot is distinct from current_snapshot then raise exception 'fighter-changed'; end if;
+  -- World character cards are a separate public surface. Preserve their previous value in the private audit.
+  update public.af_fighter_deletions set snapshot=snapshot||jsonb_build_object('worldMembership',
+    (select to_jsonb(w) from public.af_world_fighters w where w.fighter_id=f.id)) where token=d.token;
+  delete from public.af_world_fighters where fighter_id=f.id;
+  update public.af_fighters set deleted_at=now(),account_slot=null,review_state='rejected',runtime_approved=false,
+    runtime_scope=null,runtime_manifest_sha=null,duel_approved=false,duel_manifest_sha=null,entered_at=null,profile_set_id=null,
+    moderation_reason='Deleted by owner',moderation_version=moderation_version+1,moderated_at=now()
+    where id=f.id and owner_id=p_owner returning * into f;
+  perform public.af_profile_sets_withdraw(f.id,p_owner,'fighter-deleted');
+  answer:=jsonb_build_object('ok',true,'stage','deleted','fighterId',f.id,'ownerId',p_owner,'name',d.confirm_name,
+    'deletedAt',f.deleted_at,'deletionMode','soft-delete','privatePackageAndHistoryRetained',true,'fighterSlotReleased',true);
+  update public.af_fighter_deletions set completed_at=now(),result=answer where token=d.token;
+  return answer;
+end $$;
+
+-- As 20261023124255, and an operator's removal withdraws his profile sets and clears his current one (a restore does not bring them back:
+-- his owner submits a set again). The API removes the public copies after this commits.
+create or replace function public.af_moderate_fighter(p_actor uuid,p_fighter uuid,p_version bigint,p_action text,p_reason text) returns jsonb
+language plpgsql security invoker set search_path='' as $$
+declare f public.af_fighters; s public.af_submissions; next_version bigint;
+begin
+  if not public.af_admin_account(p_actor) then raise exception 'admin-required'; end if;
+  if p_action is null or p_action not in ('remove','restore') or p_version is null or p_version<0
+    or p_reason is null or length(trim(p_reason)) not between 1 and 500 then raise exception 'invalid-review'; end if;
+  select * into f from public.af_fighters where id=p_fighter for update;
+  if not found then raise exception 'not-found'; end if;
+  if f.moderation_version<>p_version then raise exception 'review-conflict'; end if;
+  if (p_action='remove' and f.review_state='rejected') or (p_action='restore' and (f.runtime_approved or (f.status='profile' and f.review_state='approved'))) then raise exception 'review-conflict'; end if;
+  select * into s from public.af_submissions where id=f.submission_id;
+  if p_action='restore' and f.status<>'profile' and (s.status<>'registered' or s.manifest_sha<>f.manifest_sha
+    or s.validation->>'stage' is distinct from 'bytes-hashes-and-full-decode') then raise exception 'validation-incomplete'; end if;
+  next_version:=f.moderation_version+1;
+  update public.af_fighters set review_state=case when p_action='remove' then 'rejected' else 'approved' end,
+    runtime_approved=p_action='restore' and f.status='registered',duel_approved=p_action='restore' and f.status='registered',
+    runtime_scope=case when p_action='restore' and f.status='registered' then 'arena-player-v1' else null end,
+    runtime_manifest_sha=case when p_action='restore' and f.status='registered' then manifest_sha else null end,
+    duel_manifest_sha=case when p_action='restore' and f.status='registered' then manifest_sha else null end,
+    profile_set_id=case when p_action='remove' then null else profile_set_id end,
+    review_evidence=coalesce(review_evidence,'{}'::jsonb)||case when f.status='profile' then '{"authorization":"profile-registration"}'::jsonb else jsonb_build_object('authorization','open-registration','validation',s.validation,'duelValidation','validated-v1-package','policy','post-publication-moderation') end,
+    moderation_version=next_version,moderation_reason=trim(p_reason),moderated_at=now()
+    where id=f.id;
+  if p_action='remove' then perform public.af_profile_sets_withdraw(f.id,p_actor,'fighter-removed'); end if;
+  insert into public.af_moderation_events(fighter_id,actor,action,reason,version) values(f.id,p_actor,p_action,trim(p_reason),next_version);
+  return jsonb_build_object('fighterId',f.id,'state',case when p_action='remove' then 'removed' else 'active' end,'version',next_version);
+end $$;
+revoke all on function public.af_moderate_fighter(uuid,uuid,bigint,text,text) from public,anon,authenticated;
+grant execute on function public.af_moderate_fighter(uuid,uuid,bigint,text,text) to service_role;

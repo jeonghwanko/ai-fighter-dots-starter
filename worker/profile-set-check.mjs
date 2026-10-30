@@ -3,11 +3,12 @@
 // derived files: the card (the character's area, 600 px high, with the face square in its pixels) and the face (192 × 192). The worker
 // runs it in a child process (profile-set-child.mjs), as it does the package decoder, so a hostile file cannot take the worker down.
 import sharp from 'sharp';
+import { PROFILE_SET_LIMITS } from '../api/profile-sets.mjs';
 
 /** The decoder's pixel limit: the set file allows a 2048-px long side. */
 export const PROFILE_SET_PIXELS = 2048 * 2048;
 const INK = 16, BORDER = 2, BORDER_INK_SHARE = 0.005, FACE_TOLERANCE = 2;
-export const CARD_HEIGHT = 600, FACE_SIZE = 192;
+export const CARD_HEIGHT = PROFILE_SET_LIMITS.cardHeight, CARD_MAX_WIDTH = PROFILE_SET_LIMITS.cardMaxWidth, FACE_SIZE = PROFILE_SET_LIMITS.faceSize;
 /** @typedef {{ code: string, path: string }} CheckError */
 /**
  * @typedef {{ ok: true, errors: [], card: Buffer, face: Buffer,
@@ -31,6 +32,7 @@ export async function checkProfileSet(buffer, set) {
     const metadata = await source().metadata();
     if (metadata.format !== 'webp' || (metadata.pages ?? 1) !== 1 || !metadata.hasAlpha) return fail('FRONT_ENCODING');
     if (metadata.width !== set.front.width || metadata.height !== set.front.height) return fail('FRONT_DIMENSIONS');
+    if (!metadata.height || !metadata.width || metadata.height <= metadata.width) return fail('FRONT_ORIENTATION');
     // The header is not enough: decode every pixel.
     ({ data: rgba, info } = await source().toColourspace('srgb').ensureAlpha().raw().toBuffer({ resolveWithObject: true }));
   } catch { return fail('FRONT_DECODE'); }
@@ -58,12 +60,19 @@ export async function checkProfileSet(buffer, set) {
     || face.y + face.side > bottom + 1 + FACE_TOLERANCE) errors.push({ code: 'FACE_OUTSIDE_FIGURE', path: '/face' });
   if (face.side < figureHeight * 0.1 || face.side > figureHeight * 0.3) errors.push({ code: 'FACE_SIZE', path: '/face/side' });
   if (face.y + face.side / 2 - top > figureHeight * 0.4) errors.push({ code: 'FACE_POSITION', path: '/face' });
-  if (errors.length) return { ok: false, errors };
   const scale = CARD_HEIGHT / figureHeight, cardWidth = Math.max(1, Math.round(figureWidth * scale));
-  const card = await source().extract({ left, top, width: figureWidth, height: figureHeight })
-    .resize({ width: cardWidth, height: CARD_HEIGHT, fit: 'fill' }).webp({ quality: 86, alphaQuality: 100, effort: 4 }).toBuffer();
-  const faceImage = await source().extract({ left: face.x, top: face.y, width: face.side, height: face.side })
-    .resize({ width: FACE_SIZE, height: FACE_SIZE, fit: 'fill' }).webp({ quality: 86, alphaQuality: 100, effort: 4 }).toBuffer();
+  // The card stands in a tall slot: a character wider than tall does not fit it.
+  if (cardWidth > CARD_MAX_WIDTH) errors.push({ code: 'FIGURE_WIDTH', path: '/front' });
+  if (errors.length) return { ok: false, errors };
+  // Past the decode, a failure to cut or encode is still this painting's verdict, not the worker's.
+  let card, faceImage;
+  try {
+    card = await source().extract({ left, top, width: figureWidth, height: figureHeight })
+      .resize({ width: cardWidth, height: CARD_HEIGHT, fit: 'fill' }).webp({ quality: 86, alphaQuality: 100, effort: 4 }).toBuffer();
+    faceImage = await source().extract({ left: face.x, top: face.y, width: face.side, height: face.side })
+      .resize({ width: FACE_SIZE, height: FACE_SIZE, fit: 'fill' }).webp({ quality: 86, alphaQuality: 100, effort: 4 }).toBuffer();
+  } catch { return fail('DERIVE_FAILED'); }
+  if (card.length > PROFILE_SET_LIMITS.derivedBytes || faceImage.length > PROFILE_SET_LIMITS.derivedBytes) return fail('DERIVED_TOO_LARGE');
   // The face square in the card's pixels, kept inside the card.
   const x = Math.min(Math.max(0, Math.round((face.x - left) * scale)), cardWidth - 1), y = Math.min(Math.max(0, Math.round((face.y - top) * scale)), CARD_HEIGHT - 1);
   const side = Math.max(1, Math.min(Math.round(face.side * scale), cardWidth - x, CARD_HEIGHT - y));

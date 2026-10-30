@@ -13,7 +13,7 @@ export const PROFILE_SET_VALIDATOR_VERSION = 'oddbout-profile-set-validator-0.1.
 /** The approved derived files, at `<fighter>/<sha256>.webp`. Public: the roster and the home read them by address. */
 export const PUBLIC_BUCKET = 'af-profile-sets';
 export const PROFILE_SET_LIMITS = Object.freeze({ jsonBytes: 4000, frontBytes: 4000000, longSide: Object.freeze([1024, 2048]),
-  shortSideMin: 512, faceMin: 16, derivedBytes: 1000000, cardHeight: 600, faceSize: 192 });
+  shortSideMin: 512, faceMin: 16, derivedBytes: 1000000, cardHeight: 600, cardMaxWidth: 600, faceSize: 192 });
 export const STYLE_ANCHOR_URL = 'https://oddbout.com/art/oddbout/style-anchor-front.webp';
 /**
  * The house colouring every profile painting keeps (사용자 2026-10-31: "우리 아트스타일의 담백한 채색을 하도록 하는 것을 꼭 넣어줘"): the words
@@ -36,12 +36,13 @@ export const PROFILE_SET_SPEC = Object.freeze({
   file: { name: 'profile-set.json', maxBytes: PROFILE_SET_LIMITS.jsonBytes, example: { version: PROFILE_SET_VERSION,
     front: { path: 'front.webp', bytes: 812345, sha256: '<64 hex>', width: 1024, height: 1536 }, face: { x: 402, y: 96, side: 228 } } },
   front: { format: 'static WebP with a real alpha channel (transparent background)', maxBytes: PROFILE_SET_LIMITS.frontBytes,
-    longSide: PROFILE_SET_LIMITS.longSide, shortSideMin: PROFILE_SET_LIMITS.shortSideMin, framing: [
+    orientation: 'portrait: height greater than width', longSide: PROFILE_SET_LIMITS.longSide, shortSideMin: PROFILE_SET_LIMITS.shortSideMin,
+    cardMaxWidth: PROFILE_SET_LIMITS.cardMaxWidth, framing: [
       'One character only, full body from head to feet.',
       'Front view: chest, face and toes toward the viewer; symmetric, not three-quarter.',
       'Camera at chest height looking straight ahead; no top-down tilt, no worm\'s-eye.',
       'Feet flat on one invisible ground line; head to feet about 86 percent of the image height, empty margin above the head and below the feet.',
-      'Arms close to the body: the silhouette fits a tall narrow card.',
+      'Arms close to the body: the silhouette fits a tall narrow card (the character no wider than tall).',
       'No background, floor, cast shadow, scenery, frame, text, logo or other character. An item he always carries may stay.',
       'The same character, costume and colours as his side-view motions.'] },
   face: { shape: 'a square { x, y, side } in the front painting\'s pixels, holding the whole head and a little of the hair',
@@ -98,6 +99,8 @@ export function parseProfileSet(text) {
   const long = Math.max(front.width, front.height), short = Math.min(front.width, front.height);
   if (long < PROFILE_SET_LIMITS.longSide[0] || long > PROFILE_SET_LIMITS.longSide[1] || short < PROFILE_SET_LIMITS.shortSideMin)
     errors.push({ code: 'FRONT_DIMENSIONS', path: '/front' });
+  // A card stands tall: a landscape painting cannot hold a full-body front view at the roster's height.
+  if (front.height <= front.width) errors.push({ code: 'FRONT_ORIENTATION', path: '/front' });
   if (!object(face) || !exactKeys(face, ['x', 'y', 'side']) || ![face.x, face.y, face.side].every(int)) return fail('FACE_KEYS', '/face');
   if (face.x < 0 || face.y < 0 || face.side < PROFILE_SET_LIMITS.faceMin || face.x + face.side > front.width || face.y + face.side > front.height)
     errors.push({ code: 'FACE_OUTSIDE', path: '/face' });
@@ -128,7 +131,8 @@ export function rosterProfileSet(db, row) {
     return typeof address === 'string' && address.startsWith('https://') ? address : null;
   };
   const cardUrl = url(card.sha256), faceUrl = url(face.sha256);
-  if (!cardUrl || !faceUrl || ![card.width, card.height, card.face.x, card.face.y, card.face.side, face.size].every(int)) return {};
+  if (!cardUrl || !faceUrl || ![card.width, card.height, card.face.x, card.face.y, card.face.side, face.size].every(int)
+    || card.height !== PROFILE_SET_LIMITS.cardHeight || card.width < 1 || card.width > PROFILE_SET_LIMITS.cardMaxWidth || face.size !== PROFILE_SET_LIMITS.faceSize) return {};
   return { profileSet: { id: set.id, card: { url: cardUrl, width: card.width, height: card.height,
     face: { x: card.face.x, y: card.face.y, side: card.face.side } }, face: { url: faceUrl, size: face.size } } };
 }
@@ -136,7 +140,7 @@ export function rosterProfileSet(db, row) {
 /** The refusals of the profile-set functions and their statuses. @type {Readonly<Record<string, number>>} */
 export const PROFILE_SET_STATUS = Object.freeze({
   'idempotency-conflict': 409, 'open-profile-set-exists': 409, 'profile-set-quota': 409, 'submissions-paused': 409, 'assets-incomplete': 409,
-  'upload-expired': 409, 'upload-closed': 409, 'stale-validation': 409, 'review-conflict': 409,
+  'upload-expired': 409, 'upload-closed': 409, 'stale-validation': 409, 'review-conflict': 409, 'fighter-deleted': 409,
   'not-found': 404, 'fighter-not-found': 404, 'rate-limit': 429, 'account-disabled': 403, 'admin-required': 403,
   'validator-version': 400, 'validation-incomplete': 400, 'validation-result-limit': 400, 'invalid-release-code': 400, 'invalid-review': 400,
   'invalid-query': 400, 'byte-budget-mismatch': 422,
@@ -152,8 +156,8 @@ export const profileSetWorkerRoute = parts => parts[0] === 'worker' && parts[1] 
 /** @type {(row: ProfileSetRow) => boolean} */
 const uploadExpired = row => row.status === 'uploading' && Date.parse(row.expires_at) <= Date.now();
 /**
- * A set as its owner reads it. `urls` signs his own files for a preview (a single set's read only).
- * @param {ProfileSetRow} row @param {Record<string, string>} [urls]
+ * A set as its owner reads it. `urls` signs his own files for a preview (a single set's read only); a file not stored yet is null.
+ * @param {ProfileSetRow} row @param {Record<string, string | null>} [urls]
  */
 export function profileSetView(row, urls) {
   const card = row.derived?.card, face = row.derived?.face;
@@ -168,18 +172,20 @@ export function profileSetView(row, urls) {
 }
 
 /**
- * Sign a set's private files in one Storage call: the front painting and, once validated, its card and face.
- * @param {any} db @param {ProfileSetRow} row @param {number} seconds @returns {Promise<Record<string, string>>}
+ * Sign a set's private files in one Storage call: the front painting once uploaded and, once validated, its card and face. A file Storage
+ * cannot sign (not uploaded yet, removed) is null; a failed call throws.
+ * @param {any} db @param {ProfileSetRow} row @param {number} seconds @returns {Promise<Record<string, string | null>>}
  */
 export async function signProfileSet(db, row, seconds) {
-  const names = ['front', ...(row.derived?.card ? ['card'] : []), ...(row.derived?.face ? ['face'] : [])];
+  const names = [...(row.status === 'uploading' ? [] : ['front']), ...(row.derived?.card ? ['card'] : []), ...(row.derived?.face ? ['face'] : [])];
+  if (!names.length) return {};
   const paths = names.map(name => profileSetKey(row.owner_id, row.id, name));
   const { data, error } = await db.storage.from(BUCKET).createSignedUrls(paths, seconds);
-  const signed = new Map((Array.isArray(data) ? data : []).map(item => [item.path, item]));
+  if (error || !Array.isArray(data)) throw new Problem(503, 'storage-unavailable');
+  const signed = new Map(data.map(item => [item?.path, item]));
   return Object.fromEntries(names.map((name, index) => {
     const item = signed.get(paths[index]);
-    if (error || !item || item.error || typeof item.signedUrl !== 'string') throw new Problem(503, 'storage-unavailable');
-    return [name, item.signedUrl];
+    return [name, item && !item.error && typeof item.signedUrl === 'string' ? item.signedUrl : null];
   }));
 }
 
@@ -188,11 +194,12 @@ const webp = bytes => bytes.length >= 12 && new TextDecoder().decode(bytes.slice
 /**
  * Store an object once: an existing object is a successful retry only if its bytes match. True when this call wrote it.
  * @param {any} db @param {string} bucketName @param {string} path @param {Uint8Array} bytes @param {string} hash @param {boolean} [upsert]
+ * @param {string} [cacheControl]  seconds: a year for private files; a day for the public copies, which leave when a set does
  * @returns {Promise<boolean>}
  */
-export async function storeOnce(db, bucketName, path, bytes, hash, upsert = false) {
+export async function storeOnce(db, bucketName, path, bytes, hash, upsert = false, cacheControl = '31536000') {
   const bucket = db.storage.from(bucketName);
-  const { error } = await bucket.upload(path, bytes, { contentType: 'image/webp', cacheControl: '31536000', upsert });
+  const { error } = await bucket.upload(path, bytes, { contentType: 'image/webp', cacheControl, upsert });
   if (!error) return true;
   const { data, error: getError } = await bucket.download(path);
   if (getError || !data || data.size !== bytes.length || await sha256(new Uint8Array(await data.arrayBuffer())) !== hash) throw new Problem(503, 'storage-unavailable');
@@ -307,6 +314,7 @@ export function createProfileSetHandler({ db, authenticate }) {
       if (!row?.id) return { ok: true, stage: 'idle' };
       // The lease is five minutes; the URL outlives it so a slow job fails on its deadline, not on a dead link.
       const { front } = await signProfileSet(db, { ...row, derived: null }, 360);
+      if (!front) throw new Problem(503, 'storage-unavailable');
       return { ok: true, stage: 'validating', profileSetId: row.id, leaseToken: row.lease_token, manifestText: row.manifest_text,
         manifestSha256: row.manifest_sha, front: { ...row.manifest.front, downloadUrl: front }, face: row.manifest.face };
     }
@@ -346,7 +354,44 @@ export async function publishProfileSet(db, set) {
     // The private object can change only under a live validation lease; what the operator approves is what the validator recorded.
     if (bytes.length !== file.bytes || await sha256(bytes) !== file.sha256) throw new Problem(409, 'review-conflict');
     const path = publicProfileSetPath(set.fighterId, file.sha256);
-    if (await storeOnce(db, PUBLIC_BUCKET, path, bytes, file.sha256)) written.push(path);
+    if (await storeOnce(db, PUBLIC_BUCKET, path, bytes, file.sha256, false, '86400')) written.push(path);
   }
   return written;
+}
+
+/**
+ * Remove public copies. Storage answers a failure as `{ error }` (or throws): one more try, then the failure is recorded
+ * (af_profile_set_events `public-cleanup-failed`). True when they are gone.
+ * @param {any} db @param {string} fighterId @param {string[]} paths @returns {Promise<boolean>}
+ */
+export async function removePublicFiles(db, fighterId, paths) {
+  if (!paths.length) return true;
+  const bucket = db.storage.from(PUBLIC_BUCKET);
+  /** @type {() => Promise<any>} */
+  const remove = () => Promise.resolve().then(() => bucket.remove(paths)).catch(caught => ({ error: caught }));
+  let result = await remove();
+  if (result?.error) result = await remove();
+  if (!result?.error) return true;
+  await Promise.resolve().then(() => db.rpc('af_profile_set_cleanup_failed', { p_fighter: fighterId, p_paths: paths,
+    p_error: String(result.error?.message ?? result.error).slice(0, 200) })).catch(() => {});
+  return false;
+}
+
+/**
+ * Remove the public copies of a fighter's sets that were approved and no longer are (superseded, rejected, withdrawn with him), after the
+ * database change that made them stale has committed. Storage answers a failure as `{ error }`: one more try, then the failure is recorded
+ * (af_profile_set_events `public-cleanup-failed`) and the next cleanup of this fighter tries again. Never throws: the change it follows stands.
+ * @param {any} db @param {string} fighterId @returns {Promise<{ removed: number, failed?: number }>}
+ */
+export async function cleanupPublicFiles(db, fighterId) {
+  try {
+    const { data, error } = await db.rpc('af_profile_set_stale_public', { p_fighter: fighterId });
+    if (error || !Array.isArray(data) || !data.length) return { removed: 0 };
+    /** @type {string[]} */
+    const shas = data.flatMap(row => (Array.isArray(row?.shas) ? row.shas : [])).filter(sha => typeof sha === 'string' && /^[a-f0-9]{64}$/.test(sha));
+    const paths = [...new Set(shas)].map(sha => publicProfileSetPath(fighterId, sha));
+    if (!await removePublicFiles(db, fighterId, paths)) return { removed: 0, failed: paths.length };
+    await db.rpc('af_profile_set_unpublished', { p_fighter: fighterId, p_ids: data.map(row => row.id) });
+    return { removed: paths.length };
+  } catch { return { removed: 0 }; }
 }

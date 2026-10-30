@@ -24,23 +24,24 @@ class RetryLater extends Error {}
 /** @typedef {{ ok: boolean, stage?: string, errors: { code: string, path: string }[], derived?: any }} ChildVerdict */
 
 /**
- * Run the pixel check in a child process with its own deadline. An unanswered or crashed child is the worker's problem (RetryLater).
- * @param {string} directory @returns {Promise<ChildVerdict>}
+ * Run the pixel check in a child process with its own deadline. A child that dies or runs out of time on this painting is its verdict
+ * (rejected, with the reason): retrying would meet the same file. Only a child that cannot start is the worker's problem (RetryLater).
+ * @param {string} directory @param {{ childModule?: string, timeoutMs?: number }} [options]  tests replace the child and its deadline
+ * @returns {Promise<ChildVerdict>}
  */
-function checkInChild(directory) {
+export function checkInChild(directory, { childModule = fileURLToPath(new URL('./profile-set-child.mjs', import.meta.url)), timeoutMs = CHECK_TIMEOUT_MS } = {}) {
   return new Promise((resolve, reject) => {
-    const child = fork(fileURLToPath(new URL('./profile-set-child.mjs', import.meta.url)), [directory], {
+    const child = fork(childModule, [directory], {
       stdio: ['ignore', 'ignore', 'ignore', 'ipc'], execArgv: ['--max-old-space-size=256'], env: { ...process.env, VIPS_CONCURRENCY: '1' } });
     /** @type {ChildVerdict | undefined} */
     let result;
     let timedOut = false;
-    const timer = setTimeout(() => { timedOut = true; child.kill(); }, CHECK_TIMEOUT_MS);
+    const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
     child.on('message', message => { if (!timedOut) result ??= /** @type {ChildVerdict} */ (message); });
     child.once('error', () => { clearTimeout(timer); reject(new RetryLater('check-start-failed')); });
     child.once('exit', () => {
       clearTimeout(timer);
-      if (!result || result.stage === 'worker') reject(new RetryLater(timedOut ? 'check-timeout' : 'check-failed'));
-      else resolve(result);
+      resolve(result ?? { ok: false, stage: 'profile-set-check', errors: [{ code: timedOut ? 'CHECK_TIMEOUT' : 'CHECK_CRASHED', path: '' }] });
     });
   });
 }
@@ -48,8 +49,9 @@ function checkInChild(directory) {
 /**
  * Validate one queued profile set, or answer idle.
  * @param {{ url?: string, workerToken?: string }} config @param {string} [profileSetId]
+ * @param {{ childModule?: string, timeoutMs?: number }} [check]  tests replace the check's child and deadline
  */
-export async function runProfileSetWithConfig(config, profileSetId) {
+export async function runProfileSetWithConfig(config, profileSetId, check = {}) {
   if (!validProjectUrl(config.url) || !/^afw_[a-f0-9]{64}$/.test(config.workerToken ?? '')) throw new Error('invalid-worker-config');
   const project = /** @type {string} */ (config.url), token = /** @type {string} */ (config.workerToken);
   /** @type {(route: string, body: object) => Promise<any>} */
@@ -82,7 +84,7 @@ export async function runProfileSetWithConfig(config, profileSetId) {
       if (bytes.length !== front.bytes || await sha256(bytes) !== front.sha256) throw new RetryLater('download-integrity');
       await writeFile(path.join(directory, 'front.webp'), bytes, { flag: 'wx', mode: 0o600 });
       await writeFile(path.join(directory, 'set.json'), JSON.stringify(parsed.data), { flag: 'wx', mode: 0o600 });
-      verdict = await checkInChild(directory);
+      verdict = await checkInChild(directory, check);
       if (deadline.aborted) throw new RetryLater('job-deadline');
       if (verdict.ok) {
         /** @type {Record<string, { sha256: string, bytes: number }>} */
