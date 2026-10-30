@@ -1,3 +1,4 @@
+// @ts-check
 import { readFile } from 'node:fs/promises';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { z } from 'zod';
@@ -22,8 +23,15 @@ const MOTIONS = /** @type {[string, ...string[]]} */ ([...Object.keys(spec.motio
 const outputSchema = { ok: z.boolean(), stage: z.string(), data: z.unknown().optional(), errors: z.array(z.unknown()).optional(),
   pending: z.array(z.string()).optional(), assetBytes: z.number().optional(), decodedPixels: z.number().optional(), errorCount: z.number().optional(),
   code: z.string().optional() };
+/**
+ * A tool's own result. Its fields pass through; `errors` is bounded here.
+ * @typedef {{ ok: boolean, stage: string, errors?: unknown[], [key: string]: unknown }} ToolResult
+ * @typedef {(result: ToolResult) => import('@modelcontextprotocol/sdk/types.js').CallToolResult} Respond
+ */
+/** @type {Respond} */
 function respond(result) {
   // Bound tool output even if every field fails. Do not echo input text as instructions.
+  /** @type {(value: unknown, depth?: number) => unknown} */
   const diagnostic = (value, depth = 0) => {
     if (typeof value === 'string') return value.length > 512 ? `${value.slice(0, 512)}…[truncated]` : value;
     if (value && typeof value === 'object') {
@@ -37,6 +45,10 @@ function respond(result) {
     ...(result.errors.length > 50 ? { errorCount: result.errors.length } : {}) } : result;
   return { isError: !bounded.ok, structuredContent: bounded, content: [{ type: 'text', text: JSON.stringify(bounded) }] };
 }
+/**
+ * @param {{ root?: string, remote?: import('../api/client.mjs').RemoteClient, creatorPage?: string, contextRequest?: typeof fetch,
+ *   connectionOptions?: import('./connect-oddbout.mjs').ConnectionOptions, registrationMode?: 'local' | 'cloud' }} [options]
+ */
 export function createServer({ root, remote, creatorPage, contextRequest, connectionOptions = {}, registrationMode = 'local' } = {}) {
   if (!['local', 'cloud'].includes(registrationMode) || registrationMode === 'cloud' && remote)
     throw Error('inconsistent-registration-route');
@@ -70,9 +82,9 @@ export function createServer({ root, remote, creatorPage, contextRequest, connec
       catch (error) { return respond({ ok: false, stage: 'game-creation-context', code: errorCode(error, 'creation-context-unavailable', { prefix: 'creation-context-' }), pending: ['fetch-current-game-context'] }); }
     }
     if (motion && section === 'schema')
-      return respond({ ok: true, stage: 'public-contract', data: { motion, clip: schema.properties.clips.properties[motion], definitions: schema.definitions } });
+      return respond({ ok: true, stage: 'public-contract', data: { motion, clip: /** @type {Record<string, unknown>} */ (schema.properties.clips.properties)[motion], definitions: schema.definitions } });
     if (motion && section === 'example') {
-      const clip = example.clips[motion] ?? null;
+      const clip = /** @type {Record<string, { assetId: string } | undefined>} */ (example.clips)[motion] ?? null;
       return respond({ ok: true, stage: 'public-contract', data: { motion, clip, asset: clip && example.assets.find(asset => asset.id === clip.assetId) } });
     }
     if (section === 'creation') return respond({ ok: true, stage: 'creation-kit', data: {

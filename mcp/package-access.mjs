@@ -1,10 +1,17 @@
+// @ts-check
 import { fork } from 'node:child_process';
 import { lstat, realpath } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
+/**
+ * A package check's verdict. The worker's (server/ai-fighter-package.mjs) carries more fields.
+ * @typedef {{ ok: boolean, stage: string, errors: { code: string, path?: string }[] }} PackageCheck
+ */
+/** @type {(code: string) => PackageCheck} */
 const issue = code => ({ ok: false, stage: 'local-access', errors: [{ code, path: '/manifestPath' }] });
 // A local trusted workspace only. Concurrent hostile filesystem replacement needs OS isolation.
+/** @param {string} root @param {string} relative */
 export async function resolveManifest(root, relative) {
   if (!relative || relative.includes('\\') || relative.includes(':') || relative.includes('\0') || path.isAbsolute(relative) ||
       relative.split('/').some(part => !part || part === '.' || part === '..') || !relative.endsWith('/fighter.json')) return null;
@@ -22,8 +29,11 @@ export async function resolveManifest(root, relative) {
 /**
  * One decoder at a time. Up to `maxWaiting` further calls wait their turn; more return VALIDATOR_BUSY.
  * Each run gets its own deadline from the moment it starts.
+ * @param {string} root @param {{ timeoutMs?: number, maxWaiting?: number }} [options]
+ * @returns {(relative: string) => Promise<PackageCheck>}
  */
 export function makePackageValidator(root, { timeoutMs = 20000, maxWaiting = 2 } = {}) {
+  /** @type {(relative: string) => Promise<PackageCheck>} */
   const validateOnce = async relative => {
     try {
       const manifest = await resolveManifest(root, relative);
@@ -34,9 +44,10 @@ export function makePackageValidator(root, { timeoutMs = 20000, maxWaiting = 2 }
           env: { ...process.env, VIPS_CONCURRENCY: '1' },
         });
         // A result that arrived before the deadline wins, even if the child is slow to exit.
+        /** @type {PackageCheck | undefined} */
         let result, timedOut = false;
         const timer = setTimeout(() => { timedOut = true; child.kill(); }, timeoutMs);
-        child.on('message', message => { if (!timedOut) result ??= message; });
+        child.on('message', message => { if (!timedOut) result ??= /** @type {PackageCheck} */ (message); });
         child.once('error', () => { clearTimeout(timer); resolve(issue('WORKER_START_FAILED')); });
         child.once('exit', code => { clearTimeout(timer);
           resolve(result ?? issue(timedOut ? 'VALIDATION_TIMEOUT' : code === 0 ? 'WORKER_NO_RESULT' : 'WORKER_FAILED')); });

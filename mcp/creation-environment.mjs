@@ -1,3 +1,4 @@
+// @ts-check
 import { randomUUID, createHash } from 'node:crypto';
 import { realpath, readFile } from 'node:fs/promises';
 import { hostname, homedir } from 'node:os';
@@ -26,10 +27,26 @@ export const environmentChange = z.discriminatedUnion('type', [
   z.object({ type: z.literal('refresh-profile') }).strict(),
   z.object({ type: z.literal('revoke-network'), feedback: text }).strict(),
 ]);
+/**
+ * The workspace's environment record. `network` holds the current plan's approval, host report and probe, or a revocation.
+ * @typedef {import('./environment-profiles.mjs').Profile} Profile
+ * @typedef {{ host: string, status: string, httpStatus?: number }} ProbeResult
+ * @typedef {{ approval?: { planHash: string, feedback: string, at: string },
+ *   hostReport?: { planHash: string, status: 'allowed' | 'denied' | 'unknown', evidence: string, at: string, source: string },
+ *   probe?: { planHash: string, at: string, destinations: ProbeResult[] } | null,
+ *   revocation?: { at: string, feedback: string, hostActionRequired: boolean, note: string } }} Network
+ * @typedef {{ schemaVersion: 1, revision: number, environmentId: string, previousEnvironmentId?: string, hostBinding: string, profile: Profile,
+ *   account: z.infer<typeof accountChoice>, host: 'dots' | 'local' | 'owned-vm', conversationId: string, confirmedAccess: z.infer<typeof capabilities>,
+ *   feedback: string, network?: Network | null, delivery?: { path: string, hash: string, at: string } | null, createdAt: string, updatedAt?: string,
+ *   history?: object[] }} EnvironmentState
+ */
+/** @type {(value: unknown) => string} */
 const digest = value => createHash('sha256').update(canonical(value)).digest('hex');
+/** @type {(at: string, now: number) => boolean} */
 const fresh = (at, now) => Number.isFinite(Date.parse(at)) && now - Date.parse(at) >= 0 && now - Date.parse(at) < 15 * 60 * 1000;
 const prefix = 'output/creation-environment';
 
+/** @param {EnvironmentState} state */
 export function environmentPlan(state) {
   const profile = state.profile.profiles.find(p => p.id === 'gpt-appearance');
   const destinations = ['gpt', 'both'].includes(state.account) ? profile?.destinations ?? [] : [];
@@ -37,13 +54,16 @@ export function environmentPlan(state) {
     profileHash: profileHash(state.profile), profileRevision: state.profile.revision, destinations };
   const supported = destinations.length > 0;
   return { ...content, planHash: digest(content), coverage: 'bootstrap-only',
-    unresolved: supported ? profile.unresolved : ['현재 온보딩 어댑터는 GPT 외형 연결부터 지원합니다. 기존 Grok workflow는 유지됩니다.'],
+    unresolved: supported ? /** @type {NonNullable<typeof profile>} */ (profile).unresolved : ['현재 온보딩 어댑터는 GPT 외형 연결부터 지원합니다. 기존 Grok workflow는 유지됩니다.'],
     approvalPrompt: supported ? '이 제작 환경의 GPT 로그인·생성 접속을 허용할까요? 참고 이미지는 선택한 제공자에게 전송됩니다. 도메인 상세와 현재 환경 범위를 확인하세요.' : null,
     hostAdapter: { status: 'manual-handoff', automaticApply: false,
       instruction: '호스트의 실제 네트워크 승인·설정 기능을 사용하세요. 이 도구의 승인 기록은 방화벽을 변경하지 않습니다. 적용 결과를 확인한 후 report-host-network에 근거를 기록하세요.' } };
 }
 
-/** Root requests never follow a redirect, upload a reference or start generation. HTTP 403 is not success. */
+/**
+ * Root requests never follow a redirect, upload a reference or start generation. HTTP 403 is not success.
+ * @param {{ host: string }} destination @param {typeof fetch} [fetchImpl] @returns {Promise<ProbeResult>}
+ */
 export async function probeDestination(destination, fetchImpl = fetch) {
   try {
     const response = await fetchImpl(`https://${destination.host}/`, {
@@ -54,11 +74,17 @@ export async function probeDestination(destination, fetchImpl = fetch) {
   } catch { return { host: destination.host, status: 'unreachable-or-blocked' }; }
 }
 
+/**
+ * @param {string} root
+ * @param {{ loginProbe?: typeof inspectGenerationLogin, fetchImpl?: typeof fetch, now?: () => number, hostId?: string,
+ *   trustedKeys?: Record<string, string>, profileSource?: string }} [options]
+ */
 export function createEnvironmentStore(root, { loginProbe = inspectGenerationLogin, fetchImpl = fetch, now = () => Date.now(), hostId = hostname(),
   trustedKeys, profileSource } = {}) {
   const file = () => localPath(root, `${prefix}/environment.json`);
   const binding = async () => digest({ root: await realpath(root), host: hostId, platform: process.platform,
     credentialHome: path.resolve(process.env.CODEX_HOME || path.join(homedir(), '.codex')) });
+  /** @param {{ allowMoved?: boolean }} [options] @returns {Promise<EnvironmentState | null>} */
   async function read({ allowMoved = false } = {}) {
     const state = await readJson(await file()).catch(error => { if (error.code === 'ENOENT') return null; throw error; });
     if (!state) return null;
@@ -68,18 +94,21 @@ export function createEnvironmentStore(root, { loginProbe = inspectGenerationLog
     if (!allowMoved && state.hostBinding !== await binding()) throw Error('environment-host-changed-reconnect-required');
     return state;
   }
+  /** @template T @param {() => Promise<T>} action @returns {Promise<T>} */
   async function locked(action) {
     await localPath(root, prefix, { createParents: true, directory: true });
     // A device login holds this for minutes, so other callers get environment-busy after a short wait.
     return withFileLock(await localPath(root, `${prefix}/environment.lock`), action, { busy: 'environment-busy', waitMs: 2000 });
   }
+  /** @param {EnvironmentState} state */
   async function deliveryStatus(state) {
     if (!state.delivery) return { status: 'unknown', ready: false };
     try {
       const record = await readJson(await localPath(root, state.delivery.path));
       if (digest(record) !== state.delivery.hash || record.environment !== state.environmentId)
         return { status: 'stale', ready: false };
-      const check = checkCreationDelivery(record, { phase: 'preflight', conversationId: state.conversationId });
+      const check = /** @type {Extract<ReturnType<typeof checkCreationDelivery>, { ready: boolean }>} */ (
+        checkCreationDelivery(record, { phase: 'preflight', conversationId: state.conversationId })); // the preflight verdict
       return { status: check.ready ? 'recorded-preconditions' : 'blocked', ...check };
     } catch { return { status: 'invalid-or-missing-record', ready: false }; }
   }
@@ -118,10 +147,12 @@ export function createEnvironmentStore(root, { loginProbe = inspectGenerationLog
       readyForGeneration: blockers.length === 0,
       meaning: 'Precondition records only. Host application is reported, HEAD probes cover bootstrap hosts only. Actual generation, download, image backend, account identity and conversation display remain unverified until the requested result completes.' };
   }
+  /** @param {number} expectedRevision @param {unknown} input */
   async function update(expectedRevision, input) {
+    /** @type {z.infer<typeof environmentChange> & { feedback?: string }} */
     const change = environmentChange.parse(input);
     return locked(async () => {
-      let state = await read({ allowMoved: change.type === 'rebind' });
+      let state = /** @type {EnvironmentState} */ (await read({ allowMoved: change.type === 'rebind' })); // null only before configure: checked below
       if ((state?.revision ?? 0) !== expectedRevision) throw Error('environment-revision-conflict');
       if (!state && change.type !== 'configure') throw Error('environment-not-configured');
       const at = new Date(now()).toISOString();
@@ -132,8 +163,8 @@ export function createEnvironmentStore(root, { loginProbe = inspectGenerationLog
       } else if (change.type === 'configure') {
         const allowed = change.account === 'both' ? ['gpt-image', 'grok-image', 'grok-video'] : change.account === 'gpt' ? ['gpt-image'] : change.account === 'grok' ? ['grok-image', 'grok-video'] : [];
         if (change.confirmedAccess.some(c => !allowed.includes(c))) throw Error('access-choice-conflict');
-        state ??= { schemaVersion: 1, revision: 0, environmentId: randomUUID(), hostBinding: await binding(),
-          profile: await bundledProfiles(), createdAt: at };
+        state ??= /** @type {EnvironmentState} */ ({ schemaVersion: 1, revision: 0, environmentId: randomUUID(), hostBinding: await binding(),
+          profile: await bundledProfiles(), createdAt: at }); // the choice is assigned below
         if (state.account !== change.account || state.host !== change.host) state.network = null;
         if (state.conversationId !== change.conversationId) state.delivery = null;
         Object.assign(state, { account: change.account, host: change.host, conversationId: change.conversationId,
@@ -188,7 +219,7 @@ export function createEnvironmentStore(root, { loginProbe = inspectGenerationLog
   async function prepareLogin() {
     const state = await read();
     if (!state || !['gpt', 'both'].includes(state.account)) throw Error('gpt-environment-required');
-    const view = await inspect();
+    const view = /** @type {Extract<Awaited<ReturnType<typeof inspect>>, { plan: object }>} */ (await inspect()); // read() above found it on this host
     if (!view.network.approved || view.network.application !== 'host-reported' || view.network.reachability !== 'bootstrap-hosts-reachable')
       throw Error('host-network-application-unverified');
     if (view.generation.status === 'signed-in') return { status: 'already-signed-in', generation: view.generation };
@@ -199,10 +230,17 @@ export function createEnvironmentStore(root, { loginProbe = inspectGenerationLog
   }
   return { read, inspect, update, prepareLogin, locked };
 }
+/** @typedef {ReturnType<typeof createEnvironmentStore>} EnvironmentStore */
 
+/** @typedef {import('@modelcontextprotocol/sdk/types.js').CallToolResult} CallToolResult */
+/**
+ * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
+ * @param {{ root: string, respond: import('./server.mjs').Respond, outputSchema: z.ZodRawShape }} options
+ */
 export function registerEnvironmentTools(server, { root, respond, outputSchema }) {
   const store = createEnvironmentStore(root);
   const readonly = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
+  /** @type {<A>(action: (args: A) => Promise<unknown>) => (args: A) => Promise<CallToolResult>} */
   const handle = action => async args => {
     try { return respond({ ok: true, stage: 'creation-environment', data: await action(args) }); }
     catch (error) { return respond({ ok: false, stage: 'creation-environment', code: errorCode(error, 'environment-request-invalid') }); }

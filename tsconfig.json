@@ -20,6 +20,7 @@
   },
   "include": [
     "api/**/*.mjs",
-    "worker/**/*.mjs"
+    "worker/**/*.mjs",
+    "mcp/**/*.mjs"
   ]
 }

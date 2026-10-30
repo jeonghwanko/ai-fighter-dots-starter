@@ -1,9 +1,17 @@
+// @ts-check
 // The agent tools (3단계, 2026-10-27): ODDBOUT's public records, spars, cups and the owner's fighting style and profile edits.
 import { z } from 'zod';
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
 import { CUP_WAIT_MS, UUID_ARG, arenaCall } from './common.mjs';
+/**
+ * @typedef {import('./common.mjs').Identity} Identity
+ * @typedef {import('./common.mjs').Arena} Arena
+ * @typedef {import('./common.mjs').Invoke} Invoke
+ * @typedef {import('./common.mjs').RecordAgent} RecordAgent
+ * @typedef {import('./common.mjs').Register} Register
+ */
 
 /**
  * How a fighter's `combat.style` reads (the game contract's README, 싸우는 성격; values in `spec.combatStyle`). An agent translates the
@@ -28,9 +36,15 @@ export const STYLE_GUIDE = Object.freeze({
     + 'Spar before and after a change and keep the version that fights like the character.',
 });
 
+/**
+ * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
+ * @param {{ register: Register, arena: Arena, db: any, identity: Identity | null, invoke: Invoke, recordAgent: RecordAgent, caller: string | null }} options
+ */
 export function registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller }) {
+  /** @type {(path: string, body?: object) => Promise<any>} */
   const call = (path, body) => arenaCall(arena, path, body);
   // A read's budget: the signed-in owner's; signed out, the host's anonymous user (`caller`); else every signed-out agent's together.
+  /** @type {(path: string) => Promise<any>} */
   const read = path => identity ? arenaCall(arena, path, undefined, identity.owner)
     : arenaCall(arena, path, undefined, caller ?? 'public', undefined, { signedOut: caller !== null });
   const ID = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
@@ -45,9 +59,10 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       if (!builtins.ok) return builtins;
       const registered = [];
       for (let cursor = null, page = 0; page < 5; page++) {
+        /** @type {any} */
         const list = page === 0 ? first : await invoke(`roster?after=${encodeURIComponent(cursor)}`);
         if (!list.ok) return list;
-        registered.push(...list.fighters.map(({ id, name, names }) => ({ id, name, ...(names ? { names } : {}) })));
+        registered.push(...list.fighters.map(/** @param {{ id: string, name: string, names?: Record<string, string> }} fighter */ ({ id, name, names }) => ({ id, name, ...(names ? { names } : {}) })));
         if (!list.hasMore) break;
         cursor = list.nextCursor;
       }
@@ -61,7 +76,7 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     { fighterId: ID }, async ({ fighterId }) => {
       const record = await call(`fighter?id=${encodeURIComponent(fighterId)}`);
       // Each bout's package pins are 64-character hashes an agent never uses; read_bout finds them from the cup.
-      return record.ok && Array.isArray(record.recent) ? { ...record, recent: record.recent.map(({ registered, ...bout }) => bout) } : record;
+      return record.ok && Array.isArray(record.recent) ? { ...record, recent: record.recent.map(/** @param {Record<string, unknown>} bout */ ({ registered, ...bout }) => bout) } : record;
     }, { publicTool: true });
   register('get_cup', '컵 결과', 'Read a cup by its id (one enter_cup returned, or a week\'s): '
     + 'its bracket, state and every played bout with its winner and finish.',
@@ -81,13 +96,13 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
     + 'Not ranked and not kept. Use it to see how a fighter fights, before and after a style change. '
     + 'Give a seed to fight the same bout again.',
     { fighterId: ID, opponentId: ID, seed: z.number().int().min(0).max(0xffffffff).optional() },
-    ({ fighterId, opponentId, seed }) => call('agent/spar', { owner: identity.owner, a: fighterId, b: opponentId, ...(seed === undefined ? {} : { seed }) }));
+    ({ fighterId, opponentId, seed }) => call('agent/spar', { owner: /** @type {Identity} */ (identity).owner, a: fighterId, b: opponentId, ...(seed === undefined ? {} : { seed }) }));
   register('enter_cup', '16강 컵 출전', 'Enter the connected user\'s registered fighter in a 16-fighter cup. '
     + 'The server draws the other fifteen from the built-in roster and fights every bout; '
     + 'the results count in the cup rankings. Requires the user\'s request. Returns the finished cup (a few seconds); '
     + 'if it is still running, read it with get_cup.',
     { fighterId: UUID_ARG() }, async ({ fighterId }) => {
-      const issued = await call('agent/cup', { owner: identity.owner, fighter: fighterId });
+      const issued = await call('agent/cup', { owner: /** @type {Identity} */ (identity).owner, fighter: fighterId });
       if (!issued.ok) return issued;
       // A cup is fought in about seven seconds: wait for it here so the agent needs no second call (MCP 점검 2026-10-27).
       // The whole wait ends by CUP_WAIT_MS, each read bounded by the time left, well inside the Edge request limit.
@@ -100,8 +115,9 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
       return { ...issued, state: 'open', next: 'get_cup' };
     }, { write: true, openWorld: true, idempotent: false });
   // The owner's current registered package hash (the version an edit is made on), or a 404.
+  /** @param {string} fighterId */
   const currentSha = async fighterId => {
-    const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', identity.owner)
+    const { data: fighter, error } = await db.from('af_fighters').select('manifest_sha').eq('id', fighterId).eq('owner_id', /** @type {Identity} */ (identity).owner)
       .is('deleted_at', null).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
     if (!fighter) throw new Problem(404, 'fighter-not-found');
@@ -110,16 +126,18 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
   // The package an edit is made on. A key that already made its edit names the package that edit started from: the fighter has since
   // moved to the edit's own package, and rebuilt on that, a successful edit whose response was lost came back as a conflict
   // (MCP 점검 2026-10-29). The API checks the key's fighter and change itself.
+  /** @param {string} fighterId @param {string} idempotencyKey */
   const baseSha = async (fighterId, idempotencyKey) => {
-    const { data: previous, error } = await db.from('af_submissions').select('validation').eq('owner_id', identity.owner)
+    const { data: previous, error } = await db.from('af_submissions').select('validation').eq('owner_id', /** @type {Identity} */ (identity).owner)
       .eq('idempotency_key', idempotencyKey).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
     const base = previous?.validation?.profileBaseSubmission;
     if (!base) return currentSha(fighterId);
-    const { data, error: baseError } = await db.from('af_submissions').select('manifest_sha').eq('id', base).eq('owner_id', identity.owner).maybeSingle();
+    const { data, error: baseError } = await db.from('af_submissions').select('manifest_sha').eq('id', base).eq('owner_id', /** @type {Identity} */ (identity).owner).maybeSingle();
     if (baseError) throw new Problem(503, 'database-unavailable');
     return data?.manifest_sha ?? currentSha(fighterId);
   };
+  /** @param {string} fighterId @param {object} change @param {string} idempotencyKey */
   const edit = async (fighterId, change, idempotencyKey) => {
     const result = await invoke(`fighters/${fighterId}/profile`, 'PATCH', JSON.stringify({ expectedManifestSha256: await baseSha(fighterId, idempotencyKey), ...change }),
       { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });

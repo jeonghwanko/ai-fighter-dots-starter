@@ -1,6 +1,23 @@
+// @ts-check
 // The cloud MCP's shared pieces: tool argument schemas and annotations, results as hosts read them, host file downloads and arena calls.
 import { z } from 'zod';
 import { Problem, readBody } from '../../api/http.mjs';
+
+/**
+ * What cloud.mjs hands the tool families. `Identity` is the verified caller (authenticateCloud): null on a signed-out call, which
+ * register lets reach only the public tools. `Register` is its `register`: each tool's `run` gets the arguments its inputSchema parsed.
+ * @typedef {{ owner: string, email: string, claims: { client_id: string, session_id: string, [claim: string]: unknown } }} Identity
+ * @typedef {{ url: string, key: string, fetcher?: typeof fetch, cupWaitMs?: number, pollMs?: number, pollTries?: number }} Arena
+ * @typedef {{ pollMs?: number }} Hosted
+ * @typedef {z.infer<typeof FILE>} HostFile
+ * @typedef {(path: string, method?: string, body?: BodyInit, headers?: Record<string, string>) => Promise<any>} Invoke  Resolves to the API's JSON.
+ * @typedef {(submissionId: string | undefined) => Promise<void>} RecordAgent
+ * @typedef {{ content: { type: 'text', text: string }[], structuredContent: Record<string, unknown>, isError?: boolean }} ToolOutput
+ * @typedef {{ write?: boolean, publish?: boolean, openWorld?: boolean, idempotent?: boolean, files?: string[], profile?: boolean,
+ *   publicTool?: boolean, diagnostic?: boolean }} ToolOptions
+ * @typedef {<S extends z.ZodRawShape>(name: string, title: string, description: string, inputSchema: S,
+ *   run: (args: z.infer<z.ZodObject<S>>) => Record<string, unknown> | Promise<Record<string, unknown>>, options?: ToolOptions) => void} Register
+ */
 
 export const FILE = z.object({ download_url: z.string().max(8192), file_id: z.string().min(1).max(256),
   mime_type: z.string().max(128).optional(), file_name: z.string().max(512).optional() }).strict();
@@ -11,12 +28,14 @@ export const FILE = z.object({ download_url: z.string().max(8192), file_id: z.st
 export const UUID_ARG = () => z.string().regex(/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i);
 export const READ = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false };
 export const AUTH = [{ type: 'oauth2', scopes: ['openid', 'email', 'profile'] }];
+/** @type {(value: Record<string, unknown>, compact?: boolean) => ToolOutput} */
 export const output = (value, compact = false) => ({ content: [{ type: 'text', text: compact ? compactText(value) : JSON.stringify(value) }], structuredContent: value,
   ...(value.ok === false ? { isError: true } : {}) });
 /**
  * A result's text for a host that also reads its structured content (ChatGPT — the Apps SDK hands the model both): the JSON again doubled
  * every result in the conversation (MCP 점검, 2026-10-27; the contract schema is 24 KB). A small result or a failure stays whole; a large one
  * says where its fields are. Other hosts read only the text and keep the whole JSON.
+ * @param {Record<string, unknown>} value
  */
 export function compactText(value) {
   const text = JSON.stringify(value);
@@ -35,6 +54,7 @@ export function compactText(value) {
  * (the request since 2026-10-30, the user's decision); registration keeps the host's own file origins.
  */
 export const LIBRARY_FILE_HOSTS = Object.freeze(['oaisdmntprnznorth.blob.core.windows.net', 'oaisdmntprwestus.blob.core.windows.net']);
+/** @param {string} value @param {readonly string[]} [additionalHosts] */
 export function allowedFileUrl(value, additionalHosts = []) {
   try {
     const u = new URL(value);
@@ -43,6 +63,7 @@ export function allowedFileUrl(value, additionalHosts = []) {
         u.hostname === 'files.openai.com' || additionalHosts.includes(u.hostname));
   } catch { return false; }
 }
+/** @param {HostFile} file @param {number} maximum @param {typeof fetch} [fetcher] @param {readonly string[]} [additionalHosts] */
 export async function downloadHostFile(file, maximum, fetcher = fetch, additionalHosts = []) {
   if (!allowedFileUrl(file.download_url, additionalHosts)) throw new Problem(400, 'unsupported-file-origin');
   const response = await fetcher(file.download_url, { redirect: 'error', signal: AbortSignal.timeout(20000), credentials: 'omit' });
@@ -52,10 +73,16 @@ export async function downloadHostFile(file, maximum, fetcher = fetch, additiona
 
 /** One arena call: a GET, or a POST with the agent key. A network failure or a body that is not JSON is `arena-unavailable`. */
 export const CUP_WAIT_MS = 25_000;
+/**
+ * @param {Arena} arena @param {string} path @param {object} [body] @param {string} [owner] @param {number} [timeoutMs]
+ * @param {{ signedOut?: boolean }} [options]
+ * @returns {Promise<any>} The arena's JSON object; callers check its fields.
+ */
 export async function arenaCall(arena, path, body, owner, timeoutMs = 20000, { signedOut = false } = {}) {
   // A read made for someone (`owner`: the connected owner, or `public`) carries the key: the arena counts it against that owner, not this
   // function's one address (MCP 점검 2026-10-27 — every agent together had six reads a minute). `signedOut`: the owner is a host's anonymous
   // user id, which its caller chooses — the arena counts the read on every signed-out agent's pool as well (2026-10-30).
+  /** @type {Record<string, string>} */
   const headers = body !== undefined ? { 'content-type': 'application/json', 'x-arena-agent': arena.key }
     : owner !== undefined ? { 'x-arena-agent': arena.key, 'x-arena-owner': owner, ...(signedOut ? { 'x-arena-signed-out': '1' } : {}) } : {};
   let response;

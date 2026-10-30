@@ -1,21 +1,40 @@
+// @ts-check
 import { z } from 'zod';
 import { Problem, sha256 } from '../api/http.mjs';
 import { pngHeader } from './file-input-probe.mjs';
 import { SOURCE_BUCKET, SOURCE_LIMIT, importVmPublicKey, sealVmGrant } from '../api/creator-source-crypto.mjs';
 import { LIBRARY_FILE_HOSTS as HOSTS } from './cloud/common.mjs';
+/**
+ * @typedef {import('./cloud/common.mjs').Identity} Identity
+ * @typedef {import('./cloud/common.mjs').HostFile} HostFile
+ * @typedef {import('./cloud/common.mjs').Register} Register
+ * @typedef {typeof import('./cloud/common.mjs').downloadHostFile} DownloadFile
+ */
+/**
+ * A row of af_creator_sources.
+ * @typedef {{ id: string, owner_id: string, sha256: string, bytes: number, width: number, height: number, status: 'pending' | 'ready' }} SourceRow
+ */
 
 const UUID = () => z.string().uuid();
+/** @param {SourceRow} row */
 const receipt = row => ({ sourceId: row.id, accountId: row.owner_id, bytes: row.bytes, sha256: row.sha256,
   width: row.width, height: row.height, status: row.status, persisted: row.status === 'ready', decoded: false, vmReceived: false });
+/** @param {{ message?: string } | null | undefined} error */
 function database(error) {
   if (!error) return;
   for (const code of ['source-idempotency-conflict','source-quota','account-disabled','rate-limit'])
     if (error.message?.includes(code)) throw new Problem(['source-quota','rate-limit'].includes(code) ? 429 : code === 'account-disabled' ? 403 : 409, code);
   throw new Problem(503, 'source-database-unavailable');
 }
+/**
+ * `owner` is undefined only on a signed-out call, which register refuses for these account tools.
+ * @param {{ db: any, owner: string | undefined, downloadFile: DownloadFile, fetcher?: typeof fetch }} options
+ */
 export function creatorSourceService({ db, owner, downloadFile, fetcher }) {
   const bucket = () => db.storage.from(SOURCE_BUCKET);
+  /** @param {SourceRow} row */
   const pathOf = row => `${owner}/${row.id}.png`;
+  /** @param {'id' | 'idempotency_key'} field @param {string} value */
   async function find(field, value) {
     const permission = await db.rpc('af_authorize', { p_owner: owner });
     database(permission.error);
@@ -23,6 +42,7 @@ export function creatorSourceService({ db, owner, downloadFile, fetcher }) {
     const { data, error } = await db.from('af_creator_sources').select('*').eq('owner_id', owner).eq(field, value).maybeSingle();
     database(error); return data;
   }
+  /** @param {SourceRow} row */
   async function stored(row) {
     const { data, error } = await bucket().download(pathOf(row));
     if (error) {
@@ -34,6 +54,7 @@ export function creatorSourceService({ db, owner, downloadFile, fetcher }) {
     if (await sha256(bytes) !== row.sha256) throw new Problem(409, 'stored-source-identity-mismatch');
     return bytes;
   }
+  /** @param {SourceRow} row */
   async function finish(row) {
     const { data, error } = await db.from('af_creator_sources').update({ status: 'ready', verified_at: new Date().toISOString() })
       .eq('id', row.id).eq('owner_id', owner).eq('sha256', row.sha256).select('*').single();
@@ -41,6 +62,7 @@ export function creatorSourceService({ db, owner, downloadFile, fetcher }) {
     return { ok: true, ...receipt(data) };
   }
   return {
+    /** @param {{ file: HostFile, expectedBytes: number, expectedSha256: string, idempotencyKey: string }} request */
     async save({ file, expectedBytes, expectedSha256, idempotencyKey }) {
       let row = await find('idempotency_key', idempotencyKey);
       if (row) {
@@ -61,11 +83,13 @@ export function creatorSourceService({ db, owner, downloadFile, fetcher }) {
       if (!await stored(row)) throw new Problem(503, 'source-upload-outcome-unknown');
       return finish(row);
     },
+    /** @param {string} sourceId */
     async get(sourceId) {
       const row = await find('id', sourceId);
       if (!row) throw new Problem(404, 'source-not-found');
       return { ok: true, ...receipt(row) };
     },
+    /** @param {string} sourceId @param {{ version: 1, requestId: string, publicKey: string }} vmRequest */
     async grant(sourceId, vmRequest) {
       await importVmPublicKey(vmRequest); // Validate before creating a signed capability.
       const row = await find('id', sourceId);
@@ -80,6 +104,7 @@ export function creatorSourceService({ db, owner, downloadFile, fetcher }) {
     },
   };
 }
+/** @param {{ register: Register, fileSchema: typeof import('./cloud/common.mjs').FILE, identity: Identity | null, db: any, downloadFile: DownloadFile, fetcher: typeof fetch }} options */
 export function registerCreatorSources({ register, fileSchema, identity, db, downloadFile, fetcher }) {
   const service = creatorSourceService({ db, owner: identity?.owner, downloadFile, fetcher });
   register('store_creator_source', '제작 원본 비공개 보관',

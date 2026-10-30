@@ -1,3 +1,4 @@
+// @ts-check
 // Separate workspace setup, ODDBOUT connection, provider choice, generation access and parent delivery.
 // It never generates, never switches providers, and never proves that a preview was displayed.
 import { execFile } from 'node:child_process';
@@ -13,6 +14,20 @@ import { createEnvironmentStore } from './creation-environment.mjs';
 import { doctor as inspectDotsRuntime } from '../scripts/dots-workspace.mjs';
 import { readRecord, safePath } from '../scripts/dots-safety.mjs';
 
+/**
+ * @typedef {import('./creation-store.mjs').CreationStore} CreationStore
+ * @typedef {import('./creation-jobs.mjs').JobStore} JobStore
+ * @typedef {import('./creation-environment.mjs').EnvironmentStore} EnvironmentStore
+ * @typedef {{ version: string | null, motion: boolean, error?: string }} Engine
+ * @typedef {{ source: boolean, environment: boolean }} Installed
+ * @typedef {{ progress: { inProgress: boolean | null }, installed?: Installed, root?: string, spriteRoot?: string, workspaceRoot?: string,
+ *   fetchRemote?: boolean, git?: typeof runGit, inspectEngine?: (spriteRoot: string) => Promise<Engine>,
+ *   inspectPinnedRuntime?: typeof inspectDotsRuntime }} KitOptions
+ * @typedef {{ status: string, branch: string | null, behind: number | null, ahead: number | null, remoteChecked: boolean, engine: Engine | null,
+ *   changedFiles: string[], nextCommands: string[], restartRequired: boolean, reason?: string | null, versionPolicy?: string }} KitResult
+ * @typedef {{ blockers?: string[], kit?: { version?: string, distribution?: string, commit?: string, manifestSha256?: string } }} DotsReport
+ */
+
 // codex/creator-hosting was the kit branch until 2026-10-29; it is frozen there and a checkout on it is told to move.
 export const KIT_BRANCH = 'main';
 const kitRoot = fileURLToPath(new URL('../', import.meta.url));
@@ -24,7 +39,10 @@ export const ACCOUNT_OPTIONS = [
   { id: 'stop', label: '지금은 생성하지 않고 멈춤', provider: null },
 ];
 
-/** git without a shell. Resolves { code, stdout } and never throws for a non-zero exit. */
+/**
+ * git without a shell. Resolves { code, stdout } and never throws for a non-zero exit.
+ * @param {string[]} args @param {{ cwd?: string, timeout?: number }} [options] @returns {Promise<{ code: number, stdout: string }>}
+ */
 export function runGit(args, { cwd = kitRoot, timeout = 30000 } = {}) {
   return new Promise(resolve => execFile('git', args, { cwd, timeout, windowsHide: true, maxBuffer: 1 << 20 },
     (error, stdout) => resolve({ code: error ? (typeof error.code === 'number' ? error.code : 1) : 0, stdout: String(stdout ?? '').trim() })));
@@ -33,6 +51,7 @@ export function runGit(args, { cwd = kitRoot, timeout = 30000 } = {}) {
 /**
  * A character is in progress once any version or non-cancelled job exists. Updating then would change the
  * engine under recorded attempts and reviews (docs/EXECUTION-HOST.md). Without a workspace it is unknown.
+ * @param {{ store?: CreationStore, jobs?: JobStore, sessionId?: string }} [options]
  */
 export async function creationProgress({ store, jobs, sessionId } = {}) {
   if (!store) return { known: false, inProgress: null, sessions: [] };
@@ -41,7 +60,7 @@ export async function creationProgress({ store, jobs, sessionId } = {}) {
   for (const id of ids) {
     const state = await store.read(id);
     const versions = Object.values(state.items ?? {}).some(item => Object.keys(item.versions ?? {}).length);
-    const work = (await jobs.list(id)).some(job => job.status !== 'cancelled');
+    const work = (await /** @type {JobStore} */ (jobs).list(id)).some(job => job.status !== 'cancelled'); // jobs come with the store
     if (versions || work) active.push(id);
   }
   return { known: true, inProgress: active.length > 0, sessions: active };
@@ -50,8 +69,9 @@ export async function creationProgress({ store, jobs, sessionId } = {}) {
 /**
  * Bring the kit and its pinned sprite-gen-agent engine current, but only before a character starts.
  * Fast-forward only, on the published branch, with no tracked local edits. Slow installs are returned as commands.
+ * @param {KitOptions} [options] `progress` is needed unless this is a pinned Dots runtime.
  */
-export async function checkKit({ installed, ...options } = {}) {
+export async function checkKit({ installed, ...options } = /** @type {KitOptions} */ ({})) {
   const spriteRoot = options.spriteRoot ?? path.join(options.root ?? kitRoot, 'vendor', 'sprite-gen');
   const pinned = await checkPinnedDotsKit({ ...options, spriteRoot });
   if (pinned) return pinned;
@@ -64,14 +84,15 @@ export async function checkKit({ installed, ...options } = {}) {
   return { ...result, status: result.status === 'blocked' ? 'blocked' : 'action-required', reason: result.reason ?? 'sprite-gen-not-installed' };
 }
 
-/** A Dots install keeps its workspace's immutable release; readiness must never fetch a moving branch. */
+/** A Dots install keeps its workspace's immutable release; readiness must never fetch a moving branch. @param {KitOptions & { spriteRoot: string }} options */
 async function checkPinnedDotsKit({ root = kitRoot, workspaceRoot, spriteRoot,
   inspectPinnedRuntime = inspectDotsRuntime, inspectEngine = inspectSpriteEngine }) {
+  /** @type {KitResult} */
   const result = { status: 'blocked', branch: null, behind: null, ahead: null, remoteChecked: false,
     engine: null, changedFiles: [], nextCommands: [], restartRequired: false, versionPolicy: 'retain-workspace-pin' };
   let marker;
   try { marker = await readRecord(await safePath('.dots-runtime.json', { root })); }
-  catch (error) { return error.code === 'ENOENT' ? null : { ...result, reason: 'dots-runtime-marker-invalid' }; }
+  catch (/** @type {any} */ error) { return error.code === 'ENOENT' ? null : { ...result, reason: 'dots-runtime-marker-invalid' }; }
   if (marker?.schemaVersion !== 1 || marker.host !== 'dots') return { ...result, reason: 'dots-runtime-marker-invalid' };
   if (!workspaceRoot) return { ...result, reason: 'dots-workspace-binding-required' };
   let binding;
@@ -84,8 +105,8 @@ async function checkPinnedDotsKit({ root = kitRoot, workspaceRoot, spriteRoot,
     return { ...result, reason: 'dots-workspace-binding-invalid' };
   let report;
   try {
-    report = await inspectPinnedRuntime({ runtime: root, workspace: workspaceRoot, provider: 'none',
-      ...(bundlePin ? { manifestSha256: binding.manifestSha256 } : {}) });
+    report = /** @type {DotsReport} */ (await inspectPinnedRuntime({ runtime: root, workspace: workspaceRoot, provider: 'none',
+      ...(bundlePin ? { manifestSha256: binding.manifestSha256 } : {}) })); // dots-workspace.mjs is unchecked: its inferred report lacks these
   } catch { return { ...result, reason: 'dots-runtime-inspection-failed' }; }
   if (report.blockers?.length) return { ...result, reason: report.blockers[0] };
   if (!Array.isArray(report.blockers) || !report.kit || report.kit.version !== binding.version ||
@@ -98,15 +119,19 @@ async function checkPinnedDotsKit({ root = kitRoot, workspaceRoot, spriteRoot,
     manifestSha256: report.kit.manifestSha256 ?? null };
 }
 
+/** @param {string} spriteRoot */
 async function installedSpriteGen(spriteRoot) {
+  /** @type {(file: string) => Promise<boolean>} */
   const exists = file => access(file).then(() => true, () => false);
   return { source: await exists(path.join(spriteRoot, 'SKILL.md')),
     environment: await exists(path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python')) };
 }
 
-const FETCH_INTERVAL_MS = 5 * 60_000, lastFetch = new Map();
+const FETCH_INTERVAL_MS = 5 * 60_000, lastFetch = /** @type {Map<string, number>} */ (new Map());
+/** @param {KitOptions & { spriteRoot: string, present: Installed }} options */
 async function checkKitCore({ progress, present, fetchRemote = true, git = runGit, root = kitRoot, spriteRoot,
   inspectEngine = inspectSpriteEngine }) {
+  /** @type {KitResult} */
   const result = { status: 'ready', branch: null, behind: null, ahead: null, remoteChecked: false, engine: null,
     changedFiles: [], nextCommands: [], restartRequired: false, reason: null };
   const readEngine = async () => !present.source ? { version: null, motion: false, error: 'sprite-gen-not-installed' }
@@ -133,16 +158,17 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
   if (progress.inProgress !== false) {
     // In progress, or unknown without a workspace: report only, change nothing.
     const reason = progress.inProgress === null ? 'progress-unknown-no-workspace' : 'character-in-progress';
-    if (result.behind > 0) return { ...result, status: 'deferred', reason };
+    if (/** @type {number} */ (result.behind) > 0) return { ...result, status: 'deferred', reason }; // null (unchecked) is not > 0
     return { ...result, status: result.engine.motion ? 'ready' : 'action-required', reason: result.engine.motion ? null : reason };
   }
   if (dirty) return { ...result, status: 'blocked', reason: 'local-changes' };
-  if (result.ahead > 0) return { ...result, status: 'blocked', reason: 'diverged-from-published-branch' };
-  if (result.behind > 0) {
+  if (/** @type {number} */ (result.ahead) > 0) return { ...result, status: 'blocked', reason: 'diverged-from-published-branch' };
+  if (/** @type {number} */ (result.behind) > 0) {
     const before = (await git(['rev-parse', 'HEAD'], { cwd: root })).stdout;
     if ((await git(['merge', '--ff-only', `origin/${KIT_BRANCH}`], { cwd: root, timeout: 60000 })).code !== 0)
       return { ...result, status: 'blocked', reason: 'fast-forward-failed' };
     result.changedFiles = (await git(['diff', '--name-only', before, 'HEAD'], { cwd: root })).stdout.split('\n').filter(Boolean);
+    /** @type {(file: string) => boolean} */
     const changed = file => result.changedFiles.includes(file);
     if (changed('package.json') || changed('package-lock.json')) result.nextCommands.push('npm ci --ignore-scripts');
     if (changed('vendor/sprite-gen') || !present.source) result.nextCommands.push('npm run sprite:setup');
@@ -164,8 +190,11 @@ async function checkKitCore({ progress, present, fetchRemote = true, git = runGi
 /**
  * Inspect saved/pending session presence, public routes and authenticated GET /me separately.
  * No new login request is started. The existing device login commands are offered only after public probes pass.
+ * @param {{ remoteActive?: boolean, request?: import('../api/client.mjs').RemoteClient['request'], sessionPath?: string, root?: string,
+ *   probe?: typeof import('./connection-readiness.mjs').probePublic, checkServer?: boolean }} [options]
  */
 export async function checkLogin({ remoteActive, request, sessionPath = defaultSessionPath(), root = kitRoot, probe, checkServer = true } = {}) {
+  /** @type {(file: string) => Promise<any>} */
   const read = async file => { try { return JSON.parse(await readFile(file, 'utf8')); } catch { return null; } };
   const saved = await read(sessionPath);
   const hasSession = Boolean(saved && typeof saved.accessToken === 'string' && saved.accessToken && typeof saved.refreshToken === 'string' && saved.refreshToken);
@@ -186,7 +215,7 @@ export async function checkLogin({ remoteActive, request, sessionPath = defaultS
   const routeAction = connections.api.nextAction ?? connections.homepage.nextAction
     ?? (routeReason === 'server-without-device-login' ? { actor: 'service-operator', code: 'device-login-deployment-required',
       message: '서비스 운영자가 기존 기기 로그인 API와 홈페이지 승인 화면의 배포를 확인해야 한다. 일반 제작 사용자에게 배포를 요구하지 않는다.' }
-      : connectionAction(routeReason));
+      : connectionAction(/** @type {string} */ (routeReason))); // null gets its default action
   const needsSignIn = account.status === 'sign-in-required';
   const action = { id: 'connect-oddbout', label: 'ODDBOUT 연결',
     status: account.status === 'connected' ? 'connected' : account.status === 'restart-required' ? 'restart-required'
@@ -214,7 +243,7 @@ export async function checkLogin({ remoteActive, request, sessionPath = defaultS
       + ' 콜백 주소나 토큰을 대화에 붙여 넣도록 요청하지 않고, 안전하다고 안내하지 않는다.' };
 }
 
-/** The generation-account choice: options to show; the user's stated or elicited answer only. Never inferred. */
+/** The generation-account choice: options to show; the user's stated or elicited answer only. Never inferred. @param {string | null} [choice] */
 export function accountItem(choice) {
   const option = ACCOUNT_OPTIONS.find(o => o.id === choice);
   const verification = 'sprite-gen workflow는 사용자가 전달한 선택·접근 조건을 확인하며 구독·한도·실제 생성 성공을 보증하지 않는다.'
@@ -228,7 +257,10 @@ export function accountItem(choice) {
       'npm run creation:delivery -- preflight output/<sessionId>-work/delivery-check.json <현재-대화-ID>'] };
 }
 
-/** Ask for the account through a host form when the client supports elicitation. Any failure means "ask in text". */
+/**
+ * Ask for the account through a host form when the client supports elicitation. Any failure means "ask in text".
+ * @param {import('@modelcontextprotocol/sdk/server/index.js').Server} [lowLevelServer] @returns {Promise<{ method: string, choice: string | null }>}
+ */
 export async function elicitAccount(lowLevelServer) {
   if (!lowLevelServer?.getClientCapabilities?.()?.elicitation) return { method: 'unsupported', choice: null };
   try {
@@ -238,10 +270,16 @@ export async function elicitAccount(lowLevelServer) {
         oneOf: ACCOUNT_OPTIONS.map(({ id, label }) => ({ const: id, title: label })) } } },
     }, { timeout: 5 * 60 * 1000 });
     return answer.action === 'accept' && ACCOUNT_OPTIONS.some(o => o.id === answer.content?.account)
-      ? { method: 'elicited', choice: answer.content.account } : { method: answer.action ?? 'declined', choice: null };
+      ? { method: 'elicited', choice: /** @type {{ account: string }} */ (answer.content).account } : { method: answer.action ?? 'declined', choice: null };
   } catch { return { method: 'unsupported', choice: null }; }
 }
 
+/**
+ * @param {{ store?: CreationStore, jobs?: JobStore, sessionId?: string, account?: string, purpose?: string, remoteActive?: boolean,
+ *   lowLevelServer?: import('@modelcontextprotocol/sdk/server/index.js').Server, kit?: Omit<KitOptions, 'progress'>,
+ *   tools?: Parameters<typeof checkTools>[0], login?: Parameters<typeof checkLogin>[0], registrationMode?: string,
+ *   environment?: EnvironmentStore }} [options]
+ */
 export async function checkReadiness({ store, jobs, sessionId, account, purpose = 'generation', remoteActive, lowLevelServer, kit = {}, tools = {}, login = {},
   registrationMode = 'local', environment } = {}) {
   if (!['generation', 'connection', 'registration'].includes(purpose)) throw new Error('invalid-readiness-purpose');
@@ -251,7 +289,7 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   const workspace = needsGeneration ? environment ?? (store?.root ? createEnvironmentStore(store.root) : null) : null;
   // A workspace moved to another host still names its provider; its inspection below reports the rebind instead of failing this check.
   const saved = workspace ? await workspace.read({ allowMoved: true }) : null;
-  const savedChoice = ACCOUNT_OPTIONS.some(o => o.id === saved?.account) ? saved.account : null;
+  const savedChoice = ACCOUNT_OPTIONS.some(o => o.id === saved?.account) ? /** @type {NonNullable<typeof saved>} */ (saved).account : null;
   let choice = account ?? savedChoice, elicitation = savedChoice && !account ? 'saved-environment' : 'not-needed';
   if (needsGeneration && !choice) ({ method: elicitation, choice } = await elicitAccount(lowLevelServer));
   const notRequired = { status: 'not-required', reason: 'no-generation-in-this-step', nextCommands: [] };
@@ -266,7 +304,8 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   const [{ infrastructure, ...connection }, kitItem, toolsItem, environmentItem] = await Promise.all([loginItem,
     needsGeneration ? checkKit({ progress, workspaceRoot: store?.root, ...kit }) : notRequired,
     // ffmpeg, ffprobe and img2webp -exact are required; RIFE only warns (loops cut as filmed).
-    needsGeneration ? checkTools({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools }) : notRequired,
+    // The type inferred for checkTools (sprite-tools.mjs is unchecked) omits the options it passes on to inspectTools.
+    needsGeneration ? checkTools(/** @type {Parameters<typeof checkTools>[0]} */ ({ spriteRoot, python: path.join(spriteRoot, '.venv', process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python'), ...tools })) : notRequired,
     // Recorded environment preconditions are reported for the agent to resolve; they do not make generation ready here.
     !needsGeneration ? notRequired : workspace
       ? workspace.inspect().then(found => ({ ...found, matchesChoice: saved?.account === choice, certifiesGeneration: false }))
@@ -274,10 +313,10 @@ export async function checkReadiness({ store, jobs, sessionId, account, purpose 
   ]);
   const items = { kit: kitItem, tools: toolsItem, infrastructure, login: connection,
     account: needsGeneration ? accountItem(choice) : notRequired, ...unverifiedCreation(choice), environment: environmentItem };
-  const ready = ['ready', 'updated'].includes(items.kit.status) && !items.kit.restartRequired && items.kit.nextCommands.length === 0
+  const ready = ['ready', 'updated'].includes(items.kit.status) && !/** @type {KitResult} */ (items.kit).restartRequired && items.kit.nextCommands.length === 0 // a kit status
     && items.tools.status === 'ready' && items.account.status === 'chosen-unverified';
   return { purpose, kitAndAccountReady: ready, readyForGeneration: false,
-    readyForRegistration: items.login.status === 'connected' && items.login.canSubmit === true, progress, elicitation, items,
+    readyForRegistration: items.login.status === 'connected' && /** @type {{ canSubmit?: boolean | null }} */ (items.login).canSubmit === true, progress, elicitation, items, // none on the cloud route
     resume: { preserveWorkspace: true, sessionIds: progress.sessions, automaticGeneration: false, automaticSubmission: false,
       nextAction: { actor: 'agent', code: 'resume-existing-work', message: '연결 복구 뒤 같은 작업 공간에서 check_creation_readiness를 다시 호출하고 get_creation_session·get_creation_job으로 기존 버전·선택·pending/unknown 결과를 회수한다. 새 폴더·재생성·재등록으로 우회하지 않는다.' } },
     meaning: 'kitAndAccountReady covers the kit, its required system tools (ffmpeg, ffprobe, img2webp with -exact) and provider choice only. Generation and parent display remain unverified by this tool; readyForGeneration stays false. Registration readiness means authenticated API access, not package approval or submission authorization.' };

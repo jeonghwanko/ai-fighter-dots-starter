@@ -156,10 +156,11 @@ This repository lets each user create their own fighter through Dot. Read
   last commit message, body included, even quoted: the required check then never reports. Do not dispatch extra runs unless asked.
 - `main` is the working branch: branch from it and open pull requests against it. `codex/creator-hosting` was the kit and
   service branch until 2026-10-29 and is frozen at the commit that moved everything to `main`; never push to it.
-- Every `api/` and `worker/` module starts with `// @ts-check`; `npm run typecheck` (also in `npm test`) runs tsc over them under `strict`.
+- Every `api/`, `worker/` and `mcp/` module starts with `// @ts-check`; `npm run typecheck` (also in `npm test`) runs tsc over them under `strict`.
   Satisfy it with JSDoc types or casts, not runtime changes; a caught value is `catch (/** @type {any} */ error)`. Every
   Edge function's deno.json has the same `strict: true`, so `deno check supabase/functions/<name>/index.ts` agrees;
-  the Edge deploy itself does not type-check.
+  the Edge deploy itself does not type-check. Deno's TypeScript is older than this kit's tsc and can infer less (an SDK
+  callback's arguments, 2026-10-30), so after typing a file an Edge function bundles, run `deno check` on that function too.
 - Deploy the production `ai-fighter` Edge function only from the game repository with `npm run fighter:edge -- plan`,
   review its source/engine/live-version changes, then use `deploy --plan <id>` with the same options.
   Never upload this checkout directly through Supabase CLI/MCP or a hand-built payload: its duel engine is a null adapter.

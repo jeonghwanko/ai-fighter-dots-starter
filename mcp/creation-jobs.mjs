@@ -1,3 +1,4 @@
+// @ts-check
 import { randomUUID } from 'node:crypto';
 import { lstat, readdir, rm, writeFile } from 'node:fs/promises';
 import { spawn } from 'node:child_process';
@@ -14,7 +15,7 @@ const recovering = new Set(['video-resume']);
 const spriteCommands = new Set([...generating, ...recovering, 'gen-motion', 'workflow', 'prepare', 'extract', 'compose-atlas', 'compose-gif',
   'game-pack', 'video-canvas', 'video-prompt', 'video-frames', 'video-loop', 'video-cycle-align', 'inspect-motion']);
 /** Whether a sprite command may send a provider request. gen-motion does only with `--frame` and without `--reconcile`
- * (its other actions — prepare, measure, register, export, reconcile — read and write local files). */
+ * (its other actions — prepare, measure, register, export, reconcile — read and write local files). @param {string[]} argv */
 export function spends(argv) {
   if (generating.has(argv[0]) || recovering.has(argv[0])) return true;
   return argv[0] === 'gen-motion' && argv.some(a => a === '--frame' || a.startsWith('--frame=')) && !argv.includes('--reconcile');
@@ -36,10 +37,29 @@ const STOP_POLL_MS = 2000;
 const jobIdSchema = z.string().uuid();
 const terminal = new Set(['succeeded', 'failed', 'needs-input', 'resolved', 'cancelled']);
 
+/**
+ * A job record. A running job carries runnerPid; a finished one its stage, exit and, for a failed paid run, the engine's outcome.
+ * @typedef {import('./creation-store.mjs').CreationStore} CreationStore
+ * @typedef {import('./creation-store.mjs').FileRecord} FileRecord
+ * @typedef {z.infer<typeof jobPlanSchema>} JobPlan
+ * @typedef {'prepared' | 'running' | 'succeeded' | 'failed' | 'needs-input' | 'unknown' | 'resolved' | 'cancelled'} JobStatus
+ * @typedef {{ jobId: string, sessionId: string, requestHash: string, plan: JobPlan, inputs: FileRecord[], sessionRevision: number,
+ *   createdAt: string, updatedAt?: string, status: JobStatus, attempt: number, runnerPid?: number, runToken?: string, startedAt?: string,
+ *   finishedAt?: string, stage?: string, exitCode?: number | null, signal?: string | null, reason?: string, outputs?: FileRecord[],
+ *   outcome?: ReturnType<typeof judgeOutcome>,
+ *   resolution?: { outcome: 'recovered' | 'not-started' | 'duplicate-risk-accepted', note: string, evidence: FileRecord[], source: string, at: string } }} Job
+ * @typedef {{ code: number | null, signal?: NodeJS.Signals | null, notStarted?: boolean, stopped?: string }} EngineResult
+ */
+
+/** @param {CreationStore} store */
 export function createJobStore(store) {
+  /** @type {(id: string, jobId: string) => Promise<string>} */
   const jobFile = (id, jobId) => { jobIdSchema.parse(jobId); return store.fileFor(id, `jobs/${jobId}.json`); };
+  /** @param {string} id @param {string} jobId @returns {Promise<Job>} */
   async function read(id, jobId) { return readJson(await jobFile(id, jobId)); }
+  /** @param {string} id @param {Job} job */
   async function write(id, job) { job.updatedAt = new Date().toISOString(); await atomicJson(await jobFile(id, job.jobId), job); return job; }
+  /** @param {string} id */
   async function list(id) {
     await store.read(id);
     const dir = await store.fileFor(id, 'jobs');
@@ -49,11 +69,13 @@ export function createJobStore(store) {
       jobs.push(await read(id, name.slice(0, -5)));
     return jobs.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
+  /** @param {JobPlan} plan */
   function validatePlan(plan) {
     if (plan.engine === 'sprite') {
       if (!spriteCommands.has(plan.args[0])) fail('unsupported-sprite-command');
       if (spends(plan.args)) {
         if (!plan.workflowArgs || plan.workflowArgs[0] !== 'workflow' || plan.workflowArgs.includes('--stage')) fail('generation-needs-workflow-preflight');
+        /** @type {(argv: string[], key: string) => string | undefined} */
         const option = (argv, key) => {
           const matches = argv.flatMap((value, index) => value === key || value.startsWith(`${key}=`) ? [index] : []);
           if (matches.length > 1) fail('duplicate-provider-option');
@@ -64,7 +86,7 @@ export function createJobStore(store) {
         const kind = option(plan.workflowArgs, '--kind');
         const provider = option(plan.args, '--provider');
         if (['gen', 'gen-set'].includes(plan.args[0]) && !provider) fail('explicit-provider-required');
-        if (!['image', 'sprite'].includes(kind)) fail('workflow-kind-required');
+        if (!/** @type {(string | undefined)[]} */ (['image', 'sprite']).includes(kind)) fail('workflow-kind-required');
         if (plan.args[0] === 'gen' && option(plan.args, '--provider') !== option(plan.workflowArgs, '--image-provider')) fail('provider-preflight-mismatch');
         if (plan.args[0] === 'gen-set') {
           const matched = provider === 'codex' ? kind === 'sprite' && option(plan.workflowArgs, '--motion-method') === 'gpt-rows'
@@ -80,6 +102,7 @@ export function createJobStore(store) {
     } else if (plan.args.length !== 1 || plan.args[0].startsWith('-') || plan.groupId !== 'final') fail('invalid-pack-plan');
     if (plan.workflowArgs && (plan.workflowArgs[0] !== 'workflow' || plan.engine !== 'sprite')) fail('invalid-workflow-preflight');
   }
+  /** @param {import('./creation-store.mjs').Session} state @param {JobPlan} plan */
   async function gate(state, plan) {
     validatePlan(jobPlanSchema.parse(plan));
     if (plan.engine === 'sprite') await guardDotsExecution(fileURLToPath(new URL('../', import.meta.url)), store.root, plan.args);
@@ -117,6 +140,7 @@ export function createJobStore(store) {
     }
     return context;
   }
+  /** @param {string} id @param {number} revision @param {string} jobId @param {unknown} input */
   async function prepare(id, revision, jobId, input) {
     jobIdSchema.parse(jobId);
     const plan = jobPlanSchema.parse(input); validatePlan(plan);
@@ -142,15 +166,21 @@ export function createJobStore(store) {
         createdAt: new Date().toISOString(), status: 'prepared', attempt: 0 });
     });
   }
+  /** @param {string} id @param {string} jobId */
   async function inspect(id, jobId) {
     const job = await read(id, jobId);
+    /** @type {string} */
     let observedStatus = job.status;
     if (job.status === 'running') {
-      try { process.kill(job.runnerPid, 0); } catch { observedStatus = 'unknown'; }
+      try { process.kill(/** @type {number} */ (job.runnerPid), 0); } catch { observedStatus = 'unknown'; }
     }
     if (job.status === 'succeeded' && !await unchanged(store.root, job.outputs)) observedStatus = 'outputs-changed';
     return { ...job, observedStatus, canExecute: job.status === 'prepared', nextAction: nextAction(job, observedStatus) };
   }
+  /**
+   * @param {string} id @param {string} jobId
+   * @param {{ outcome: 'recovered' | 'not-started' | 'duplicate-risk-accepted', evidence: string[], note: string }} resolution
+   */
   async function resolve(id, jobId, { outcome, evidence, note }) {
     z.enum(['recovered', 'not-started', 'duplicate-risk-accepted']).parse(outcome);
     z.string().trim().min(1).max(4000).parse(note);
@@ -158,7 +188,7 @@ export function createJobStore(store) {
       const job = await inspect(id, jobId);
       if (job.observedStatus !== 'unknown') fail('only-unknown-job-can-be-resolved');
       // A live runner may still finish. Never release its reservation from under it.
-      if (job.status === 'running') { try { process.kill(job.runnerPid, 0); fail('runner-still-alive'); } catch (e) { if (e.message === 'runner-still-alive' || e.code !== 'ESRCH') throw e; } }
+      if (job.status === 'running') { try { process.kill(/** @type {number} */ (job.runnerPid), 0); fail('runner-still-alive'); } catch (/** @type {any} */ e) { if (e.message === 'runner-still-alive' || e.code !== 'ESRCH') throw e; } }
       const records = await store.snapshots(z.array(z.string()).min(1).max(32).parse(evidence));
       const saved = await read(id, jobId);
       saved.status = 'resolved'; saved.resolution = { outcome, note, evidence: records, source: 'agent-reported', at: new Date().toISOString() };
@@ -168,12 +198,13 @@ export function createJobStore(store) {
   // An unstarted job is cancelled. A running one gets a stop request its runner acts on within STOP_POLL_MS; the job then
   // ends `failed` when the engine's report says no provider request left (or packing, preflight), else `unknown` (a
   // generation may have been billed), never as a confirmed non-run without that report.
+  /** @param {string} id @param {string} jobId */
   async function cancel(id, jobId) {
     return store.lock(id, async () => {
       const job = await read(id, jobId);
       if (job.status === 'cancelled') return job;
       if (job.status === 'running') {
-        try { process.kill(job.runnerPid, 0); } catch { fail('runner-not-running-inspect-job'); }
+        try { process.kill(/** @type {number} */ (job.runnerPid), 0); } catch { fail('runner-not-running-inspect-job'); }
         await writeFile(await stopFile(id, jobId), JSON.stringify({ requestedAt: new Date().toISOString() }), { mode: 0o600 });
         return { ...job, stopRequested: true };
       }
@@ -181,17 +212,19 @@ export function createJobStore(store) {
       job.status = 'cancelled'; return write(id, job);
     });
   }
+  /** @type {(id: string, jobId: string) => Promise<string>} */
   const stopFile = (id, jobId) => { jobIdSchema.parse(jobId); return store.fileFor(id, `jobs/${jobId}.stop`); };
   return { read, list, prepare, inspect, resolve, cancel, gate, write, stopFile };
 }
+/** @typedef {ReturnType<typeof createJobStore>} JobStore */
 
-/** A workspace-relative engine path as a file under `root`, or null when it is not one the store allows. */
+/** A workspace-relative engine path as a file under `root`, or null when it is not one the store allows. @param {string} root @param {string | null} relative */
 async function engineFile(root, relative) {
   if (!relative) return null;
   try { return await localPath(root, relative.split(path.sep).join('/')); } catch { return null; }
 }
 
-/** What to do with a job: for an `unknown` one, inspect before anything runs again, or resume the video request it names. */
+/** What to do with a job: for an `unknown` one, inspect before anything runs again, or resume the video request it names. @param {Job} job @param {string} observedStatus */
 function nextAction(job, observedStatus) {
   if (observedStatus !== 'unknown') return job.outcome?.next === 'retry' && job.status === 'failed'
     ? 'Every error the engine reported says the same command may succeed: prepare the job again.' : undefined;
@@ -202,14 +235,16 @@ function nextAction(job, observedStatus) {
   return 'Inspect original provider records and outputs; never repeat this job.';
 }
 
-/** Stops the engine with the processes it started (sprite-gen runs Python under a Node wrapper). */
+/** Stops the engine with the processes it started (sprite-gen runs Python under a Node wrapper). @param {import('node:child_process').ChildProcess} child */
 function stopTree(child) {
   if (process.platform === 'win32') spawn('taskkill', ['/pid', String(child.pid), '/T', '/F'], { windowsHide: true, stdio: 'ignore' }).once('error', () => child.kill());
-  else { try { process.kill(-child.pid, 'SIGTERM'); } catch { child.kill('SIGTERM'); } }
+  else { try { process.kill(-/** @type {number} */ (child.pid), 'SIGTERM'); } catch { child.kill('SIGTERM'); } } // no pid: kill throws
 }
 /**
  * No shell, provider fallback, retry, or credential mutation. Run through the host's normal execution approval.
  * `signal` stops the engine and everything it started; the result then carries `stopped`.
+ * @param {string} root @param {JobPlan['engine']} engine @param {string[]} argv @param {{ signal?: AbortSignal }} [options]
+ * @returns {Promise<EngineResult>}
  */
 export function executeEngine(root, engine, argv, { signal } = {}) {
   const entry = fileURLToPath(new URL(engine === 'sprite' ? '../scripts/sprite-gen.mjs' : '../scripts/pack-fighter.mjs', import.meta.url));
@@ -217,12 +252,14 @@ export function executeEngine(root, engine, argv, { signal } = {}) {
     // Its own process group off Windows, so a stop reaches the engine's children too.
     const child = spawn(process.execPath, [entry, ...argv], { cwd: root, shell: false, windowsHide: true, detached: process.platform !== 'win32',
       stdio: 'inherit', env: { ...process.env, INIT_CWD: root } });
+    /** @type {string | null} */
     let stopped = null;
     const stop = () => { if (!stopped) { stopped = signal?.reason ?? 'stopped'; stopTree(child); } };
     // The runner's own interrupt (Ctrl-C) must not orphan a detached engine.
     const interrupted = () => stop();
     signal?.addEventListener('abort', stop, { once: true });
     process.once('SIGINT', interrupted); process.once('SIGTERM', interrupted);
+    /** @type {(value: EngineResult) => void} */
     const done = value => {
       signal?.removeEventListener('abort', stop); process.off('SIGINT', interrupted); process.off('SIGTERM', interrupted);
       resolve(stopped ? { ...value, stopped } : value);
@@ -232,6 +269,7 @@ export function executeEngine(root, engine, argv, { signal } = {}) {
   });
 }
 
+/** @param {CreationStore} store @param {string} id @param {string} jobId @param {{ execute?: typeof executeEngine, timeoutMs?: number }} [options] */
 export async function runCreationJob(store, id, jobId, { execute = executeEngine, timeoutMs } = {}) {
   const jobs = createJobStore(store);
   let job = await store.lock(id, async () => {
@@ -255,7 +293,7 @@ export async function runCreationJob(store, id, jobId, { execute = executeEngine
   const claimFile = await store.fileFor(id, `jobs/${jobId}.claimed`);
   const { open } = await import('node:fs/promises');
   try { const claim = await open(claimFile, 'wx', 0o600); await claim.close(); }
-  catch (e) { if (e.code === 'EEXIST') return jobs.read(id, jobId); throw e; }
+  catch (/** @type {any} */ e) { if (e.code === 'EEXIST') return jobs.read(id, jobId); throw e; }
   let result, stage = 'execute';
   // A time limit and a stop request (cancel_creation_job on a running job) both stop the engine through this signal.
   const control = new AbortController(), stopPath = await jobs.stopFile(id, jobId);

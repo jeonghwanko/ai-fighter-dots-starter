@@ -5,8 +5,8 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
-// The directories tsc checks (tsconfig.json `include`). worker/ joined api/ on 2026-10-30.
-const CHECKED = ['api', 'worker'];
+// The directories tsc checks (tsconfig.json `include`). worker/ and mcp/ joined api/ on 2026-10-30.
+const CHECKED = ['api', 'worker', 'mcp'];
 
 test('every module tsc covers opts into type checking', async () => {
   assert.deepEqual(JSON.parse(await readFile(new URL('../tsconfig.json', import.meta.url), 'utf8')).include, CHECKED.map(dir => `${dir}/**/*.mjs`));
@@ -29,7 +29,7 @@ test('Deno checks api/ at the same strictness as tsc, in every Edge function', a
   }
 });
 
-test('tsc finds no type errors in api/ and worker/ under strict (npm run typecheck)', () => {
+test('tsc finds no type errors in api/, worker/ and mcp/ under strict (npm run typecheck)', () => {
   const run = spawnSync(process.execPath, ['node_modules/typescript/bin/tsc', '-p', 'tsconfig.json'], { cwd: root, encoding: 'utf8' });
   assert.equal(run.status, 0, run.stdout + run.stderr);
 });

@@ -1,3 +1,4 @@
+// @ts-check
 /** The public AI Fighter creator homepage on free GitHub Pages. */
 export const PUBLIC_CREATOR_PAGE = 'https://oddbout.com/creator.html';
 const LEGACY_CREATOR_PAGES = new Set(['https://rupin.pryzm.gg/creator.html',
@@ -18,6 +19,7 @@ export function creatorPage(value = PUBLIC_CREATOR_PAGE) {
 /**
  * The server mints a one-use Supabase Auth token for the signed-in user; the link carries only its hash, in the fragment,
  * so it never reaches server logs or link-preview fetchers. The page redeems it on a click, in any browser on any device.
+ * @param {{ page?: string, request: import('../api/client.mjs').RemoteClient['request'] }} options
  */
 export async function creatorLink({ page = PUBLIC_CREATOR_PAGE, request }) {
   const { href } = creatorPage(page);

@@ -1,3 +1,4 @@
+// @ts-check
 // Declarative destinations only. A profile is never a script or a network permission.
 import { createHash, verify, createPublicKey } from 'node:crypto';
 import { readFile, mkdir, writeFile } from 'node:fs/promises';
@@ -23,25 +24,31 @@ export const profileSchema = z.object({
   for (const p of value.profiles) if (new Set(p.destinations.map(d => d.host)).size !== p.destinations.length)
     ctx.addIssue({ code: 'custom', message: 'duplicate-destination' });
 });
+/**
+ * @typedef {import('zod').infer<typeof profileSchema>} Profile
+ * @typedef {{ bundled: Profile, trustedKeys?: Record<string, string>, minimumRevision?: number }} TrustOptions  `trustedKeys` maps a key ID to its PEM.
+ */
 
 // Canonical JSON makes the approval bind to content, independent of whitespace/key order.
+/** @param {unknown} value @returns {string} */
 export function canonical(value) {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
-  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${canonical(value[k])}`).join(',')}}`;
+  if (value && typeof value === 'object') return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${canonical(/** @type {Record<string, unknown>} */ (value)[k])}`).join(',')}}`;
   return JSON.stringify(value);
 }
+/** @type {(value: unknown) => string} */
 export const profileHash = value => createHash('sha256').update(canonical(profileSchema.parse(value))).digest('hex');
 export async function bundledProfiles() {
   return profileSchema.parse(JSON.parse(await readFile(new URL('../deploy/creation-environments.json', import.meta.url), 'utf8')));
 }
 
-/** No trust-on-first-use: new content needs an independently installed Ed25519 public key. */
+/** No trust-on-first-use: new content needs an independently installed Ed25519 public key. @param {unknown} input  Checked here. @param {TrustOptions} options */
 export function verifyProfileEnvelope(input, { bundled, trustedKeys = {}, minimumRevision = bundled.revision }) {
   const envelope = z.object({ profile: profileSchema, keyId: z.string().max(100).optional(), signature: z.string().max(256).optional() }).strict().parse(input);
   const hash = profileHash(envelope.profile);
   if (envelope.profile.revision < minimumRevision) throw Error('profile-rollback-rejected');
   if (hash === profileHash(bundled)) return { profile: envelope.profile, hash, trust: 'bundled-content' };
-  const pem = trustedKeys[envelope.keyId];
+  const pem = trustedKeys[/** @type {string} */ (envelope.keyId)];
   if (!pem || !envelope.signature) throw Error('profile-signature-required');
   const key = createPublicKey(pem);
   if (key.asymmetricKeyType !== 'ed25519' || !verify(null, Buffer.from(canonical(envelope.profile)), key, Buffer.from(envelope.signature, 'base64')))
@@ -49,7 +56,7 @@ export function verifyProfileEnvelope(input, { bundled, trustedKeys = {}, minimu
   return { profile: envelope.profile, hash, trust: 'signed-release' };
 }
 
-/** Fixed configured source, bounded response, no redirects and no credentials. */
+/** Fixed configured source, bounded response, no redirects and no credentials. @param {string} url @param {TrustOptions & { fetchImpl?: typeof fetch }} options */
 export async function fetchProfileEnvelope(url, options) {
   const target = new URL(url);
   host.parse(target.hostname);
@@ -66,6 +73,7 @@ export async function fetchProfileEnvelope(url, options) {
   return verifyProfileEnvelope(JSON.parse(Buffer.concat(chunks).toString('utf8')), options);
 }
 
+/** @param {string} output */
 export async function publishEnvironmentProfiles(output) {
   const profile = await bundledProfiles();
   const dir = path.join(output, 'creation-environments');
