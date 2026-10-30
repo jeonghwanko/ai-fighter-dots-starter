@@ -254,11 +254,16 @@ async function mapLimited(items, limit, task) {
   return results;
 }
 
-/** @param {Frame} sheet @param {Plan} plan */
+/**
+ * Lossy at effort 5. At effort 6 with alphaQuality 100, libwebp packs the alpha plane with its slowest lossless search: 12–15 s
+ * per hosted fighter instead of 0.6–0.8 s, for 1 % fewer bytes and the same colour (two fighters, 2026-10-30). alphaQuality stays
+ * 100: below it libwebp quantises alpha. Lossless has no such step and keeps 6.
+ * @param {Frame} sheet @param {Plan} plan
+ */
 function encode(sheet, plan) {
   const image = sharp(sheet.data, { raw: { width: sheet.width, height: sheet.height, channels: 4 } });
   return (plan.encoding === 'lossless' ? image.webp({ lossless: true, effort: 6 })
-    : image.webp({ quality: plan.quality, alphaQuality: 100, effort: 6 })).toBuffer();
+    : image.webp({ quality: plan.quality, alphaQuality: 100, effort: 5 })).toBuffer();
 }
 
 /**

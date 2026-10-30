@@ -749,6 +749,10 @@ def pack_plan(out: Path, brief: dict, local_id: str, package: str = "package"):
     return plan
 
 
+PREVIEW_METHOD = 5         # libwebp effort of the animated previews: at 6 (with Pillow's alpha_quality 100) its slowest alpha search
+                           # made them 5x slower for 1 % fewer bytes (2026-10-30)
+
+
 def preview(package: Path, out: Path, scale=0.5, background=(236, 240, 246, 255)):
     fighter = json.loads((package / "fighter.json").read_text())
     assets = {a["id"]: a for a in fighter["assets"]}
@@ -768,7 +772,7 @@ def preview(package: Path, out: Path, scale=0.5, background=(236, 240, 246, 255)
             images.append(base.resize(size, Image.LANCZOS).convert("RGB"))
             durations.append(max(20, round(step["durationMs"])))
         file = out / f"{name}.webp"
-        images[0].save(file, save_all=True, append_images=images[1:], duration=durations, loop=0, quality=80, method=6)
+        images[0].save(file, save_all=True, append_images=images[1:], duration=durations, loop=0, quality=80, method=PREVIEW_METHOD)
         written.append(file.name)
     return written
 
@@ -782,7 +786,7 @@ def _animated(frames, durations_ms, out: Path, scale=0.5, background=(236, 240, 
         base = Image.new("RGBA", (w, h), background)
         base.alpha_composite(frame, ((w - frame.width) // 2, h - frame.height))
         images.append(base.resize(size, Image.LANCZOS).convert("RGB"))
-    images[0].save(out, save_all=True, append_images=images[1:], duration=[max(20, round(d)) for d in durations_ms], loop=0, quality=80, method=6)
+    images[0].save(out, save_all=True, append_images=images[1:], duration=[max(20, round(d)) for d in durations_ms], loop=0, quality=80, method=PREVIEW_METHOD)
 
 
 def drafts(asm: Path, out: Path):
