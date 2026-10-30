@@ -22,6 +22,30 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
+      # A pull does not move the submodule, so a checkout left on an older pin shows `M vendor/sprite-gen` and `git add -A`
+      # stages it as a rollback (2026-10-30). A pin moves only forward along sprite-gen-agent main; an engine revert is a
+      # new sprite-gen-agent commit, pinned forward.
+      - name: sprite-gen pin moves forward
+        if: github.event_name == 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          git fetch -q --no-tags --depth=1 origin "$BASE"
+          old=$(git rev-parse "$BASE:vendor/sprite-gen")
+          new=$(git rev-parse "HEAD:vendor/sprite-gen")
+          [ "$old" = "$new" ] && exit 0
+          compare=repos/jeonghwanko/sprite-gen-agent/compare
+          step=$(gh api "$compare/$old...$new" --jq .status)
+          main=$(gh api "$compare/$new...main" --jq .status)
+          if [ "$step" != ahead ]; then
+            echo "::error file=vendor/sprite-gen::The pin goes from $old to $new ($step, not ahead). If the submodule was staged by accident: git restore --staged --source=origin/main vendor/sprite-gen, then commit."
+            exit 1
+          fi
+          if [ "$main" != ahead ] && [ "$main" != identical ]; then
+            echo "::error file=vendor/sprite-gen::$new is not on sprite-gen-agent main (main: $main). Merge the engine change there first, then move the pin."
+            exit 1
+          fi
       - uses: actions/setup-node@v4
         with:
           node-version: 22
