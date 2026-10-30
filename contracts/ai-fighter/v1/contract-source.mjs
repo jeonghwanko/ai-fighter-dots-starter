@@ -2,13 +2,20 @@
 // build-contract.mjs emits the portable JSON files Dots and future services read.
 const frameStandard = { roles: { fighter: { walk: 16, run: 12 } } }; // Published v1 snapshot.
 
+/** @param {Record<string, unknown>} properties */
 const object = properties => ({ type: 'object', additionalProperties: false, required: Object.keys(properties), properties });
+/** @param {Record<string, unknown>} properties @param {string[]} required */
 const optionalObject = (properties, required) => ({ type: 'object', additionalProperties: false, required, properties });
+/** @param {number} minimum @param {number} maximum */
 const integer = (minimum, maximum) => ({ type: 'integer', minimum, maximum });
+/** @param {number} minimum @param {number} maximum */
 const number = (minimum, maximum) => ({ type: 'number', minimum, maximum });
+/** @param {unknown} items @param {number} minItems @param {number} maxItems */
 const array = (items, minItems, maxItems) => ({ type: 'array', items, minItems, maxItems });
+/** @param {string} name */
 const ref = name => ({ $ref: `#/definitions/${name}` });
 const id = { type: 'string', pattern: '^[a-z][a-z0-9-]{0,47}$' };
+/** @param {number} maxLength */
 const text = maxLength => ({ type: 'string', minLength: 1, maxLength, pattern: '\\S' });
 const step = integer(0, 127);
 const pair = { ...array(step, 2, 2) };
@@ -86,6 +93,7 @@ export const combatStats = Object.freeze({ keys: Object.freeze(['power', 'toughn
 export const limits = Object.freeze({ jsonBytes: 262144, assetBytes: 4000000, packageAssetBytes: 10000000,
   assetCount: 16, imageDimension: 4096, imagePixels: 16777216, packagePixels: 33554432, clipDurationMs: 10000 });
 
+/** @type {Record<string, Record<string, unknown>>} */
 const landmarks = {
   combo: object({ spinStart: step }),
   hit: object({ recoil: step, stagger: pair, recover: pair }),
@@ -93,7 +101,9 @@ const landmarks = {
   fall: object({ lieSequenceIndex: step, getUp: array(object({ ...borrowed.properties, durationMs: number(1, 2000) }), 2, 8) }),
 };
 
+/** @param {string} name @param {any} motion */
 function clipSchema(name, motion) {
+  /** @type {Record<string, unknown>} */
   const fields = {
     assetId: id, frameWidth: integer(1, 1024), frameHeight: integer(1, 1024),
     columns: integer(1, 8), rows: integer(1, 8),
@@ -114,6 +124,7 @@ function clipSchema(name, motion) {
   return { ...object(fields), description: motion.purpose };
 }
 
+/** @param {readonly string[]} keys */
 const grades = keys => optionalObject(Object.fromEntries(keys.map(key => [key, integer(combatStyle.grade.min, combatStyle.grade.max)])), []);
 const style = optionalObject({
   mix: object(Object.fromEntries(combatStyle.actions.map(action => [action, integer(combatStyle.mix.min, combatStyle.mix.max)]))),
