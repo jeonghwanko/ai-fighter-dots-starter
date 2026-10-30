@@ -58,6 +58,7 @@
 | [CREATOR-HOSTING](CREATOR-HOSTING.md) | ODDBOUT 사이트·API·검증 작업자의 호스팅 구성 |
 | [CLOUD-MCP](CLOUD-MCP.md) | 클라우드 MCP(`mcp.oddbout.com`) 연결: PC나 API 키 없이 등록하기 |
 | [GENERATION-HOST](GENERATION-HOST.md) | 호스팅 생성 신청을 실제로 그리는 생성 PC 되기 |
+| [SINGLE-SUBSCRIPTION-HOSTS](SINGLE-SUBSCRIPTION-HOSTS.md) | 구독이 하나뿐인 호스트를 받을 수 있는지와 그 설계(구현 전) |
 | [MEASUREMENT](MEASUREMENT.md) | 호스팅 생성이 나아졌는지 보는 측정과 export |
 | [DOMAIN-SETUP.ko](DOMAIN-SETUP.ko.md) | 도메인 DNS와 GitHub Pages, 정책 페이지 공개 |
 
