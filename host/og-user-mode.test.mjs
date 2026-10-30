@@ -9,6 +9,8 @@ import { fileURLToPath } from 'node:url';
 import { hostEnv, installFiles } from '../scripts/host.mjs';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
+// og is a bash script that runs on a Linux host (flock, systemd-run, Unix modes); its fakes are bash scripts too.
+const linuxOnly = { skip: process.platform !== 'linux' && 'og runs on a Linux host' };
 
 // A community host's install (커뮤니티 호스트 H2, 2026-10-28): og in <root>/bin beside host.env runs as the caller, no sudo. Fake codex,
 // grok, systemctl and systemd-run stand in for the providers and systemd; everything else is the real og.
@@ -43,7 +45,7 @@ esac`);
   return { base, root, units, og };
 }
 
-test('a host install runs og as its own account: providers signed in inside the root, the ledger marks the host, no sudo', async () => {
+test('a host install runs og as its own account: providers signed in inside the root, the ledger marks the host, no sudo', linuxOnly, async () => {
   const { base, root, units, og } = await hostInstall();
   try {
     assert.match(og(['status']).stdout, new RegExp(`root +${root} \\(user ${os.userInfo().username}, user install\\)`));
@@ -112,7 +114,7 @@ test('a host install runs og as its own account: providers signed in inside the 
 });
 
 // og rife torch (2026-10-28): RIFE on PyTorch only with an NVIDIA GPU that PyTorch sees; once chosen every provider run carries it.
-test('og rife torch needs a GPU, then every run carries SPRITE_GEN_RIFE_BACKEND=torch; og rife ncnn goes back', async () => {
+test('og rife torch needs a GPU, then every run carries SPRITE_GEN_RIFE_BACKEND=torch; og rife ncnn goes back', linuxOnly, async () => {
   const { base, root, og } = await hostInstall();
   try {
     assert.match(og(['rife', 'status']).stdout, /^rife +ncnn$/m);
@@ -142,7 +144,7 @@ test('og rife torch needs a GPU, then every run carries SPRITE_GEN_RIFE_BACKEND=
   } finally { await rm(base, { recursive: true, force: true }); }
 });
 
-test('og prune clears closed jobs past the keep days and worker jobs the API ended without telling (idle 14 days)', async () => {
+test('og prune clears closed jobs past the keep days and worker jobs the API ended without telling (idle 14 days)', linuxOnly, async () => {
   const { base, root, og } = await hostInstall();
   try {
     const output = path.join(root, 'kit', 'output'), daysAgo = d => new Date(Date.now() - d * 86_400_000);

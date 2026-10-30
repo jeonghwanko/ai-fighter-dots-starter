@@ -52,7 +52,7 @@ test('ambiguous and abbreviated routes fail exactly; actual Codex image routes s
     } }), /dots-protected-session-provider-blocked/);
   assert.equal(inspections, 4);
 });
-test('direct CLI reaches a mock engine for Grok, preserves non-Dots behavior and blocks Codex before dispatch', async t => {
+test('direct CLI reaches a mock engine for Grok, preserves non-Dots behavior and blocks Codex before dispatch', { skip: process.platform === 'win32' && 'the mock engine is a shebang script at .venv/bin/python; Windows runs .venv/Scripts/python.exe' }, async t => {
   const root = await mkdtemp(path.join(tmpdir(), 'dots-provider-cli-'));
   t.after(() => rm(root, { recursive: true, force: true }));
   await mkdir(path.join(root, 'scripts'));
