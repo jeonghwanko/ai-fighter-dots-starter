@@ -1,8 +1,8 @@
 // @ts-check
+/// <reference path="./site-globals.d.ts" />
 // Only the ODDBOUT build consumes these hooks; the shared game's simulation stays unchanged.
 export const milestoneVirtualId = 'virtual:oddbout-milestones';
 /**
- * @typedef {import('./site-analytics.mjs').AnalyticsWindow} AnalyticsWindow
  * @typedef {import('./site-analytics.mjs').SitePlugin} SitePlugin
  */
 function bridge() {
@@ -21,7 +21,7 @@ function bridge() {
   }
   /** @param {string} api @param {string} token @param {string} key */
   function bindIdentity(api, token, key) {
-    const bind = () => /** @type {AnalyticsWindow} */ (window).oddboutBindAnalytics?.(api, token, key);
+    const bind = () => window.oddboutBindAnalytics?.(api, token, key);
     bind(); window.addEventListener('oddbout:analytics-ready', bind, { once: true });
   }
   return { milestone, creationStart, bindIdentity };

@@ -202,9 +202,7 @@ export async function checkLogin({ remoteActive, request, sessionPath = defaultS
   const account = await checkAccount({ hasSession, remoteActive, request, checkServer: checkServer && connections.api.status === 'reachable' });
   const pending = await pendingConnection(sessionPath);
   const available = connections.api.status === 'reachable' && connections.api.deviceLogin === 'available' && connections.homepage.status === 'reachable';
-  const routeReason = connections.api.status !== 'reachable' ? connections.api.reason
-    : connections.api.deviceLogin !== 'available' ? 'server-without-device-login'
-    : connections.homepage.status !== 'reachable' ? connections.homepage.reason : null;
+  const routeReason = secureRouteReason(connections);
   const otherDevice = available
     ? { status: 'available', secureRoute: 'device-connection', start: `npm run login -- --device${flags}`, wait: 'npm run login -- --device-wait',
         when: '봇 VM처럼 사용자 브라우저가 다른 기기에 있을 때. start가 보여주는 링크와 공개 확인 코드를 사용자에게 전하고,'
@@ -215,22 +213,17 @@ export async function checkLogin({ remoteActive, request, sessionPath = defaultS
     ?? (routeReason === 'server-without-device-login' ? { actor: 'service-operator', code: 'device-login-deployment-required',
       message: '서비스 운영자가 기존 기기 로그인 API와 홈페이지 승인 화면의 배포를 확인해야 한다. 일반 제작 사용자에게 배포를 요구하지 않는다.' }
       : connectionAction(/** @type {string} */ (routeReason))); // null gets its default action
-  const needsSignIn = account.status === 'sign-in-required';
-  const action = { id: 'connect-oddbout', label: 'ODDBOUT 연결',
-    status: account.status === 'connected' ? 'connected' : account.status === 'restart-required' ? 'restart-required'
-      : !available ? 'blocked' : !needsSignIn ? 'check-required' : pending.status === 'pending' ? 'awaiting-approval'
-      : pending.status === 'unknown' ? 'check-required' : 'available',
-    actor: needsSignIn && available ? 'user' : routeAction.actor,
+  const needsSignIn = account.status === 'sign-in-required', offersSignIn = needsSignIn && available;
+  const action = { id: 'connect-oddbout', label: 'ODDBOUT 연결', status: connectActionStatus(account.status, available, pending.status),
+    actor: offersSignIn ? 'user' : routeAction.actor,
     steps: ['ODDBOUT 연결', '본인 Google 계정 로그인', '화면의 공개 확인 코드 확인 및 연결 승인'],
-    ...(needsSignIn && available && ['none', 'expired'].includes(pending.status) ? { command: otherDevice.start } : {}),
-    ...(needsSignIn && available && pending.status === 'pending' ? { resumeCommand: otherDevice.wait } : {}) };
-  const nextAction = account.status === 'restart-required' ? { actor: 'agent', code: 'restart-mcp',
-    message: '저장된 세션을 보존하고 MCP를 다시 시작해 계정 상태를 조회한다. 다시 로그인하거나 캐릭터를 재생성하지 않는다.' }
-    : !available && account.status !== 'connected' ? routeAction : account.nextAction ?? { actor: needsSignIn ? 'user' : 'agent', code: action.status,
-      message: needsSignIn ? '본인이 시작한 요청과 코드가 같은지 확인하고 연결을 승인한다. 기존 승인 대기는 새로 시작하지 않고 이어간다.'
-        : '계정 상태를 확인한 뒤 기존 제작 기록에서 재개한다. 연결 확인은 생성·등록 실행 승인이 아니다.' };
-  return { ...account, status: needsSignIn && !available ? 'blocked' : needsSignIn && pending.status === 'pending' ? 'pending-approval' : account.status,
-    accountStatus: account.status, label: 'ODDBOUT 계정 연결', savedSessionPresent: hasSession, pendingConnection: pending.status,
+    ...(offersSignIn && ['none', 'expired'].includes(pending.status) ? { command: otherDevice.start } : {}),
+    ...(offersSignIn && pending.status === 'pending' ? { resumeCommand: otherDevice.wait } : {}) };
+  const nextAction = loginNextAction(account, available, routeAction, action.status);
+  let status = account.status;
+  if (needsSignIn && !available) status = 'blocked';
+  else if (needsSignIn && pending.status === 'pending') status = 'pending-approval';
+  return { ...account, status, accountStatus: account.status, label: 'ODDBOUT 계정 연결', savedSessionPresent: hasSession, pendingConnection: pending.status,
     remoteToolsActive: Boolean(remoteActive), infrastructure: infrastructureItem(project, connections), action: { ...action, actor: nextAction.actor }, nextAction,
     routes: {
       sameDevice: connections.api.status === 'reachable'
@@ -240,6 +233,37 @@ export async function checkLogin({ remoteActive, request, sessionPath = defaultS
     },
     note: '키트는 연결 행동·상태와 기존 CLI 명령을 제공한다. Dots 자체 버튼을 설치하지 않는다. 호스트가 버튼을 지원하지 않으면 같은 이름의 선택지와 공식 링크로 안내한다.'
       + ' 콜백 주소나 토큰을 대화에 붙여 넣도록 요청하지 않고, 안전하다고 안내하지 않는다.' };
+}
+
+/** @param {Awaited<ReturnType<typeof probeConnections>>} connections */
+function secureRouteReason({ api, homepage }) {
+  if (api.status !== 'reachable') return api.reason;
+  if (api.deviceLogin !== 'available') return 'server-without-device-login';
+  return homepage.status !== 'reachable' ? homepage.reason : null;
+}
+
+/** @param {string} accountStatus @param {boolean} available @param {string} pending */
+function connectActionStatus(accountStatus, available, pending) {
+  if (accountStatus === 'connected') return 'connected';
+  if (accountStatus === 'restart-required') return 'restart-required';
+  if (!available) return 'blocked';
+  if (accountStatus !== 'sign-in-required') return 'check-required';
+  if (pending === 'pending') return 'awaiting-approval';
+  return pending === 'unknown' ? 'check-required' : 'available';
+}
+
+/**
+ * @param {Awaited<ReturnType<typeof checkAccount>>} account @param {boolean} available
+ * @param {{ actor: string, code: string, message: string }} routeAction @param {string} actionStatus
+ */
+function loginNextAction(account, available, routeAction, actionStatus) {
+  if (account.status === 'restart-required') return { actor: 'agent', code: 'restart-mcp',
+    message: '저장된 세션을 보존하고 MCP를 다시 시작해 계정 상태를 조회한다. 다시 로그인하거나 캐릭터를 재생성하지 않는다.' };
+  if (!available && account.status !== 'connected') return routeAction;
+  const needsSignIn = account.status === 'sign-in-required';
+  return account.nextAction ?? { actor: needsSignIn ? 'user' : 'agent', code: actionStatus,
+    message: needsSignIn ? '본인이 시작한 요청과 코드가 같은지 확인하고 연결을 승인한다. 기존 승인 대기는 새로 시작하지 않고 이어간다.'
+      : '계정 상태를 확인한 뒤 기존 제작 기록에서 재개한다. 연결 확인은 생성·등록 실행 승인이 아니다.' };
 }
 
 /** The generation-account choice: options to show; the user's stated or elicited answer only. Never inferred. @param {string | null} [choice] */
