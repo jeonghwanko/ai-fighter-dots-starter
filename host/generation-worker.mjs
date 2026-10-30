@@ -10,7 +10,7 @@ import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promise
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ASKS, MODELS, createStages, ogJobId } from './generation-stages.mjs';
+import { ASKS, GROK_LIMITED, MODELS, createStages, ogJobId } from './generation-stages.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
 const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -137,6 +137,11 @@ export function timedOutOutcome(status, outcome) {
   const requestIds = outcome?.result?.requestIds;
   return { outcome: 'review', result: { code: `${status}-stage-timeout`, ...(Array.isArray(requestIds) && requestIds.length ? { requestIds } : {}) } };
 }
+/** The health after a stage's outcome: a provider that cannot run here now (the codex question, Grok's 429) is marked down until a check passes. */
+export function healthAfter(health, code) {
+  const provider = { [ASKS]: 'codex', [GROK_LIMITED]: 'grok' }[code];
+  return provider ? { ...health, ok: false, [provider]: false } : health;
+}
 /** An error's code as the finish route takes it: a string of at most 60 characters (a child process's or a reply's code may be a number). */
 export const errorCode = (error, fallback = 'stage-error') => String(error?.code ?? fallback).slice(0, 60);
 
@@ -247,10 +252,11 @@ export async function main({ once = false } = {}) {
       outcome = timedOutOutcome(job.status, outcome);
     } else if (controller.signal.aborted) { await say(`job ${job.id} ${job.status} stopped (lease lost)`); return; }
     // codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon.
-    if (outcome.result?.code === ASKS) {
-      health = { ...health, ok: false, codex: false };
+    const down = healthAfter(health, outcome.result?.code);
+    if (down !== health) {
+      health = down;
       checkedAt = Date.now() - TIMING.healthMs + TIMING.askedRecheckMs;
-      await say(`codex asked a question: no claims until health passes (checked again in ${TIMING.askedRecheckMs / 60_000} minutes)`);
+      await say(`${outcome.result.code === ASKS ? 'codex' : 'grok'} cannot run now: no claims until health passes (checked again in ${TIMING.askedRecheckMs / 60_000} minutes)`);
     }
     const reply = await api.finish(job, outcome.outcome, { ...outcome.result, ...(tally.size ? { calls: tally.value() } : {}) });
     await say(`job ${job.id} ${job.status} → ${outcome.outcome}${outcome.result?.code ? ` (${outcome.result.code})` : ''} ${reply.ok ? reply.status : `finish refused ${reply.code}`}`);

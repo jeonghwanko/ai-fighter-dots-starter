@@ -3,8 +3,8 @@ import test from 'node:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ASKS, createStages } from './generation-stages.mjs';
-import { STAGE_LIMIT_MS, STAGE_STOPPED, TIMING, errorCode, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
+import { ASKS, GROK_LIMITED, createStages } from './generation-stages.mjs';
+import { STAGE_LIMIT_MS, healthAfter, STAGE_STOPPED, TIMING, errorCode, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
 
 const brief = { profile: { name: 'Blue' }, look: { subject: 'A blue cat boxer', palette: ['blue'], prop: 'gloves', avoid: 'none' },
   motion: { temper: 'bold', attack: 'jab' } };
@@ -136,4 +136,12 @@ test('a look gen said it made but whose picture is not there goes to an operator
     const stages = createStages({ og, api: { artifact: async () => ({ ok: true }) }, fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
     assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-no-output' } });
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('a provider that cannot run here now is marked down, the other keeps its health, and any other outcome changes nothing', () => {
+  const up = { ok: true, codex: true, grok: true, at: 't' };
+  assert.deepEqual(healthAfter(up, ASKS), { ok: false, codex: false, grok: true, at: 't' });
+  assert.deepEqual(healthAfter(up, GROK_LIMITED), { ok: false, codex: true, grok: false, at: 't' });
+  assert.equal(healthAfter(up, 'video-exit-1'), up);
+  assert.equal(healthAfter(up, undefined), up);
 });

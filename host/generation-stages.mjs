@@ -233,6 +233,13 @@ export function lookPick(value) {
  */
 export const ASKS = 'provider-asks';
 const ASKED = Object.freeze({ retry: ASKS });
+/**
+ * A video request xAI answered with 429 after sprite-gen's own waits (2026-10-30): Grok cannot film for this host now (its rate or its
+ * SuperGrok allowance; xAI's answer does not say which). The request was not taken, so the stage is tried again, but not at once: the
+ * worker marks its grok health down (generation-worker.mjs) and claims nothing until a health check passes, as it does for ASKS. Before,
+ * the stage went straight back to the queue and met the same answer three times, and the server failed the job (`stage-attempts`).
+ */
+export const GROK_LIMITED = 'grok-rate-limited';
 export const lookNames = round => [`look-a-${round}`, `look-b-${round}`];
 export const previewName = (clip, round) => `motion-${clip.toLowerCase()}-${round}`;
 
@@ -431,9 +438,12 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
    * report that says the request's outcome cannot be told, names a video request xAI took (resume it, never film again),
    * asks the codex question, or names an error the same command will meet again goes to an operator too (host/README.md).
    */
-  async function failedRun(prefix, code, report, since) {
+  async function failedRun(prefix, code, report, since, limited = null) {
     const said = await readOutcome(report, { since });
     const verdict = judgeOutcome({ code, report: said });
+    // `limited`: the code a run of a provider that answers 429 for its allowance returns instead of a plain retry (only when every error
+    // said the same command may succeed, so a request the provider took, or any error read another way, still goes to an operator).
+    if (limited && verdict.next === 'retry' && verdict.codes.includes('provider-rate-limited')) return { retry: limited };
     if (verdict.next === 'retry' || (!said && code === NOT_STARTED_EXIT)) return { retry: `${prefix}-exit-${code}` };
     if (verdict.next === 'answer') return ASKED;
     const review = { resume: `${prefix}-unfinished`, inspect: `${prefix}-outcome-unknown` }[verdict.next]
@@ -611,7 +621,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       // No clip at all (a limit, an outage): try the stage later rather than film again with other words, unless the set report
       // says a request xAI took is unfinished (resume it), its outcome cannot be told, or the same run would fail again.
       if (code !== 0 && !existsSync(path.join(item, 'frames', 'keyed')) && !existsSync(path.join(item, 'loop')))
-        return failedRun('video', code, path.join(clip, 'set.report.json'), since);
+        return failedRun('video', code, path.join(clip, 'set.report.json'), since, GROK_LIMITED);
       const keyed = path.join(item, 'frames', 'keyed'), auto = path.join(clip, 'cut-auto');
       const cutsOf = async () => {
         const cuts = [];
