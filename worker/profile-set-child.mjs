@@ -15,5 +15,6 @@ try {
     process.send?.({ ok: true, errors: [], derived: result.derived });
   } else process.send?.({ ok: false, errors: result.errors });
 } catch {
-  process.send?.({ ok: false, stage: 'worker', errors: [{ code: 'CHECK_FAILED', path: '' }] });
+  // Reading its own job files failed, or the check threw: still this painting's verdict (worker/profile-sets.mjs records it).
+  process.send?.({ ok: false, errors: [{ code: 'CHECK_FAILED', path: '' }] });
 }

@@ -1,13 +1,13 @@
 // @ts-check
 import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUserId } from './http.mjs';
-import { PUBLIC_BUCKET, profileSetKey, publicProfileSetPath, publishProfileSet } from './profile-sets.mjs';
+import { cleanupPublicFiles, profileSetKey, publishProfileSet, removePublicFiles } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
 
 const CORS = { methods: 'GET, POST, OPTIONS', headers: 'Authorization, Content-Type' };
 /** @type {(body: any, status?: number) => Response} */
 const reply = (body, status = 200) => jsonResponse(body, status, CORS);
 /** @type {Record<string, number>} */
-const statuses = { 'admin-required': 403, 'not-found': 404, 'review-conflict': 409, 'beta-capacity': 409,
+const statuses = { 'admin-required': 403, 'not-found': 404, 'review-conflict': 409, 'beta-capacity': 409, 'fighter-deleted': 409,
   'invalid-query': 400, 'invalid-review': 400, 'validation-incomplete': 409, 'registration-open': 410 };
 // A small JSON body with only the named keys.
 /** @param {Request} request @param {string[]} keys */
@@ -74,7 +74,10 @@ export function createAdminHandler({ db }) {
           || typeof body.reason !== 'string') throw new Problem(400, 'invalid-review');
         const reason = body.reason.trim();
         if (!reason || reason.length>500 || reason.includes('\0') || !reason.isWellFormed()) throw new Problem(400, 'invalid-review');
-        return reply({ ok: true, moderation: await rpc('af_moderate_fighter', { p_actor: actor, p_fighter: parts[2], p_version: body.version, p_action: body.action, p_reason: reason }) });
+        const moderation = await rpc('af_moderate_fighter', { p_actor: actor, p_fighter: parts[2], p_version: body.version, p_action: body.action, p_reason: reason });
+        // A removal withdraws his profile sets (20261031100000); their public copies go after it commits. A restore does not bring them back.
+        if (body.action === 'remove') await cleanupPublicFiles(db, parts[2].toLowerCase());
+        return reply({ ok: true, moderation });
       }
       if (parts.length === 2 && parts[1] === 'access-requests' && request.method === 'GET') {
         const query = new URL(request.url).searchParams, page = query.get('page') ?? '0', status = query.get('status') ?? 'pending', search = (query.get('search') ?? '').trim();
@@ -127,11 +130,15 @@ export function createAdminHandler({ db }) {
           if (!['review', 'approved'].includes(set.status)) throw new Problem(409, 'review-conflict');
           // Public first, then the roster names it: a failed approval leaves no roster entry, and the files this call wrote are removed.
           const written = await publishProfileSet(db, set);
-          try { return reply({ ok: true, status: (await rpc('af_admin_profile_set_approve', { p_actor: actor, p_id: id })).status }); }
+          let approved;
+          try { approved = await rpc('af_admin_profile_set_approve', { p_actor: actor, p_id: id }); }
           catch (error) {
-            if (written.length) await db.storage.from(PUBLIC_BUCKET).remove(written).catch(() => {});
+            await removePublicFiles(db, set.fighterId, written);
             throw error;
           }
+          // The set it replaced is superseded: its copies leave unless this set has the same file.
+          await cleanupPublicFiles(db, set.fighterId);
+          return reply({ ok: true, status: approved.status });
         }
         let body;
         try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 4000))); }
@@ -142,10 +149,7 @@ export function createAdminHandler({ db }) {
         if (!reason || reason.length > 300 || reason.includes('\0') || !reason.isWellFormed()) throw new Problem(400, 'invalid-review');
         const rejected = await rpc('af_admin_profile_set_reject', { p_actor: actor, p_id: id, p_reason: reason });
         // A rejected current set leaves the roster; its public files go with it.
-        if (rejected.previous === 'approved') {
-          const files = ['card', 'face'].map(name => rejected.derived?.[name]?.sha256).filter(sha => typeof sha === 'string' && /^[a-f0-9]{64}$/.test(sha));
-          if (files.length) await db.storage.from(PUBLIC_BUCKET).remove(files.map(sha => publicProfileSetPath(rejected.fighterId, sha))).catch(() => {});
-        }
+        if (rejected.previous === 'approved') await cleanupPublicFiles(db, rejected.fighterId);
         return reply({ ok: true, status: rejected.status });
       }
       return reply({ ok: false, code: 'not-found' }, 404);

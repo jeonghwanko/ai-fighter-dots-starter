@@ -166,7 +166,9 @@ test('the site deletion route binds the signed-in session and the site client, c
   assert.deepEqual(calls.at(-1),['af_prepare_fighter_deletion',{ p_owner:owner, p_fighter:fighter, p_session:session, p_client:SITE_CLIENT }]);
   const done=await send(`${fighter}/deletion/confirm`,{ confirmationToken:token, confirmName:'꿈돌이' });
   assert.equal(done.status,200); assert.equal((await done.json()).stage,'deleted');
-  assert.deepEqual(calls.at(-1)[1],{ p_owner:owner, p_fighter:fighter, p_session:session, p_client:SITE_CLIENT, p_token:token, p_confirm_name:'꿈돌이' });
+  assert.deepEqual(calls.find(([name])=>name==='af_delete_owned_fighter')[1],{ p_owner:owner, p_fighter:fighter, p_session:session, p_client:SITE_CLIENT, p_token:token, p_confirm_name:'꿈돌이' });
+  // Then his withdrawn profile sets' public copies (선수 프로필 세트, 2026-10-31).
+  assert.deepEqual(calls.at(-1),['af_profile_set_stale_public',{ p_fighter:fighter }]);
   // Nothing reaches the database without a whole confirmation.
   calls.length=0;
   for (const body of [{ confirmationToken:token }, { confirmationToken:'nope', confirmName:'꿈돌이' }, { confirmationToken:token, confirmName:'' },

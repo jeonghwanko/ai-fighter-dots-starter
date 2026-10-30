@@ -5,6 +5,7 @@ import { Problem, sha256 } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
 import { FILE, UUID_ARG, downloadHostFile } from './common.mjs';
+import { cleanupPublicFiles } from '../../api/profile-sets.mjs';
 /**
  * @typedef {import('./common.mjs').Identity} Identity
  * @typedef {import('./common.mjs').Invoke} Invoke
@@ -97,9 +98,12 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
     + 'otherwise ask first. Ownership, live session, expiry and package/profile identity are rechecked atomically. '
     + 'This is soft deletion: private package bytes and history remain. Retry only with identical confirmation arguments.',
     { fighterId: UUID_ARG(), confirmationToken: UUID_ARG(), confirmName: z.string().min(1).max(200), confirm: z.literal(true) },
-    ({ fighterId, confirmationToken, confirmName }) => deletionRpc('af_delete_owned_fighter', {
-      p_fighter: fighterId, p_token: confirmationToken, p_confirm_name: confirmName,
-    }), { write: true, publish: true, openWorld: true, idempotent: true });
+    async ({ fighterId, confirmationToken, confirmName }) => {
+      const deleted = await deletionRpc('af_delete_owned_fighter', { p_fighter: fighterId, p_token: confirmationToken, p_confirm_name: confirmName });
+      // His profile sets were withdrawn with him; their public copies go now (a retried deletion tries again).
+      await cleanupPublicFiles(db, fighterId.toLowerCase());
+      return deleted;
+    }, { write: true, publish: true, openWorld: true, idempotent: true });
   register('prepare_fighter_registration', '캐릭터 등록 준비', 'After the user requests registration and approves the final package, '
     + 'create/resume a private upload from the actual fighter.json file. '
     + 'Use a new UUID for changed package bytes and the same UUID for immutable retries. This does not publish. '
