@@ -31,7 +31,8 @@ export const STYLE_GUIDE = Object.freeze({
 export function registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller }) {
   const call = (path, body) => arenaCall(arena, path, body);
   // A read's budget: the signed-in owner's; signed out, the host's anonymous user (`caller`); else every signed-out agent's together.
-  const read = path => arenaCall(arena, path, undefined, identity?.owner ?? caller ?? 'public');
+  const read = path => identity ? arenaCall(arena, path, undefined, identity.owner)
+    : arenaCall(arena, path, undefined, caller ?? 'public', undefined, { signedOut: caller !== null });
   const ID = z.string().min(1).max(64).regex(/^[a-z0-9-]+$/);
   register('get_style_guide', '싸우는 성격 안내', 'Read how a fighter\'s combat.style choices fight, to translate the character\'s concept into them. '
     + 'Values and limits are the contract\'s (spec.combatStyle). This changes nothing.',

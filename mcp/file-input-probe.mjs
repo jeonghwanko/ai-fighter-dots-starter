@@ -1,14 +1,10 @@
 import { z } from 'zod';
 import { Problem, sha256 } from '../api/http.mjs';
+// Observed from the authorized native fileParams call on 2026-10-26 (LIBRARY_FILE_HOSTS: never arbitrary Azure tenants or inferred names).
+import { LIBRARY_FILE_HOSTS as OBSERVED_PROBE_HOSTS } from './cloud/common.mjs';
 
 export const FILE_PROBE_LIMIT = 4 * 1024 * 1024;
 const PNG_SIGNATURE = [137, 80, 78, 71, 13, 10, 26, 10];
-// Observed from the authorized native fileParams call on 2026-10-26.
-// Probe-only: never trust arbitrary Azure tenants or infer further hostnames.
-const OBSERVED_PROBE_HOSTS = [
-  'oaisdmntprnznorth.blob.core.windows.net',
-  'oaisdmntprwestus.blob.core.windows.net',
-];
 
 // Safe diagnostics only: signed paths, query strings and credentials never leave the server.
 function rejectedOrigin(value) {

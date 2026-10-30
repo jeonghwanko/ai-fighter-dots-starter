@@ -308,3 +308,23 @@ test('next names what the user is asked or how long ODDBOUT works', () => {
   assert.match(hostedNext({ status: 'submitted', submission: { stage: 'validating' } }), /waitSeconds/);
   assert.match(hostedNext({ status: 'rejected', error: 'real-person' }), /declined this request \(real-person\)/);
 });
+
+test('a picture chosen from the ChatGPT Library reaches the request; other Azure tenants and the registration tools still refuse it (2026-10-30)', async () => {
+  // The Library hands a file from an Azure blob origin (docs/research/FILE-INPUT-PROOF.md): only its two observed hosts are taken.
+  const g = await generation();
+  try {
+    await g.healthy();
+    const { call, downloads } = await connector(g, {});
+    const ask = picture => call('request_hosted_fighter', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko', idempotencyKey: crypto.randomUUID(),
+      picture, rightsConfirmed: true });
+    assert.equal((await ask({ download_url: 'https://someone.blob.core.windows.net/files/x.png?sig=s', file_id: 'file-x' })).code, 'unsupported-file-origin');
+    assert.equal(downloads.length, 0);
+    const library = 'https://oaisdmntprnznorth.blob.core.windows.net/files/library.png?sig=s';
+    const made = await ask({ download_url: library, file_id: 'file-library' });
+    assert.equal(made.job.status, 'queued', JSON.stringify(made)); assert.deepEqual(downloads, [library]);
+    assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_uploads where job_id is not null')).rows[0].n, 1);
+    // Registration keeps its narrow origins (the proof's boundary): a fighter.json from the Library is refused before any download.
+    const registration = await call('prepare_fighter_registration', { manifest: { download_url: library, file_id: 'file-manifest' }, idempotencyKey: crypto.randomUUID() });
+    assert.equal(registration.code, 'unsupported-file-origin'); assert.equal(downloads.length, 1);
+  } finally { await g.sql.close(); }
+});

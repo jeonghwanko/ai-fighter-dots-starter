@@ -4,7 +4,7 @@ import { GENERATION_LIMITS } from '../../api/generations.mjs';
 import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
-import { FILE, UUID_ARG, downloadHostFile } from './common.mjs';
+import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile } from './common.mjs';
 
 /**
  * 호스팅 생성 도구 (2026-10-28): ODDBOUT's generation worker makes the fighter from the user's words (and up to two of his pictures) and
@@ -116,7 +116,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       }
       const refs = [];
       for (const file of pictures) {
-        const uploaded = await invoke('generations/uploads', 'POST', await downloadHostFile(file, GENERATION_LIMITS.refBytes, fetcher),
+        const uploaded = await invoke('generations/uploads', 'POST', await downloadHostFile(file, GENERATION_LIMITS.refBytes, fetcher, LIBRARY_FILE_HOSTS),
           { 'content-type': 'application/octet-stream' });
         if (!uploaded.ok) return uploaded;
         refs.push(uploaded.upload.id);

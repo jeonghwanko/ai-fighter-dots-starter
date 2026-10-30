@@ -289,6 +289,24 @@ test('a large result\'s short text survives a field with no JSON form', () => {
   assert.match(text, /^Full result in structuredContent \(\d+ characters\): ok=true, rules=undefined, fighters\[40\]$/);
 });
 
+test('a signed-out read is marked as one, so the arena also counts it on every signed-out agent\'s pool (2026-10-30)', async () => {
+  // The host's anonymous user id is the caller's to choose: a fresh one per call had a fresh budget each. The arena now counts a read
+  // marked signed out on that id and on the shared signed-out pool too.
+  const calls = [], arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async (url, init = {}) => {
+    calls.push(init.headers ?? {}); return Response.json({ ok: true });
+  } };
+  const signedOut = createCloudHandler({ db: { auth: { getClaims: async () => ({ data: null }) }, rpc: async () => ({ data: false }) }, arena });
+  const ask = (handle, meta, auth = false) => handle(new Request(CLOUD_RESOURCE, { method: 'POST', headers: { 'content-type': 'application/json',
+    accept: 'application/json, text/event-stream', ...(auth ? { authorization: `Bearer ${token}` } : {}) },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read_bout', arguments: { a: 'kuma', b: 'yume', seed: 1 }, ...(meta ? { _meta: meta } : {}) } }) }));
+  await ask(signedOut, { 'openai/subject': 'user-123' });
+  assert.match(calls[0]['x-arena-owner'], /^[0-9a-f]{8}-[0-9a-f]{4}-4/); assert.equal(calls[0]['x-arena-signed-out'], '1');
+  await ask(signedOut);
+  assert.equal(calls[1]['x-arena-owner'], 'public'); assert.equal(calls[1]['x-arena-signed-out'], undefined);
+  await ask(createCloudHandler({ db: dbFor(), arena }), { 'openai/subject': 'user-123' }, true);
+  assert.equal(calls[2]['x-arena-owner'], owner); assert.equal(calls[2]['x-arena-signed-out'], undefined);
+});
+
 test('ChatGPT\'s calls get a short text for a large result (it reads the structured one) and its anonymous user as the read budget', async () => {
   const calls = [], arena = { url: 'https://arena.test/oddbout-arena', key: 'k'.repeat(64), fetcher: async (url, init = {}) => {
     if (url.includes('rankings')) return Response.json({ ok: true, scope: 'registered', minBouts: 5, rankings: [] });

@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { Problem, sha256 } from '../api/http.mjs';
 import { pngHeader } from './file-input-probe.mjs';
 import { SOURCE_BUCKET, SOURCE_LIMIT, importVmPublicKey, sealVmGrant } from '../api/creator-source-crypto.mjs';
+import { LIBRARY_FILE_HOSTS as HOSTS } from './cloud/common.mjs';
 
-const HOSTS = ['oaisdmntprnznorth.blob.core.windows.net', 'oaisdmntprwestus.blob.core.windows.net'];
 const UUID = () => z.string().uuid();
 const receipt = row => ({ sourceId: row.id, accountId: row.owner_id, bytes: row.bytes, sha256: row.sha256,
   width: row.width, height: row.height, status: row.status, persisted: row.status === 'ready', decoded: false, vmReceived: false });
