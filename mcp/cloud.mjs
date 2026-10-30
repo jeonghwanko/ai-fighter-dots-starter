@@ -71,7 +71,20 @@ export async function authenticateCloud(db, request, now = Date.now) {
 
 export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {} }) {
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
-    instructions: (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. Call this cloud connector’s check_creation_readiness before first generation, after a workspace restart and before registration. It checks account access; generation and display still require actual host evidence. Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. Require the user’s final registration request and preserve motion review boundaries. Use host file attachments for fighter.json and WebP assets. When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. A VM direct-network denial does not establish failure of the native connector; use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
+    instructions: (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
+      + 'Verify get_profile matches the intended registration account, especially after adding or switching connected accounts. '
+      + 'Call this cloud connector’s check_creation_readiness before first generation, '
+      + 'after a workspace restart and before registration. It checks account access; '
+      + 'generation and display still require actual host evidence. '
+      + 'Do not run local stdio login or ask for a PC to authenticate cloud registration. Do not generate merely to test access. '
+      + 'Require the user’s final registration request and preserve motion review boundaries. '
+      + 'Use host file attachments for fighter.json and WebP assets. '
+      + 'When file inputs are exposed as paths, pass existing absolute workspace paths; the host uploads them. '
+      + 'For existing Library or Page files use the host’s supported file materialization or original-byte read tools and verify '
+      + 'size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. '
+      + 'A VM direct-network denial does not establish failure of the native connector; '
+      + 'use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. '
+      + 'A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
   // The existing API runs in-process with an identity bound to this verified request. The shim cannot be
   // selected from tool inputs and never receives/returns a privileged credential or another user's identity.
   const scoped = identity ? new Proxy(db, { get(target, key) {
@@ -93,7 +106,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   };
   // A write states whether repeating it with the same arguments is safe (idempotentHint). It once defaulted to yes, and three tools that
   // make something new on every call told retrying clients they could repeat them (MCP 점검 2026-10-29).
-  const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false, idempotent = write ? undefined : true, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
+  const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false,
+    idempotent = write ? undefined : true, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
     if (typeof idempotent !== 'boolean') throw Error(`${name}: a write tool states idempotent`);
     server.registerTool(name, { title, description, inputSchema,
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
