@@ -1,3 +1,4 @@
+// @ts-check
 // 호스팅 생성 도구 (2026-10-28): ODDBOUT's generation worker makes the fighter; the agent carries the user's answers.
 import { z } from 'zod';
 import { GENERATION_LIMITS } from '../../api/generations.mjs';
@@ -5,6 +6,20 @@ import { Problem } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import { profileLimits } from '../../contracts/ai-fighter/profile-limits.mjs';
 import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile } from './common.mjs';
+/**
+ * @typedef {import('./common.mjs').Identity} Identity
+ * @typedef {import('./common.mjs').Hosted} Hosted
+ * @typedef {import('./common.mjs').Invoke} Invoke
+ * @typedef {import('./common.mjs').Register} Register
+ * @typedef {import('./common.mjs').HostFile} HostFile
+ */
+/**
+ * A job as the API shows it (api/generations.mjs), the fields hostedNext reads.
+ * @typedef {{ status: string, delegate?: boolean, error?: string | null, choice?: string | null,
+ *   revisionsLeft?: { appearance?: number, motions?: number }, preview?: { note?: string }[],
+ *   submission?: { stage: string, fighterId?: string | null } | null,
+ *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown } }} HostedJob
+ */
 
 /**
  * 호스팅 생성 도구 (2026-10-28): ODDBOUT's generation worker makes the fighter from the user's words (and up to two of his pictures) and
@@ -31,12 +46,14 @@ const SUBMISSION_PENDING = new Set(['uploading', 'queued', 'validating']);
 export const HOSTED_WAIT_SECONDS = 25;
 const HOSTED_POLL_MS = 3000;
 const PROFILE_KEYS = ['name', 'description', 'names', 'lines', 'stats'];
+/** @type {(status: string, submission: string | null) => boolean} */
 const hostedSettled = (status, submission) => !HOSTED_WORKING.has(status) && !(status === 'submitted' && SUBMISSION_PENDING.has(submission ?? 'queued'));
 
 /** What the agent does next with a job, from its state: the user's answer it asks for, or how long to wait. */
 // A run the gate refused, made from the walk (the worker's `run-from-walk` preview note, 2026-10-29): the creator hears it and may film it again.
 const RUN_FROM_WALK_NEXT = 'The run preview is the walk played faster: no filmed run passed the checks. Tell the user so; '
   + 'if he wants a real run, revise_hosted_motion with clip run and his words. ';
+/** @param {HostedJob} job */
 export function hostedNext(job) {
   const left = job.revisionsLeft ?? {}, error = job.error ? ` (${job.error})` : '';
   switch (job.status) {
@@ -70,13 +87,20 @@ export function hostedNext(job) {
     default: return `This request is ${job.status}; it is over.`;
   }
 }
+/** @param {any} result  The API's JSON. */
 const withNext = result => result?.ok && result.job ? { ...result, next: hostedNext(result.job) } : result;
 
+/**
+ * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
+ * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, hosted: Hosted }} options
+ */
 export function registerHostedTools({ register, db, identity, invoke, fetcher, hosted }) {
   const JOB = UUID_ARG();
+  /** @type {(path: string, body: object, headers?: Record<string, string>) => Promise<any>} */
   const post = (path, body, headers = {}) => invoke(path, 'POST', JSON.stringify(body), { 'content-type': 'application/json', ...headers });
+  /** @param {string} key */
   const jobIdForKey = async key => {
-    const { data, error } = await db.from('af_generation_jobs').select('id').eq('owner_id', identity.owner).eq('idempotency_key', key.toLowerCase()).maybeSingle();
+    const { data, error } = await db.from('af_generation_jobs').select('id').eq('owner_id', /** @type {Identity} */ (identity).owner).eq('idempotency_key', key.toLowerCase()).maybeSingle();
     if (error) throw new Problem(503, 'database-unavailable');
     return data?.id ?? null;
   };
@@ -105,7 +129,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       const service = await invoke('generations/capabilities');
       if (!service.ok) return service;
       if (!service.capabilities?.hosted) return { ok: false, code: 'generation-unavailable', reason: service.capabilities?.reason ?? null };
-      const pictures = [picture, secondPicture].filter(Boolean);
+      const pictures = /** @type {HostFile[]} */ ([picture, secondPicture].filter(Boolean));
       if (pictures.length && rightsConfirmed !== true) return { ok: false, code: 'rights-required' };
       const ask = { description, language, ...(delegate ? { delegate: true } : {}), ...(host && host !== 'oddbout' ? { host, hostConsent: hostConsent === true } : {}) };
       // The request's own checks (consent, one at a time, the day's limits, the host) before a picture moves: each kept picture spends one
@@ -145,12 +169,12 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       }
       if (!jobId) {
         const list = await invoke('generations');
-        return list.ok ? { ...list, jobs: list.jobs.map(job => ({ ...job, next: hostedNext(job) })) } : list;
+        return list.ok ? { ...list, jobs: list.jobs.map(/** @param {HostedJob} job */ job => ({ ...job, next: hostedNext(job) })) } : list;
       }
       // Wait on the state alone (no signed URLs per look), then read the job once.
       const deadline = Date.now() + waitSeconds * 1000, pollMs = hosted.pollMs ?? HOSTED_POLL_MS;
       while (Date.now() + pollMs <= deadline) {
-        const { data: row, error } = await db.from('af_generation_jobs').select('status,submission_id').eq('id', jobId).eq('owner_id', identity.owner).maybeSingle();
+        const { data: row, error } = await db.from('af_generation_jobs').select('status,submission_id').eq('id', jobId).eq('owner_id', /** @type {Identity} */ (identity).owner).maybeSingle();
         if (error || !row) break;
         let stage = null;
         if (row.status === 'submitted' && row.submission_id) {
@@ -186,7 +210,7 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       if (!read.ok) return read;
       // The draft the worker wrote, with his changes over it; the API checks the result against the contract.
       const draft = read.job.profile ?? {}, merged = { ...draft, ...profile };
-      for (const key of ['names', 'lines']) if (profile[key] && draft[key]) merged[key] = { ...draft[key], ...profile[key] };
+      for (const key of /** @type {const} */ (['names', 'lines'])) if (profile[key] && draft[key]) merged[key] = { ...draft[key], ...profile[key] };
       const confirmed = Object.fromEntries(PROFILE_KEYS.filter(key => merged[key] != null).map(key => [key, merged[key]]));
       return withNext(await post(`generations/${jobId}/register`, { profile: confirmed }));
     }, { write: true, publish: true, openWorld: true, idempotent: true });

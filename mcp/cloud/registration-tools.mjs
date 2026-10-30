@@ -1,11 +1,23 @@
+// @ts-check
 // The registration tools: the contract, the connected account and its readiness, the owner's fighters, deletion, and a package's way in.
 import { z } from 'zod';
 import { Problem, sha256 } from '../../api/http.mjs';
 import spec from '../../contracts/ai-fighter/v1/spec.json' with { type: 'json' };
 import schema from '../../contracts/ai-fighter/v1/fighter.schema.json' with { type: 'json' };
 import { FILE, UUID_ARG, downloadHostFile } from './common.mjs';
+/**
+ * @typedef {import('./common.mjs').Identity} Identity
+ * @typedef {import('./common.mjs').Invoke} Invoke
+ * @typedef {import('./common.mjs').RecordAgent} RecordAgent
+ * @typedef {import('./common.mjs').Register} Register
+ * @typedef {{ id: string, path: string, bytes: number, sha256: string }} ManifestAsset  An asset as the stored fighter.json lists it.
+ */
 
-/** Registers the tools every connection lists. `invoke` calls the in-process API as the verified owner; `recordAgent` labels a submission. */
+/**
+ * Registers the tools every connection lists. `invoke` calls the in-process API as the verified owner; `recordAgent` labels a submission.
+ * `identity` is null only on a signed-out call, which register lets reach the public tools alone: the account tools cast it.
+ * @param {{ register: Register, db: any, identity: Identity | null, invoke: Invoke, fetcher: typeof fetch, recordAgent: RecordAgent }} options
+ */
 export function registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent }) {
   register('get_fighter_spec', '캐릭터 등록 규격', 'Read the fighter contract before authoring. All 11 motions and actual visual review are required. '
     + 'This does not generate or register.',
@@ -38,7 +50,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
     }, { publicTool: true });
   register('get_profile', 'ODDBOUT 연결 계정', 'Read the connected ODDBOUT account. Its opaque ID is stable across reconnections and email changes. '
     + 'No creation or publication.', {},
-    async () => ({ id: identity.owner, ...(identity.email ? { email: identity.email } : {}), nickname: 'ODDBOUT' }), { profile: true });
+    async () => ({ id: /** @type {Identity} */ (identity).owner, ...(/** @type {Identity} */ (identity).email ? { email: /** @type {Identity} */ (identity).email } : {}), nickname: 'ODDBOUT' }), { profile: true });
   register('check_creation_readiness', '클라우드 제작·등록 연결 점검', 'Use before first generation, after a workspace restart and before registration. '
     + 'Checks this cloud account’s registration access without a PC or CLI login. '
     + 'Generation, conversation display and package review remain unverified until actual evidence exists; '
@@ -55,13 +67,14 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
           + 'Verify generation/display separately in the current conversation.' : 'Account registration access is unavailable; inspect the account response.' };
     });
   register('list_my_fighters', '내 캐릭터', 'List only the connected user’s registered fighters.', {}, async () => {
-    const { data, error } = await db.from('af_fighters').select('id,profile,status,review_state,created_at').eq('owner_id', identity.owner)
+    const { data, error } = await db.from('af_fighters').select('id,profile,status,review_state,created_at').eq('owner_id', /** @type {Identity} */ (identity).owner)
       .is('deleted_at', null).order('created_at', { ascending: false }).limit(50);
     if (error) throw new Problem(503, 'database-unavailable'); return { ok: true, fighters: data };
   });
+  /** @param {string} name @param {Record<string, unknown>} args */
   const deletionRpc = async (name, args) => {
-    const { data, error } = await db.rpc(name, { p_owner: identity.owner,
-      p_session: identity.claims.session_id, p_client: identity.claims.client_id, ...args });
+    const { data, error } = await db.rpc(name, { p_owner: /** @type {Identity} */ (identity).owner,
+      p_session: /** @type {Identity} */ (identity).claims.session_id, p_client: /** @type {Identity} */ (identity).claims.client_id, ...args });
     if (error) {
       const expected = ['not-found','authentication-required','invalid-deletion-confirmation','deletion-name-mismatch',
         'deletion-confirmation-expired','fighter-changed','fighter-deleted'];
@@ -75,7 +88,7 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
     + 'and retains private package bytes and history. Never interpret preparation alone as approval.',
     { fighterId: UUID_ARG() }, async ({ fighterId }) => ({
       ...await deletionRpc('af_prepare_fighter_deletion', { p_fighter: fighterId }),
-      account: { id: identity.owner, email: identity.email },
+      account: { id: /** @type {Identity} */ (identity).owner, email: /** @type {Identity} */ (identity).email },
     }), { write: true, idempotent: true });
   register('delete_fighter', '내 캐릭터 삭제', 'Execute only the user’s explicit deletion instruction for the exact account and fighter returned by '
     + 'prepare_fighter_deletion. Pass that token and exact confirmName, with confirm=true. '
@@ -95,17 +108,17 @@ export function registerRegistrationTools({ register, db, identity, invoke, fetc
       const result = await invoke('submissions', 'POST', bytes, { 'content-type': 'application/json', 'idempotency-key': idempotencyKey });
       if (result.ok) await recordAgent(result.submissionId);
       if (!result.ok || result.stage !== 'uploading') return result;
-      const { data, error } = await db.from('af_submissions').select('manifest').eq('id', result.submissionId).eq('owner_id', identity.owner).single();
+      const { data, error } = await db.from('af_submissions').select('manifest').eq('id', result.submissionId).eq('owner_id', /** @type {Identity} */ (identity).owner).single();
       if (error) throw new Problem(503, 'database-unavailable');
-      return { ...result, assets: data.manifest.assets.map(({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 })) };
+      return { ...result, assets: data.manifest.assets.map(/** @param {ManifestAsset} asset */ ({ id, path, bytes, sha256 }) => ({ id, path, bytes, sha256 })) };
     }, { write: true, openWorld: true, idempotent: true, files: ['manifest'] });
   register('upload_fighter_asset', '캐릭터 파일 전달', 'Upload one actual WebP file to your private submission. Its size and SHA-256 must match fighter.json. '
     + 'Repeat safely with identical bytes; never regenerate for a delivery failure.',
     { submissionId: UUID_ARG(), assetId: z.string().regex(/^[a-zA-Z0-9_-]{1,80}$/), file: FILE }, async ({ submissionId, assetId, file }) => {
-      const { data: row, error } = await db.from('af_submissions').select('manifest,status,expires_at').eq('id', submissionId).eq('owner_id', identity.owner).maybeSingle();
+      const { data: row, error } = await db.from('af_submissions').select('manifest,status,expires_at').eq('id', submissionId).eq('owner_id', /** @type {Identity} */ (identity).owner).maybeSingle();
       if (error) throw new Problem(503, 'database-unavailable'); if (!row) throw new Problem(404, 'not-found');
       if (row.status !== 'uploading' || Date.parse(row.expires_at) <= Date.now()) throw new Problem(409, 'upload-closed');
-      const asset = row.manifest.assets.find(a => a.id === assetId);
+      const asset = row.manifest.assets.find(/** @param {ManifestAsset} a */ a => a.id === assetId);
       if (!asset || !Number.isSafeInteger(asset.bytes) || asset.bytes > spec.limits.assetBytes) throw new Problem(404, 'asset-not-found');
       const bytes = await downloadHostFile(file, asset.bytes, fetcher);
       if (bytes.length !== asset.bytes || await sha256(bytes) !== asset.sha256) throw new Problem(422, 'asset-hash-or-size');

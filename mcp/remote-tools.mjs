@@ -1,3 +1,4 @@
+// @ts-check
 import { constants } from 'node:fs';
 import { lstat, open, readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -11,9 +12,10 @@ import { errorCode } from './error-code.mjs';
 import { profileLimits } from '../contracts/ai-fighter/profile-limits.mjs';
 
 const CHANGED = 'package-changed-after-validation';
+/** @type {(bytes: Buffer) => string} */
 const sha256 = bytes => createHash('sha256').update(bytes).digest('hex');
 
-/** Read exactly the declared size from a regular file. The final component must not be a symbolic link. */
+/** Read exactly the declared size from a regular file. The final component must not be a symbolic link. @param {string} file @param {number} bytes */
 async function readDeclaredFile(file, bytes) {
   const handle = await open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
   try {
@@ -31,7 +33,7 @@ async function readDeclaredFile(file, bytes) {
   } finally { await handle.close(); }
 }
 
-/** The manifest bytes, or null when the path is not an allowed, existing manifest. */
+/** The manifest bytes, or null when the path is not an allowed, existing manifest. @param {string} root @param {string} manifestPath */
 async function readManifest(root, manifestPath) {
   try {
     const location = await resolveManifest(root, manifestPath);
@@ -39,12 +41,18 @@ async function readManifest(root, manifestPath) {
   } catch { return null; }
 }
 
+/**
+ * @param {import('@modelcontextprotocol/sdk/server/mcp.js').McpServer} server
+ * @param {{ remote: import('../api/client.mjs').RemoteClient, validatePackage?: (relative: string) => Promise<import('./package-access.mjs').PackageCheck>,
+ *   root?: string, respond: import('./server.mjs').Respond, creatorPage?: string }} options
+ */
 export function registerRemoteTools(server, { remote, validatePackage, root, respond, creatorPage }) {
   const outputSchema = { ok: z.boolean(), stage: z.string(), submissionId: z.string().optional(), manifestSha256: z.string().optional(),
     fighterId: z.string().nullable().optional(), runtimeApproved: z.boolean().optional(), runtimeScope: z.string().nullable().optional(), pending: z.array(z.string()).optional(),
     validation: z.unknown().optional(), code: z.string().optional(), fighter: z.unknown().optional(),
     errors: z.array(z.unknown()).optional(), errorCount: z.number().optional(), loginUrl: z.string().optional(), expiresAt: z.string().optional() };
   const read = { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true };
+  /** @type {<A>(fn: (args: A) => Promise<import('./server.mjs').ToolResult>) => (args: A) => Promise<import('@modelcontextprotocol/sdk/types.js').CallToolResult>} */
   const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: errorCode(error, 'remote-operation-failed') }); } };
   if (validatePackage) {
     server.registerTool('submit_fighter_package', {
@@ -54,11 +62,11 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
     }, safe(async ({ manifestPath, idempotencyKey, fighterId }) => {
       // Upload exactly what the validator saw: the manifest must not change while the child process checks it,
       // and every uploaded asset must match the hash in that manifest.
-      const before = await readManifest(root, manifestPath);
+      const before = await readManifest(/** @type {string} */ (root), manifestPath); // set whenever validatePackage is
       const checked = await validatePackage(manifestPath);
       if (!checked.ok) return { ok: false, stage: 'local-validation', errors: checked.errors,
         code: checked.stage === 'local-access' ? 'local-validation-unavailable' : 'package-invalid' };
-      const after = await readManifest(root, manifestPath);
+      const after = await readManifest(/** @type {string} */ (root), manifestPath);
       if (!before || !after || !after.bytes.equals(before.bytes)) throw new Error(CHANGED);
       const manifestText = new TextDecoder('utf-8', { fatal: true }).decode(after.bytes);
       const parsed = parseFighterJson(manifestText);

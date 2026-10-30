@@ -1,3 +1,4 @@
+// @ts-check
 import { realpath, stat } from 'node:fs/promises';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { createServer } from './server.mjs';

@@ -1,3 +1,4 @@
+// @ts-check
 // Read-only public probes and authenticated GET /me. No OAuth start, upload or network policy mutation.
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -6,6 +7,12 @@ import { connectionAction, transportCode } from '../api/connection-errors.mjs';
 import { runtimeFetch } from '../api/runtime-fetch.mjs';
 import { isPublishableKey, pendingDeviceLoginPath } from '../scripts/login.mjs';
 
+/**
+ * @typedef {{ origin: string, apiBase: string, siteUrl: string, publishableKey: string, flags: string }} Project  deploy/creator-site.json, checked.
+ * @typedef {{ status: string, reason?: string, httpStatus?: number, deviceLogin?: string, nextAction?: { actor: string, code: string, message: string } }} Probe
+ */
+
+/** @param {string} root @returns {Promise<Project | null>} */
 export async function readProject(root) {
   try {
     const site = JSON.parse(await readFile(path.join(root, 'deploy/creator-site.json'), 'utf8'));
@@ -18,8 +25,12 @@ export async function readProject(root) {
   } catch { return null; }
 }
 
+/** @type {(reason: string) => Probe} */
 const unknown = reason => ({ status: 'unverified', reason, deviceLogin: 'unknown' });
-/** A reachable HTTP error is different from a CONNECT failure before reaching the service. */
+/**
+ * A reachable HTTP error is different from a CONNECT failure before reaching the service.
+ * @param {string} url @param {{ spec?: boolean, fetchImpl?: typeof runtimeFetch }} [options] @returns {Promise<Probe>}
+ */
 export async function probePublic(url, { spec = false, fetchImpl = runtimeFetch } = {}) {
   try {
     const response = await fetchImpl(url, { redirect: 'error', signal: AbortSignal.timeout(8000) });
@@ -41,6 +52,7 @@ export async function probePublic(url, { spec = false, fetchImpl = runtimeFetch 
   }
 }
 
+/** @param {Project | null} project @param {{ checkServer?: boolean, probe?: typeof probePublic }} [options] */
 export async function probeConnections(project, { checkServer = true, probe = probePublic } = {}) {
   if (!project) return { api: unknown('public-config-invalid'), homepage: unknown('public-config-invalid') };
   if (!checkServer) return { api: unknown('server-not-checked'), homepage: unknown('server-not-checked') };
@@ -48,7 +60,10 @@ export async function probeConnections(project, { checkServer = true, probe = pr
   return { api, homepage };
 }
 
-/** Only a successful server response verifies the active MCP account; a local JWT claim never does. */
+/**
+ * Only a successful server response verifies the active MCP account; a local JWT claim never does.
+ * @param {{ hasSession: boolean, remoteActive?: boolean, request?: import('../api/client.mjs').RemoteClient['request'], checkServer?: boolean }} options
+ */
 export async function checkAccount({ hasSession, remoteActive, request, checkServer }) {
   if (!hasSession) return { status: 'sign-in-required', canSubmit: null, accountMatch: 'unknown' };
   if (!remoteActive) return { status: 'restart-required', canSubmit: null, accountMatch: 'unknown' };
@@ -59,7 +74,7 @@ export async function checkAccount({ hasSession, remoteActive, request, checkSer
       return { status: 'unverified', reason: 'invalid-account-response', canSubmit: null, accountMatch: 'unknown' };
     return { status: 'connected', evidence: 'authenticated GET /me', canSubmit: typeof result.account.canSubmit === 'boolean' ? result.account.canSubmit : null,
       accountMatch: 'unknown' };
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     const reason = [401, 403].includes(error.status) ? `api-http-${error.status}`
       : /^[a-z][a-z0-9-]{0,80}$/.test(error.message) ? error.message : transportCode(error);
     return { status: ['authentication-required', 'client-sign-in-required', 'api-http-401'].includes(reason) ? 'sign-in-required' : 'blocked',
@@ -67,15 +82,17 @@ export async function checkAccount({ hasSession, remoteActive, request, checkSer
   }
 }
 
+/** @param {string} sessionPath @param {{ now?: () => number }} [options] */
 export async function pendingConnection(sessionPath, { now = Date.now } = {}) {
   try {
     const pending = JSON.parse(await readFile(pendingDeviceLoginPath(sessionPath), 'utf8'));
     // Report presence/expiry only. Never return the secret device code, session or user identifier.
     if (pending?.version !== 1 || !Number.isFinite(Date.parse(pending.expiresAt))) return { status: 'unknown' };
     return { status: Date.parse(pending.expiresAt) > now() ? 'pending' : 'expired' };
-  } catch (error) { return { status: error.code === 'ENOENT' ? 'none' : 'unknown' }; }
+  } catch (/** @type {any} */ error) { return { status: error.code === 'ENOENT' ? 'none' : 'unknown' }; }
 }
 
+/** @param {Project | null} project @param {{ api: Probe, homepage: Probe }} connections */
 export function infrastructureItem(project, connections) {
   const blocked = [connections.api, connections.homepage].some(item => item.status === 'blocked');
   return { status: blocked ? 'blocked' : [connections.api, connections.homepage].every(item => item.status === 'reachable') ? 'service-reachable' : 'unverified',
@@ -86,6 +103,7 @@ export function infrastructureItem(project, connections) {
     note: '초기 환경 준비자가 실제 호스트 종류의 공식 네트워크 설정을 확인한다. Work 기본 클라우드에 사용자 지정 Codex 환경의 Republish 절차를 강제하지 않는다. 키트는 이 설정을 변경하지 않으며 제작 사용자는 준비된 작업 공간을 재사용한다.' };
 }
 
+/** @param {string | null} [choice] */
 export function unverifiedCreation(choice) {
   return {
     generation: { status: choice === 'stop' ? 'stopped' : 'unverified', providerChoice: choice ?? null,

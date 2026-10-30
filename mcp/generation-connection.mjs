@@ -1,3 +1,4 @@
+// @ts-check
 // Official CLI only; raw status/login output never leaves this module or reaches a log.
 import { execFile, spawn } from 'node:child_process';
 import { access } from 'node:fs/promises';
@@ -16,11 +17,16 @@ export async function codexCommand(env = process.env, platform = process.platfor
   throw Error('codex-not-installed');
 }
 
+/**
+ * @param {string} command @param {string[]} args @param {{ env?: NodeJS.ProcessEnv, cwd?: string, timeout?: number }} [options]
+ * @returns {Promise<{ code: number | string, text: string }>}
+ */
 export function capture(command, args, { env = process.env, cwd, timeout = 15000 } = {}) {
   return new Promise(resolve => execFile(command, args, { env, cwd, timeout, windowsHide: true, maxBuffer: 65536, encoding: 'utf8' },
     (error, stdout, stderr) => resolve({ code: error ? error.code ?? 1 : 0, text: String(stdout ?? '') + String(stderr ?? '') })));
 }
 
+/** @param {{ resolve?: typeof codexCommand, run?: typeof capture, env?: NodeJS.ProcessEnv, cwd?: string }} [options] */
 export async function inspectGenerationLogin({ resolve = codexCommand, run = capture, env = process.env, cwd } = {}) {
   let cli;
   try { cli = await resolve(env); } catch { return { status: 'not-installed', provider: 'codex' }; }
@@ -33,6 +39,7 @@ export async function inspectGenerationLogin({ resolve = codexCommand, run = cap
     accountIdentity: 'unknown', imageAccess: 'unknown', quota: 'unknown', checkedAt: new Date().toISOString() };
 }
 
+/** @param {string} raw */
 export function publicDeviceChallenge(raw) {
   const text = raw.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, '');
   // No callback addresses, query parameters, bearer values, email addresses or arbitrary URLs.
@@ -42,8 +49,13 @@ export function publicDeviceChallenge(raw) {
     instruction: '본인이 시작한 연결인지, 제공자 화면의 코드가 같은지 확인한 뒤 로그인하세요. 콜백 주소나 토큰은 대화에 보내지 마세요.' } : null;
 }
 
+/**
+ * @typedef {{ cwd?: string, env?: NodeJS.ProcessEnv, emit: (event: object) => void, resolve?: typeof codexCommand, spawnImpl?: typeof spawn,
+ *   inspect?: typeof inspectGenerationLogin, run?: typeof capture, timeoutMs?: number }} DeviceLoginOptions
+ */
+/** @param {DeviceLoginOptions} options */
 export async function runDeviceLogin({ cwd, env = process.env, emit, resolve = codexCommand, spawnImpl = spawn, inspect = inspectGenerationLogin,
-  run = capture, timeoutMs = 10 * 60 * 1000 } = {}) {
+  run = capture, timeoutMs = 10 * 60 * 1000 } = /** @type {DeviceLoginOptions} */ ({})) {
   const cli = await resolve(env);
   // Check the installed CLI's capability before starting authentication.
   const help = await run(cli.command, [...cli.prefix, 'login', '--help'], { env, cwd });
@@ -64,6 +76,7 @@ export async function runDeviceLogin({ cwd, env = process.env, emit, resolve = c
     process.once('SIGINT', interrupt); process.once('SIGTERM', interrupt);
     const timer = setTimeout(() => { timedOut = true; stop(); }, timeoutMs);
     const cleanup = () => { clearTimeout(timer); process.removeListener('SIGINT', interrupt); process.removeListener('SIGTERM', interrupt); raw = ''; pending.fill(''); };
+    /** @type {(stream: number, chunk: Buffer) => void} */
     const receive = (stream, chunk) => {
       // A chunk can end halfway through a valid-looking pairing code. Only parse
       // complete lines, keeping stdout/stderr fragments separate until then.

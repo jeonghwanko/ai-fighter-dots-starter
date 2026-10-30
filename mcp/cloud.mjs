@@ -1,3 +1,4 @@
+// @ts-check
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { WebStandardStreamableHTTPServerTransport } from '@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js';
 import { z } from 'zod';
@@ -14,6 +15,14 @@ import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.m
 export { allowedFileUrl, compactText, downloadHostFile } from './cloud/common.mjs';
 export { STYLE_GUIDE } from './cloud/agent-tools.mjs';
 export { HOSTED_WAIT_SECONDS, hostedNext } from './cloud/hosted-tools.mjs';
+/**
+ * @typedef {import('./cloud/common.mjs').Identity} Identity
+ * @typedef {import('./cloud/common.mjs').Arena} Arena
+ * @typedef {import('./cloud/common.mjs').Hosted} Hosted
+ * @typedef {import('./cloud/common.mjs').Invoke} Invoke
+ * @typedef {import('./cloud/common.mjs').RecordAgent} RecordAgent
+ * @typedef {import('./cloud/common.mjs').Register} Register
+ */
 
 export const CLOUD_RESOURCE = 'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp';
 export const LEGACY_PUBLIC_RESOURCE = 'https://ai-fighter-validator.onrender.com/mcp';
@@ -24,6 +33,7 @@ export const PUBLIC_RESOURCE = 'https://mcp.oddbout.com/mcp';
  * out (ChatGPT relies on that), so Grok connected without an account and never offered the sign-in. Its tokens carry the same audience.
  */
 export const SIGN_IN_RESOURCE = `${CLOUD_RESOURCE}/signin`;
+/** @param {unknown} aud */
 export function validCloudAudience(aud) {
   const current = [CLOUD_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_RESOURCE];
   if (typeof aud === 'string') return current.includes(aud);
@@ -42,17 +52,25 @@ export const PUBLIC_TOOLS = new Set(['get_fighter_spec', 'get_style_guide', 'lis
   'get_fighter_story', 'get_world', 'list_generation_hosts']);
 /** Public tools that spend an arena budget: a signed-in caller's call counts on his owner (MCP 점검, 2026-10-27). */
 export const OWNER_BUDGET_TOOLS = new Set(['read_bout']);
-/** A host's own anonymous user id (`_meta["openai/subject"]` — the Apps SDK sends it "for the purposes of rate limiting"), as a UUID-shaped key. */
+/**
+ * A host's own anonymous user id (`_meta["openai/subject"]` — the Apps SDK sends it "for the purposes of rate limiting"), as a UUID-shaped key.
+ * @param {unknown} subject
+ */
 async function subjectKey(subject) {
   if (typeof subject !== 'string' || !subject || subject.length > 200) return null;
   const hex = Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`openai-subject:${subject}`))),
     byte => byte.toString(16).padStart(2, '0')).join('');
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-8${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
+/** @type {(value: unknown, status?: number, headers?: Record<string, string>) => Response} */
 const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(value), { status,
   headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers } });
 
-// A signed OAuth token is still insufficient without the dedicated audience, role and server-managed permission.
+/**
+ * A signed OAuth token is still insufficient without the dedicated audience, role and server-managed permission.
+ * @param {any} db @param {Request} request @param {() => number} [now]
+ * @returns {Promise<Identity | null>}
+ */
 export async function authenticateCloud(db, request, now = Date.now) {
   const token = bearerToken(request);
   if (!token) return null;
@@ -69,6 +87,10 @@ export async function authenticateCloud(db, request, now = Date.now) {
   return { owner: c.sub, email: c.email ?? '', claims: c };
 }
 
+/**
+ * @param {{ db: any, identity: Identity | null, fetcher?: typeof fetch, arena?: Arena | null, hosted?: Hosted | null,
+ *   host?: { compact?: boolean, caller?: string | null } }} options
+ */
 export function cloudServer({ db, identity, fetcher = fetch, arena = null, hosted = null, host = {} }) {
   const server = new McpServer({ name: 'oddbout-cloud', version: '1.0.0' }, {
     instructions: (hosted ? HOSTED_INSTRUCTIONS : '') + 'For creation in the user’s workspace, use the user’s own generation account. '
@@ -93,12 +115,14 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   } }) : null;
   // The workshop labels what this client writes (made with); the in-process API takes its OAuth client from the verified token only.
   const api = createHandler({ db: scoped ?? db, agentClient: identity?.claims.client_id ?? null });
+  /** @type {Invoke} */
   const invoke = async (path, method = 'GET', body, headers = {}) => {
     const response = await api(new Request(`https://internal.invalid/ai-fighter/${path}`, {
       method, headers: { authorization: 'Bearer internal-request-identity', ...headers }, ...(body === undefined ? {} : { body }) }));
     return response.json();
   };
   // Which agent made a submission (`af_record_submission_agent`, 2026-10-27): the roster shows a fighter's maker. Never fails the call.
+  /** @type {RecordAgent} */
   const recordAgent = async submissionId => {
     if (!identity || !UUID.test(submissionId ?? '')) return;
     try { await db.rpc('af_record_submission_agent', { p_owner: identity.owner, p_submission: submissionId, p_client: identity.claims.client_id }); }
@@ -106,18 +130,20 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
   };
   // A write states whether repeating it with the same arguments is safe (idempotentHint). It once defaulted to yes, and three tools that
   // make something new on every call told retrying clients they could repeat them (MCP 점검 2026-10-29).
+  /** @type {Register} */
   const register = (name, title, description, inputSchema, run, { write = false, publish = false, openWorld = false,
     idempotent = write ? undefined : true, files = [], profile = false, publicTool = false, diagnostic = false } = {}) => {
     if (typeof idempotent !== 'boolean') throw Error(`${name}: a write tool states idempotent`);
-    server.registerTool(name, { title, description, inputSchema,
+    // Register types each tool's args; the SDK parses them with inputSchema before run sees them.
+    server.registerTool(name, { title, description, inputSchema: /** @type {z.ZodRawShape} */ (inputSchema),
       ...(profile ? { outputSchema: z.object({ id: z.string().min(1), email: z.string().optional(), nickname: z.string().optional() }).strict() } : {}),
       annotations: { ...READ, readOnlyHint: !write, openWorldHint: openWorld, destructiveHint: publish, idempotentHint: idempotent },
       _meta: { securitySchemes: publicTool ? [{ type: 'noauth' }] : AUTH,
-        ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } }, async args => {
+        ...(files.length ? { 'openai/fileParams': files } : {}), ...(profile ? { 'openai/profile': true } : {}) } }, async (/** @type {Record<string, unknown>} */ args) => {
       if (!publicTool && !identity) return { ...output({ ok: false, code: 'authentication-required' }),
         _meta: { 'mcp/www_authenticate': [`Bearer resource_metadata="${CLOUD_RESOURCE}/.well-known/oauth-protected-resource"`] } };
       try {
-        const result = output(await run(args), host.compact === true);
+        const result = output(await run(/** @type {Parameters<typeof run>[0]} */ (args)), host.compact === true);
         // A diagnostic failure is useful data; keep it readable by hosts that throw away tool errors.
         return diagnostic ? { ...result, isError: false } : result;
       }

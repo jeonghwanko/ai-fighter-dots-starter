@@ -1,3 +1,4 @@
+// @ts-check
 // Cross-process file locks for one workspace (creation sessions, the environment record).
 // The holder refreshes the lock's mtime while it works, so a lock left by a killed process goes stale and is
 // reclaimed instead of blocking that session forever. Callers in this process queue; other processes wait
@@ -6,11 +7,14 @@ import { randomUUID } from 'node:crypto';
 import { readFile, rm, stat, utimes, writeFile } from 'node:fs/promises';
 import { setTimeout as delay } from 'node:timers/promises';
 
+/** @type {Map<string, Promise<unknown>>} */
 const queues = new Map();
+/** @type {(file: string) => Promise<number | null>} */
 const age = async file => { const modified = await stat(file).then(info => info.mtimeMs, () => null); return modified === null ? null : Date.now() - modified; };
+/** @type {(file: string, body: string) => Promise<boolean>} */
 const create = (file, body) => writeFile(file, body, { flag: 'wx', mode: 0o600 }).then(() => true, error => { if (error.code === 'EEXIST') return false; throw error; });
 
-/** Removes `file` if it is still stale. One reclaimer at a time, so a freshly acquired lock is never deleted. */
+/** Removes `file` if it is still stale. One reclaimer at a time, so a freshly acquired lock is never deleted. @param {string} file @param {number} staleMs */
 async function reclaim(file, staleMs) {
   const first = await age(file);
   if (first === null) return true;
@@ -31,10 +35,14 @@ async function reclaim(file, staleMs) {
 /**
  * Runs `task` holding `file`. Throws Error(busy) if the lock is not free within `waitMs`.
  * `staleMs` must exceed the longest event-loop stall a holder can have; the heartbeat runs every `staleMs / 4`.
+ * @template T
+ * @param {string} file @param {() => Promise<T>} task @param {{ busy?: string, waitMs?: number, staleMs?: number }} [options]
+ * @returns {Promise<T>}
  */
 export async function withFileLock(file, task, { busy = 'lock-busy', waitMs = 10_000, staleMs = 60_000 } = {}) {
   const deadline = Date.now() + waitMs;
   const previous = queues.get(file) ?? Promise.resolve();
+  /** @type {((value?: unknown) => void) | undefined} */
   let done;
   const turn = new Promise(resolve => { done = resolve; }), tail = previous.then(() => turn);
   queues.set(file, tail);
@@ -60,7 +68,7 @@ export async function withFileLock(file, task, { busy = 'lock-busy', waitMs = 10
       if (held === token) await rm(file, { force: true });
     }
   } finally {
-    done();
+    /** @type {() => void} */ (done)(); // set by the Promise executor above
     if (queues.get(file) === tail) queues.delete(file);
   }
 }
