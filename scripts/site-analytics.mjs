@@ -67,8 +67,9 @@ function startAnalytics(measurementId, hostname, apiBase) {
   window.addEventListener('oddbout:milestone', event => {
     if (!permitted()) return;
     const { name, parameters = {} } = event.detail ?? {};
-    // 첫 선수 무료 (2026-10-30): the hosted request, its finished motions, the entry and the wish for one more fighter.
-    if (!['game_start', 'match_complete', 'creation_start', 'hosted_request', 'hosted_ready', 'fighter_entered', 'extra_generation_interest'].includes(name)) return;
+    // 첫 선수 무료 (2026-10-30): the hosted request, the entry and the wish for one more fighter (the finished motions are counted from the
+    // database, measure-export's freeFunnel).
+    if (!['game_start', 'match_complete', 'creation_start', 'hosted_request', 'fighter_entered', 'extra_generation_interest'].includes(name)) return;
     /** @type {Record<string, string>} */
     const safe = { ...page, send_to: measurementId };
     if (['play', 'watch', 'tournament', 'exhibition'].includes(parameters.mode)) safe.mode = parameters.mode;
