@@ -5,10 +5,10 @@
 
 ## 자료 읽기
 
-- [규격이 포함된 제작 시작 문서](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/START-HERE.md)와
-  [대화 시험 문서](https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/game-context/DIALOGUE-ONLY.md)는 같은 JSON을 포함한다.
+- [규격이 포함된 제작 시작 문서](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/START-HERE.md)와
+  [대화 시험 문서](https://github.com/jeonghwanko/oddbout-starter/blob/codex/game-context/DIALOGUE-ONLY.md)는 같은 JSON을 포함한다.
   게임이 생성·게시하며, 첫 링크를 읽을 때 구조 데이터가 빠지는 일을 줄인다. 첫 응답에 읽은 revision 앞 12자리를 표시한다.
-- [현재 게임 제공 JSON](https://raw.githubusercontent.com/jeonghwanko/ai-fighter-dots-starter/refs/heads/codex/game-context/creation-context.json)
+- [현재 게임 제공 JSON](https://raw.githubusercontent.com/jeonghwanko/oddbout-starter/refs/heads/codex/game-context/creation-context.json)
 - MCP: `get_fighter_spec`의 `section: "context"`. `group`을 주면 해당 묶음의 모션 규격만 받는다.
 - CLI: `npm run creation:context`. 로그인·생성 계정 접근 없이 읽는다.
 

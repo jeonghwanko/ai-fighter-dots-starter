@@ -37,7 +37,7 @@ if (option === '--dry-run') {
     // No checkout means old tracked assets are absent. add -A removes stale assets
     // from the new commit without deleting anything in an existing user checkout.
     git(parent, 'clone', '--depth=1', '--single-branch', '--no-checkout', '--branch', hosting.branch,
-      'git@github.com:jeonghwanko/ai-fighter-dots-starter.git', checkout);
+      'git@github.com:jeonghwanko/oddbout-starter.git', checkout);
     for (const entry of await readdir(source)) await cp(join(source, entry), join(checkout, entry), { recursive: true, errorOnExist: true, force: false });
     // The caller's build directory may change while cloning or copying.
     // Recheck the exact bytes that will be committed, before staging or pushing.

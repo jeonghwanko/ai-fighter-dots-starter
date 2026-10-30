@@ -14,7 +14,7 @@ Spaceship DNS와 GitHub Pages를 연결하고 정책 페이지까지 공개하�
 | 제작 및 게임 | https://oddbout.com/creator.html<br>https://oddbout.com/fighter.html |
 | 권한 있는 DNS | launch1.spaceship.net<br>launch2.spaceship.net |
 | 사이트 호스팅 | GitHub Pages |
-| 공개 저장소 | jeonghwanko/ai-fighter-dots-starter |
+| 공개 저장소 | jeonghwanko/oddbout-starter |
 | 게시 브랜치 | codex/creator-pages |
 | 웹 원본 | jeonghwanko/crashbang-heroes의 kaito_web |
 | 백엔드 | 기존 Supabase 프로젝트 유지<br>ztfxxhtmtrvxvuxlqmgz.supabase.co |
@@ -29,7 +29,7 @@ Spaceship DNS와 GitHub Pages를 연결하고 정책 페이지까지 공개하�
 
 최초 연결 시 GitHub 계정 Settings → Pages → Add a domain에서 oddbout.com을 추가하고 안내된 TXT 레코드로 소유권을 확인합니다. 검증은 저장소 설정이 아니라 해당 저장소를 소유한 계정의 설정에서 합니다. TXT 값은 화면에 표시된 실제 값을 쓰고, 검증 후에도 유지합니다.
 
-이후 저장소 jeonghwanko/ai-fighter-dots-starter의 Settings → Pages를 엽니다. 현재 브랜치 게시 구성을 유지하고 게시 원본을 codex/creator-pages, 폴더를 /(root)로 확인합니다. Custom domain에는 프로토콜이나 경로 없이 oddbout.com만 입력합니다. 저장한 뒤 DNS를 연결합니다.
+이후 저장소 jeonghwanko/oddbout-starter의 Settings → Pages를 엽니다. 현재 브랜치 게시 구성을 유지하고 게시 원본을 codex/creator-pages, 폴더를 /(root)로 확인합니다. Custom domain에는 프로토콜이나 경로 없이 oddbout.com만 입력합니다. 저장한 뒤 DNS를 연결합니다.
 
 ### Spaceship의 Advanced DNS 값
 
@@ -44,7 +44,7 @@ Spaceship에서 Advanced DNS를 열고 oddbout.com을 선택합니다. 현재 �
 | CNAME | www | jeonghwanko.github.io | 1800초 |
 | TXT | GitHub가 지정한 호스트 | GitHub 화면에 표시된 검증값 | 기본값 |
 
-@는 루트 도메인 oddbout.com을 뜻합니다. CNAME 값에는 https://나 /ai-fighter-dots-starter 같은 경로를 넣지 않습니다. 도메인 전체를 호스트 칸에 넣어야 하는 관리 화면인지도 확인하세요.
+@는 루트 도메인 oddbout.com을 뜻합니다. CNAME 값에는 https://나 /oddbout-starter 같은 경로를 넣지 않습니다. 도메인 전체를 호스트 칸에 넣어야 하는 관리 화면인지도 확인하세요.
 
 위 A 4개와 www CNAME은 현재 공개 DNS에서 확인된 값입니다. 루트 AAAA 레코드는 이번 조회에서 발견되지 않았습니다. IPv6는 선택 사항이며 추가할 경우 GitHub 공식 문서의 현재 AAAA 값을 사용합니다. 와일드카드 DNS는 추가하지 않습니다.
 

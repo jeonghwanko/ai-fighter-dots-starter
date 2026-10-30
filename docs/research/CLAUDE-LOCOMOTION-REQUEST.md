@@ -1,7 +1,7 @@
 # Claude 검토 요청
 
 콘솔에서 이 파일과 같은 폴더의 `MOCHA-LOCOMOTION-HANDOFF.md`를 읽혀 사용한다.
-작업 저장소: `C:/Users/turbo08/ai-fighter-dots-starter`.
+작업 저장소: `C:/Users/turbo08/oddbout-starter`.
 별도 폴더에서 실행한다면 이 절대 경로로 문서를 지정한다.
 아직 Claude의 답변을 받은 상태가 아니며, 아래는 검토 요청서다.
 
@@ -36,7 +36,7 @@ VACE는 원인 분리 연구이며 더 튜닝하자는 답을 기본 결론으�
 ## 콘솔에 붙여 넣을 짧은 프롬프트
 
 ```text
-C:/Users/turbo08/ai-fighter-dots-starter/docs/research/CLAUDE-LOCOMOTION-REQUEST.md와
+C:/Users/turbo08/oddbout-starter/docs/research/CLAUDE-LOCOMOTION-REQUEST.md와
 같은 폴더의 MOCHA-LOCOMOTION-HANDOFF.md를 읽고 독립적인 기술·제품 검토를 해줘.
 고객은 Dots 또는 Grok 등 한 서비스만 구독한다고 가정해.
 추가 GPU/VACE 설치나 두 번째 구독을 기본 해결책으로 삼지 말고,

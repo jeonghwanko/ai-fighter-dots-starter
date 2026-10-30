@@ -13,7 +13,9 @@ export const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 
 /** @param {string} text */
 export function publicSiteText(text) {
   const base = new URL('.', hosting.siteUrl).href;
+  // The game's pages may still carry the repository's old name (ai-fighter-dots-starter) until they are re-saved.
   return text.replaceAll('https://jeonghwanko.github.io/ai-fighter-dots-starter/', base)
+    .replaceAll('https://jeonghwanko.github.io/oddbout-starter/', base)
     .replaceAll(base + 'league.html', base)
     .replaceAll('./league.html', './')
     .replace(/((?:\\)?["'])league\.html(?=(?:\\)?["'])/g, '$1');

@@ -113,8 +113,8 @@ PC가 필요 없는 외형은 현재 호스트가 지원하는 직접 생성·�
 봇 서비스의 작업 VM으로 운영할 때의 계정·격리·보존 규칙은 [실행 환경 운영 지침](EXECUTION-HOST.md)에 있다.
 
 ```sh
-git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
-cd ai-fighter-dots-starter
+git clone --branch main --single-branch https://github.com/jeonghwanko/oddbout-starter.git
+cd oddbout-starter
 npm ci --ignore-scripts
 npm run sprite:setup
 npm run sprite:status

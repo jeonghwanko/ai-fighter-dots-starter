@@ -35,7 +35,7 @@ test('startup returns one concrete action without treating login or mock evidenc
 });
 test('front door fetches exact commit, preserves a workspace binding and returns actionable failures', async t => {
   const f = await fixture(t), releasePath = path.join(f.base, 'release.json'), commit = 'b'.repeat(40), calls = [];
-  await writeFile(releasePath, JSON.stringify({ schemaVersion: 1, repository: 'https://github.com/jeonghwanko/ai-fighter-dots-starter.git', provider: 'grok', commit, version: '0.5.5' }));
+  await writeFile(releasePath, JSON.stringify({ schemaVersion: 1, repository: 'https://github.com/jeonghwanko/oddbout-starter.git', provider: 'grok', commit, version: '0.5.5' }));
   const run = async (cmd,args) => { calls.push([cmd,args]); assert.equal(cmd, 'git');
     return { stdout: args[0] === 'rev-parse' ? commit : '' }; };
   const loadRuntime = async url => { assert.ok(url.endsWith('/scripts/dots-start.mjs'));
@@ -68,7 +68,7 @@ test('front door CLI returns a failing exit code while preserving its actionable
 
 test('front door imports the bound runtime without relying on child Node stdout', async t => {
   const f = await fixture(t), commit = 'd'.repeat(40), releasePath = path.join(f.base, 'release.json');
-  await writeFile(releasePath, JSON.stringify({ schemaVersion: 1, repository: 'https://github.com/jeonghwanko/ai-fighter-dots-starter.git', provider: 'grok', commit: 'e'.repeat(40), version: '0.5.5' }));
+  await writeFile(releasePath, JSON.stringify({ schemaVersion: 1, repository: 'https://github.com/jeonghwanko/oddbout-starter.git', provider: 'grok', commit: 'e'.repeat(40), version: '0.5.5' }));
   await mkdir(path.join(f.workspace, 'output'));
   await writeFile(path.join(f.workspace, 'output/dots-workspace.json'), JSON.stringify({ schemaVersion: 1, provider: 'grok', commit, runtime: f.runtime }));
   await mkdir(path.join(f.runtime, 'scripts'));

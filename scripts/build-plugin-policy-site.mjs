@@ -34,7 +34,7 @@ for (const page of pages) {
 ${publish ? '' : `<div class="preview">POLICY PREVIEW <span>Prepared ${prepared} · publication pending · not an effective notice</span></div>`}
 <main id="main"><div class="hero"><p class="eyebrow">${page.eyebrow}</p><h1>${page.title}</h1><p class="intro">${page.description}</p><div class="meta">Lucas Foundation <span>•</span> ${date}${page.translation ? ` <span>•</span> <a href="./${page.translation.file}" lang="${page.translation.lang}">${page.translation.label}</a>` : ''}</div></div>
 <div class="layout"><aside aria-label="On this page">${page.sections.map(([id, title]) => `<a href="#${id}">${title}</a>`).join('')}</aside><article>${sections}</article></div></main>
-<footer><div><strong>LUCAS FOUNDATION</strong><p>AI Fighter Creator · ODDBOUT</p></div><div><a href="https://oddbout.com/">ODDBOUT</a><a href="./privacy.html">Privacy</a><a href="./terms.html">Terms</a><a href="./support.html">Support</a><a href="https://github.com/jeonghwanko/ai-fighter-dots-starter">Source code ↗</a></div></footer></body></html>`;
+<footer><div><strong>LUCAS FOUNDATION</strong><p>AI Fighter Creator · ODDBOUT</p></div><div><a href="https://oddbout.com/">ODDBOUT</a><a href="./privacy.html">Privacy</a><a href="./terms.html">Terms</a><a href="./support.html">Support</a><a href="https://github.com/jeonghwanko/oddbout-starter">Source code ↗</a></div></footer></body></html>`;
   await writeFile(path.join(destination, page.file), html);
 }
 await cp(path.join(root, 'website/ai-fighter-creator/style.css'), path.join(destination, 'style.css'));

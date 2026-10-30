@@ -6,7 +6,7 @@
 
 ODDBOUT is a fighting game where you play with a character you create. This repository contains the open-source tools for making that character. Work with an AI assistant to turn a description or reference image into artwork, animations, and a fighter package for the game. The tools and docs also use the name AI Fighter.
 
-[Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Site guide](https://oddbout.com/docs.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues)
+[Play ODDBOUT](https://oddbout.com/fighter.html) · [Manage your fighters](https://oddbout.com/creator.html?lang=en) · [Site guide](https://oddbout.com/docs.html?lang=en) · [Creation guide](docs/START-HERE.md) · [Report a problem](https://github.com/jeonghwanko/oddbout-starter/issues)
 
 ## Gameplay preview
 
@@ -14,7 +14,7 @@ ODDBOUT is a fighting game where you play with a character you create. This repo
 
 Existing ODDBOUT gameplay. The subscription-based character creation workflow is still experimental; this clip does not show a complete creation run.
 
-[Watch the 10-second clip](docs/media/oddbout-gameplay.mp4) · [Play ODDBOUT](https://oddbout.com/fighter.html) · [Questions and feedback](https://github.com/jeonghwanko/ai-fighter-dots-starter/discussions)
+[Watch the 10-second clip](docs/media/oddbout-gameplay.mp4) · [Play ODDBOUT](https://oddbout.com/fighter.html) · [Questions and feedback](https://github.com/jeonghwanko/oddbout-starter/discussions)
 
 ## What you can make
 
@@ -67,7 +67,7 @@ Use the **ODDBOUT** plugin for creation, review and registration from a PC or a 
 The same connected ODDBOUT account registers the result in either environment. A second AI Fighter Creator
 plugin is no longer required. See [the unified plugin and migration guide](docs/ODDBOUT-PLUGIN.md).
 
-Send the [repository URL](https://github.com/jeonghwanko/ai-fighter-dots-starter) to your assistant in the prepared workspace. Add an idea or a reference image. For example:
+Send the [repository URL](https://github.com/jeonghwanko/oddbout-starter) to your assistant in the prepared workspace. Add an idea or a reference image. For example:
 
 > Make a cat boxer in blue armor for ODDBOUT using this kit.
 > Show me the concept first so we can get the appearance right.
@@ -113,8 +113,8 @@ Codex sessions or claim that login/installation proves image generation or paren
 Use the **main** branch, which contains the public service configuration. For a new installation:
 
 ```sh
-git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
-cd ai-fighter-dots-starter
+git clone --branch main --single-branch https://github.com/jeonghwanko/oddbout-starter.git
+cd oddbout-starter
 npm ci --ignore-scripts
 npm run sprite:setup
 npm run sprite:status
@@ -150,7 +150,7 @@ Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same 
 
 ## Help and contributions
 
-If setup, generation, sign-in, registration, or gameplay fails, [open an issue](https://github.com/jeonghwanko/ai-fighter-dots-starter/issues) with the failing step, expected and actual behavior, error message, and tool version or commit. Exclude credentials and private files. For generation or upload timeouts, check existing requests and outputs before retrying.
+If setup, generation, sign-in, registration, or gameplay fails, [open an issue](https://github.com/jeonghwanko/oddbout-starter/issues) with the failing step, expected and actual behavior, error message, and tool version or commit. Exclude credentials and private files. For generation or upload timeouts, check existing requests and outputs before retrying.
 
 Bug reports, clearer setup instructions, and reproducible examples are welcome. Read [AGENTS.md](AGENTS.md) before using an assistant to change this repository.
 Pull requests target `main` and merge only after the `test` workflow passes; `npm test` runs the same suite locally, including the

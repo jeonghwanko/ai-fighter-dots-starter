@@ -43,8 +43,8 @@ oddbout.com 제작자 페이지의 My agents(`creator.html#view=agents`) → **�
 누른다. 나온 명령을 PC의 터미널에 붙여 넣는다.
 
 ```bash
-git clone https://github.com/jeonghwanko/ai-fighter-dots-starter.git
-cd ai-fighter-dots-starter && git checkout main && npm ci
+git clone https://github.com/jeonghwanko/oddbout-starter.git
+cd oddbout-starter && git checkout main && npm ci
 npm run host -- join ohj_…                   # 붙이기 코드(30분 안에 한 번): 설치 → codex·grok 로그인(없으면) → 워커
 ```
 

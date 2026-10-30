@@ -58,8 +58,8 @@ ODDBOUT의 생성 워커가 ODDBOUT 쪽 계정으로 만든다. 작업 공간·�
 ### 설치와 버전 고정
 
 ```sh
-git clone --branch main --single-branch https://github.com/jeonghwanko/ai-fighter-dots-starter.git
-cd ai-fighter-dots-starter
+git clone --branch main --single-branch https://github.com/jeonghwanko/oddbout-starter.git
+cd oddbout-starter
 npm ci --ignore-scripts
 npm run sprite:setup
 npm run sprite:status

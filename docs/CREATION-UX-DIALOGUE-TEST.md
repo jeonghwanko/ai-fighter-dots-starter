@@ -80,7 +80,7 @@ B1은 6개 배치, B2는 15개 배치다. 이 식별자는 아래 정답 예시�
 
 ### ENTRY · U01
 
-입력·가상 상태: https://github.com/jeonghwanko/ai-fighter-dots-starter/blob/codex/creator-hosting/docs/START-HERE.md
+입력·가상 상태: https://github.com/jeonghwanko/oddbout-starter/blob/codex/creator-hosting/docs/START-HERE.md
 
 실제 받은 응답: 어떤 캐릭터를 만들고 싶으세요? **한두 문장으로 설명하거나, 참고 이미지와 바꾸고 싶은 점을 보내주세요.**
 
