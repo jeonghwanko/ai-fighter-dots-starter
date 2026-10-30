@@ -1,3 +1,4 @@
+// @ts-check
 // Records real calls to the installed portable plugin. No generation, login or upload.
 import assert from 'node:assert/strict';
 import { createHash, randomUUID } from 'node:crypto';
@@ -21,6 +22,14 @@ await mkdir(path.join(output, 'site'), { recursive: true });
 await cp(path.join(root, 'examples/sparring-bot'), path.join(workspace, 'fixture'), { recursive: true });
 const manifest = JSON.parse(await readFile(path.join(plugin, 'plugin.json'), 'utf8'));
 const runtimeBytes = await readFile(path.join(plugin, 'runtime-manifest.json'));
+/**
+ * The evidence.json record and each recorded call.
+ * @typedef {{ number: number, title: string, description: string, tool: string, arguments: Record<string, unknown>, startedAt: string,
+ *   status: string, response?: unknown, summary?: string[], finishedAt?: string, error?: string }} Step
+ * @typedef {{ title: string, run: string, version: string, publisher: string, startedAt: string, runtimeManifestSha256: string,
+ *   source: string, presentation: string, limitations: string[], steps: Step[], status: string, finishedAt?: string, error?: string }} Evidence
+ */
+/** @type {Evidence} */
 const evidence = { title: 'AI Fighter Creator — actual MCP functional demonstration', run,
   version: manifest.version, publisher: 'Lucas Foundation', startedAt: new Date().toISOString(),
   runtimeManifestSha256: createHash('sha256').update(runtimeBytes).digest('hex'),
@@ -28,6 +37,7 @@ const evidence = { title: 'AI Fighter Creator — actual MCP functional demonstr
   presentation: 'Reviewer console for real MCP calls; this is not the Codex conversation UI',
   limitations: ['No image or video generation', 'No visual approval', 'No sign-in or registration', 'Geometric fixture used only for file-format validation'],
   steps: [], status: 'running' };
+/** @type {(value: unknown) => any} */
 const sanitize = value => JSON.parse(JSON.stringify(value).replaceAll(JSON.stringify(work).slice(1, -1), '<ISOLATED_REVIEW_DIR>')
   .replaceAll(JSON.stringify(plugin).slice(1, -1), '<INSTALLED_PLUGIN>')
   .replaceAll(JSON.stringify(root.replace(/[\\/]$/, '')).slice(1, -1), '<SOURCE_CHECKOUT>'));
@@ -36,7 +46,8 @@ async function save() {
   await writeFile(target + '.next', JSON.stringify(sanitize(evidence), null, 2));
   await rename(target + '.next', target);
 }
-let client, transport;
+/** @type {import('@modelcontextprotocol/sdk/client/index.js').Client} */
+let client, /** @type {import('@modelcontextprotocol/sdk/client/stdio.js').StdioClientTransport} */ transport;
 async function connect() {
   client = new Client({ name: 'ai-fighter-review-demonstration', version: '1.0.0' });
   transport = new StdioClientTransport({ command: process.execPath, args: [path.join(plugin, 'launcher.mjs')], cwd: work,
@@ -45,7 +56,12 @@ async function connect() {
   await client.connect(transport, { timeout: 180000 });
 }
 async function close() { await client?.close(); await transport?.close(); }
+/**
+ * @param {string} title @param {string} description @param {string} tool @param {Record<string, unknown>} args
+ * @param {(result: any) => void} verify @param {(result: any) => string[]} summarize
+ */
 async function step(title, description, tool, args, verify, summarize) {
+  /** @type {Step} */
   const item = { number: evidence.steps.length + 1, title, description, tool, arguments: args,
     startedAt: new Date().toISOString(), status: 'running' };
   evidence.steps.push(item); await save();
@@ -53,19 +69,19 @@ async function step(title, description, tool, args, verify, summarize) {
     const raw = tool === 'tools/list' ? await client.listTools()
       : tool === 'transport/restart' ? await close().then(connect).then(() => ({ reconnected: true }))
       : await client.callTool({ name: tool, arguments: args });
-    const result = raw.structuredContent || raw;
+    const result = /** @type {any} */ (raw).structuredContent || raw;
     item.response = sanitize(result); verify(result);
     item.summary = summarize(result); item.status = 'passed'; item.finishedAt = new Date().toISOString();
     await save(); console.log(JSON.stringify({ step: item.number, title, status: item.status, summary: item.summary }));
     await delay(hold); return result;
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     item.status = 'failed'; item.error = String(error.message); await save(); throw error;
   }
 }
 try {
   await save(); await connect(); await delay(Number(process.env.REVIEW_START_DELAY_MS || 0));
   await step('Portable plugin starts', 'The installed 0.2.0 package starts in a clean, isolated workspace without a user login.',
-    'tools/list', {}, r => { assert.ok(r.tools.some(t => t.name === 'create_creation_session')); assert.ok(!r.tools.some(t => t.name === 'submit_fighter_package')); },
+    'tools/list', {}, r => { assert.ok(/** @type {{ name: string }[]} */ (r.tools).some(t => t.name === 'create_creation_session')); assert.ok(!/** @type {{ name: string }[]} */ (r.tools).some(t => t.name === 'submit_fighter_package')); },
     r => [`${r.tools.length} local MCP tools available`, 'No inherited registration credentials', 'Generation has not run']);
   await step('Inspect setup', 'Read the packaged creation guide and current local prerequisites.',
     'get_fighter_spec', { section: 'creation' }, r => { assert.equal(r.ok, true); assert.equal(r.data.tool.sourcePresent, true); },
@@ -98,5 +114,5 @@ try {
     'list_creation_sessions', {}, r => { assert.equal(r.ok, true); assert.equal(r.data.length, 1); },
     () => ['One preserved discussion project', 'No production approvals recorded', 'Generation and registration remain unperformed']);
   evidence.status = 'passed'; evidence.finishedAt = new Date().toISOString();
-} catch (error) { evidence.status = 'failed'; evidence.error = String(error.message); process.exitCode = 1; }
+} catch (/** @type {any} */ error) { evidence.status = 'failed'; evidence.error = String(error.message); process.exitCode = 1; }
 finally { await close(); await save(); }

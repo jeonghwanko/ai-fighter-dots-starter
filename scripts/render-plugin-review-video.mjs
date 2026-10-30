@@ -1,3 +1,4 @@
+// @ts-check
 // Encode captured browser pixels at their actual capture times; no fabricated tool output.
 import { readFile, writeFile, copyFile } from 'node:fs/promises';
 import path from 'node:path';
@@ -10,7 +11,7 @@ if (evidence.status !== 'passed' || evidence.steps.length !== 9) throw Error('A 
 const captured = JSON.parse(await readFile(path.join(framesDir, 'frames.json'), 'utf8'));
 const wantedStart = Date.parse(evidence.steps[0].startedAt) - 500;
 const wantedEnd = Date.parse(evidence.finishedAt) + 4000;
-const frames = captured.filter(f => f.timestamp >= wantedStart && f.timestamp <= wantedEnd);
+const frames = /** @type {any[]} */ (captured).filter(f => f.timestamp >= wantedStart && f.timestamp <= wantedEnd);
 if (frames.length < 50) throw Error('Insufficient real screen captures');
 const start = frames[0].timestamp;
 const concat = frames.map((frame, i) => `file '${frame.file}'\nduration ${((frames[i + 1]?.timestamp ?? frame.timestamp + 1000) - frame.timestamp) / 1000}`).join('\n') + `\nfile '${frames.at(-1).file}'\n`;
@@ -31,9 +32,10 @@ const ko = [
   '실제 WebP 파일을 검증합니다. 기하학 예제는 생성 작품이나 시각 승인 자료가 아닙니다.',
   '9개 기능 검사가 통과했습니다. 실제 생성·시각 검토·로그인·등록 시연은 별도입니다.',
 ];
+/** @type {(s: number) => string} */
 const stamp = s => { const ms = Math.max(0, Math.round(s * 1000)); return `${String(Math.floor(ms/3600000)).padStart(2,'0')}:${String(Math.floor(ms/60000)%60).padStart(2,'0')}:${String(Math.floor(ms/1000)%60).padStart(2,'0')}.${String(ms%1000).padStart(3,'0')}`; };
 for (const lang of ['en', 'ko']) {
-  const cues = evidence.steps.map((step, i) => {
+  const cues = /** @type {{ startedAt: string, description: string }[]} */ (evidence.steps).map((step, i) => {
     const from = Math.max(0, (Date.parse(step.startedAt) - start) / 1000);
     const to = Math.min(duration, i + 1 < evidence.steps.length ? (Date.parse(evidence.steps[i + 1].startedAt) - start) / 1000 : duration);
     return `${i+1}\n${stamp(from)} --> ${stamp(to)}\n${lang === 'ko' ? ko[i] : step.description}\n`;

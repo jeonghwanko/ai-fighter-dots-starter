@@ -1,3 +1,4 @@
+// @ts-check
 // Explicit remote integration test. Never included in npm test or automatic CI.
 import assert from 'node:assert/strict';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
@@ -16,20 +17,23 @@ const creator = await createRemoteClient(clientPath), other = await createRemote
 const config = JSON.parse(await readFile(clientPath, 'utf8')), statePath = path.join(privateDir, 'test-state.json');
 let state;
 try { state = JSON.parse(await readFile(statePath, 'utf8')); }
-catch (error) { if (error.code !== 'ENOENT') throw error; state = { validKey: randomUUID(), invalidKey: randomUUID() }; await writeFile(statePath, JSON.stringify(state), { flag: 'wx', mode: 0o600 }); }
-const checks = [], pass = name => { checks.push(name); console.log(`PASS ${name}`); };
-const expectedFailure = async (fn, status, message) => { await assert.rejects(fn, error => error.status === status && (!message || error.message === message)); };
+catch (/** @type {any} */ error) { if (error.code !== 'ENOENT') throw error; state = { validKey: randomUUID(), invalidKey: randomUUID() }; await writeFile(statePath, JSON.stringify(state), { flag: 'wx', mode: 0o600 }); }
+/** @type {string[]} */
+const checks = [], /** @type {(name: string) => void} */ pass = name => { checks.push(name); console.log(`PASS ${name}`); };
+/** @type {(fn: () => Promise<unknown>, status: number, message?: string) => Promise<void>} */
+const expectedFailure = async (fn, status, message) => { await assert.rejects(fn, /** @type {(error: any) => boolean} */ (error => error.status === status && (!message || error.message === message))); };
 const mcp = new Client({ name: 'dot-live-registration-test', version: '0.2.0' });
+/** @type {(name: string, args: Record<string, unknown>) => Promise<any>} */
 const call = async (name, args) => {
   const result = await mcp.callTool({ name, arguments: args }, undefined, { timeout: 120000 });
-  if (result.isError || !result.structuredContent?.ok) throw new Error(`MCP ${name}: ${JSON.stringify(result.structuredContent)}`);
+  if (result.isError || !/** @type {Record<string, unknown> | undefined} */ (result.structuredContent)?.ok) throw new Error(`MCP ${name}: ${JSON.stringify(result.structuredContent)}`);
   return result.structuredContent;
 };
 try {
   await mcp.connect(new StdioClientTransport({ command: process.execPath, args: [path.join(root, 'mcp/stdio.mjs')],
     env: { AI_FIGHTER_ROOT: root, AI_FIGHTER_CLIENT_CONFIG: clientPath }, stderr: 'inherit' }));
   const tools = await mcp.listTools();
-  assert.equal(tools.tools.find(t => t.name === 'submit_fighter_package').annotations.readOnlyHint, false);
+  assert.equal(/** @type {{ annotations: { readOnlyHint?: boolean } }} */ (tools.tools.find(t => t.name === 'submit_fighter_package')).annotations.readOnlyHint, false);
   assert.equal((await call('get_fighter_spec', { section: 'overview' })).data.registration.available, true);
   pass('live MCP discovery and server specification');
   assert.equal((await fetch(`${config.url}/functions/v1/ai-fighter/submissions`, { method: 'POST', body: '{}' })).status, 401);

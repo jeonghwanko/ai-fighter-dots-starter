@@ -1,9 +1,15 @@
+// @ts-check
 // Operator-side Linux runner. OpenAI credentials never leave the Edge function.
 // node decisions-benchmark-runner.mjs <manifest.json> <worker.env> <results.json>
 import { readFile, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { BENCHMARK_BODY_BYTES } from '../api/sequence-benchmark.mjs';
+
+/**
+ * @typedef {{ caseId: string, label: string, requestSha256: string, status: 'request_started' | 'response_received' | 'transport_outcome_unknown',
+ *   httpStatus?: number, report?: any, code?: string | null, wallSeconds?: number }} Call  report: the server's review JSON
+ */
 
 if (process.platform !== 'linux') throw new Error('Run on the authorized Linux server, not a creator PC');
 const [manifestPath, workerEnvPath, resultPath] = process.argv.slice(2);
@@ -15,6 +21,7 @@ const env = Object.fromEntries((await readFile(workerEnvPath, 'utf8')).split('\n
 const base = new URL(env.ODDBOUT_GENERATION_API);
 if (base.protocol !== 'https:' || base.username || base.password || base.search || base.hash
   || !/^afw_[a-f0-9]{64}$/.test(env.ODDBOUT_GENERATION_WORKER_KEY ?? '')) throw new Error('Invalid server worker configuration');
+/** @type {{ startedAt: string, calls: Call[], finishedAt?: string }} */
 const result = { startedAt: new Date().toISOString(), calls: [] };
 // Exclusive creation prevents an accidental rerun after an unknown network outcome.
 await writeFile(resultPath, JSON.stringify(result, null, 2), { flag: 'wx', mode: 0o600 });
@@ -23,6 +30,7 @@ for (const entry of manifest.cases) {
   const filename = path.resolve(path.dirname(manifestPath), entry.request);
   const raw = await readFile(filename);
   if (raw.length > BENCHMARK_BODY_BYTES || createHash('sha256').update(raw).digest('hex') !== entry.requestSha256) throw new Error('Request bytes changed');
+  /** @type {Call} */
   const item = { caseId: entry.id, label: entry.label, requestSha256: entry.requestSha256, status: 'request_started' };
   result.calls.push(item); await writeFile(resultPath, JSON.stringify(result, null, 2), { mode: 0o600 });
   const start = performance.now();

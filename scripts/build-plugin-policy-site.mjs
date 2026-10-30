@@ -1,3 +1,4 @@
+// @ts-check
 // Static policy renderer. Publication is performed by the normal site deployment.
 import { mkdir, writeFile, cp } from 'node:fs/promises';
 import path from 'node:path';
@@ -8,6 +9,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 export const policyFiles = [...pages.map(page => page.file), 'style.css', 'icon.svg']
   .map(file => `ai-fighter-creator/${file}`);
 
+/** @param {string} html */
 export function sitePrivacyNotice(html) {
   const marker = '<section id="scope">';
   const operator = /The service is operated by (?:Supervillain Labs|Lucas Foundation)\./g;
@@ -18,6 +20,7 @@ export function sitePrivacyNotice(html) {
     .replace('</section>', '<p>For the local creation plugin, read the <a href="/ai-fighter-creator/privacy.html">AI Fighter Creator privacy notice</a> (<a href="/ai-fighter-creator/privacy.ko.html" lang="ko">한국어</a>), <a href="/ai-fighter-creator/terms.html">terms of service</a> and <a href="/ai-fighter-creator/support.html">support information</a>.</p></section>');
 }
 
+/** @param {string} destination @param {{ publish?: boolean }} [options] */
 export async function buildPluginPolicySite(destination, { publish = false } = {}) {
 await mkdir(destination, { recursive: true });
 const nav = [['index.html', 'Overview'], ['privacy.html', 'Privacy'], ['terms.html', 'Terms'], ['support.html', 'Support']];

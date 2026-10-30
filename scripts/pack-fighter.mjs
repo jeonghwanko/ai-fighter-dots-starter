@@ -1,3 +1,4 @@
+// @ts-check
 // Build an AI Fighter package from a `sprite-gen game-pack` output. Deterministic: the same pack and plan give the same bytes.
 // Pixels decide what they can measure: body scale, ground line, ground contacts, frame identity and the walk stride.
 // The plan decides what pixels cannot: which animation is which motion, contact steps and landmarks.
@@ -13,6 +14,25 @@ import { validateFighter } from '../contracts/ai-fighter/validate.mjs';
 import { validateFighterPackage } from '../server/ai-fighter-package.mjs';
 import { requireLoopReview, requireReview } from '../tools/ai-fighter/gait.mjs';
 
+/**
+ * @typedef {{ width: number, height: number, data: Buffer }} Frame
+ * @typedef {{ x: number, y: number, w: number, h: number }} Rect
+ * @typedef {{ left: number, top: number, right: number, bottom: number }} Bounds
+ * @typedef {{ x: number, y: number, rx: number, ry: number }} Contact
+ * @typedef {{ kind: string, loop: boolean, frames?: number, minFrames?: number, maxFrames?: number }} ClipSpec  A motion or optional clip of the spec.
+ * @typedef {{ kind: string, version: number, textures: { image: string, frames?: Record<string, { frame: Rect, rotated?: boolean, trimmed?: boolean }> }[],
+ *   animations: Record<string, { frames: string[], durations_ms: number[], anchor?: number[], loop?: boolean, events?: unknown[] }> }} GamePack
+ *   sprite-gen game-pack.json, the fields read here.
+ * @typedef {{ geometry: { groundY: number }, stridePixels: number, sequenceSha256: string }} GaitReview  As requireReview passed it.
+ * @typedef {{ stridePixels: number | null, sequenceSha256: string, engine: unknown, judge: string }} LoopReview  As requireLoopReview passed it.
+ * @typedef {{ keys: string[], frames: Frame[], durations: number[], sourceDurations: number[], anchor: { x: number, y: number }, loop?: boolean,
+ *   events: unknown[], getUp?: Animation, gaitReview?: GaitReview, loopReview?: LoopReview }} Animation
+ * @typedef {{ frame: number, durationMs: number }} Step
+ * @typedef {{ assetId: string, frameWidth: number, frameHeight: number, columns: number, rows: number, frames: number[],
+ *   origins: { originX: number, originY: number, groundContacts: Contact[] }[], loop: boolean, durationMs?: number, stridePixels?: number,
+ *   sequence?: Step[], hitSequenceIndices?: number[], landmarks?: Record<string, unknown>, skill?: Record<string, unknown> }} Clip
+ */
+
 const BODY = spec.input.bodyHeight;
 const ALPHA = 32;              // measurement threshold: ignores faint anti-aliasing and soft shadows
 const MARGIN = 8;              // transparent pixels kept around the motion's union box
@@ -21,8 +41,11 @@ const MAX_COLUMNS = 8, MAX_SHEET = spec.limits.imageDimension, MAX_FRAME = 1024;
 const MOTIONS = Object.keys(spec.motions);
 // Optional clips (skill, entrance, victory): packed like the required actions when the plan names them.
 const OPTIONAL_CLIPS = Object.keys(spec.optionalClips);
-const clipSpec = name => spec.motions[name] ?? spec.optionalClips[name];
+/** @type {(name: string) => ClipSpec} */
+const clipSpec = name => /** @type {Record<string, ClipSpec>} */ (spec.motions)[name] ?? /** @type {Record<string, ClipSpec>} */ (spec.optionalClips)[name];
+/** @type {(name: string) => string} */
 const assetId = name => name.replace(/[A-Z]/g, c => `-${c.toLowerCase()}`);
+/** @type {(value: number) => number} */
 const round = value => Math.round(value * 100) / 100;
 
 const crop = z.strictObject({ x: z.number().int().min(0), y: z.number().int().min(0), width: z.number().int().min(1), height: z.number().int().min(1) });
@@ -56,37 +79,44 @@ const planSchema = z.strictObject({
   resample: z.enum(['lanczos3', 'nearest']).default('lanczos3'),
   // required: same-foot gait reviews (authoring); engine-loop: loop reviews (hosted generation, video loops); format-only: fixtures.
   reviewPolicy: z.enum(['required', 'engine-loop', 'format-only']).default('required'),
-  motions: z.strictObject({ ...Object.fromEntries(MOTIONS.map(name => [name, motionPlan])),
-    ...Object.fromEntries(OPTIONAL_CLIPS.map(name => [name, motionPlan.optional()])) }),
+  motions: /** @type {z.ZodType<Record<string, MotionPlan>>} */ (z.strictObject({ ...Object.fromEntries(MOTIONS.map(name => [name, motionPlan])),
+    ...Object.fromEntries(OPTIONAL_CLIPS.map(name => [name, motionPlan.optional()])) })),
 });
+/** @typedef {z.infer<typeof motionPlan>} MotionPlan @typedef {z.infer<typeof planSchema>} Plan */
 
 class PackError extends Error {
+  /** @param {string} code @param {string} detail */
   constructor(code, detail) { super(code); this.detail = detail; }
 }
+/** @type {(code: string, detail: string) => never} */
 const fail = (code, detail) => { throw new PackError(code, detail); };
 
-/** An RGBA frame. */
+/** An RGBA frame. @type {(width: number, height: number, data?: Buffer) => Frame} */
 const frameOf = (width, height, data = Buffer.alloc(width * height * 4)) => ({ width, height, data });
+/** @param {Frame} page @param {Rect} rect */
 function extract(page, rect) {
   const frame = frameOf(rect.w, rect.h);
   for (let y = 0; y < rect.h; y++)
     page.data.copy(frame.data, y * rect.w * 4, ((rect.y + y) * page.width + rect.x) * 4, ((rect.y + y) * page.width + rect.x + rect.w) * 4);
   return frame;
 }
+/** @param {Frame} frame */
 function mirror(frame) {
   const out = frameOf(frame.width, frame.height);
   for (let y = 0; y < frame.height; y++) for (let x = 0; x < frame.width; x++)
     frame.data.copy(out.data, (y * frame.width + frame.width - 1 - x) * 4, (y * frame.width + x) * 4, (y * frame.width + x) * 4 + 4);
   return out;
 }
+/** @param {Frame} frame @param {number} ratio @param {Plan['resample']} kernel */
 async function resize(frame, ratio, kernel) {
   const width = Math.max(1, Math.round(frame.width * ratio)), height = Math.max(1, Math.round(frame.height * ratio));
   const data = await sharp(frame.data, { raw: { width: frame.width, height: frame.height, channels: 4 } })
     .resize(width, height, { kernel, fit: 'fill' }).ensureAlpha().raw().toBuffer();
   return frameOf(width, height, data);
 }
+/** @type {(frame: Frame, x: number, y: number) => number} */
 const alphaAt = (frame, x, y) => frame.data[(y * frame.width + x) * 4 + 3];
-/** Opaque bounds as half-open rows/columns, or null for an empty frame. */
+/** Opaque bounds as half-open rows/columns, or null for an empty frame. @param {Frame} frame @param {number} threshold @returns {Bounds | null} */
 function bounds(frame, threshold) {
   let left = frame.width, top = frame.height, right = 0, bottom = 0;
   for (let y = 0; y < frame.height; y++) for (let x = 0; x < frame.width; x++) if (alphaAt(frame, x, y) >= threshold) {
@@ -94,9 +124,10 @@ function bounds(frame, threshold) {
   }
   return right > left ? { left, top, right, bottom } : null;
 }
-/** Feet on the ground line: up to two runs of opaque columns in a thin band above it. */
+/** Feet on the ground line: up to two runs of opaque columns in a thin band above it. @param {Frame} frame @param {number} groundY @returns {Contact[]} */
 function measureContacts(frame, groundY) {
   const band = Math.max(2, Math.round(BODY * 0.02)), gap = Math.max(2, Math.round(BODY * 0.015)), minimum = Math.max(2, Math.round(BODY * 0.01));
+  /** @type {{ start: number, end: number }[]} */
   const runs = [];
   for (let x = 0; x < frame.width; x++) {
     let ink = false;
@@ -109,13 +140,13 @@ function measureContacts(frame, groundY) {
     .sort((a, b) => a.start - b.start)
     .map(r => ({ x: (r.start + r.end) / 2, y: groundY, rx: (r.end - r.start) / 2, ry: band / 2 }));
 }
-/** Backward travel of planted feet over one walk cycle: the distance the body must move so feet do not slide. */
+/** Backward travel of planted feet over one walk cycle: the distance the body must move so feet do not slide. @param {Contact[][]} contacts */
 function measureStride(contacts) {
   const near = BODY * 0.12, steps = [];
   for (let i = 0; i < contacts.length; i++) {
     const from = contacts[i], to = contacts[(i + 1) % contacts.length], backward = [];
     for (const a of from) {
-      const b = to.reduce((best, c) => Math.abs(c.x - a.x) < Math.abs((best?.x ?? Infinity) - a.x) ? c : best, null);
+      const b = to.reduce((best, c) => Math.abs(c.x - a.x) < Math.abs((best?.x ?? Infinity) - a.x) ? c : best, /** @type {Contact | null} */ (null));
       if (b && Math.abs(b.x - a.x) <= near && b.x - a.x < -0.5) backward.push(b.x - a.x);
     }
     steps.push(backward.length ? median(backward) : null);
@@ -123,43 +154,52 @@ function measureStride(contacts) {
   const measured = steps.filter(step => step !== null);
   if (measured.length * 2 < steps.length) return null;
   const typical = median(measured);
-  return round(-steps.reduce((sum, step) => sum + (step ?? typical), 0));
+  return round(-steps.reduce((/** @type {number} */ sum, step) => sum + (step ?? typical), 0));
 }
+/** @param {number[]} values */
 function median(values) {
   const sorted = [...values].sort((a, b) => a - b), middle = sorted.length >> 1;
   return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
 }
 
+/** @param {string} file */
 async function loadPack(file) {
+  /** @type {GamePack} */
   let pack;
   try { pack = JSON.parse(await readFile(file, 'utf8')); } catch { fail('GAME_PACK_UNREADABLE', file); }
   if (pack?.kind !== 'sprite-gen-game-pack' || ![1, 2].includes(pack.version) || !Array.isArray(pack.textures) || !pack.animations)
     fail('GAME_PACK_FORMAT', 'expected sprite-gen game-pack.json version 1 or 2');
-  const directory = path.dirname(file), frames = new Map(), pages = new Map();
+  const directory = path.dirname(file), frames = /** @type {Map<string, { page: number, rect: Rect }>} */ (new Map()), pages = /** @type {Map<number, Frame>} */ (new Map());
   pack.textures.forEach((texture, page) => {
     for (const [key, entry] of Object.entries(texture.frames ?? {})) {
       if (entry.rotated || entry.trimmed) fail('GAME_PACK_FRAME', `${key}: rotated or trimmed frames are not supported`);
       frames.set(key, { page, rect: entry.frame });
     }
   });
+  /** @type {(index: number) => Promise<Frame>} */
   const page = async index => {
     if (!pages.has(index)) {
       const image = path.resolve(directory, pack.textures[index].image);
       const { data, info } = await sharp(image, { limitInputPixels: MAX_SHEET * MAX_SHEET }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
       pages.set(index, { width: info.width, height: info.height, data });
     }
-    return pages.get(index);
+    return /** @type {Frame} */ (pages.get(index));
   };
   // Decoded pages are only needed while frames are cut out; release them before packing.
   return { pack, frames, page, release: () => pages.clear() };
 }
 
-/** Frames of one animation in playback order, and its durations, at the game pack's scale. */
+/** @typedef {Awaited<ReturnType<typeof loadPack>>} Source */
+/**
+ * Frames of one animation in playback order, and its durations, at the game pack's scale.
+ * @param {Source} source @param {string} name @param {Pick<MotionPlan, 'animation' | 'flipX'>} motion @returns {Promise<Animation>}
+ */
 async function readAnimation(source, name, motion) {
   const animation = source.pack.animations[motion.animation];
   if (!animation) fail('ANIMATION_NOT_FOUND', `${name}: ${motion.animation}`);
   if (!Array.isArray(animation.frames) || !animation.frames.length || animation.durations_ms?.length !== animation.frames.length)
     fail('GAME_PACK_ANIMATION', `${name}: frames and durations_ms must match`);
+  /** @type {Frame[]} */
   const frames = [];
   for (const key of animation.frames) {
     const location = source.frames.get(key);
@@ -176,6 +216,7 @@ async function readAnimation(source, name, motion) {
     anchor: { x: motion.flipX ? frames[0].width - ax : ax, y: ay }, loop: animation.loop, events: animation.events ?? [] };
 }
 
+/** @param {string} name @param {MotionPlan} motion */
 function checkPlanFields(name, motion) {
   const kind = clipSpec(name).kind;
   const misplaced = [
@@ -195,7 +236,11 @@ function checkPlanFields(name, motion) {
 }
 
 const PACK_CONCURRENCY = 4;
-/** `task` over `items`, at most `limit` at a time; results in item order, as Promise.allSettled reports them. */
+/**
+ * `task` over `items`, at most `limit` at a time; results in item order, as Promise.allSettled reports them.
+ * @template T, R
+ * @param {T[]} items @param {number} limit @param {(item: T) => Promise<R>} task @returns {Promise<PromiseSettledResult<R>[]>}
+ */
 async function mapLimited(items, limit, task) {
   const results = new Array(items.length);
   let next = 0;
@@ -209,13 +254,17 @@ async function mapLimited(items, limit, task) {
   return results;
 }
 
+/** @param {Frame} sheet @param {Plan} plan */
 function encode(sheet, plan) {
   const image = sharp(sheet.data, { raw: { width: sheet.width, height: sheet.height, channels: 4 } });
   return (plan.encoding === 'lossless' ? image.webp({ lossless: true, effort: 6 })
     : image.webp({ quality: plan.quality, alphaQuality: 100, effort: 6 })).toBuffer();
 }
 
-/** Pack one motion: dedupe by pixels, crop to the union box, measure origins and contacts, lay out the sheet. */
+/**
+ * Pack one motion: dedupe by pixels, crop to the union box, measure origins and contacts, lay out the sheet.
+ * @param {string} name @param {MotionPlan} motion @param {Animation} animation @param {Plan} plan
+ */
 async function packMotion(name, motion, animation, plan) {
   const motionSpec = clipSpec(name);
   let playback = animation.frames.map((frame, step) => ({ frame, durationMs: animation.durations[step], key: animation.keys[step] }));
@@ -224,16 +273,17 @@ async function packMotion(name, motion, animation, plan) {
     if (index >= playback.length) fail('PLAN_FIELD', `idle: frame ${index} outside ${playback.length} playback steps`);
     playback = [playback[index]];
   }
-  const unique = [], identity = new Map();
+  const unique = /** @type {{ frame: Frame, key: string }[]} */ ([]), identity = /** @type {Map<string, number>} */ (new Map());
+  /** @type {(step: { frame: Frame, durationMs: number, key: string }) => Step} */
   const include = step => {
     const hash = createHash('sha256').update(step.frame.data).digest('hex');
     if (!identity.has(hash)) { identity.set(hash, unique.length); unique.push({ frame: step.frame, key: step.key }); }
-    return { frame: identity.get(hash), durationMs: step.durationMs };
+    return { frame: /** @type {number} */ (identity.get(hash)), durationMs: step.durationMs };
   };
   // Get-up cells share the fall sheet and deduplication, but never enter fall playback.
   const steps = playback.map(include);
   const getUp = animation.getUp?.frames.map((frame, step) => ({ clip: 'fall', ...include({ frame,
-    durationMs: animation.getUp.durations[step], key: animation.getUp.keys[step] }) }));
+    durationMs: /** @type {Animation} */ (animation.getUp).durations[step], key: /** @type {Animation} */ (animation.getUp).keys[step] }) }));
   if (motionSpec.kind === 'gait') {
     // A gait keeps the frames it was filmed or drawn in, inside the contract's range (gait-frames-1); idle is one.
     const fewest = motionSpec.minFrames ?? motionSpec.frames ?? 1, most = motionSpec.maxFrames ?? motionSpec.frames ?? 1;
@@ -243,7 +293,7 @@ async function packMotion(name, motion, animation, plan) {
   }
   let groundY = 0, union = null;
   for (const { frame } of unique) {
-    const solid = bounds(frame, ALPHA), any = bounds(frame, 1);
+    const solid = bounds(frame, ALPHA), any = /** @type {Bounds} */ (bounds(frame, 1)); // not null when solid is not
     if (!solid) fail('EMPTY_FRAME', `${name}: a frame has no visible pixels`);
     groundY = Math.max(groundY, solid.bottom);
     union = union ? { left: Math.min(union.left, any.left), top: Math.min(union.top, any.top), right: Math.max(union.right, any.right), bottom: Math.max(union.bottom, any.bottom) } : any;
@@ -251,13 +301,14 @@ async function packMotion(name, motion, animation, plan) {
   const origin = { x: motion.origin?.x ?? animation.anchor.x, y: animation.gaitReview?.geometry.groundY ?? motion.origin?.y ?? groundY };
   const { width: canvasWidth, height: canvasHeight } = unique[0].frame;
   // The box may extend past the source canvas: feet drawn on its bottom edge still get room for contact ellipses.
-  const box = { left: Math.min(union.left, Math.floor(origin.x)) - MARGIN, top: union.top - MARGIN,
-    right: Math.max(union.right, Math.ceil(origin.x)) + MARGIN, bottom: Math.max(union.bottom, Math.ceil(origin.y)) + MARGIN };
+  // union: set above, as unique is never empty
+  const box = { left: Math.min(/** @type {Bounds} */ (union).left, Math.floor(origin.x)) - MARGIN, top: /** @type {Bounds} */ (union).top - MARGIN,
+    right: Math.max(/** @type {Bounds} */ (union).right, Math.ceil(origin.x)) + MARGIN, bottom: Math.max(/** @type {Bounds} */ (union).bottom, Math.ceil(origin.y)) + MARGIN };
   const frameWidth = box.right - box.left, frameHeight = box.bottom - box.top;
   if (frameWidth > MAX_FRAME || frameHeight > MAX_FRAME) fail('FRAME_TOO_LARGE', `${name}: ${frameWidth}x${frameHeight} exceeds ${MAX_FRAME}`);
   const columns = Math.min(MAX_COLUMNS, unique.length, Math.floor(MAX_SHEET / frameWidth)), rows = Math.ceil(unique.length / columns);
   if (rows > MAX_COLUMNS || rows * frameHeight > MAX_SHEET) fail('SHEET_TOO_LARGE', `${name}: ${unique.length} frames of ${frameWidth}x${frameHeight} do not fit ${MAX_SHEET}px in ${MAX_COLUMNS} rows`);
-  const sheet = frameOf(columns * frameWidth, rows * frameHeight), contacts = [];
+  const sheet = frameOf(columns * frameWidth, rows * frameHeight), contacts = /** @type {Contact[][]} */ ([]);
   unique.forEach(({ frame }, index) => {
     const left = index % columns * frameWidth, top = Math.floor(index / columns) * frameHeight;
     const fromX = Math.max(0, box.left), toX = Math.min(canvasWidth, box.right);
@@ -268,6 +319,7 @@ async function packMotion(name, motion, animation, plan) {
     }
     contacts.push(measureContacts(frame, Math.round(origin.y)));
   });
+  /** @type {(value: number, offset: number) => number} */
   const local = (value, offset) => round(value - offset);
   const origins = contacts.map(list => ({ originX: local(origin.x, box.left), originY: local(origin.y, box.top),
     groundContacts: list.map(c => ({ x: local(c.x, box.left), y: local(c.y, box.top), rx: round(c.rx), ry: round(c.ry) })) }));
@@ -275,11 +327,12 @@ async function packMotion(name, motion, animation, plan) {
   const id = assetId(name);
   const asset = { id, path: `assets/${id}.webp`, mediaType: 'image/webp', sha256: createHash('sha256').update(bytes).digest('hex'),
     bytes: bytes.length, width: sheet.width, height: sheet.height };
+  /** @type {Clip} */
   const clip = { assetId: id, frameWidth, frameHeight, columns, rows, frames: unique.map((_, i) => i), origins, loop: motionSpec.loop };
   if (motionSpec.kind === 'gait') {
     clip.durationMs = steps[0].durationMs;
     if (name === 'walk') {
-      const measured = measureStride(contacts);
+      const measured = /** @type {number} */ (measureStride(contacts)); // null (unmeasured) fails measured >= 1
       clip.stridePixels = animation.gaitReview?.stridePixels ?? animation.loopReview?.stridePixels ?? motion.stridePixels ?? (measured >= 1 ? measured : fail('STRIDE_UNMEASURED', 'walk: no verified stride; review actual same-foot stances'));
     }
   } else {
@@ -298,19 +351,20 @@ async function packMotion(name, motion, animation, plan) {
     ...(animation.loopReview ? { loopReview: { status: 'pass', sequenceSha256: animation.loopReview.sequenceSha256, engine: animation.loopReview.engine,
       judge: animation.loopReview.judge } } : {}),
     ...(getUp ? { getUp: { animation: motion.getUpAnimation, playbackSteps: getUp.length,
-      frames: getUp.map(step => step.frame), frameKeys: animation.getUp.keys, events: animation.getUp.events } } : {}),
+      frames: getUp.map(step => step.frame), frameKeys: /** @type {Animation} */ (animation.getUp).keys, events: /** @type {Animation} */ (animation.getUp).events } } : {}),
     ...(name === 'walk' ? { stride: { used: clip.stridePixels, measured: measureStride(contacts),
       source: animation.gaitReview ? 'same-foot-review' : animation.loopReview ? 'loop-review' : motion.stridePixels ? 'plan' : 'silhouette-estimate',
       estimateWarning: 'Nearest silhouette matching may exchange feet and fills missing steps with a median; it is not verified contact.' } } : {}) };
   return { asset, bytes, clip, report, sheet, steps };
 }
 
+/** @param {Plan} plan @param {{ clip: Clip, sheet: Frame }} idle */
 function profileCrops(plan, idle) {
   const { clip, sheet } = idle;
   const preview = plan.profile.previewCrop ?? { x: 0, y: 0, width: clip.frameWidth, height: clip.frameHeight };
   if (plan.profile.portraitCrop) return { portrait: plan.profile.portraitCrop, preview };
   // Head square: the top of the body, centered on the top band's opaque pixels.
-  const solid = bounds(sheet, ALPHA), size = Math.min(clip.frameWidth, clip.frameHeight, Math.round(BODY * 0.3));
+  const solid = /** @type {Bounds} */ (bounds(sheet, ALPHA)), size = Math.min(clip.frameWidth, clip.frameHeight, Math.round(BODY * 0.3)); // packMotion refused empty frames
   let sum = 0, count = 0;
   for (let y = solid.top; y < Math.min(solid.bottom, solid.top + Math.round(BODY * 0.15)); y++)
     for (let x = solid.left; x < solid.right; x++) if (alphaAt(sheet, x, y) >= ALPHA) { sum += x; count++; }
@@ -319,7 +373,7 @@ function profileCrops(plan, idle) {
   return { portrait: { x, y, width: size, height: size }, preview };
 }
 
-/** Returns { ok, stage, out?, errors?, report? }. */
+/** Returns { ok, stage, out?, errors?, report? }. @param {string} planFile */
 export async function packFighter(planFile) {
   let plan;
   try {
@@ -333,6 +387,7 @@ export async function packFighter(planFile) {
     for (const [name, motion] of Object.entries(plan.motions)) checkPlanFields(name, motion);
     const clips = [...MOTIONS, ...OPTIONAL_CLIPS.filter(name => plan.motions[name])];
     const source = await loadPack(gamePack);
+    /** @type {Record<string, Animation>} */
     const animations = {};
     for (const name of clips) animations[name] = await readAnimation(source, name, plan.motions[name]);
     if (plan.motions.fall.getUpAnimation !== undefined) {
@@ -356,7 +411,7 @@ export async function packFighter(planFile) {
         try {
           review = requireLoopReview(JSON.parse(await readFile(path.resolve(base, motion.loopReview), 'utf8')),
             { frames: animations[name].frames, durations: animations[name].sourceDurations }, name);
-        } catch (error) { fail(error.message.startsWith('LOOP_') ? error.message.split(':')[0] : 'LOOP_REVIEW_UNREADABLE', `${name}: ${error.message}`); }
+        } catch (/** @type {any} */ error) { fail(error.message.startsWith('LOOP_') ? error.message.split(':')[0] : 'LOOP_REVIEW_UNREADABLE', `${name}: ${error.message}`); }
         if (motion.stridePixels !== undefined) fail('GAIT_STRIDE_OVERRIDE', `${name}: remove stridePixels; the loop review supplies it`);
         animations[name].loopReview = structuredClone(review);
         continue;
@@ -368,7 +423,7 @@ export async function packFighter(planFile) {
         try {
           review = requireReview(JSON.parse(await readFile(path.resolve(base, motion.gaitReview), 'utf8')),
             { frames: animations[name].frames, durations: animations[name].sourceDurations }, name);
-        } catch (error) { fail(error.message.startsWith('GAIT_') ? error.message.split(':')[0] : 'GAIT_REVIEW_UNREADABLE', `${name}: ${error.message}`); }
+        } catch (/** @type {any} */ error) { fail(error.message.startsWith('GAIT_') ? error.message.split(':')[0] : 'GAIT_REVIEW_UNREADABLE', `${name}: ${error.message}`); }
         if (motion.stridePixels !== undefined) fail('GAIT_STRIDE_OVERRIDE', `${name}: remove stridePixels; the verified report supplies it`);
         if (motion.origin && motion.origin.y !== review.geometry.groundY) fail('GAIT_ORIGIN_MISMATCH', `${name}: origin must use the reviewed ground line`);
         animations[name].gaitReview = structuredClone(review);
@@ -399,8 +454,9 @@ export async function packFighter(planFile) {
     const settled = await mapLimited(clips, PACK_CONCURRENCY, name => packMotion(name, plan.motions[name], animations[name], plan));
     const failed = settled.find(result => result.status === 'rejected');
     if (failed) throw failed.reason;
-    const packed = Object.fromEntries(clips.map((name, index) => [name, settled[index].value]));
+    const packed = Object.fromEntries(clips.map((name, index) => [name, /** @type {PromiseFulfilledResult<Awaited<ReturnType<typeof packMotion>>>} */ (settled[index]).value])); // none rejected
     // Borrowed cells may name a playback step ({ clip, step }); deduplication decides its frame index.
+    /** @type {(cell: any, at: string) => unknown} */
     const borrow = (cell, at) => {
       if (!cell || typeof cell !== 'object' || cell.step === undefined) return cell;
       const { step, ...rest } = cell, steps = packed[cell.clip]?.steps;
@@ -408,7 +464,7 @@ export async function packFighter(planFile) {
         fail('PLAN_FIELD', `${at}: step ${step} is not a playback step of ${cell.clip}`);
       return { ...rest, frame: steps[step].frame };
     };
-    for (const [name, keys] of [['dash', ['windup', 'recover']], ['fall', ['getUp']]]) {
+    for (const [name, keys] of /** @type {[string, string[]][]} */ ([['dash', ['windup', 'recover']], ['fall', ['getUp']]])) {
       const landmarks = packed[name].clip.landmarks;
       if (!landmarks) continue;
       for (const key of keys) landmarks[key] = Array.isArray(landmarks[key])
@@ -418,7 +474,7 @@ export async function packFighter(planFile) {
     const fighter = {
       schemaVersion: spec.schemaVersion, specVersion: spec.specVersion, localId: plan.localId,
       profile: { name: plan.profile.name, description: plan.profile.description,
-        ...Object.fromEntries(['language', 'concept', 'moves', 'names', 'lines'].filter(key => plan.profile[key] !== undefined).map(key => [key, plan.profile[key]])),
+        ...Object.fromEntries(/** @type {const} */ (['language', 'concept', 'moves', 'names', 'lines']).filter(key => plan.profile[key] !== undefined).map(key => [key, plan.profile[key]])),
         portrait: { assetId: packed.idle.asset.id, crop: crops.portrait }, preview: { assetId: packed.idle.asset.id, crop: crops.preview } },
       combat: { kitId: 'standard-duel', ...(plan.profile.stats ? { stats: plan.profile.stats } : {}), ...(plan.profile.style ? { style: plan.profile.style } : {}) },
       appearance: { projection: 'orthographic', elevationDegrees: spec.input.cameraElevationDegrees, sourceFacing: 'right', leftFacing: 'mirror', bodyHeight: BODY, bodyScale: 1 },

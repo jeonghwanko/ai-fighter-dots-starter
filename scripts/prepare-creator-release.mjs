@@ -1,3 +1,4 @@
+// @ts-check
 // Prepare only public kit bytes. This does not publish, change policy, install or execute the kit.
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
@@ -10,10 +11,16 @@ import { bootstrapPython } from './bootstrap-python.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const execute = promisify(execFile);
+/** @type {(bytes: string | Buffer) => string} */
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+/** @type {(value: unknown) => Buffer} */
 const json = value => Buffer.from(JSON.stringify(value, null, 2) + '\n');
 export const kitOrigin = 'https://oddbout.com';
 
+/**
+ * @param {{ version: string, sha256: string, runtimeManifestSha256: string, name: string, bytes: number }} archive
+ * @param {Buffer} bootstrap
+ */
 export function releaseMetadata(archive, bootstrap) {
   if (!/^\d+\.\d+\.\d+$/.test(archive.version) || !/^[a-f0-9]{64}$/.test(archive.sha256) ||
       !/^[a-f0-9]{64}$/.test(archive.runtimeManifestSha256) || archive.name !== 'oddbout' ||
@@ -31,6 +38,7 @@ export function releaseMetadata(archive, bootstrap) {
   return { relative, manifest, manifestBytes: json(manifest), manifestUrl: `${base}release.json` };
 }
 
+/** @param {string} bundleDirectory @param {string} destination */
 export async function prepareCreatorRelease(bundleDirectory, destination) {
   if (!destination.startsWith('output/')) throw Error('release-output-must-be-under-output');
   const out = await localPath(root, destination);
@@ -79,5 +87,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
   try {
     if (process.argv.length !== 4) throw Error('Usage: npm run kit:release -- <bundle-directory> <output/new-release>');
     console.log(JSON.stringify(await prepareCreatorRelease(process.argv[2], process.argv[3]), null, 2));
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
+  } catch (/** @type {any} */ error) { console.error(error.message); process.exitCode = 1; }
 }

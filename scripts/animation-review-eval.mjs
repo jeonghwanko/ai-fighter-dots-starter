@@ -1,3 +1,4 @@
+// @ts-check
 // Local, generation-free utilities. No credential lookup, network, or paid calls.
 import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -5,15 +6,19 @@ import { fileURLToPath } from 'node:url';
 import { digest, evaluate, swappedPair } from './animation-review-eval-lib.mjs';
 import { questions } from '../api/decisions-review.mjs';
 
+/** @param {string} filename @param {number} [limit] */
 async function readBounded(filename, limit = 64 * 1024 * 1024) {
   if ((await stat(filename)).size > limit) throw Error('Input exceeds size limit');
   const raw = await readFile(filename);
   if (raw.length > limit) throw Error('Input exceeds size limit');
   return raw;
 }
+/** @type {(value: unknown) => string} */
 const json = value => JSON.stringify(value, null, 2) + '\n';
+/** @type {(filename: string, bytes: string | Uint8Array) => Promise<void>} */
 const save = (filename, bytes) => writeFile(filename, bytes, { flag: 'wx', mode: 0o600 });
 
+/** @param {string} directory */
 async function demo(directory) {
   // Tiny colored squares exercise plumbing, NOT animation quality or real labels.
   const { default: sharp } = await import('sharp');
@@ -54,6 +59,7 @@ async function demo(directory) {
   await save(path.join(directory, 'evaluation.json'), json(evaluate(manifest, results, { cutoff: 0.8 })));
 }
 
+/** @param {string[]} args */
 export async function main(args) {
   const [command, ...rest] = args;
   if (command === 'evaluate' && [3, 4, 5].includes(rest.length)) {
@@ -61,8 +67,9 @@ export async function main(args) {
     if (cutoffText !== undefined && !/^(?:0(?:\.\d+)?|1(?:\.0+)?)$/.test(cutoffText)) throw Error('Cutoff must be a decimal in [0, 1]');
     const labels = await readBounded(labelsFile), results = await readBounded(resultsFile);
     const planBytes = planFile === undefined ? null : await readBounded(planFile);
-    const report = evaluate(JSON.parse(labels), JSON.parse(results), { cutoff: cutoffText === undefined ? null : Number(cutoffText),
-      plan: planBytes === null ? null : JSON.parse(planBytes) });
+    // JSON.parse reads a Buffer as its text.
+    const report = /** @type {ReturnType<typeof evaluate> & { inputFiles?: Record<string, string> }} */ (evaluate(JSON.parse(/** @type {any} */ (labels)), JSON.parse(/** @type {any} */ (results)), { cutoff: cutoffText === undefined ? null : Number(cutoffText),
+      plan: planBytes === null ? null : JSON.parse(/** @type {any} */ (planBytes)) }));
     report.inputFiles = { labelsSha256: digest(labels), resultsSha256: digest(results) };
     if (planBytes) report.inputFiles.planFileSha256 = digest(planBytes);
     await save(output, json(report));

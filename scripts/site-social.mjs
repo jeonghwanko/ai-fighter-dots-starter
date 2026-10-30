@@ -1,9 +1,11 @@
+// @ts-check
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // Public channel identity is configured once in deploy/creator-site.json.
 // Newer sources draw their own brand icons from oddbout-community.json (YouTube among them): the plugin then adds nothing — no text link in
 // the footer script nor in the pages' pre-mount footer HTML. Older sources keep the injected "YouTube" link.
+/** @param {string | undefined} channelUrl @returns {import('./site-analytics.mjs').SitePlugin | null} */
 export function youtubeChannelPlugin(channelUrl) {
   if (!channelUrl) return null;
   const url = new URL(channelUrl);
@@ -33,7 +35,7 @@ export function youtubeChannelPlugin(channelUrl) {
   };
 }
 
-/** The source's footer draws its own social icons (crashbang-heroes 51b594d7 onward). */
+/** The source's footer draws its own social icons (crashbang-heroes 51b594d7 onward). @param {string} root */
 export function sourceHasSocialIcons(root) {
   try {
     return readFileSync(join(root, 'src', 'creator', 'siteChrome.ts'), 'utf8').includes('club-social');

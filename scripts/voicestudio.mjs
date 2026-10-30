@@ -1,3 +1,4 @@
+// @ts-check
 import { generate, reuse, status } from '../tools/voice-studio/client.mjs';
 
 const [command, ...args] = process.argv.slice(2);
@@ -15,6 +16,7 @@ try {
     if (!['status', 'reuse', 'generate'].includes(command)) throw new Error(`Unknown command: ${command}`);
     const allowed = new Set(command === 'reuse' ? ['input', 'out', 'source-report']
       : command === 'generate' ? ['out', 'text', 'voice', 'speed', 'language'] : []);
+    /** @type {Record<string, string>} */
     const options = {};
     for (let index = 0; index < args.length; index += 2) {
       const key = args[index].replace(/^--/, '');
@@ -32,15 +34,16 @@ try {
       if (!options.out) throw new Error('--out is required.');
       if (command === 'reuse') {
         if (!options.input) throw new Error('--input is required.');
-        result = await reuse({ input: options.input, output: options.out, sourceReport: options['source-report'], baseUrl });
+        // tools/voice-studio is unchecked: its inferred options make fetchImpl required and leave generate's output out.
+        result = await /** @type {(options: { input: string, output: string, sourceReport?: string, baseUrl?: string }) => ReturnType<typeof reuse>} */ (reuse)({ input: options.input, output: options.out, sourceReport: options['source-report'], baseUrl });
       } else {
-        result = await generate({ output: options.out, text: options.text, voice: options.voice,
+        result = await /** @type {(options: { output: string, text?: string, voice?: string, language?: string, speed?: number, baseUrl?: string }) => ReturnType<typeof generate>} */ (generate)({ output: options.out, text: options.text, voice: options.voice,
           language: options.language, speed: options.speed == null ? undefined : Number(options.speed), baseUrl });
       }
     }
     console.log(JSON.stringify(result, null, 2));
   }
-} catch (error) {
+} catch (/** @type {any} */ error) {
   console.error(`VoiceStudio: ${error.message}`);
   process.exitCode = 1;
 }

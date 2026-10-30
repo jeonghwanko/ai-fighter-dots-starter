@@ -1,3 +1,4 @@
+// @ts-check
 // Retain legacy creator handoffs and normalize old homepage URLs without a reload.
 const homepageRoute = `if (/\\/(?:index|league)\\.html$/.test(location.pathname)) {
   history.replaceState(null, "", "./" + location.search + location.hash);
@@ -9,6 +10,7 @@ if (creatorParams.some(key => params.has(key)) || (location.hash && !publicAncho
   location.replace("./creator.html" + location.search + location.hash);
 }`;
 
+/** @param {string} homepage */
 export function homepageEntries(homepage) {
   if (!homepage.includes('<head>') || !homepage.includes('<main')) throw new Error('Expected the built homepage document');
   const html = homepage.replace('<head>', '<head>\n<meta name="referrer" content="no-referrer">\n<script>' + homepageRoute + '</script>');

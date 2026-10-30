@@ -1,3 +1,4 @@
+// @ts-check
 // Add exactly one reviewed kit release to the existing Pages tree. Never replace the site.
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
@@ -16,12 +17,16 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const repository = 'jeonghwanko/ai-fighter-dots-starter';
 const branch = 'codex/creator-pages';
 const prefix = `repos/${repository}`;
+/** @type {(bytes: Buffer) => string} */
 const sha = bytes => createHash('sha256').update(bytes).digest('hex');
+/** @type {(bytes: Buffer) => string} */
 export const gitBlobSha = bytes => createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex');
+/** @type {(value: unknown) => string} */
 const json = value => JSON.stringify(value, null, 2) + '\n';
 const proofPaths = ['index.html', 'creator.html', 'fighter.html', 'league.html', 'about.html', 'docs.html',
   'privacy.html', 'admin.html', 'world.html', 'deployment.json', 'CNAME', '.vite/manifest.json'];
 
+/** @param {string} directory @param {string} [parent] @returns {Promise<string[]>} */
 async function inventory(directory, parent = '') {
   const result = [];
   for (const entry of await readdir(directory, { withFileTypes: true })) {
@@ -34,6 +39,12 @@ async function inventory(directory, parent = '') {
   return result.sort();
 }
 
+/**
+ * A Git tree entry as the GitHub API lists it.
+ * @typedef {{ path: string, mode: string, type: string, sha: string }} TreeEntry
+ */
+
+/** @param {TreeEntry[]} before @param {TreeEntry[]} after @param {{ path: string, gitSha: string }[]} files */
 export function auditAdditiveTree(before, after, files) {
   const old = new Map(before.map(entry => [entry.path, entry]));
   const next = new Map(after.map(entry => [entry.path, entry]));
@@ -65,6 +76,7 @@ export function auditAdditiveTree(before, after, files) {
     modifiedOrDeletedExistingFiles: 0 };
 }
 
+/** @param {string} directory @param {string} expectedManifestHash */
 export async function validateCandidate(directory, expectedManifestHash) {
   if (!/^[a-f0-9]{64}$/.test(expectedManifestHash)) throw Error('reviewed-manifest-sha256-required');
   const candidate = path.resolve(directory), publicRoot = path.join(candidate, 'public');
@@ -74,7 +86,7 @@ export async function validateCandidate(directory, expectedManifestHash) {
   const release = await localPath(publicRoot, report.relative.slice(0, -1), { directory: true });
   const manifestBytes = await readFile(path.join(release, 'release.json'));
   if (sha(manifestBytes) !== expectedManifestHash) throw Error('reviewed-release-changed');
-  const manifest = JSON.parse(manifestBytes), version = report.relative.split('/')[1];
+  const manifest = JSON.parse(/** @type {string} */ (/** @type {unknown} */ (manifestBytes))), version = report.relative.split('/')[1];
   const archiveFile = path.join(release, `oddbout-${version}.zip`);
   if (!(await lstat(archiveFile)).isFile()) throw Error('archive-not-regular');
   const { stdout } = await execute(bootstrapPython(),
@@ -94,11 +106,12 @@ export async function validateCandidate(directory, expectedManifestHash) {
   return { manifest, manifestUrl: derived.manifestUrl, files };
 }
 
+/** @param {string} relative @param {number} [limit] */
 async function readPublic(relative, limit = 4_000_000) {
   const response = await fetch(`${kitOrigin}/${relative}`, { redirect: 'error', cache: 'no-store', signal: AbortSignal.timeout(30_000) });
   if (response.status !== 200) throw Error(`public-http-${response.status}: ${relative}`);
   const chunks = []; let length = 0;
-  for await (const chunk of response.body) {
+  for await (const chunk of /** @type {ReadableStream<Uint8Array>} */ (response.body)) {
     length += chunk.length;
     if (length > limit) throw Error(`public-size-limit: ${relative}`);
     chunks.push(chunk);
@@ -107,6 +120,17 @@ async function readPublic(relative, limit = 4_000_000) {
   return { path: relative, status: response.status, bytes: bytes.length, sha256: sha(bytes), gitSha: gitBlobSha(bytes) };
 }
 
+/**
+ * What publication-result.json records as the publication proceeds.
+ * @typedef {Awaited<ReturnType<typeof readPublic>>} PublicFile
+ * @typedef {{ status: string, repository: string, branch: string, releaseManifestSha256: string, manifestUrl: string,
+ *   files: { path: string, sha256: string, gitSha: string, bytes: number }[], baseCommit?: string, baseTree?: string,
+ *   baseline?: PublicFile[], preservation?: ReturnType<typeof auditAdditiveTree>, preparedCommit?: string, refUpdateAttempted?: boolean,
+ *   commit?: string, liveFiles?: PublicFile[], siteAfter?: PublicFile[], branchHeadAfterVerification?: string, verifiedAt?: string,
+ *   error?: string }} PublicationSummary
+ */
+
+/** @param {string} directory @param {string} attemptDirectory @param {string} expectedManifestHash @param {{ publish?: boolean }} [options] */
 export async function publishCreatorKit(directory, attemptDirectory, expectedManifestHash, { publish = false } = {}) {
   if (!attemptDirectory.startsWith('output/')) throw Error('attempt-must-be-under-output');
   const attempt = await localPath(root, attemptDirectory);
@@ -114,6 +138,7 @@ export async function publishCreatorKit(directory, attemptDirectory, expectedMan
   await mkdir(attempt); // Preserve request bodies and results; never overwrite an earlier attempt.
   await mkdir(path.join(attempt, 'requests'));
   let requestNumber = 0;
+  /** @type {(endpoint: string, method?: string, body?: unknown) => Promise<any>} */
   const api = async (endpoint, method = 'GET', body) => {
     const args = ['api', endpoint, '--method', method];
     if (body !== undefined) {
@@ -124,11 +149,13 @@ export async function publishCreatorKit(directory, attemptDirectory, expectedMan
     return JSON.parse(stdout);
   };
   const getHead = async () => (await api(`${prefix}/git/ref/heads/${branch}`)).object.sha;
+  /** @type {(tree: string) => Promise<TreeEntry[]>} */
   const getTree = async tree => {
     const result = await api(`${prefix}/git/trees/${tree}?recursive=1`);
     if (result.truncated || !Array.isArray(result.tree)) throw Error('incomplete-git-tree');
     return result.tree;
   };
+  /** @type {PublicationSummary} */
   const summary = { status: 'validating', repository, branch, releaseManifestSha256: expectedManifestHash,
     manifestUrl, files: files.map(({ bytes, ...item }) => ({ ...item, bytes: bytes.length })) };
   const save = async () => writeFile(path.join(attempt, 'publication-result.json'), json(summary));
@@ -198,7 +225,7 @@ export async function publishCreatorKit(directory, attemptDirectory, expectedMan
     summary.branchHeadAfterVerification = await getHead();
     summary.status = 'live-verified'; summary.verifiedAt = new Date().toISOString(); await save();
     return summary;
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     summary.status = summary.commit ? 'published-verification-incomplete'
       : summary.refUpdateAttempted ? 'publication-outcome-unknown' : 'stopped-before-publication';
     summary.error = error.message; await save(); throw error;
@@ -211,5 +238,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     if (!directory || !attempt || !hash || extra.length || option && option !== '--publish')
       throw Error('Usage: node scripts/publish-creator-kit.mjs <release-directory> <output/new-attempt> <reviewed-manifest-sha256> [--publish]');
     console.log(json(await publishCreatorKit(directory, attempt, hash, { publish: option === '--publish' })));
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
+  } catch (/** @type {any} */ error) { console.error(error.message); process.exitCode = 1; }
 }

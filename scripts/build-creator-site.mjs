@@ -1,3 +1,4 @@
+// @ts-check
 import { cp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises';
 import { resolve, join, relative, isAbsolute } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -48,10 +49,13 @@ await build({
   configFile: false, root: source, envDir: false, base: config.base,
   plugins: [creationContextPlugin(), ...boutSharePages, ...gamePlugins, milestonePlugin(), youtubeChannelPlugin(config.youtubeChannelUrl), googleAnalyticsPlugin(config.analyticsMeasurementId, config.siteUrl, config.apiBase), {
     name: 'standalone-creator-origin',
-    transformIndexHtml: { order: 'pre', handler(html, context) {
+    transformIndexHtml: { order: 'pre',
+      /** @param {string} html @param {{ filename: string }} context */
+      handler(html, context) {
       const text = publicSiteText(html);
       return context.filename.replaceAll('\\', '/').endsWith('/privacy.html') ? sitePrivacyNotice(text) : text;
     } },
+    /** @param {string} code @param {string} id */
     transform(code, id) {
       code = publicSiteText(code);
       if (!id.replaceAll('\\', '/').endsWith('/src/platform/fighterCreator.ts')) return code;

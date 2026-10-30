@@ -1,12 +1,15 @@
+// @ts-check
 // Inspect directory metadata only. Never reads, creates, moves or removes credentials.
 import { access, lstat } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import { homedir } from 'node:os';
 import path from 'node:path';
 
+/** @param {{ env?: NodeJS.ProcessEnv, home?: string }} [options] @param {{ metadata?: typeof lstat, checkAccess?: typeof access }} [deps] */
 export async function inspectGrokAuthStorage({ env = process.env,
   home = (process.platform === 'win32' ? env.USERPROFILE : env.HOME) ?? homedir() } = {},
   { metadata = lstat, checkAccess = access } = {}) {
+  /** @param {string} status @param {string} reason */
   const result = (status, reason) => ({ status, reason, scope: 'directory-metadata-only',
     loginSaveVerified: false });
   const configured = env.GROK_HOME;
@@ -24,7 +27,7 @@ export async function inspectGrokAuthStorage({ env = process.env,
       if (part) current = path.join(current, part);
       let info;
       try { info = await metadata(current); }
-      catch (error) { if (error.code === 'ENOENT') { missing = true; break; } throw error; }
+      catch (/** @type {any} */ error) { if (error.code === 'ENOENT') { missing = true; break; } throw error; }
       if (info.isSymbolicLink() || !info.isDirectory())
         return result('blocked', 'grok-auth-storage-path-unsafe');
       nearest = { directory: current, mode: info.mode };
@@ -33,7 +36,7 @@ export async function inspectGrokAuthStorage({ env = process.env,
     if (!(nearest.mode & 0o222)) return result('blocked', 'grok-auth-storage-not-writable');
     await checkAccess(nearest.directory, constants.W_OK | constants.X_OK);
     return result('permission-available', missing ? 'grok-auth-storage-creatable' : 'grok-auth-storage-present');
-  } catch (error) {
+  } catch (/** @type {any} */ error) {
     return result(['EROFS', 'EACCES', 'EPERM'].includes(error.code) ? 'blocked' : 'unknown',
       ['EROFS', 'EACCES', 'EPERM'].includes(error.code) ? 'grok-auth-storage-not-writable' : 'grok-auth-storage-unavailable');
   }

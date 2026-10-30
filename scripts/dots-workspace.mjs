@@ -1,3 +1,4 @@
+// @ts-check
 // Offline by default. Installation, CLI/auth probes, public network probes and report writes are explicit.
 import { execFile } from 'node:child_process';
 import { access, lstat, mkdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
@@ -9,11 +10,35 @@ import { INSTALL_OUTCOME_UNKNOWN, directoryEntries, fail, fingerprint, readRecor
 import { inspectProvider } from './dots-provider.mjs';
 import { inspectGrokAuthStorage } from './dots-auth-storage.mjs';
 
+/**
+ * @typedef {{ runtime?: string, workspace: string, cache?: string, provider?: string, evidence?: string, report?: string, manifestSha256?: string,
+ *   install?: boolean, checkCli?: boolean, checkAuth?: boolean, checkNetwork?: boolean }} DotsOptions
+ * @typedef {{ run?: typeof runCommand, find?: typeof findBinary, now?: number, env?: NodeJS.ProcessEnv, fetchPublic?: typeof fetch }} DoctorDeps
+ * @typedef {{ distribution: string, manifestSha256?: string, vendorPin?: string | null, verifiedFiles?: number, commit?: string, dirty?: boolean,
+ *   publishedBranch?: boolean, versionPolicy?: string, vendorMatchesPin?: boolean | null, vendorDirty?: boolean }} KitSource
+ * @typedef {{ host: string, httpStatus?: number, status: string }} ProbeResult
+ * @typedef {Awaited<ReturnType<typeof evidenceReport>>} Evidence
+ * @typedef {{ schemaVersion: number, checkedAt: string, environmentId: string, host: { kind: string, os: string, arch: string, node: string, identity: string },
+ *   runtime: string, workspace: string, cache: string, network: { status: string, coverage?: string, reason?: string, results?: ProbeResult[] },
+ *   auth: { status: string, reason?: string, scope?: string, accountIdentity?: string, imageAccess?: string, videoAccess?: string,
+ *     storage?: Awaited<ReturnType<typeof inspectGrokAuthStorage>> },
+ *   readyForGeneration: boolean, generationVerified: boolean, automaticDispatch: boolean,
+ *   kit?: Partial<KitSource> & { status?: string, version?: string, lockSha256?: string, dependenciesPresent?: boolean },
+ *   paths?: Record<string, Awaited<ReturnType<typeof writableDirectory>>>,
+ *   tools?: Record<string, { status: string, actor?: string, required?: boolean, nextAction?: string }>,
+ *   provider?: Awaited<ReturnType<typeof inspectProvider>>, delivery?: Evidence['delivery'], registration?: Evidence['registration'], reason?: string,
+ *   recovery?: Awaited<ReturnType<typeof resume>>, blockers?: string[], status?: string }} DoctorReport
+ */
 export const defaultRuntime = fileURLToPath(new URL('../', import.meta.url));
 const identifier = /^[a-z][a-z0-9-]{0,63}$/;
 const jobId = /^[a-f0-9-]{36}$/i;
 const statuses = new Set(['prepared', 'running', 'succeeded', 'failed', 'needs-input', 'unknown', 'resolved', 'cancelled']);
+/** @param {string} value */
 const nodeOkay = value => { const [major, minor] = value.split('.').map(Number); return major > 22 || major === 22 && minor >= 12; };
+/**
+ * @param {string} command @param {string[]} args @param {{ cwd?: string, env?: NodeJS.ProcessEnv, timeout?: number }} [options]
+ * @returns {Promise<{ code: number, uncertain: boolean, text: string }>}
+ */
 export function runCommand(command, args, { cwd, env = process.env, timeout = 15000 } = {}) {
   if (command === 'npm' && process.platform === 'win32') {
     args = [path.join(path.dirname(process.execPath), 'node_modules/npm/bin/npm-cli.js'), ...args];
@@ -25,6 +50,7 @@ export function runCommand(command, args, { cwd, env = process.env, timeout = 15
       // Kept in memory for typed parsers; never copy raw child output into reports/errors.
       text: String(stdout ?? '') + String(stderr ?? '') })));
 }
+/** @param {string} name @param {NodeJS.ProcessEnv} [env] */
 export async function findBinary(name, env = process.env) {
   for (const dir of (env.PATH ?? env.Path ?? '').split(path.delimiter).filter(Boolean)) {
     for (const suffix of process.platform === 'win32' ? ['', '.exe', '.cmd'] : ['']) {
@@ -35,10 +61,11 @@ export async function findBinary(name, env = process.env) {
   }
   return null;
 }
+/** @param {string} runtime @param {typeof runCommand} run @param {string} [expectedManifestSha256] */
 async function metadata(runtime, run, expectedManifestSha256) {
   const pkg = await readRecord(await safePath('package.json', { root: runtime }));
   const lockBytes = await readFile(await safePath('package-lock.json', { root: runtime }));
-  const lock = JSON.parse(lockBytes), locked = lock.packages?.[''];
+  const lock = JSON.parse(/** @type {string} */ (/** @type {unknown} */ (lockBytes))), locked = lock.packages?.['']; // JSON.parse reads a Buffer as its text
   if (typeof pkg.version !== 'string' || !/^\d+\.\d+\.\d+(?:-[a-z0-9.-]+)?$/i.test(pkg.version)) fail('invalid-kit-version');
   if (!locked || locked.version !== pkg.version || Object.entries(pkg.dependencies ?? {}).some(([name, version]) => locked.dependencies?.[name] !== version))
     fail('package-lock-mismatch');
@@ -52,7 +79,8 @@ async function metadata(runtime, run, expectedManifestSha256) {
   }
   let bundle;
   try { bundle = await readRecord(await safePath('.bundle-manifest.json', { root: runtime })); }
-  catch (e) { if (e.code !== 'ENOENT') throw e; }
+  catch (/** @type {any} */ e) { if (e.code !== 'ENOENT') throw e; }
+  /** @type {KitSource} */
   let source;
   if (bundle) {
     const manifestBytes = await readFile(await safePath('.bundle-manifest.json', { root: runtime }));
@@ -92,6 +120,7 @@ async function metadata(runtime, run, expectedManifestSha256) {
     node: process.versions.node, platform: process.platform, arch: process.arch }));
   return { pkg, source, key, lockSha256: sha256(lockBytes) };
 }
+/** @param {string} runtime @param {Awaited<ReturnType<typeof metadata>>} meta */
 async function dependencies(runtime, meta) {
   for (const [name, version] of Object.entries(meta.pkg.dependencies ?? {})) {
     try { if ((await readRecord(await safePath(`node_modules/${name}/package.json`, { root: runtime }))).version !== version) return false; }
@@ -99,6 +128,7 @@ async function dependencies(runtime, meta) {
   }
   return true;
 }
+/** @param {{ workspace: string }} options */
 export async function resume({ workspace }) {
   workspace = await safePath(workspace);
   const sessions = [], problems = [];
@@ -119,8 +149,8 @@ export async function resume({ workspace }) {
         if (!entry.isFile() || !jobId.test(entry.name.slice(0, -5))) { problems.push('unsafe-job-entry'); continue; }
         const record = await readRecord(await safePath(`${base}/jobs/${entry.name}`, { root: workspace }));
         if (record.sessionId !== id || record.jobId !== entry.name.slice(0, -5) || !statuses.has(record.status)) fail('invalid-job');
-        const inputs = await Promise.all((record.inputs ?? []).map(file => fingerprint(workspace, file)));
-        const outputs = await Promise.all((record.outputs ?? []).map(file => fingerprint(workspace, file)));
+        const inputs = await Promise.all((record.inputs ?? []).map(/** @param {any} file */ file => fingerprint(workspace, file)));
+        const outputs = await Promise.all((record.outputs ?? []).map(/** @param {any} file */ file => fingerprint(workspace, file)));
         const unresolved = ['running', 'unknown'].includes(record.status);
         jobs.push({ jobId: record.jobId, status: record.status, inputs, outputs, automaticDispatch: false,
           nextAction: unresolved ? 'inspect-original-run-no-retry' : 'inspect-with-get_creation_job' });
@@ -135,11 +165,13 @@ export async function resume({ workspace }) {
   return { schemaVersion: 1, scope: 'recovery-inventory-no-execution', sessions, blockers: [...new Set(problems)],
     automaticDispatch: false, generationVerified: false, persistence: 'host-storage-not-certified' };
 }
+/** @param {any} record read from disk: checked here @param {number} now */
 function freshness(record, now) {
   const at = Date.parse(record?.checkedAt);
   const expiry = record?.expiresAt === undefined ? Infinity : Date.parse(record.expiresAt);
   return Number.isFinite(at) && now >= at && now - at < 15 * 60_000 && expiry > now;
 }
+/** @param {string} workspace @param {string | undefined} relative @param {string} environmentId @param {number} now */
 async function evidenceReport(workspace, relative, environmentId, now) {
   const unknown = { auth: { status: 'unknown' }, delivery: { status: 'unknown', displayedVerified: false },
     registration: { status: 'unknown', nextAction: 'connected-ODDBOUT-get_profile-and-readiness' } };
@@ -156,15 +188,16 @@ async function evidenceReport(workspace, relative, environmentId, now) {
       nextAction: 'connected-ODDBOUT-get_profile-and-readiness' },
   };
 }
+/** @param {DotsOptions} options @param {DoctorDeps} [deps] */
 export async function doctor(options, { run = runCommand, find = findBinary, now = Date.now(), env = process.env, fetchPublic } = {}) {
   await validateOptions(options);
   const runtime = await safePath(options.runtime ?? defaultRuntime), workspace = await safePath(options.workspace);
   const cache = await safePath(options.cache ?? path.join(workspace, '.cache', 'oddbout'));
   const environmentId = sha256(JSON.stringify({ host: hostname(), platform: process.platform, runtime, workspace }));
-  const blockers = [], report = { schemaVersion: 1, checkedAt: new Date(now).toISOString(), environmentId,
+  const blockers = [], report = /** @type {DoctorReport} */ ({ schemaVersion: 1, checkedAt: new Date(now).toISOString(), environmentId,
     host: { kind: 'dots', os: process.platform, arch: process.arch, node: process.versions.node, identity: 'local-binding-hash' },
     runtime, workspace, cache, network: { status: 'not-probed' }, auth: { status: 'unknown' },
-    readyForGeneration: false, generationVerified: false, automaticDispatch: false };
+    readyForGeneration: false, generationVerified: false, automaticDispatch: false });
   if (!nodeOkay(process.versions.node)) blockers.push('node-22-12-required');
   let meta;
   try {
@@ -204,7 +237,7 @@ export async function doctor(options, { run = runCommand, find = findBinary, now
     .then(() => 'present-unprobed', () => 'missing'), nextAction: 'bootstrap --install before starting a character' };
   if (report.tools.spritePython.status === 'missing') blockers.push('sprite-python-environment-missing');
   report.provider = await inspectProvider(runtime, options.provider ?? 'codex');
-  if (report.provider.status !== 'not-selected') blockers.push(report.provider.reason);
+  if (report.provider.status !== 'not-selected') blockers.push(/** @type {string} */ (report.provider.reason)); // set for every selected provider
   Object.assign(report, await evidenceReport(workspace, options.evidence, environmentId, now));
   if (options.checkAuth) {
     if (options.provider === 'grok') {
@@ -242,8 +275,8 @@ export async function doctor(options, { run = runCommand, find = findBinary, now
     if (fetcher) for (const url of targets) {
       try {
         const response = await fetcher(url, { method: 'HEAD', redirect: 'error', signal: AbortSignal.timeout(10000) });
-        report.network.results.push({ host: new URL(url).hostname, httpStatus: response.status, status: 'http-response-not-capability-proof' });
-      } catch { report.network.results.push({ host: new URL(url).hostname, status: 'unavailable' }); }
+        /** @type {ProbeResult[]} */ (report.network.results).push({ host: new URL(url).hostname, httpStatus: response.status, status: 'http-response-not-capability-proof' }); // set above
+      } catch { /** @type {ProbeResult[]} */ (report.network.results).push({ host: new URL(url).hostname, status: 'unavailable' }); }
     }
   }
   report.recovery = await resume({ workspace });
@@ -252,6 +285,7 @@ export async function doctor(options, { run = runCommand, find = findBinary, now
   report.status = report.blockers.length ? 'action-required' : 'inspected';
   return report;
 }
+/** @param {DotsOptions} options @param {DoctorDeps} [deps] */
 export async function bootstrap(options, { run = runCommand, ...deps } = {}) {
   await validateOptions(options);
   if (!options.install) return { ...(await doctor(options, { run, ...deps })), installation: 'not-requested', nextAction: 'bootstrap --install' };
@@ -276,15 +310,15 @@ export async function bootstrap(options, { run = runCommand, ...deps } = {}) {
     const env = { ...process.env, npm_config_cache: npmCache, PIP_CACHE_DIR: pipCache };
     const receiptPath = await safePath('.dots-install.json', { root: runtime });
     let receipt;
-    try { receipt = await readRecord(receiptPath); } catch (e) { if (e.code !== 'ENOENT') fail('install-receipt-invalid'); }
+    try { receipt = await readRecord(receiptPath); } catch (/** @type {any} */ e) { if (e.code !== 'ENOENT') fail('install-receipt-invalid'); }
     const npmReady = receipt?.key === meta.key && receipt.npm === true && await dependencies(runtime, meta);
     // venv executables normally link to the system Python. Never read their target as an artifact.
     const venv = await safePath('vendor/sprite-gen/.venv', { root: runtime });
     const python = path.join(venv, process.platform === 'win32' ? 'Scripts/python.exe' : 'bin/python');
     const pythonPresent = await access(python, constants.X_OK).then(() => true, () => false);
     const pythonReady = pythonPresent && (await run(python, ['-c', 'import sprite_gen, PIL, numpy'], { cwd: runtime, env, timeout: 15000 })).code === 0;
-    const commands = [!npmReady && ['npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund']],
-      !(receipt?.key === meta.key && receipt.sprite === true && pythonReady) && [process.execPath, [path.join(runtime, 'scripts/sprite-gen.mjs'), 'setup', '--skip-rife']]].filter(Boolean);
+    const commands = /** @type {[string, string[]][]} */ ([!npmReady && ['npm', ['ci', '--ignore-scripts', '--no-audit', '--no-fund']],
+      !(receipt?.key === meta.key && receipt.sprite === true && pythonReady) && [process.execPath, [path.join(runtime, 'scripts/sprite-gen.mjs'), 'setup', '--skip-rife']]].filter(Boolean)); // filter(Boolean) drops the false entries
     await writeFile(await safePath('.dots-runtime.json', { root: runtime }), JSON.stringify({ schemaVersion: 1, host: 'dots' }) + '\n', { mode: 0o600 });
     for (const [command, args] of commands) {
       let result;
@@ -312,7 +346,9 @@ const safeCodes = new Set(['path-not-allowed', 'absolute-path-required', 'protec
   'invalid-kit-version', 'package-lock-mismatch', 'dots-runtime-contract-missing', 'bundle-trust-anchor-required', 'bundle-integrity-invalid', 'source-or-bundle-layout-required', 'source-metadata-unavailable',
   'unsupported-provider-choice', 'existing-work-preserved-install-blocked', 'installation-path-not-writable', 'local-changes-install-blocked',
   'vendor-pin-mismatch', 'node-22-12-required', 'bootstrap-busy-or-interrupted', 'installation-outcome-unknown', 'install-receipt-invalid', 'invalid-arguments', 'report-already-exists']);
+/** @param {any} error a caught value */
 export const safeError = error => safeCodes.has(error.message) ? error.message : 'workspace-inspection-failed';
+/** @param {DotsOptions} options */
 async function validateOptions(options) {
   if (options.provider !== undefined && !['codex', 'grok', 'none'].includes(options.provider)) fail('unsupported-provider-choice');
   const workspace = await safePath(options.workspace);
@@ -323,10 +359,12 @@ async function validateOptions(options) {
     if (await lstat(target).then(() => true, e => { if (e.code !== 'ENOENT') throw e; return false; })) fail('report-already-exists');
   }
 }
+/** @param {string[]} argv */
 export async function main(argv) {
   const [mode, ...rest] = argv;
   if (!['doctor', 'bootstrap', 'resume'].includes(mode)) fail('invalid-arguments');
-  const options = {}, flags = { '--install': 'install', '--check-cli': 'checkCli', '--check-auth': 'checkAuth', '--check-network': 'checkNetwork' };
+  const options = /** @type {DotsOptions & Record<string, string | boolean>} */ ({}), flags = /** @type {Record<string, string>} */ ({ '--install': 'install', '--check-cli': 'checkCli', '--check-auth': 'checkAuth', '--check-network': 'checkNetwork' });
+  /** @type {Record<string, string>} */
   const values = { '--runtime': 'runtime', '--workspace': 'workspace', '--cache': 'cache', '--provider': 'provider', '--evidence': 'evidence', '--report': 'report', '--manifest-sha256': 'manifestSha256' };
   for (let i = 0; i < rest.length; i++) {
     const key = flags[rest[i]] ?? values[rest[i]];
@@ -336,7 +374,8 @@ export async function main(argv) {
   }
   if (!options.workspace || mode !== 'bootstrap' && options.install || mode === 'resume' && Object.keys(options).some(k => !['workspace', 'report'].includes(k))) fail('invalid-arguments');
   await validateOptions(options);
-  const result = await (mode === 'resume' ? resume(options) : mode === 'bootstrap' ? bootstrap(options) : doctor(options));
+  // A resume inventory has no status; a blocked installation has no blockers.
+  const result = /** @type {{ status?: string, blockers?: string[] }} */ (await (mode === 'resume' ? resume(options) : mode === 'bootstrap' ? bootstrap(options) : doctor(options)));
   if (options.report) {
     const target = await safePath(options.report, { root: await safePath(options.workspace) });
     if (!options.report.startsWith('output/')) fail('path-not-allowed');

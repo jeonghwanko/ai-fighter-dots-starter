@@ -1,10 +1,14 @@
+// @ts-check
 import { cp, lstat, mkdir, readFile, realpath, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { localPath } from '../mcp/creation-store.mjs';
 
 const kitRoot = fileURLToPath(new URL('../', import.meta.url));
-/** One ODDBOUT plugin with the existing cloud account and a workspace CLI, not a second stdio plugin. */
+/**
+ * One ODDBOUT plugin with the existing cloud account and a workspace CLI, not a second stdio plugin.
+ * @param {string} destination @param {{ root?: string, workspace?: string }} [options]
+ */
 export async function buildLocalPlugin(destination, { root = kitRoot, workspace = root } = {}) {
   const canonicalRoot = await realpath(root), canonicalWorkspace = await realpath(workspace);
   if (!destination.startsWith('output/')) throw new Error('plugin-output-must-be-under-output');
@@ -32,5 +36,5 @@ if (process.argv[1] && import.meta.url === pathToFileURL(path.resolve(process.ar
     const args = process.argv.slice(2);
     if (args.length > 1) throw new Error('Usage: npm run plugin:build -- [output/new-marketplace]');
     console.log(JSON.stringify(await buildLocalPlugin(args[0] ?? 'output/ai-fighter-marketplace'), null, 2));
-  } catch (error) { console.error(error.message); process.exitCode = 1; }
+  } catch (/** @type {any} */ error) { console.error(error.message); process.exitCode = 1; }
 }
