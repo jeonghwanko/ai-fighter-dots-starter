@@ -6,7 +6,7 @@ import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { promisify } from 'node:util';
 const exec = promisify(execFile);
-const repository = 'https://github.com/jeonghwanko/ai-fighter-dots-starter.git';
+const repository = 'https://github.com/jeonghwanko/oddbout-starter.git';
 async function plainDirectory(value) {
   if (!path.isAbsolute(value)) throw Error('absolute-path-required');
   const target = path.resolve(value), parsed = path.parse(target);

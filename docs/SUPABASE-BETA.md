@@ -258,7 +258,7 @@ Dot에서 첫 실제 등록:
 ## 제작자 홈페이지 연결 링크
 
 `open_creator_homepage`는 `POST /creator-handoffs`로 이 계정 전용 일회용 토큰을 받아
-`https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html#handoff=<tokenHash>` 링크를 만든다. 어느 기기의 브라우저에서나 열린다.
+`https://jeonghwanko.github.io/oddbout-starter/creator.html#handoff=<tokenHash>` 링크를 만든다. 어느 기기의 브라우저에서나 열린다.
 홈페이지는 무료 GitHub Pages에서 제공하고 기존 Supabase를 사용한다. [호스팅·재배포 안내](CREATOR-HOSTING.md)를 따른다.
 
 - 서버는 `auth.admin.generateLink({ type: 'magiclink' })`로 토큰을 만든다. 메일은 보내지 않으며 해시만 돌려준다.

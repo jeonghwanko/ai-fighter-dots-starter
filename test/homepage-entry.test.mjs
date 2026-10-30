@@ -31,7 +31,7 @@ test('homepage is served directly, with language and public anchors preserved', 
 
 test('public home links and canonical metadata use the root without rewriting repository links', () => {
   const base = new URL('.', hosting.siteUrl).href;
-  const old = 'https://jeonghwanko.github.io/ai-fighter-dots-starter/';
+  const old = 'https://jeonghwanko.github.io/oddbout-starter/';
   assert.equal(publicSiteText(`<link rel="canonical" href="${old}league.html">`), `<link rel="canonical" href="${base}">`);
   assert.equal(publicSiteText('<a href="./league.html?lang=ko#fighters" data-destination="league.html">'), '<a href="./?lang=ko#fighters" data-destination="">');
   assert.equal(publicSiteText('home: ["league.html", ""]'), 'home: ["", ""]');

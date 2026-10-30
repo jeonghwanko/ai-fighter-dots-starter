@@ -40,7 +40,7 @@ Publish the resulting files to the existing Pages branch after local review.
 
 The existing Supabase project `ztfxxhtmtrvxvuxlqmgz` continues to own login,
 registered fighters, storage, and API operations. Its Auth redirect allowlist
-includes `https://jeonghwanko.github.io/ai-fighter-dots-starter/creator.html**`
+includes `https://jeonghwanko.github.io/oddbout-starter/creator.html**`
 so English and Korean Google login return URLs work. Existing redirect entries
 remain available. No service key belongs in the website.
 
@@ -208,7 +208,7 @@ seven worker/dispatch tests passed. The build published 2,159 files from source
 commit `5bdaf3fa7bb92bbfa8084e6433d2cb5586eeef44`, using hosting commit
 `395f047cd39a383795e804e4f70ff7581c5a6463`.
 
-[Pages run 39455458507](https://github.com/jeonghwanko/ai-fighter-dots-starter/actions/runs/39455458507)
+[Pages run 39455458507](https://github.com/jeonghwanko/oddbout-starter/actions/runs/39455458507)
 published commit `b1768dc72dacc80a36f8a7498f6737a77b9b0d3b`. The live
 deployment marker matched the build, all three HTML entries and their entry
 assets returned HTTP 200, and Render `/health` returned the exact hosting

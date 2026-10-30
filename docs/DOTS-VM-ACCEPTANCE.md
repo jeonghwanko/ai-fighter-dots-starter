@@ -58,7 +58,7 @@ Local security tests additionally use migrated PostgreSQL (PGlite) and simulated
 
 ## Published settings and actual VM installation
 
-With the user's explicit approval, the saved ai-fighter-dots-starter environment was published on
+With the user's explicit approval, the saved oddbout-starter environment was published on
 2026-10-28 KST. Its initial install script pinned front door 1f110b3e37c4cfbc965014960e937d646c57b630,
 which pins runtime 97890ddf399cbbaae9351ee6d11ac0776714d7b0. Start instructions cover the complete
 Grok creation/recovery flow. The exact three hosts nodejs.org, storage.googleapis.com and
@@ -245,7 +245,7 @@ unverified until their own observed results.
 
 ## Related animation change
 
-[PR #38](https://github.com/jeonghwanko/ai-fighter-dots-starter/pull/38) is in this creator-kit repository,
+[PR #38](https://github.com/jeonghwanko/oddbout-starter/pull/38) is in this creator-kit repository,
 not crashbang-heroes. It merged into codex/creator-hosting as 43c63da3a1362aa113763a8f1f2802c639705a02.
 It adds a hosted-only engine-loop packing policy: engine loop/foot-name records and visual verdicts are
 bound to final frame pixels/durations, with missing/stale/failing reviews rejected. It helps Grok video

@@ -14,7 +14,7 @@ import { bootstrapPython } from './bootstrap-python.mjs';
 
 const execute = promisify(execFile);
 const root = fileURLToPath(new URL('../', import.meta.url));
-const repository = 'jeonghwanko/ai-fighter-dots-starter';
+const repository = 'jeonghwanko/oddbout-starter';
 const branch = 'codex/creator-pages';
 const prefix = `repos/${repository}`;
 /** @type {(bytes: Buffer) => string} */

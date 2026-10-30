@@ -56,7 +56,7 @@
 
 ### 적용한 코드와 보존 범위
 
-- 작업 경로는 `/workspace/ai-fighter-dots-starter`, 브랜치는 `codex/creator-hosting`이다. 사용자 PC에는 접근하지 않았다.
+- 작업 경로는 `/workspace/oddbout-starter`, 브랜치는 `codex/creator-hosting`이다. 사용자 PC에는 접근하지 않았다.
 - 시작 HEAD는 `76109d0ce1c80a7f4a048913ab94f18ed5896fce`였다. fetch한 creator-hosting은
   `7cb01dae6049eb603513b1d98229db3a2800603a`이고, 그 직계 후손인 dots-creator-flow의
   `25933682320f9763dad1b89f94b0619326731451` 및 `6294eeef662e6c37f33ae56ae581627b12e6d79c`를 읽었다.
@@ -154,7 +154,7 @@
 
 ### 프록시 보완의 같은 VM 후속 검증 — 2026-10-24
 
-- `/workspace/ai-fighter-dots-starter`의 작업 없는 체크아웃에서 기존 HEAD `240537bd25a7c000e9cd7abb44f2e189ed7defb4`와
+- `/workspace/oddbout-starter`의 작업 없는 체크아웃에서 기존 HEAD `240537bd25a7c000e9cd7abb44f2e189ed7defb4`와
   작업 상태를 다시 확인했다. 캐릭터 결과 파일·ODDBOUT 세션·기기 승인 대기 파일은 없었고,
   기존 v8 패치 23개 파일은 manifest의 적용 후 해시와 모두 일치했다.
 - 두 원격 브랜치를 명시적으로 fetch한 뒤 `codex/dots-creator-flow`의
