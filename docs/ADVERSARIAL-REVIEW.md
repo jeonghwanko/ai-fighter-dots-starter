@@ -183,3 +183,30 @@ starter PR #149와 게임 PR #34를 각각 독립 리뷰어가 코드만 보고 
 
 그대로 둔 것: 공방·세계(`af_fighter_public`)는 출전과 별개다(경기가 아니다). MCP `spar`는 주인의 제작 중 선수도 거절한다 —
 사용자 결정("제작 중에는 동작 확인 + 아레나 연습만")이 서버 경기를 출전 뒤로 뒀다. 두 출전 도구는 다른 에이전트 도구처럼 아레나 키가 있을 때만 목록에 나온다.
+
+## 2026-10-30 에이전트 지시문(AGENTS.md·CLAUDE.md) 재구성 적대적 리뷰
+
+AGENTS.md를 작업별 진입표·Hard rules·영역별 절로 다시 묶고, CLAUDE.md를 `@AGENTS.md` 가져오기로 바꾸고, 지시문이 가리키는
+경로·앵커·스크립트를 검사하는 `test/agent-docs.test.mjs`를 더했다. 첫 대조 점검(원본 규칙을 문장 단위로 대조)에서 고친 뒤,
+두 독립 리뷰어가 결과물만 보고 공격했다: 하나는 사용자와 대화하는 제작 에이전트의 행동, 하나는 사실·시험·로딩 방식.
+P1은 시험 하나였다. 아래를 고쳤다.
+
+| 우선순위 | 발견 | 개선과 근거 |
+| --- | --- | --- |
+| P1 | 새 시험이 서브모듈 없는 체크아웃(새 worktree, `--no-recurse-submodules` 클론)에서 실패했다. 다른 빠른 시험은 모두 통과하는 곳이다 | 엔진 파일이 없으면 `vendor/sprite-gen/` 이름만 건너뛴다. CI는 서브모듈을 받으므로 계속 검사한다. 서브모듈 파일을 치운 상태에서 통과를 확인 |
+| P2 | Hard rule 3(본인 계정만, 뒤 절이 완화하지 못함)이 호스팅 경로(`request_hosted_fighter`, 동의받은 다른 사람의 호스트)를 막았다 | 작업 공간에서 생성할 때로 범위를 좁혔다(EXECUTION-HOST와 같은 범위). 공급자 절에 호스팅 경로를 적었다 |
+| P2 | "재생성에는 명시적 요청"을 Hard rule로 올리자 묶음 안의 자율 진행·제한된 재시도와 충돌했다. 고친 판은 원래의 독립 규칙(새 생성에는 명시적 새 생성·수정 요청)을 잃었다 | 원래 문장을 생성·전달 절에 그대로 되돌렸다. Hard rule에는 결과 불명·중복 생성·전달 실패만 둔다 |
+| P2 | START-HERE의 새 문장이 "`main`을 쓴다"고 해서 Dots 저장 환경(고정 커밋)과 플러그인 설치를 `main`으로 바꾸게 할 수 있었다 | `mcp/creation-readiness.mjs`의 실제 동작대로 적었다: `main` 체크아웃 갱신은 readiness가 하고 제작 중에는 미룬다. Dots·플러그인은 기록된 커밋·매니페스트를 유지한다. `nextCommands`는 실행한다 |
+| P2 | 배포 표가 커뮤니티 생성 호스트를 "`main`을 pull하면 바로 반영"으로 적고 `host/` 파일을 배포 대상에서 뺐다 | 생성 PC 행: `HOST_FILES`와 `KIT_REF`. 공식 PC는 `og self-update`·`og setup`, 커뮤니티 호스트는 pull 뒤 `npm run host:setup` |
+| P2 | 지도가 `contracts/` 전체를 게임 파일의 바이트 복사라고 했다(`profile-limits.mjs`, `v1/contract-source.mjs`는 이 저장소의 파일) | `SOURCE.json`이 나열한 파일과 `server/`만 바이트 복사로 적고, 타입 검사 규칙도 그 범위로 좁혔다 |
+| P2 | 공유 체크아웃 규칙이 게임 저장소만 말했다. 리뷰 도중 이 저장소의 체크아웃도 다른 세션이 브랜치를 바꾸고 커밋했다 | 두 저장소 모두로 넓혔다. 이 작업도 worktree로 옮겼다 |
+| P3 | 지시문이 Hard rules 뒤에 저장소 지도·명령·배포를 먼저 두어, 키트에서 읽는 제작 에이전트에게 제작 규칙이 뒤로 밀렸다 | 제작 규칙을 Hard rules 바로 뒤로 옮기고, 지도·명령을 "Changing this repository" 아래로 내렸다. 서두에 키트에서 적용되는 부분을 밝혔다 |
+| P3 | Hard rule 1이 에이전트 자신의 화면 관찰을 근거에서 뺐다. Hard rule 3의 "사용자 선택이 정한다"는 Dots의 API 키 대체 금지를 넘는 것으로 읽혔다. "hard rule 5" 참조가 준비 작업까지 막는 것으로 읽혔다 | 실제 출력의 관찰을 근거에 넣었다. 호스트 규칙 안에서만(Dots는 API 키 대체 없음). 참조는 "생성 허가가 아닌 것"으로 |
+| P3 | CLAUDE.md의 대체 지시가 Grok에게 이미 읽은 AGENTS.md를 다시 열게 했다. 하위 폴더에서 시작한 Claude Code는 가져오기를 건너뛸 수 있다 | Claude Code만 다시 열고 Codex·Grok은 열지 않도록 적었다. Grok은 신뢰한 폴더에서만 읽는다는 것도 적었다 |
+| P3 | 시험이 끝 마침표를 스크립트 이름으로 읽고("npm run typecheck."), 앵커는 검사하지 않았다. 32 KiB 경계가 하나 작았다 | 마침표를 빼고, 문서 안·문서 간 앵커를 GitHub 방식으로 검사하고, 경계를 `<=`로. 틀린 앵커 두 개를 넣어 잡는 것을 확인 |
+| P3 | 사실 오류: GitHub의 다른 CI 건너뛰기 표시, `git add .`·`-u`·`commit -a`의 서브모듈 스테이징, 게시 브랜치(`codex/creator-pages`·`codex/game-context`), setup과 번들의 vendor 수정 처리 차이, POSIX 전용 venv 복구 명령, JSDoc import가 `plugin:bundle`도 깨는 점, `worker:deploy` 인자, `test:heavy`, `deploy/`, 키트의 `plugins/ai-fighter/` | 각각 고쳤다. venv 복구는 `npm run sprite:setup` 재실행으로 |
+
+그대로 둔 것: 키트 번들은 AGENTS.md를 그대로 복사하므로 유지보수 내용(약 9 KB)도 키트에 실린다. 잘라 내려면 번들 코드를 바꿔야 해서
+이번 범위 밖이다. AGENTS.md는 28.5 KB로 Codex가 읽는 32 KiB 안이고 시험이 지킨다. 시험은 코드 펜스 안의 경로, 명령 중간의 경로,
+루트 파일, 키트에 실리는지 여부는 보지 않는다. DOT-CREATION §1의 "기본 `main`으로 대체하지 않는다"(브랜치 이름 변경 때 남은 문장)는
+MCP가 그대로 내보내는 안내라 이번에 고치지 않았다. 제작 절이 가리키는 Mocha 인계 문서와 `examples/`가 키트에 없는 것은 이전부터다.

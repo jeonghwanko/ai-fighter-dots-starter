@@ -1,9 +1,7 @@
-# AI Fighter creator kit
+# ODDBOUT creator kit
 
-Read and follow `AGENTS.md`, `docs/DOT-CREATION.md`, and `docs/AUTHORING.md` before working here.
-For a user arriving with only a repository link, begin with `docs/START-HERE.md`.
+@AGENTS.md
 
-Character creation uses meaningful review groups: appearance; locomotion and stance; attacks;
-defense and reactions; an optional style group the user may skip; final review. Work autonomously within each group and show its previews together.
-Wait for feedback between groups, not after each motion; respect explicitly delegated groups and prior choices.
-Use the bundled sprite-gen workflow and the live AI Fighter spec.
+Claude Code: read and follow AGENTS.md before working here. If the import above did not load it (a session started
+in a subdirectory may skip it), open it first. Codex and Grok load AGENTS.md directly and need not open it again.
+Keep every shared rule in AGENTS.md, not here.
