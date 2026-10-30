@@ -6,7 +6,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
-  submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows } from './generation-stages.mjs';
+  submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken } from './generation-stages.mjs';
+import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
 
 const brief = { verdict: 'ok', rejectCode: 'none',
@@ -253,12 +254,13 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
       const foot = { feet: ['left', 'right'] };
       const to = gait === 'walk' ? 16 : 12;
       await writeFile(file, JSON.stringify({ frames: to,
-        cycle_align: broken ? { to, foot, retake: { reason: 'broken-beat', reasons: ['broken-beat'] } } : { to, foot } }));
+        cycle_align: broken ? { to, foot, retake: { reason: 'broken-beat', reasons: ['broken-beat'] } } : { to, foot, seam_ratio: 1.2 } }));
     }
     if (tool === 'codex') {
       // The judge fails the first run take's anatomy and passes everything else.
-      const firstRun = flag(args, '-o').includes('video-run-0');
-      await writeFile(flag(args, '-o'), JSON.stringify({ identity: 'pass', anatomy: firstRun ? 'fail' : 'pass', loop: 'pass', notes: 'Frames 3-4: legs.' }));
+      // The walk's loop it refuses alone (2026-10-30): the engine's seam takes it.
+      const firstRun = flag(args, '-o').includes('video-run-0'), walk = flag(args, '-o').includes('video-walk');
+      await writeFile(flag(args, '-o'), JSON.stringify({ identity: 'pass', anatomy: firstRun ? 'fail' : 'pass', loop: walk ? 'fail' : 'pass', notes: 'Frames 3-4: legs.' }));
     }
     if (tool === 'scale-check') await writeFile(flag(args, '--out'), '{}');
     if (tool === 'game-pack') { await mkdir(flag(args, '--out-dir'), { recursive: true }); await writeFile(path.join(flag(args, '--out-dir'), 'game-pack.json'), '{}'); }
@@ -311,6 +313,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const walkEvent = events.find(e => e.kind === 'gait' && e.gait === 'walk');
   assert.deepEqual([walkEvent.outcome, walkEvent.take, walkEvent.tried.map(t => [t.cut, t.reasons ?? (t.passed ? 'passed' : t.judge)])],
     ['ok', 0, [['loop', ['broken-beat']], ['cut-auto', 'passed']]]);
+  assert.equal(walkEvent.tried.at(-1).loopBy, 'engine-seam');
   const tools = calls.map(c => c.args);
   assert.ok(tools.some(a => a.includes('gen-set') && flag(a, '--concurrency') === '2' && flag(a, '--provider') === 'codex'));
   // The row the extract refused was drawn again alone (gen-set takes a finished row as it is), and the rows extracted again.
@@ -809,4 +812,14 @@ test('a failed extract names the rows to draw again: only the request\'s, once e
     'chroma key: no candidate clears the erase radius', 'walk-x: not in this request'] }));
   assert.deepEqual(await extractFailedRows(run), ['strike-a', 'stance-a']);
   assert.equal(EXTRACT_REDRAWS, 2);
+});
+
+test('the judge\'s loop alone gives way to a seam the engine measured inside its gate; identity and anatomy still refuse', () => {
+  const pass = { identity: 'pass', anatomy: 'pass', loop: 'pass' }, seam = ratio => ({ cycle_align: { seam_ratio: ratio } });
+  assert.equal(loopTaken(pass, null), true);
+  assert.equal(loopTaken({ ...pass, loop: 'fail' }, seam(1.41)), true);
+  for (const meta of [seam(ENGINE_SEAM_MAX + 0.01), seam(Number.NaN), {}, null]) assert.equal(loopTaken({ ...pass, loop: 'fail' }, meta), false);
+  for (const key of ['identity', 'anatomy']) assert.equal(loopTaken({ ...pass, [key]: 'fail' }, seam(0.5)), false);
+  // The loop review takes a cut on the same rule (tools/ai-fighter/gait.mjs, which the PC's bin cannot import).
+  assert.equal(ENGINE_SEAM_MAX, REVIEW_SEAM_MAX);
 });
