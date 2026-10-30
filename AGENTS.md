@@ -161,6 +161,8 @@ This repository lets each user create their own fighter through Dot. Read
   Edge function's deno.json has the same `strict: true`, so `deno check supabase/functions/<name>/index.ts` agrees;
   the Edge deploy itself does not type-check. Deno's TypeScript is older than this kit's tsc and can infer less (an SDK
   callback's arguments, 2026-10-30), so after typing a file an Edge function bundles, run `deno check` on that function too.
+  scripts/edge-bundle.mjs reads a JSDoc `import('…')` type as an import: in those files, name only modules the bundle
+  already ships or its deno.json maps (an unmapped one makes `fighter:mcp plan` fail).
 - Deploy the production `ai-fighter` Edge function only from the game repository with `npm run fighter:edge -- plan`,
   review its source/engine/live-version changes, then use `deploy --plan <id>` with the same options.
   Never upload this checkout directly through Supabase CLI/MCP or a hand-built payload: its duel engine is a null adapter.

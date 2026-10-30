@@ -347,7 +347,7 @@ export function createCreationStore(root, { contextRequest, validatePackage = ma
         const base = path.posix.dirname(manifests[0]);
         const allFiles = [...event.files, ...manifest.assets.map(asset => `${base}/${asset.path}`)];
         state.package = { files: await snapshots(allFiles), basisHash: packageBasis(state), contextRevision: state.contextRevision,
-          fileValidation: { stage: validation.stage, pending: /** @type {{ pending?: string[] }} */ (validation).pending } }; // the worker's verdict carries it
+          fileValidation: { stage: validation.stage, pending: validation.pending } };
       } else if (event.type === 'package-review') {
         if (!state.package || !await unchanged(root, state.package.files) || state.package.basisHash !== packageBasis(state)) fail('package-stale');
         state.package.review = { verdict: event.verdict, evidence: await snapshots(event.evidence), feedback: event.feedback,
