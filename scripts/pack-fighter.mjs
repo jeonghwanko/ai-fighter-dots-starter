@@ -254,11 +254,16 @@ async function mapLimited(items, limit, task) {
   return results;
 }
 
-/** @param {Frame} sheet @param {Plan} plan */
+/**
+ * Lossy at effort 4 (2026-10-30, a hosted fighter's 13 sheets): 0.75 s instead of 15 s at effort 6, 1.4 % more bytes, the same
+ * PSNR against the sheets (31.7 dB) and exact alpha. Lossless keeps 6: effort 4 saved 1.6 s for 0.6 % more bytes, on the path that
+ * comes nearest the 10 MB package limit.
+ * @param {Frame} sheet @param {Plan} plan
+ */
 function encode(sheet, plan) {
   const image = sharp(sheet.data, { raw: { width: sheet.width, height: sheet.height, channels: 4 } });
   return (plan.encoding === 'lossless' ? image.webp({ lossless: true, effort: 6 })
-    : image.webp({ quality: plan.quality, alphaQuality: 100, effort: 6 })).toBuffer();
+    : image.webp({ quality: plan.quality, alphaQuality: 100, effort: 4 })).toBuffer();
 }
 
 /**
