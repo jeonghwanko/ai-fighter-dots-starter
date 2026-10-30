@@ -5,11 +5,12 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 import { validProjectUrl } from '../api/client.mjs';
 import { makePackageValidator } from '../mcp/package-access.mjs';
 import { runWithConfig } from './run.mjs';
+import { runProfileSetWithConfig } from './profile-sets.mjs';
 import { cloudGateway } from './cloud-gateway.mjs';
 
 /**
  * HTTP-triggered worker. Supabase owns the durable queue and five-minute leases.
- * @param {{ wakeToken: string | undefined, run: () => Promise<{ stage: string, submissionId?: string }>, log?: (line: string) => void,
+ * @param {{ wakeToken: string | undefined, run: () => Promise<{ stage: string, submissionId?: string, profileSetId?: string }>, log?: (line: string) => void,
  *   commit?: string | null }} options
  */
 export function createWorkerServer({ wakeToken, run, log = console.log, commit = null }) {
@@ -31,7 +32,7 @@ export function createWorkerServer({ wakeToken, run, log = console.log, commit =
           const result = await run();
           observe('ok');
           // Never log credentials, signed URLs or package contents.
-          log(JSON.stringify({ stage: result.stage, submissionId: result.submissionId }));
+          log(JSON.stringify({ stage: result.stage, submissionId: result.submissionId, profileSetId: result.profileSetId }));
           if (result.stage === 'idle' || result.stage === 'retry-later') break;
         }
       } catch (/** @type {any} */ error) {
@@ -99,7 +100,11 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
   const app = createWorkerServer({
     wakeToken: process.env.AI_FIGHTER_WAKE_TOKEN,
     commit: process.env.RENDER_GIT_COMMIT,
-    run: () => runWithConfig(config),
+    // Packages first; when their queue is idle, the profile sets (선수 프로필 세트, 2026-10-31).
+    run: async () => {
+      const result = await runWithConfig(config);
+      return result.stage === 'idle' ? runProfileSetWithConfig(config) : result;
+    },
   });
   app.server.listen(Number(process.env.PORT ?? 10000), '0.0.0.0');
   for (const signal of ['SIGTERM', 'SIGINT']) process.once(signal, () => { void app.stop(); });

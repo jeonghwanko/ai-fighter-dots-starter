@@ -99,6 +99,10 @@ gemini mcp add --transport http --scope user oddbout https://ztfxxhtmtrvxvuxlqmg
 3. 응답의 각 asset ID에 실제 WebP 파일을 `upload_fighter_asset`으로 전달한다.
 4. 업로드가 끝나면 `submit_fighter_registration`, 이후 `get_fighter_submission`으로 확인한다.
 5. `registered`만 등록 완료다. queued/validating을 완료라고 안내하지 않는다.
+6. 프로필 세트(2026-10-31): 사용자가 고른 정면 원화와 얼굴 칸을 `prepare_profile_set`(선수 id·세트 파일·UUID) →
+   `upload_profile_set_asset` → `submit_profile_set`으로 올리고 `get_profile_set`으로 확인한다. `review`는 운영자 승인 대기이고, `approved`가 되어야
+   홈·명단에 정면이 나온다. 규격과 담백한 채색 문구·화풍 기준 그림은 `get_fighter_spec` overview의 `profileSet`에 있다
+   ([가입 후 바로 이용하기](OPEN-REGISTRATION.md#프로필-세트정면-원화얼굴-칸-2026-10-31)).
 
 ### 실제 파일과 연결 계정 확인
 

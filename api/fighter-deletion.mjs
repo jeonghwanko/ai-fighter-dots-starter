@@ -5,6 +5,7 @@
 // signed-in session; the database rechecks the owner, the session, the expiry and the fighter's version under its lock, and a lost answer
 // is safe to retry with the same confirmation (`supabase/migrations/20261030120000_ai_fighter_site_deletion.sql`).
 import { Problem, UUID, jsonResponse, readBody, rpcCaller, verifiedUser } from './http.mjs';
+import { cleanupPublicFiles } from './profile-sets.mjs';
 
 /** The client a site sign-in stands for in af_fighter_deletions, which has no OAuth client; the database reads this value as the site. */
 export const SITE_CLIENT = '00000000-0000-0000-0000-000000000000';
@@ -43,7 +44,10 @@ export function createFighterDeletionHandler({ db }) {
       if (!body || typeof body !== 'object' || Array.isArray(body) || Object.keys(body).some(key => !['confirmationToken', 'confirmName'].includes(key))
         || !UUID.test(body.confirmationToken ?? '') || typeof body.confirmName !== 'string' || !body.confirmName || body.confirmName.length > 200)
         throw new Problem(422, 'invalid-confirmation');
-      return json(await call('af_delete_owned_fighter', { ...identity, p_token: body.confirmationToken.toLowerCase(), p_confirm_name: body.confirmName }));
+      const deleted = await call('af_delete_owned_fighter', { ...identity, p_token: body.confirmationToken.toLowerCase(), p_confirm_name: body.confirmName });
+      // His profile sets were withdrawn with him; their public copies go now (a retried deletion tries again).
+      await cleanupPublicFiles(db, identity.p_fighter);
+      return json(deleted);
     } catch (error) {
       if (error instanceof Problem) return json({ ok: false, stage: 'api', code: error.message }, error.status);
       return json({ ok: false, stage: 'api', code: 'service-unavailable' }, 503);

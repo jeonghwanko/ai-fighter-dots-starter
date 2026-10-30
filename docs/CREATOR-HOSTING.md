@@ -86,6 +86,13 @@ three minutes, rather than putting the durable wake key in pg_net's queue.
 Render rejects invalid/expired signatures. Replaying a valid signature can only
 wake the existing durable queue; it cannot create jobs or choose packages.
 
+The same worker drains a second queue: profile sets (2026-10-31,
+`worker/profile-sets.mjs`). When no package is waiting it claims a submitted set,
+decodes its front painting in a child process (`worker/profile-set-check.mjs`),
+stores the derived card and face under the lease and finishes it for the
+operator's review. `20261031100100_oddbout_profile_set_dispatch.sql` makes the
+same wake function and cron fire for queued sets.
+
 Free instances sleep after inactivity; the first subsequent submission can
 take an extra minute or longer. Render's free quota and Supabase Free quotas
 still apply. See [Render Free](https://render.com/docs/free) and

@@ -9,6 +9,7 @@ import { registerCreatorSources } from './creator-sources.mjs';
 import { AUTH, FILE, READ, downloadHostFile, output } from './cloud/common.mjs';
 import { registerRegistrationTools } from './cloud/registration-tools.mjs';
 import { registerAgentTools } from './cloud/agent-tools.mjs';
+import { registerProfileSetTools } from './cloud/profile-set-tools.mjs';
 import { registerWorkshopTools } from './cloud/workshop-tools.mjs';
 import { HOSTED_INSTRUCTIONS, registerHostedTools } from './cloud/hosted-tools.mjs';
 // The cloud MCP's tool families live in ./cloud/ (Edge-only, as this file); these names are this module's as before.
@@ -151,6 +152,7 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
     });
   };
   registerRegistrationTools({ register, db, identity, invoke, fetcher, recordAgent });
+  registerProfileSetTools({ register, db, identity, invoke, fetcher });
   // 에이전트 도구 (3단계, 2026-10-27): read ODDBOUT's records, spar, enter cups and tune the fighting style. Listed only with the arena key.
   if (arena?.url && arena?.key) {
     registerAgentTools({ register, arena, db, identity, invoke, recordAgent, caller: host.caller ?? null });

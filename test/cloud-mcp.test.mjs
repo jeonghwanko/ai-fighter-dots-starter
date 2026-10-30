@@ -18,8 +18,8 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
   const init=await (await handle(request('initialize',{protocolVersion:'2025-03-26',capabilities:{},clientInfo:{name:'test',version:'1'}}))).json();
   assert.equal(init.result.serverInfo.name,'oddbout-cloud');
   const list=await (await handle(request('tools/list'))).json();
-  assert.equal(list.result.tools.length,15);
-  for(const name of ['prepare_fighter_registration','upload_fighter_asset','store_creator_source']) {
+  assert.equal(list.result.tools.length,19);
+  for(const name of ['prepare_fighter_registration','upload_fighter_asset','store_creator_source','prepare_profile_set','upload_profile_set_asset']) {
     const t=list.result.tools.find(t=>t.name===name), f=t.inputSchema.properties[t._meta['openai/fileParams'][0]];
     assert.deepEqual(new Set(f.required),new Set(['download_url','file_id']));
     assert.deepEqual(Object.keys(f.properties).sort(),['download_url','file_id','file_name','mime_type']);
@@ -276,6 +276,7 @@ test('every write tool says whether a retry is safe; the ones that make somethin
   const writes = Object.fromEntries(tools.filter(t => !t.annotations.readOnlyHint).map(t => [t.name, t.annotations.idempotentHint]));
   assert.deepEqual(writes, {
     prepare_fighter_deletion: true, delete_fighter: true, prepare_fighter_registration: true, upload_fighter_asset: true, submit_fighter_registration: true,
+    prepare_profile_set: true, upload_profile_set_asset: true, submit_profile_set: true,
     enter_cup: false, update_fighter_profile: true, update_fighter_style: true, enter_fighter: true, withdraw_fighter: true,
     update_fighter_canon: true, post_workshop_note: false, resolve_workshop_note: true, set_fighter_relation: true, manage_world: false, write_world_post: true,
     request_hosted_fighter: false, choose_hosted_look: false, revise_hosted_motion: false, register_hosted_fighter: true, cancel_hosted_fighter: true,

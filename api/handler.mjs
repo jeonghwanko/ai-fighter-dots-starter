@@ -12,6 +12,7 @@ import { createFighterDeletionHandler, deletionRoute } from './fighter-deletion.
 import { createFighterEntryHandler, entryRoute } from './fighter-entry.mjs';
 import { Problem, UUID, bearerToken, jsonResponse, readBody, rpcProblem, sha256, verifiedUserId } from './http.mjs';
 import { BUCKET, SUBMISSION_STATUS, checkedManifest, objectKey, storeAsset } from './submissions.mjs';
+import { PROFILE_SET_SPEC, createProfileSetHandler, profileSetRoute, profileSetWorkerRoute, rosterProfileSet } from './profile-sets.mjs';
 
 export { Problem, readBody, sha256 } from './http.mjs';
 export { BUCKET, objectKey } from './submissions.mjs';
@@ -32,7 +33,7 @@ const ROSTER_CORS = { methods: 'GET, OPTIONS' };
  * An af_roster_entries row (af_fighters with its maker) as the roster lists it; `profile` is the registered package's.
  * @typedef {{ id: string, created_at: string, manifest_sha: string, profile: { name: string, names?: Record<string, string> },
  *   runtime_scope: string | null, runtime_manifest_sha: string | null, duel_approved: boolean, duel_manifest_sha: string | null,
- *   made_with: string | null, entered_at: string | null }} RosterFighter
+ *   made_with: string | null, entered_at: string | null, profile_set?: { id: string, derived: any } | null }} RosterFighter
  */
 /**
  * @type {(value: any) => string} An id from the path, a header or a body, checked here, lowercase as the database writes it: an
@@ -118,6 +119,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
   const generationHandler = createGenerationHandler({ db, authenticate, present, decisionsReviewer, responsesReviewer, cascadeReviewer });
   const deletionHandler = createFighterDeletionHandler({ db });
   const entryHandler = createFighterEntryHandler({ db });
+  const profileSetHandler = createProfileSetHandler({ db, authenticate });
   /** @param {string} owner @param {string} id @returns {Promise<Submission>} */
   async function ownSubmission(owner, id) {
     const { data, error } = await db.from('af_submissions').select('*').eq('id', requireId(id)).eq('owner_id', owner).maybeSingle();
@@ -150,6 +152,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       // The site's delete button (2026-10-30): its own session check, so before the routes below authenticate.
       if (deletionRoute(parts)) return deletionHandler(request, parts);
       if (entryRoute(parts)) return entryHandler(request, parts);
+      // 선수 프로필 세트 (2026-10-31): the owner's upload and the validator's queue (api/profile-sets.mjs).
+      if (profileSetRoute(parts) || profileSetWorkerRoute(parts)) return profileSetHandler(request, parts);
       // Device-connection sign-in: start and poll are unauthenticated; approve verifies the user itself.
       if (parts[0] === 'device-logins') return deviceLoginHandler(request, parts);
       // Account and sign-in handoff routes work for every verified account.
@@ -157,7 +161,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       if (method === 'GET' && parts.join('/') === 'spec') return json({ ok: true, stage: 'public-contract', data: { ...spec,
         registration: { available: true, mode: 'open', auth: 'supabase-user-jwt', assetUpload: 'authenticated-binary',
           approvalRequired: false, publication: 'owner-entry-after-file-validation', moderation: 'post-publication', deviceLogin: 'v1', profileUpdate: 'v1',
-          fighterEntry: 'v1', dailySubmissionLimit: 5, revisionsCountTowardLimit: false } } });
+          fighterEntry: 'v1', dailySubmissionLimit: 5, revisionsCountTowardLimit: false, profileSet: 'v1' }, profileSet: PROFILE_SET_SPEC } });
       // Validated, active packages are public; uploads and removed packages remain private. The list holds entered fighters only (출전,
       // 2026-10-30): one in production is served at his own address, for his owner's previews and practice, and meets nobody else.
       if (parts[0] === 'roster' && (method === 'GET' || method === 'OPTIONS')) {
@@ -165,7 +169,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         const reply = (body, status = 200) => jsonResponse(body, status, ROSTER_CORS);
         if (method === 'OPTIONS') return reply({ ok: true });
         // af_roster_entries joins the agent that made each fighter (`made_with`), so a page or a fighter is one query (2026-10-29).
-        let query = db.from('af_roster_entries').select('id,created_at,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha,made_with,entered_at')
+        let query = db.from('af_roster_entries').select('id,created_at,submission_id,manifest_sha,profile,runtime_approved,runtime_scope,runtime_manifest_sha,duel_approved,duel_manifest_sha,made_with,entered_at,profile_set')
           .eq('runtime_approved', true).eq('runtime_scope', 'arena-player-v1').eq('review_state', 'approved');
         if (parts.length === 1) {
           // An unlisted fighter (`listed`, 2026-10-27) is left out of the list only: his own address below still serves him.
@@ -183,7 +187,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
           const last = data[19], hasMore = data.length > 20, shown = /** @type {RosterFighter[]} */ (data.slice(0, 20)).filter(f => f.runtime_manifest_sha === f.manifest_sha);
           return reply({ ok: true, hasMore, nextCursor: hasMore ? `${last.created_at}|${last.id}` : null,
             fighters: shown.map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, ...(f.profile.names ? { names: f.profile.names } : {}), runtimeScope: f.runtime_scope,
-              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha && f.entered_at != null, entered: true, ...(f.made_with ? { madeWith: f.made_with } : {}) })) });
+              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha && f.entered_at != null, entered: true, ...(f.made_with ? { madeWith: f.made_with } : {}),
+              ...rosterProfileSet(db, f) })) });
         }
         if (parts.length !== 2 || !UUID.test(parts[1])) return reply({ ok: false, code: 'not-found' }, 404);
         const { data: fighter, error } = await query.eq('id', parts[1]).maybeSingle(); check(error);
@@ -196,7 +201,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         const files = row.manifest.assets.map(/** @param {{ id: string }} asset @param {number} index */ (asset, index) => ({ id: asset.id, downloadUrl: urls[index] }));
         return reply({ ok: true, fighterId: fighter.id, manifestSha256: fighter.manifest_sha, runtimeApproved: true,
           runtimeScope: fighter.runtime_scope, duelApproved: fighter.duel_approved === true && fighter.duel_manifest_sha === fighter.manifest_sha
-            && fighter.entered_at != null, entered: fighter.entered_at != null, manifestText: row.manifest_text, files, ...(maker ? { madeWith: maker } : {}) });
+            && fighter.entered_at != null, entered: fighter.entered_at != null, manifestText: row.manifest_text, files, ...(maker ? { madeWith: maker } : {}),
+          ...rosterProfileSet(db, fighter) });
       }
       if (parts.join('/') === 'analytics/context' && request.method === 'OPTIONS' && analytics) return analytics.preflight();
       const isWorker = parts[0] === 'worker';
