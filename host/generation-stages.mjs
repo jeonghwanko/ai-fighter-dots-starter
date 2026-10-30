@@ -13,10 +13,11 @@
 //   frame brought to the look's size (sprite-gen scale-check, measured by the head), packed with reviewPolicy engine-loop, one preview per clip. A creator's change to one clip remakes that clip only: an action clip's rows drawn
 //   again with his words (its cells alone replace the first run's), a walk or run filmed again with them; idle is the look (an operator's).
 //   A seventh, optional row (2026-10-28) draws the entrance and the victory beside the six; when it fails the fighter goes without them.
+//   The action clips' previews go up as the rows finish (2026-10-30): gen-set's finished rows are extracted in a scratch run while it still draws the rest.
 // submitting: the package the motions stage left in the job folder, with the profile the creator confirmed, submitted under his account.
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { appendFile, copyFile, cp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import path from 'node:path';
 import { NOT_STARTED_EXIT, judgeOutcome, readOutcome } from './sprite-outcome.mjs';
 // No OpenAI credentials or API calls on a generation host. Use its existing ODDBOUT worker identity.
@@ -323,6 +324,14 @@ export async function gaitRanges(api) {
 export const GAIT_RETAKES = 2;
 /** How long the run waits after the walk before it films: the xAI quota counts clip starts per second (the engine staggers its own). */
 export const GAIT_STAGGER_MS = 5000;
+/**
+ * Drafts as the keypose rows finish (2026-10-30, user decision): gen-set draws six rows two at a time (43–57 s a row), and the previews of the
+ * action clips used to wait for all six (about 2 min 40 s). While gen-set runs, the rows it has finished (its per-row report is its commit
+ * marker) are looked for every EARLY_POLL_MS and extracted in a scratch run beside the rows' own, and the clips whose cells all lie in them go up.
+ * The image calls, their concurrency and their cost are gen-set's, unchanged. When gen-set ends, a step still running gets EARLY_GRACE_MS.
+ */
+export const EARLY_POLL_MS = 2000;
+export const EARLY_GRACE_MS = 15_000;
 // A fighter's look (gloves up, a weapon drawn) pulls the video toward strikes, and a run that punches as it goes never repeats: the first
 // community test host's boxer had no cycle in two of three run takes (2026-10-28). Every take, the first too, says what the arms do and
 // that nothing strikes; a pilot of the first take's words found a cycle on that boxer at once (one Grok clip).
@@ -446,7 +455,7 @@ export const extOf = type => ({ 'image/png': 'png', 'image/jpeg': 'jpg', 'image/
  * on the kit's sprite-gen venv (pixels only, no provider) and resolves `{ code }`. Calls may overlap: `og` waits for a free codex slot.
  */
 export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy = async () => ({ code: 127 }), gaitStaggerMs = GAIT_STAGGER_MS,
-  alignPauseMs = ALIGN_PAUSE_MS, signal = null }) {
+  alignPauseMs = ALIGN_PAUSE_MS, earlyPollMs = EARLY_POLL_MS, earlyGraceMs = EARLY_GRACE_MS, signal = null }) {
   // One loop alignment at a time on this worker: RIFE on the GPU takes about 4 GB, and a walk and a run aligning at once (or two jobs) ran
   // an 8 GB card out of memory (2026-10-28).
   let aligning = Promise.resolve();
@@ -865,6 +874,89 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       } catch { /* the stage goes on */ }
     }
     /**
+     * 1a. Drafts while gen-set draws the rows (2026-10-30; EARLY_POLL_MS). The finished rows are extracted in a scratch run (`rows-early`: the
+     * rows' own run is gen-set's until it ends), and `motions.py early-drafts` makes the clips whose cells all lie in them as `assemble` will (the
+     * same scale, canvas and beats): a combo waits for both its rows. A step that fails ends the watching (the normal path does it all again
+     * after gen-set; a row the scratch extract refused is the rows' extract's to redraw), the cause kept in `early-drafts.log`. Never a stop.
+     * `stop()` after gen-set: `{ taken, uploaded }` (the raw image of each row drawn from, the clips that went up), or null when a step was still
+     * running past EARLY_GRACE_MS (nothing then is taken as already drafted).
+     */
+    function earlyDrafts() {
+      const scratch = path.join(m, 'rows-early'), out = path.join(m, `drafts-early-${job.motionRound}`), note = path.join(m, 'early-drafts.log');
+      const taken = new Map(), tried = new Set(), uploaded = new Set();
+      let ending = false, wake = () => {};
+      const nap = () => new Promise(done => { const timer = setTimeout(done, earlyPollMs); wake = () => { clearTimeout(timer); done(); }; });
+      const log = text => appendFile(note, `${new Date().toISOString()} ${text}\n`).catch(() => {});
+      /** A row is drawn when gen-set's report of it (written last, removed when the row fails) names its provider and says it did not fail. */
+      const finished = async state => {
+        try {
+          const report = await readJson(path.join(rows, 'reports', 'gen-set', `${state}.json`));
+          return Boolean(report?.provider) && report.ok !== false && existsSync(path.join(rows, 'raw', `${state}.png`));
+        } catch { return false; }
+      };
+      /** `sprite extract` in the scratch run on these rows; a batch it refused is tried row by row (one bad row costs only itself). */
+      async function extract(fresh) {
+        const run = states => og(sprite('extract', '--run-dir', scratch, '--states', states.join(',')));
+        if ((await run(fresh)).code === 0) return fresh;
+        const passed = [];
+        for (const state of fresh.length > 1 ? fresh : []) if ((await run([state])).code === 0) passed.push(state);
+        await log(`extract refused ${fresh.filter(state => !passed.includes(state)).join(',')}`);
+        return passed;
+      }
+      const watching = (async () => {
+        try {
+          const states = Object.keys((await readJson(path.join(rows, 'sprite-request.json'))).states ?? {});
+          await rm(scratch, { recursive: true, force: true }); await rm(out, { recursive: true, force: true });
+          while (!ending) {
+            await nap();
+            if (ending) break;
+            const drawn = [];
+            for (const state of states) if (await finished(state)) drawn.push(state);
+            const fresh = drawn.filter(state => !tried.has(state));
+            // All six drawn: gen-set ends in a moment and the normal path drafts them all.
+            if (!fresh.length || drawn.length === states.length) continue;
+            await mkdir(path.join(scratch, 'raw'), { recursive: true });
+            await copyFile(path.join(rows, 'sprite-request.json'), path.join(scratch, 'sprite-request.json'));
+            const hashes = new Map();
+            for (const state of fresh) {
+              await copyFile(path.join(rows, 'raw', `${state}.png`), path.join(scratch, 'raw', `${state}.png`));
+              hashes.set(state, reviewHash(await readFile(path.join(scratch, 'raw', `${state}.png`))));
+              tried.add(state);
+            }
+            for (const state of await extract(fresh)) taken.set(state, hashes.get(state));
+            if (ending || !taken.size) continue;
+            if ((await motionsPy(['early-drafts', scratch, look, out])).code !== 0) { await log('early-drafts failed'); break; }
+            const files = (await readdir(out).catch(() => [])).filter(f => f.endsWith('.webp') && !uploaded.has(path.basename(f, '.webp')));
+            await draft(files.map(f => path.join(out, f)));
+            for (const f of files) if (drafted.some(d => d.clip === path.basename(f, '.webp'))) uploaded.add(path.basename(f, '.webp'));
+          }
+        } catch (error) { await log(`stopped: ${error?.message ?? error}`); }
+      })();
+      return {
+        async stop() {
+          ending = true; wake();
+          let timer;
+          const late = new Promise(done => { timer = setTimeout(() => done(false), earlyGraceMs); });
+          const ended = await Promise.race([watching.then(() => true), late]);
+          clearTimeout(timer);
+          if (!ended) { await log('still running when gen-set ended: nothing is taken as drafted'); return null; }
+          return { taken, uploaded };
+        },
+      };
+    }
+    /**
+     * The clips the early drafts may stand for (2026-10-30): none when a creator's change remade cells, or a row's image is not the one the
+     * early drafts were drawn from (a row drawn again by the extract's redraw); else every clip that went up early, which the final drafts skip.
+     */
+    async function draftedEarly(early, overrides) {
+      if (!early || overrides.length) return [];
+      try {
+        for (const [state, hash] of early.taken)
+          if (reviewHash(await readFile(path.join(rows, 'raw', `${state}.png`))) !== hash) return [];
+        return [...early.uploaded];
+      } catch { return []; }
+    }
+    /**
      * 1b. The show row (2026-10-28): the optional entrance and victory, one GPT row of its own drawn beside the six (one image at a time).
      * Never a stop — a show row that fails leaves the fighter without those clips. Drawn once: a stage tried again keeps its cells.
      * A run whose request may have been taken (its outcome unknown, stopped after it left: what failedRun gives an operator) is left out
@@ -915,7 +1007,11 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         if (code !== 0) return { retry: `prepare-exit-${code}` };
       }
       const since = Date.now();
-      const { code } = await og(sprite('gen-set', '--run-dir', rows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '2'));
+      const watching = earlyDrafts();
+      let genSet, early = null;
+      try { genSet = await og(sprite('gen-set', '--run-dir', rows, '--provider', 'codex', '--model', MODELS.image, '--concurrency', '2')); }
+      finally { early = await watching.stop(); }
+      const { code } = genSet;
       if (code === 75) return ASKED;
       if (code !== 0) return failedRun('rows', code, path.join(rows, 'reports', 'gen-set', 'set.report.json'), since);
       const extracted = await extractRows(rows, '2');
@@ -932,8 +1028,13 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       await rm(asm, { recursive: true, force: true });
       const show = await showing;
       if ((await motionsPy(['assemble', rows, look, asm, overridesFile, show ?? ''])).code !== 0) return { review: 'rows-assemble' };
-      if ((await motionsPy(['drafts', asm, draftDir])).code === 0)
-        await draft((await readdir(draftDir).catch(() => [])).filter(f => f.endsWith('.webp')).map(f => path.join(draftDir, f)));
+      // The clips already drafted early are not made again (their cells are the assembly's: the same bytes); without them, all of them are.
+      const skip = await draftedEarly(early, overrides);
+      // Its own folder (the gaits' previews are written into `draftDir` meanwhile), emptied: a retried stage's old previews are not the skipped ones.
+      const rowsDrafts = path.join(m, `drafts-rows-${job.motionRound}`);
+      await rm(rowsDrafts, { recursive: true, force: true });
+      if ((await motionsPy(['drafts', asm, rowsDrafts, ...(skip.length ? [skip.join(',')] : [])])).code === 0)
+        await draft((await readdir(rowsDrafts).catch(() => [])).filter(f => f.endsWith('.webp')).map(f => path.join(rowsDrafts, f)));
       return {};
     }
     // 2. Walk and run (Grok): a clean cut the judge passed, or an operator. Both film from one still.
