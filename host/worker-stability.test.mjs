@@ -3,8 +3,8 @@ import test from 'node:test';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
-import { ASKS, createStages } from './generation-stages.mjs';
-import { STAGE_LIMIT_MS, STAGE_STOPPED, TIMING, errorCode, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
+import { ASKS, GROK_LIMITED, createStages } from './generation-stages.mjs';
+import { STAGE_LIMIT_MS, createCooldowns, healthAfter, STAGE_STOPPED, TIMING, errorCode, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
 
 const brief = { profile: { name: 'Blue' }, look: { subject: 'A blue cat boxer', palette: ['blue'], prop: 'gloves', avoid: 'none' },
   motion: { temper: 'bold', attack: 'jab' } };
@@ -136,4 +136,35 @@ test('a look gen said it made but whose picture is not there goes to an operator
     const stages = createStages({ og, api: { artifact: async () => ({ ok: true }) }, fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
     assert.deepEqual(await stages.appearance(job, dir), { outcome: 'review', result: { code: 'look-no-output' } });
   } finally { await rm(dir, { recursive: true, force: true }); }
+});
+
+test('a provider that cannot run here now is marked down, the other keeps its health, and any other outcome changes nothing', () => {
+  const up = { ok: true, codex: true, grok: true, at: 't' };
+  assert.deepEqual(healthAfter(up, ASKS), { ok: false, codex: false, grok: true, at: 't' });
+  assert.deepEqual(healthAfter(up, GROK_LIMITED), { ok: false, codex: true, grok: false, at: 't' });
+  assert.equal(healthAfter(up, 'video-exit-1'), up);
+  assert.equal(healthAfter(up, undefined), up);
+});
+
+test('a provider a real stage found limited stays down past a health check that only says hello, for longer each time it is found limited again', () => {
+  let now = 1_000_000;
+  const cool = createCooldowns(() => now), up = { ok: true, codex: true, grok: true, at: 't' }, minute = 60_000;
+  assert.deepEqual(cool.apply(up), up);
+  assert.equal(cool.limit('grok'), TIMING.askedRecheckMs);
+  // The text probe passes again after the first wait is over only if the wait is: until then grok stays down and so does the host.
+  now += TIMING.askedRecheckMs - minute;
+  assert.deepEqual(cool.apply(up), { ok: false, codex: true, grok: false, at: 't' });
+  now += minute;
+  assert.deepEqual(cool.apply(up), up);
+  // Found limited again: twice as long, then no longer than a health period.
+  assert.equal(cool.limit('grok'), 2 * TIMING.askedRecheckMs);
+  assert.equal(cool.limit('grok'), TIMING.healthMs);
+  assert.equal(cool.limit('grok'), TIMING.healthMs);
+  // A failed probe stays failed whatever the cool-down says, and the other provider is untouched.
+  assert.deepEqual(cool.apply({ ...up, codex: false, ok: false }), { ok: false, codex: false, grok: false, at: 't' });
+  // A stage that used grok and made its work ends the streak: the next limit starts from the first wait again.
+  cool.worked(['grok']);
+  assert.equal(cool.limit('grok'), TIMING.askedRecheckMs);
+  cool.limit('codex');
+  assert.deepEqual(cool.apply(up), { ok: false, codex: false, grok: false, at: 't' });
 });

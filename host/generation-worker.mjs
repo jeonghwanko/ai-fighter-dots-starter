@@ -10,7 +10,7 @@ import { appendFile, mkdir, readFile, readdir, writeFile } from 'node:fs/promise
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { ASKS, MODELS, createStages, ogJobId } from './generation-stages.mjs';
+import { ASKS, GROK_LIMITED, MODELS, createStages, ogJobId } from './generation-stages.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
 const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -137,6 +137,37 @@ export function timedOutOutcome(status, outcome) {
   const requestIds = outcome?.result?.requestIds;
   return { outcome: 'review', result: { code: `${status}-stage-timeout`, ...(Array.isArray(requestIds) && requestIds.length ? { requestIds } : {}) } };
 }
+/** The provider a stage's outcome code says cannot run here now (the codex question, Grok's 429), if it does. */
+export const limitedProvider = code => ({ [ASKS]: 'codex', [GROK_LIMITED]: 'grok' })[code];
+/** The health after a stage's outcome: a provider that cannot run here now is marked down until a check passes. */
+export function healthAfter(health, code) {
+  const provider = limitedProvider(code);
+  return provider ? { ...health, ok: false, [provider]: false } : health;
+}
+/**
+ * What the health check cannot see (2026-10-30): it sends each provider one word, and a text answer says nothing of the image or video
+ * allowance that ran out. A provider a real stage found limited stays down for a wait, whatever the check says: the first askedRecheckMs,
+ * doubled each time it is found limited again (the stage ends first, or a requester picks this host and meets it), at most a health
+ * period. A stage that made its work with the provider ends the streak. In memory only: a restarted worker asks the check again.
+ */
+export function createCooldowns(now = Date.now) {
+  const by = new Map();
+  return {
+    /** Marks `provider` limited; returns how long it stays down (ms). */
+    limit(provider) {
+      const streak = (by.get(provider)?.streak ?? 0) + 1, wait = Math.min(TIMING.askedRecheckMs * 2 ** (streak - 1), TIMING.healthMs);
+      by.set(provider, { until: now() + wait, streak });
+      return wait;
+    },
+    worked(providers) { for (const provider of providers) { const held = by.get(provider); if (held) by.set(provider, { ...held, streak: 0 }); } },
+    apply(health) {
+      const down = p => health[p] && !(by.get(p)?.until > now()), codex = down('codex'), grok = down('grok');
+      return codex === health.codex && grok === health.grok ? health : { ...health, ok: health.ok && codex && grok, codex, grok };
+    },
+  };
+}
+/** The providers a stage's work uses, for ending a limited streak when it made its work. */
+const STAGE_PROVIDERS = Object.freeze({ appearance: ['codex'], motions: ['codex', 'grok'] });
 /** An error's code as the finish route takes it: a string of at most 60 characters (a child process's or a reply's code may be a number). */
 export const errorCode = (error, fallback = 'stage-error') => String(error?.code ?? fallback).slice(0, 60);
 
@@ -169,6 +200,7 @@ export async function main({ once = false } = {}) {
   const say = line => appendFile(workerLog, `${new Date().toISOString()} ${line}\n`).catch(() => {});
 
   let health = { ok: false, codex: false, grok: false, at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
+  const cooldowns = createCooldowns();
   const quiet = async (args, limitMs) => {
     let output = '';
     const child = spawn(og, args, { stdio: ['ignore', 'pipe', 'pipe'], detached: true });
@@ -180,7 +212,7 @@ export async function main({ once = false } = {}) {
   async function keepAlive() {
     if (Date.now() - checkedAt >= TIMING.healthMs) {
       // A health check waits for a codex slot like any run; past ten minutes it counts as not healthy.
-      health = parseHealth(await quiet(['health'], 600_000)); checkedAt = Date.now();
+      health = cooldowns.apply(parseHealth(await quiet(['health'], 600_000))); checkedAt = Date.now();
       await say(`health codex=${health.codex} grok=${health.grok}`);
       // Jobs that ended while they waited for their requester (cancelled, expired): closed here, so og setup can update again.
       const unclosed = await unclosedJobs(path.join(kit, 'output'));
@@ -247,11 +279,13 @@ export async function main({ once = false } = {}) {
       outcome = timedOutOutcome(job.status, outcome);
     } else if (controller.signal.aborted) { await say(`job ${job.id} ${job.status} stopped (lease lost)`); return; }
     // codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon.
-    if (outcome.result?.code === ASKS) {
-      health = { ...health, ok: false, codex: false };
-      checkedAt = Date.now() - TIMING.healthMs + TIMING.askedRecheckMs;
-      await say(`codex asked a question: no claims until health passes (checked again in ${TIMING.askedRecheckMs / 60_000} minutes)`);
-    }
+    const down = healthAfter(health, outcome.result?.code), provider = limitedProvider(outcome.result?.code);
+    if (down !== health) {
+      health = down;
+      const wait = cooldowns.limit(provider);
+      checkedAt = Date.now() - TIMING.healthMs + wait;
+      await say(`${provider} cannot run now: no claims until health passes (checked again in ${Math.round(wait / 60_000)} minutes)`);
+    } else if (outcome.outcome === 'ok') cooldowns.worked(STAGE_PROVIDERS[job.status] ?? []);
     const reply = await api.finish(job, outcome.outcome, { ...outcome.result, ...(tally.size ? { calls: tally.value() } : {}) });
     await say(`job ${job.id} ${job.status} → ${outcome.outcome}${outcome.result?.code ? ` (${outcome.result.code})` : ''} ${reply.ok ? reply.status : `finish refused ${reply.code}`}`);
     if (['rejected', 'failed'].includes(outcome.outcome) || reply.status === 'submitted') await writeFile(path.join(dir, '.closed'), '').catch(() => {});
