@@ -393,3 +393,39 @@ test('a full day queues requests to ODDBOUT: the brief runs, the looks wait thei
     assert.equal(other.length, 36);
   } finally { await sql.close(); }
 });
+
+// 첫 선수 무료, review (2026-10-30): idle is not a motion to redo, a limit of 0 takes no request, a stalled host's cancel gives it back.
+test('review: idle cannot be redone, a daily limit of 0 refuses, a cancel while the host is offline gives the free fighter back', async () => {
+  const { sql, owner, call, work, healthy } = await generation();
+  try {
+    await healthy();
+    await sql.query('update public.af_creators set hosted_credits = 3 where owner_id = $1', [owner]);
+    const ask = () => call('POST', 'generations', { description: '모자를 쓴 너구리 레슬러', language: 'ko', delegate: true }, undefined, { 'idempotency-key': crypto.randomUUID() });
+    const step = async status => { const c = (await work('POST', 'claim', {})).body.job; assert.equal(c?.status, status); return c; };
+    const finish = (c, outcome, result) => work('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome, result });
+    const credits = async () => (await call('GET', 'generations')).body.credits;
+    // A job at its finished motions: idle is the look itself, so a change to it is refused before it reaches the worker.
+    let job = (await ask()).body.job;
+    await finish(await step('queued'), 'ok', { brief: { profile: {} } });
+    await finish(await step('appearance'), 'ok', { candidates: ['look-a-0', 'look-b-0'], choice: 'a' });
+    await finish(await step('motions'), 'ok', { preview: [{ clip: 'idle', name: 'motion-idle-0' }, { clip: 'walk', name: 'motion-walk-0' }] });
+    assert.equal((await call('POST', `generations/${job.id}/motions`, { revise: { clip: 'idle', note: '조금 더 웃게' } })).body.code, 'invalid-answer');
+    assert.equal((await call('POST', `generations/${job.id}/motions`, { revise: { clip: 'walk', note: '조금 더 빠르게' } })).body.job.status, 'motions');
+    // The worker goes quiet in the middle: he gives up and the free fighter comes back.
+    await sql.query("update public.af_generation_hosts set worker_seen_at = now() - interval '10 minutes' where official");
+    assert.deepEqual(await credits(), { granted: 3, used: 1, left: 2 });
+    await call('DELETE', `generations/${job.id}`);
+    assert.deepEqual(await credits(), { granted: 3, used: 0, left: 3 });
+    // With the worker back, a painted job's cancel keeps it used, as before.
+    await healthy();
+    job = (await ask()).body.job;
+    await finish(await step('queued'), 'ok', { brief: { profile: {} } });
+    await finish(await step('appearance'), 'ok', { candidates: ['look-a-0', 'look-b-0'], choice: 'a' });
+    await call('DELETE', `generations/${job.id}`);
+    assert.deepEqual(await credits(), { granted: 3, used: 1, left: 2 });
+    // A daily limit of 0 starts nothing, so it takes no request.
+    await sql.query('update public.af_generation_hosts set daily_limit = 0 where official');
+    await sql.query("update public.af_generation_jobs set created_at = now() - interval '2 days' where owner_id = $1", [owner]);
+    assert.equal((await ask()).body.code, 'generation-capacity');
+  } finally { await sql.close(); }
+});

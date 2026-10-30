@@ -161,8 +161,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
       revisionsLeft: { appearance: 2 - row.appearance_revisions, motions: 3 - row.motion_revisions },
       // Its looks are painted and a cancel or an expiry from here keeps his free fighter used: not when an operator is looking
-      // (needs_review: a cancel gives it back) and not once it failed or was refused (리뷰 2026-10-30).
-      charged: Boolean(row.charged_at) && !row.refunded_at && !['needs_review', 'failed', 'rejected'].includes(row.status),
+      // (needs_review: a cancel gives it back), not once it failed or was refused, not for a package that failed its check (리뷰 2026-10-30).
+      charged: Boolean(row.charged_at) && !row.refunded_at && !['needs_review', 'failed', 'rejected'].includes(row.status)
+        && submission?.stage !== 'rejected',
       queue: isObject(queue) ? queue : null,
       preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null, ...(PREVIEW_NOTES.includes(p.note) ? { note: p.note } : {}) })),
       submission,
@@ -333,7 +334,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       }
       if (parts[2] === 'motions') {
         const body = fields(await readJson(request, 2000), ['revise']), revise = fields(body.revise, ['clip', 'note']);
-        if (!MOTIONS.includes(revise.clip)) throw new Problem(422, 'invalid-answer');
+        // idle is the look itself, not a motion (the worker sends a change to it to the operator, and a cancel there would give the free
+        // fighter back — 리뷰 2026-10-30): a new look is the looks' change, before the motions.
+        if (!MOTIONS.includes(revise.clip) || revise.clip === 'idle') throw new Problem(422, 'invalid-answer');
         const note = text(revise.note, GENERATION_LIMITS.note, '/revise/note', { min: 2, code: 'invalid-answer' });
         return { ok: true, job: await view(await call('af_generation_motion', { p_owner: owner, p_id: job, p_clip: revise.clip, p_note: note })) };
       }

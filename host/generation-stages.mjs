@@ -131,7 +131,8 @@ export function briefPrompt(job, refCount) {
     '  Original humans, animals, monsters, robots and objects are fine; cartoon violence is the game. Otherwise verdict "ok" and rejectCode "none".',
     // 첫 선수 무료 (2026-10-30): the site sends the name the player typed as the request's first line ("이름: …" or "Name: …").
     '- When the request\'s first line is "이름: <name>" or "Name: <name>", that is the fighter\'s name: use it as profile.name and in names (keep it,',
-    '  translate or transliterate it for the other language) and in his lines. Otherwise make one up.',
+    '  translate or transliterate it for the other language) and in his lines. Otherwise make one up. The name is part of the request: the verdict',
+    '  rules above judge it too (a real person\'s name, a slur → reject).',
     `- profile in ${language}: name (the fighter's name), names (ko and en), description (one or two sentences), concept (personality,`,
     '  how he fights, what he wants), lines (challenge before a bout, win, lose — short, in character), stats (power, toughness, speed, 1-5 each,',
     '  summing to 9). When rejecting, still fill every field briefly and neutrally.',
