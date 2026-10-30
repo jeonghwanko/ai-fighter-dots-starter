@@ -283,6 +283,14 @@ URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조�
 DB RPC/확인 기록은 service_role 전용이고, 일반 사용자와 MCP 토큰은 직접 실행/조회할 수 없다.
 삭제 migration은 `20261024104406_ai_fighter_owner_deletion.sql`이다.
 
+사이트의 **선수 삭제** 버튼(2026-10-30)도 같은 두 단계다. `POST fighters/<id>/deletion`이 준비(삭제하지 않는다),
+`POST fighters/<id>/deletion/confirm`이 `{ confirmationToken, confirmName }`으로 실행한다([api/fighter-deletion.mjs](../api/fighter-deletion.mjs)).
+사이트 로그인에는 OAuth 클라이언트가 없어 Edge가 client로 nil UUID를 넘긴다. DB의 `af_owner_session_active`는 그 사용자의
+살아 있는 일반 세션(OAuth 클라이언트 없음, 만료 전)인지 본다. 로그아웃하면 세션 행이 지워지므로 그 토큰으로는 준비도 실행도 못 한다.
+커넥터 세션의 확인값과 사이트 세션의 확인값은 서로 쓸 수 없다. 이관은 `20261030120000_ai_fighter_site_deletion.sql`이다.
+화면은 서버가 돌려준 이름을 그대로 입력해야 삭제 버튼이 켜진다. 확인값 만료·그사이 선수 변경은 새 확인을 받아 다시 누르게 하고,
+응답을 잃은 실행은 같은 확인값으로 다시 보낸다(서버는 첫 영수증을 돌려준다).
+
 검증: `node --test test/fighter-deletion.test.mjs test/cloud-mcp.test.mjs test/api.test.mjs test/database.test.mjs`.
 `scripts/run-cloud-review-checks.mjs`의 `ODDBOUT_REVIEW_CHECK_DELETION=1`은 기존 심사 캐릭터를
 삭제하지 않고 준비·잘못된 토큰·이름·다른 소유자 차단을 점검한다. 시험 OAuth grant는 종료 시 철회한다.

@@ -8,6 +8,7 @@ import { createDuelHandler } from './duels.mjs';
 import { createFighterStatisticsHandler } from './fighter-statistics.mjs';
 import { createWorkshopHandler, workshopRoute } from './workshop.mjs';
 import { createGenerationHandler, generationRoute } from './generations.mjs';
+import { createFighterDeletionHandler, deletionRoute } from './fighter-deletion.mjs';
 import { Problem, UUID, bearerToken, jsonResponse, readBody, rpcProblem, sha256, verifiedUserId } from './http.mjs';
 import { BUCKET, SUBMISSION_STATUS, checkedManifest, objectKey, storeAsset } from './submissions.mjs';
 
@@ -114,6 +115,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
   }
   const workshopHandler = createWorkshopHandler({ db, authenticate: request => authenticate(request, false), rpc, agentClient });
   const generationHandler = createGenerationHandler({ db, authenticate, present, decisionsReviewer, responsesReviewer, cascadeReviewer });
+  const deletionHandler = createFighterDeletionHandler({ db });
   /** @param {string} owner @param {string} id @returns {Promise<Submission>} */
   async function ownSubmission(owner, id) {
     const { data, error } = await db.from('af_submissions').select('*').eq('id', requireId(id)).eq('owner_id', owner).maybeSingle();
@@ -143,6 +145,8 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
       if (generationRoute(parts)) return generationHandler(request, parts);
       if (parts[0] === 'duels' || parts[0] === 'rankings') return duelHandler(request,parts);
       if (parts[0] === 'fighters' && parts[2] === 'statistics') return statisticsHandler(request, parts);
+      // The site's delete button (2026-10-30): its own session check, so before the routes below authenticate.
+      if (deletionRoute(parts)) return deletionHandler(request, parts);
       // Device-connection sign-in: start and poll are unauthenticated; approve verifies the user itself.
       if (parts[0] === 'device-logins') return deviceLoginHandler(request, parts);
       // Account and sign-in handoff routes work for every verified account.

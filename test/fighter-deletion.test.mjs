@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { migratedDatabase } from './helpers/fighter-database.mjs';
 import example from '../contracts/ai-fighter/v1/example.fighter.json' with { type:'json' };
-import { sha256, VALIDATOR_VERSION } from '../api/handler.mjs';
+import { createHandler, sha256, VALIDATOR_VERSION } from '../api/handler.mjs';
+import { SITE_CLIENT } from '../api/fighter-deletion.mjs';
 
 test('owner deletion binds live identity, name, expiry and snapshot; removes visibility, frees one slot and retries safely', async () => {
   const db=await migratedDatabase();
@@ -103,4 +104,84 @@ test('deleting a registered fighter preserves its package and duel record, and a
     assert.equal((await db.query('select * from af_duel_rankings() where id=$1',[done.fighter_id])).rows.length,0);
     assert.equal((await upload()).status,'uploading');
   } finally { await db.close(); }
+});
+
+test('the site deletes with a live first-party session: the nil client, the same user, no OAuth client, not signed out or expired', async () => {
+  const db=await migratedDatabase();
+  try {
+    const site='00000000-0000-0000-0000-000000000000', owner=crypto.randomUUID(), other=crypto.randomUUID(), client=crypto.randomUUID();
+    const session=crypto.randomUUID(), foreign=crypto.randomUUID(), connector=crypto.randomUUID(), expired=crypto.randomUUID();
+    await db.query('insert into auth.users(id) values($1),($2)',[owner,other]);
+    await db.query('insert into auth.oauth_clients(id) values($1)',[client]);
+    await db.query('insert into auth.sessions(id,user_id) values($1,$2),($3,$4)',[session,owner,foreign,other]);
+    await db.query("insert into auth.sessions(id,user_id,not_after) values($1,$2,now()-interval '1 second')",[expired,owner]);
+    await db.query('insert into auth.sessions(id,user_id,oauth_client_id,scopes) values($1,$2,$3,$4)',[connector,owner,client,'openid email profile']);
+    await db.query('insert into auth.oauth_consents(user_id,client_id,scopes) values($1,$2,$3)',[owner,client,'openid email profile']);
+    const profile={name:'Site deletion fixture',description:'Test only',portrait:'/art/character-profiles/test-v1.webp',color:'#ffeebb'};
+    const f=(await db.query('select to_jsonb(af_register_character_profile($1,$2,$3,null)) value',[owner,crypto.randomUUID(),profile])).rows[0].value;
+    const prepare=(s=session,c=site)=>db.query('select af_prepare_fighter_deletion($1,$2,$3,$4) value',[owner,f.id,s,c]).then(r=>r.rows[0].value);
+    const remove=(d,s=session,c=site)=>db.query('select af_delete_owned_fighter($1,$2,$3,$4,$5,$6) value',[owner,f.id,s,c,d.confirmationToken,d.confirmName]).then(r=>r.rows[0].value);
+    await assert.rejects(prepare(foreign),/authentication-required/);
+    await assert.rejects(prepare(expired),/authentication-required/);
+    // A connector's session is not a site session, and a site session is no connector's.
+    await assert.rejects(prepare(connector),/authentication-required/);
+    await assert.rejects(prepare(session,client),/authentication-required/);
+    const d=await prepare();
+    assert.equal(d.stage,'confirmation-required'); assert.equal(d.confirmName,profile.name);
+    // The connector's own confirmation for the same fighter is a separate one: neither token works for the other.
+    const viaConnector=await prepare(connector,client);
+    assert.notEqual(viaConnector.confirmationToken,d.confirmationToken);
+    await assert.rejects(remove(viaConnector),/invalid-deletion-confirmation/);
+    // Signing out deletes the session row; without it the confirmation is refused (the row is put back to go on).
+    await db.query('delete from auth.sessions where id=$1',[session]);
+    await assert.rejects(remove(d),/authentication-required/);
+    await db.query('insert into auth.sessions(id,user_id) values($1,$2)',[session,owner]);
+    const result=await remove(d);
+    assert.equal(result.stage,'deleted'); assert.equal(result.fighterSlotReleased,true);
+    assert.deepEqual(await remove(d),result);
+    assert.equal((await db.query('select client_id from af_fighter_deletions where token=$1',[d.confirmationToken])).rows[0].client_id,site);
+    await db.exec('set role authenticated');
+    await assert.rejects(db.query('select af_owner_session_active($1,$2,$3)',[owner,session,site]),/permission denied/);
+  } finally { await db.close(); }
+});
+
+test('the site deletion route binds the signed-in session and the site client, checks the confirmation and maps refusals', async () => {
+  const owner=crypto.randomUUID(), session=crypto.randomUUID(), fighter=crypto.randomUUID(), token=crypto.randomUUID(), calls=[];
+  let claims={ sub:owner, session_id:session.toUpperCase() }, refusal=null;
+  const handle=createHandler({ db:{ auth:{ getClaims:async ()=>({ data:{ claims } }) },
+    rpc:async (name,args)=>{ calls.push([name,args]);
+      if (name==='af_authorize') return { data:true };
+      if (refusal) return { error:{ message:refusal } };
+      return { data:name==='af_prepare_fighter_deletion' ? { ok:true, stage:'confirmation-required', confirmationToken:token, confirmName:'꿈돌이' }
+        : { ok:true, stage:'deleted', fighterId:fighter } }; } } });
+  const send=(path,body,method='POST')=>handle(new Request(`https://test/ai-fighter/fighters/${path}`,{ method,
+    headers:{ authorization:'Bearer signed-user-token-for-test', 'content-type':'application/json' }, ...(body===undefined ? {} : { body:JSON.stringify(body) }) }));
+  const preflight=await handle(new Request(`https://test/ai-fighter/fighters/${fighter}/deletion`,{ method:'OPTIONS' }));
+  assert.equal(preflight.status,200); assert.match(preflight.headers.get('access-control-allow-methods'),/POST/);
+  const prepared=await send(`${fighter.toUpperCase()}/deletion`);
+  assert.equal(prepared.status,200); assert.equal((await prepared.json()).confirmName,'꿈돌이');
+  assert.deepEqual(calls.at(-1),['af_prepare_fighter_deletion',{ p_owner:owner, p_fighter:fighter, p_session:session, p_client:SITE_CLIENT }]);
+  const done=await send(`${fighter}/deletion/confirm`,{ confirmationToken:token, confirmName:'꿈돌이' });
+  assert.equal(done.status,200); assert.equal((await done.json()).stage,'deleted');
+  assert.deepEqual(calls.at(-1)[1],{ p_owner:owner, p_fighter:fighter, p_session:session, p_client:SITE_CLIENT, p_token:token, p_confirm_name:'꿈돌이' });
+  // Nothing reaches the database without a whole confirmation.
+  calls.length=0;
+  for (const body of [{ confirmationToken:token }, { confirmationToken:'nope', confirmName:'꿈돌이' }, { confirmationToken:token, confirmName:'' },
+    { confirmationToken:token, confirmName:'꿈돌이', confirm:true }, []])
+    assert.equal((await send(`${fighter}/deletion/confirm`,body)).status,422);
+  assert.equal((await send('not-an-id/deletion')).status,400);
+  assert.equal((await send(`${fighter}/deletion`,undefined,'GET')).status,404);
+  assert.ok(!calls.some(([name])=>name!=='af_authorize'));
+  for (const [code,status] of [['deletion-name-mismatch',422],['fighter-changed',409],['deletion-confirmation-expired',409],['invalid-deletion-confirmation',409],
+    ['not-found',404],['authentication-required',401],['something-else',503]]) {
+    refusal=code; const answer=await send(`${fighter}/deletion/confirm`,{ confirmationToken:token, confirmName:'꿈돌이' });
+    assert.equal(answer.status,status); assert.equal((await answer.json()).code,code==='something-else' ? 'database-unavailable' : code);
+  }
+  // A token naming no session, or a connector's token, cannot delete from the site.
+  refusal=null; calls.length=0;
+  claims={ sub:owner };
+  assert.equal((await send(`${fighter}/deletion`)).status,401);
+  claims={ sub:owner, session_id:session, client_id:crypto.randomUUID() };
+  assert.equal((await send(`${fighter}/deletion`)).status,401);
+  assert.deepEqual(calls,[]);
 });
