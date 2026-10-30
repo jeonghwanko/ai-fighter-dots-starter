@@ -183,7 +183,7 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
           const last = data[19], hasMore = data.length > 20, shown = /** @type {RosterFighter[]} */ (data.slice(0, 20)).filter(f => f.runtime_manifest_sha === f.manifest_sha);
           return reply({ ok: true, hasMore, nextCursor: hasMore ? `${last.created_at}|${last.id}` : null,
             fighters: shown.map(f => ({ id: f.id, manifestSha256: f.manifest_sha, name: f.profile.name, ...(f.profile.names ? { names: f.profile.names } : {}), runtimeScope: f.runtime_scope,
-              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha, entered: true, ...(f.made_with ? { madeWith: f.made_with } : {}) })) });
+              duelApproved: f.duel_approved === true && f.duel_manifest_sha === f.manifest_sha && f.entered_at != null, entered: true, ...(f.made_with ? { madeWith: f.made_with } : {}) })) });
         }
         if (parts.length !== 2 || !UUID.test(parts[1])) return reply({ ok: false, code: 'not-found' }, 404);
         const { data: fighter, error } = await query.eq('id', parts[1]).maybeSingle(); check(error);
@@ -191,11 +191,12 @@ export function createHandler({ db, simulateDuel = null, engineVersion = null, e
         const { data: row, error: readError } = await db.from('af_submissions').select('*').eq('id', fighter.submission_id).eq('status', 'registered').maybeSingle();
         check(readError);
         if (!row || row.manifest_sha !== fighter.manifest_sha) return reply({ ok: false, code: 'not-found' }, 404);
+        // `duelApproved` is whether he may meet other people now: admitted on this package and entered (af_duel_admitted's own gate).
         const urls = await signedUrls(row, 600), maker = fighter.made_with;
         const files = row.manifest.assets.map(/** @param {{ id: string }} asset @param {number} index */ (asset, index) => ({ id: asset.id, downloadUrl: urls[index] }));
         return reply({ ok: true, fighterId: fighter.id, manifestSha256: fighter.manifest_sha, runtimeApproved: true,
-          runtimeScope: fighter.runtime_scope, duelApproved: fighter.duel_approved === true && fighter.duel_manifest_sha === fighter.manifest_sha,
-          entered: fighter.entered_at != null, manifestText: row.manifest_text, files, ...(maker ? { madeWith: maker } : {}) });
+          runtimeScope: fighter.runtime_scope, duelApproved: fighter.duel_approved === true && fighter.duel_manifest_sha === fighter.manifest_sha
+            && fighter.entered_at != null, entered: fighter.entered_at != null, manifestText: row.manifest_text, files, ...(maker ? { madeWith: maker } : {}) });
       }
       if (parts.join('/') === 'analytics/context' && request.method === 'OPTIONS' && analytics) return analytics.preflight();
       const isWorker = parts[0] === 'worker';

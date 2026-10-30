@@ -49,6 +49,9 @@ test('only scoped, reviewed immutable packages are delivered to the browser; no 
   assert.equal((await (await get(unlisted.id)).json()).manifestText, text);
   const own = await (await get(inProduction.id)).json();
   assert.equal(own.manifestText, text); assert.equal(own.entered, false);
+  // He may not meet other people: his duels are refused (af_duel_admitted), so the API says so too.
+  inProduction.duel_approved = true; inProduction.duel_manifest_sha = sha;
+  assert.equal((await (await get(inProduction.id)).json()).duelApproved, false);
   assert.equal(pkg.entered, true); assert.equal(entries[0].entered, true);
   assert.deepEqual(pkg.files.map(f => f.id), example.assets.map(a => a.id));
   assert.equal('owner_id' in pkg, false); assert.equal('lease_token' in pkg, false);

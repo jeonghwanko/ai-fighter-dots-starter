@@ -149,8 +149,8 @@ This repository lets each user create their own fighter through Dot. Read
 - Packaging and registration use local files; supported appearance previews may be generated and displayed
   directly in the current conversation. Any signed-in user may upload without an invitation or manual approval.
   Submit only within the user's request, reuse the same idempotency key for retries, and distinguish
-  validation failures from post-publication moderation. A validated fighter starts in production (제작 중): only his
-  owner previews and practises him. Other people meet him after the owner watches each required motion and enters him
+  validation failures from post-publication moderation. A validated fighter starts in production (제작 중): out of other
+  people's cups, ranked duels and lists while the owner previews and practises it. Other people meet him after the owner watches each required motion and enters him
   (출전, site motions page or `enter_fighter`); a new package returns him to production.
   Never overwrite a registered immutable package.
 - Preserve unrelated working-tree changes. Run only relevant tests locally. Pull requests to `main` and pushes to it run

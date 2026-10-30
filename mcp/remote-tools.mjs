@@ -56,7 +56,7 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
   const safe = fn => async args => { try { return respond(await fn(args)); } catch (error) { return respond({ ok: false, stage: 'remote-api', code: errorCode(error, 'remote-operation-failed') }); } };
   if (validatePackage) {
     server.registerTool('submit_fighter_package', {
-      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation publishes the fighter automatically. For text-only edits use update_fighter_profile without uploading assets. Each account may register up to three fighters: to update an existing fighter (concept, move names, bout lines, stats, fighting style or art), pass its fighterId — the package is replaced in place and the fighter keeps its ID and duel record. Omit fighterId to register a new fighter while the account has fewer than three.',
+      description: 'Upload the checked local fighter package to the configured Supabase service and queue authoritative validation. Requires user intent to submit. Use one UUID idempotencyKey per immutable package and reuse it for retries. Successful server validation registers the fighter in production: other people meet it after its owner checks every required motion and enters it on the fighter page. For text-only edits use update_fighter_profile without uploading assets. Each account may register up to three fighters: to update an existing fighter (concept, move names, bout lines, stats, fighting style or art), pass its fighterId — the package is replaced in place and the fighter keeps its ID and duel record; new art returns it to production until its owner enters it again. Omit fighterId to register a new fighter while the account has fewer than three.',
       inputSchema: { manifestPath: z.string().min(1).max(512), idempotencyKey: z.string().uuid(), fighterId: z.string().uuid().optional() }, outputSchema,
       annotations: { ...read, readOnlyHint: false },
     }, safe(async ({ manifestPath, idempotencyKey, fighterId }) => {
@@ -124,7 +124,7 @@ export function registerRemoteTools(server, { remote, validatePackage, root, res
     const { loginUrl, expiresAt } = await creatorLink({ page: creatorPage, request: remote.request });
     return { ok: true, stage: 'creator-link', loginUrl, expiresAt };
   }));
-  server.registerTool('get_fighter_submission', { description: 'Read the current user’s submission status. registered means server file validation and registry creation; validated registrations are available automatically, unless removed afterward. Empty pending means the status is final.',
+  server.registerTool('get_fighter_submission', { description: 'Read the current user’s submission status. registered means server file validation and registry creation; the fighter starts in production until its owner enters it, and can be removed afterward. Empty pending means the status is final.',
     inputSchema: { submissionId: z.string().uuid() }, outputSchema, annotations: read }, safe(({ submissionId }) => remote.request(`submissions/${submissionId}`)));
   server.registerTool('get_registered_fighter', { description: 'Read the current user’s persisted fighter ID and profile from the registry.',
     inputSchema: { fighterId: z.string().uuid() }, outputSchema, annotations: read }, safe(({ fighterId }) => remote.request(`fighters/${fighterId}`)));

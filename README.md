@@ -144,7 +144,7 @@ The [unified plugin guide](docs/ODDBOUT-PLUGIN.md) covers the portable source pa
 
 When you choose the final result and ask to register it, your assistant checks the package and registers it through your connected ODDBOUT account: the ODDBOUT plugin, or an agent connected on My agents, signed in with your Google account. You do not need to set up a backend or get service API keys. Older local tools without that connection sign in with `npm run login`.
 
-The server checks your uploaded files before making your fighter available in the game. Your assistant then checks the result to confirm that the fighter is registered and ready to play. The queue can take time to process.
+The server checks your uploaded files and registers your fighter in production: you can watch it and practise in the arena. Your assistant checks the result to confirm the registration. The queue can take time to process. To let other people play against your fighter in cups and ranked duels, open **All motions** on its page, check each of the 11 required motions and press **Enter ODDBOUT**.
 
 Open the [creator page](https://oddbout.com/creator.html?lang=en) with the same Google account to see your fighter; its My agents tab manages your connected agents and your PC. See [registration, limits, and profile edits](docs/OPEN-REGISTRATION.md) for details. Keep login links, callback URLs, and session files private.
 

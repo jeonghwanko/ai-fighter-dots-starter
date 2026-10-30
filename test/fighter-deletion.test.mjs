@@ -96,8 +96,11 @@ test('deleting a registered fighter preserves its package and duel record, and a
     await db.query(`insert into af_duels(request_key,a,b,hash_a,hash_b,seed,engine,completed_at,winner,result)
       values($1,$2,$3,$4,$4,7,'test-v1',now(),$2,'{"winner":0}')`,[crypto.randomUUID(),done.fighter_id,rival.id,hash]);
     const history=(await db.query('select * from af_duels')).rows;
+    // Entered (출전, 2026-10-30): deleting him clears the entry, which a deleted fighter may not hold.
+    await db.query('select af_enter_fighter($1,$2,$3,$4)',[owner,done.fighter_id,hash,['idle','walk','run','fightIdle','combo','slam','dash','block','hit','groggy','fall']]);
     const d=(await db.query('select af_prepare_fighter_deletion($1,$2,$3,$4) value',[owner,done.fighter_id,session,client])).rows[0].value;
     await db.query('select af_delete_owned_fighter($1,$2,$3,$4,$5,$6)',[owner,done.fighter_id,session,client,d.confirmationToken,d.confirmName]);
+    assert.deepEqual((await db.query('select deleted_at is not null deleted,entered_at from af_fighters where id=$1',[done.fighter_id])).rows[0],{deleted:true,entered_at:null});
     assert.deepEqual((await db.query('select * from af_duels')).rows,history);
     assert.equal((await db.query('select count(*)::int n from storage.objects')).rows[0].n,example.assets.length);
     assert.equal((await db.query('select manifest_text from af_submissions where id=$1',[s.id])).rows[0].manifest_text,text);

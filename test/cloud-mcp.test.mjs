@@ -403,6 +403,11 @@ test('an agent enters his fighter on the watched package and withdraws him; list
     assert.equal(await listed(), false);
     assert.equal((await call(handle, 'list_my_fighters')).structuredContent.fighters[0].entered_at, null);
     assert.equal((await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: registered.manifest_sha, reviewedClips: clips.slice(1) })).isError, true);
+    // The account first, as the site's route does (적대적 리뷰 2026-10-30).
+    await f.sql.query('update public.af_creators set enabled=false where owner_id=$1', [f.owner]);
+    const disabled = await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: registered.manifest_sha, reviewedClips: clips });
+    assert.equal(disabled.structuredContent.code, 'account-disabled');
+    await f.sql.query('update public.af_creators set enabled=true where owner_id=$1', [f.owner]);
     const stale = await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: 'f'.repeat(64), reviewedClips: clips });
     assert.equal(stale.structuredContent.code, 'fighter-changed');
     const entered = (await call(handle, 'enter_fighter', { fighterId: fighter, expectedManifestSha256: registered.manifest_sha, reviewedClips: clips })).structuredContent;

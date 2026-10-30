@@ -12,7 +12,7 @@ Dot은 먼저 `get_fighter_spec`의 `creation`과 [사용자별 제작 흐름](D
 도형 테스트 샘플은 생성 결과로 납품하지 않는다.
 
 연결된 서버의 `get_fighter_spec` 응답에서 `registration.available`을 확인한다.
-오프라인 계약은 `false`, 서버 연결 시에는 `true`다. Google 로그인 후 초대 없이 제출하며 서버 파일 검사 후 자동으로 이용한다. [현재 정책](OPEN-REGISTRATION.md)을 따른다.
+오프라인 계약은 `false`, 서버 연결 시에는 `true`다. Google 로그인 후 초대 없이 제출한다. 서버 파일 검사를 통과한 선수는 제작 중으로 시작하고, 주인이 필수 동작 11개를 확인해 출전한 뒤 다른 사람과 겨룬다. [현재 정책](OPEN-REGISTRATION.md)을 따른다.
 
 ## 제작 흐름
 

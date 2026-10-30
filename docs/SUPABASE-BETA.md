@@ -118,7 +118,7 @@ API 기본 경로는 `https://YOUR_PROJECT_REF.supabase.co/functions/v1/ai-fight
 
 `duel_approved`는 기본 false다. true로 바꾸려면 기존 출전 승인, 동일 해시의 `duel_manifest_sha`,
 검토 근거의 `duelValidation`이 모두 필요하다. 제작자는 이 필드를 변경할 권한이 없다.
-목록과 패키지 API는 해시가 일치하는 경우에만 `duelApproved: true`를 반환한다.
+목록과 패키지 API는 해시가 일치하고 주인이 출전시킨(`entered_at`, 2026-10-30) 경우에만 `duelApproved: true`를 반환한다. 제작 중인 선수는 `entered: false`다.
 게임은 입장 직전에 두 선수의 패키지를 다시 확인한다. 캐시가 있어도 승인이 취소된 선수는 출전하지 못한다.
 
 로컬 게임에서 선수를 선택하고 **등록 선수 대결 · F9**를 누르면 승인된 다른 등록 선수와 매칭한다.

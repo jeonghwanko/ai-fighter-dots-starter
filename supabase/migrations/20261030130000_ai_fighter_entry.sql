@@ -11,12 +11,15 @@ alter table public.af_fighters add constraint af_fighters_entry_registered
 
 -- 사용자 결정 (2026-10-30, "전적 있는 선수만 출전"): a fighter with a completed duel or a cup bout keeps meeting people. The cup totals
 -- belong to the arena relay's migrations, which a database without the relay (the kit's tests) lacks.
-update public.af_fighters f set entered_at = f.created_at
+-- Each keeps the entry's evidence as an owner's entry does, naming this backfill instead of his ticks.
+update public.af_fighters f set entered_at = f.created_at, review_evidence = coalesce(f.review_evidence, '{}'::jsonb)
+    || jsonb_build_object('entry', jsonb_build_object('backfill', '20261030130000', 'reason', 'completed-duel', 'at', now()))
   where f.status = 'registered' and f.deleted_at is null
     and exists(select 1 from public.af_duels d where d.completed_at is not null and f.id in (d.a, d.b));
 do $$ begin
   if to_regclass('public.af_arena_fighter_totals') is not null then
-    execute $backfill$update public.af_fighters f set entered_at = f.created_at
+    execute $backfill$update public.af_fighters f set entered_at = f.created_at, review_evidence = coalesce(f.review_evidence, '{}'::jsonb)
+        || jsonb_build_object('entry', jsonb_build_object('backfill', '20261030130000', 'reason', 'cup-bout', 'at', now()))
       where f.status = 'registered' and f.deleted_at is null and f.entered_at is null
         and exists(select 1 from public.af_arena_fighter_totals t where t.id = f.id::text and t.won + t.lost > 0)$backfill$;
   end if;

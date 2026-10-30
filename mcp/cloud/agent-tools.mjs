@@ -165,16 +165,24 @@ export function registerAgentTools({ register, arena, db, identity, invoke, reco
   // 출전 (2026-10-30): a validated fighter is 제작 중 until his owner enters him; only then do other people meet him. Both calls answer the
   // same when repeated (supabase/migrations/20261030130000_ai_fighter_entry.sql).
   /** @type {Readonly<Record<string, number>>} */
-  const ENTRY_STATUS = { 'not-found': 404, 'fighter-changed': 409, 'fighter-not-ready': 409, 'invalid-entry': 422 };
+  const ENTRY_STATUS = { 'account-disabled': 403, 'rate-limit': 429, 'not-found': 404, 'fighter-changed': 409, 'fighter-not-ready': 409, 'invalid-entry': 422 };
+  // The account first, as the site's route does (`af_authorize`: a disabled account, the per-minute budget) — 적대적 리뷰 2026-10-30: a
+  // disabled account entered its fighter here while the site refused it.
   /** @param {string} name @param {Record<string, unknown>} args */
-  const entry = async (name, args) => {
-    const { data, error } = await db.rpc(name, { p_owner: /** @type {Identity} */ (identity).owner, ...args });
+  const entryCall = async (name, args) => {
+    const { data, error } = await db.rpc(name, args);
     if (!error) return data;
     const status = ENTRY_STATUS[error.message];
     throw status ? new Problem(status, error.message) : new Problem(503, 'database-unavailable');
   };
+  /** @param {string} name @param {Record<string, unknown>} args */
+  const entry = async (name, args) => {
+    const owner = /** @type {Identity} */ (identity).owner;
+    await entryCall('af_authorize', { p_owner: owner });
+    return entryCall(name, { p_owner: owner, ...args });
+  };
   register('enter_fighter', '출전하기', 'Enter the connected user\'s registered fighter (출전): other people then meet him in the roster, '
-    + 'ranked duels, cups and their rankings. A validated fighter starts in production (제작 중), where only his owner previews and practises him. '
+    + 'ranked duels, cups and their rankings. A validated fighter starts in production (제작 중): out of other people\'s cups, ranked duels and lists while his owner previews and practises him. '
     + 'First show the user each of the eleven required motions; enter only on his request once he confirmed every one. '
     + 'Pass the package hash he watched (get_registered_fighter) and those motions. A new package returns him to production.',
     { fighterId: UUID_ARG(), expectedManifestSha256: z.string().regex(/^[a-f0-9]{64}$/),

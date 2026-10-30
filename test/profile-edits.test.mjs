@@ -10,6 +10,9 @@ test('five new-fighter attempts a day remain bounded; unlimited revisions reuse 
     // Use four failed first attempts and register on the fifth, just like the reported account.
     for (let i=0;i<4;i++) { const s=await f.create(JSON.stringify(example)); await f.sql.query("update af_submissions set status='rejected' where id=$1",[s.id]); }
     const first = await f.register(), id = first.fighter_id;
+    // Entered (출전, 2026-10-30): the edits below keep the art, and so his entry and the admission the roster reports.
+    await f.sql.query('select public.af_enter_fighter($1,$2,$3,$4)', [f.owner, id, first.manifest_sha,
+      ['idle', 'walk', 'run', 'fightIdle', 'combo', 'slam', 'dash', 'block', 'hit', 'groggy', 'fall']]);
     const original = (await f.sql.query('select * from af_fighters where id=$1',[id])).rows[0];
     await f.sql.query('update af_settings set max_reserved_bytes=$1',[f.bytes*5]);
     let current = first;

@@ -151,5 +151,8 @@ paths on another machine. Materialize supported Library files with their origina
 Preserve the submission ID and idempotency key across identical retries; inspect status before retrying
 an unknown response. Changed package bytes need a new key. A metadata-only final edit followed by an
 explicit registration request requires fresh validation, not repeated approval of unchanged animations.
-Report registration only after the response confirms it. If the connector or attachment route is missing,
+Report registration only after the response confirms it. A registered fighter starts in production (제작 중): it stays out of
+other people's cups, ranked duels and lists. Tell the user to check each required motion on the fighter page's All motions and enter it there; call
+`enter_fighter` only on the user's request after showing every required motion and hearing each confirmed.
+If the connector or attachment route is missing,
 preserve the completed package and report that blocker; do not silently switch registration accounts.
