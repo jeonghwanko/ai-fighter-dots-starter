@@ -41,7 +41,7 @@ ODDBOUT은 직접 만든 캐릭터로 플레이하는 대전 게임입니다. �
 
 ## PC 없이 Dots에서 등록하기
 
-**Dots 저장 VM 제작 경로 (0.5.5 후보)**: 환경 준비자는 [설치 절차](deploy/dots-environment/README.md)를
+**Dots 저장 VM 제작 경로 (0.6.0 후보)**: 환경 준비자는 [설치 절차](deploy/dots-environment/README.md)를
 한 번 실행하고, 이후 사용자는 Git 주소와 제작 요청을 전달합니다. Dots가 `node dots.mjs --install`로
 고정 버전을 준비한 뒤 `node dots.mjs`로 같은 작업을 재개합니다. 생성은 본인의 Grok 구독을 사용합니다.
 [시작 지침](docs/DOTS-START.md)과 [비공개 원본 전달](docs/DOTS-PRIVATE-SOURCES.md)을 따릅니다.

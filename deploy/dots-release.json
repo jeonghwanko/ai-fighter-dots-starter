@@ -1,8 +1,8 @@
 {
   "schemaVersion": 1,
   "repository": "https://github.com/jeonghwanko/oddbout-starter.git",
-  "commit": "52db965f7ad6f54b99e8920a6be2db14dc1e2756",
-  "version": "0.5.5",
+  "commit": "c102167d4c4ba45251f0ad8cfc50dc2cf7f1b6a5",
+  "version": "0.6.0",
   "provider": "grok",
   "channel": "candidate",
   "savedVmAcceptance": "pending",
