@@ -127,6 +127,12 @@ test('the worker carries a job through brief, two looks, a change, a pick, motio
     assert.deepEqual(drafting.drafts.map(d => [d.clip, d.state ?? null]), [['combo', null], ['walk', 'checking']]);
     assert.ok(drafting.drafts.every(d => typeof d.url === 'string'));
     assert.match(drafting.drafts[1].url, /jobs\/.*draft-walk-t0-0\.webp/);
+    // The list the worker sent last wins (its `seq`): an earlier send that timed out on the worker and landed after it is not shown.
+    const drafts = (seq, state) => work('POST', 'progress', { jobId: held.id, leaseToken: held.leaseToken,
+      event: { kind: 'drafts', seq, clips: [{ clip: 'combo', name: 'draft-combo-0' }, { clip: 'walk', name: 'draft-walk-t0-0', state }] } });
+    await drafts(1_800_000_000_002, 'retaking');
+    await drafts(1_800_000_000_001, 'checking');
+    assert.deepEqual((await call('GET', `generations/${job.id}`)).body.job.drafts.map(d => d.state ?? null), [null, 'retaking']);
     // The run made from the walk carries its note (2026-10-29); a note the API does not know is refused.
     const preview = ['idle', 'walk', 'run'].map(clip => ({ clip, name: `motion-${clip.toLowerCase()}-0`, ...(clip === 'run' ? { note: 'run-from-walk' } : {}) }));
     assert.equal((await finish(held, 'ok', { preview: [{ clip: 'dance', name: 'x' }] })).body.code, 'invalid-result');

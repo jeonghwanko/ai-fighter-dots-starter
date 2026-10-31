@@ -39,6 +39,7 @@ export const PREVIEW_NOTES = Object.freeze(['run-from-walk']);
 /** What the worker may say about one draft (2026-11-01): a walk or run take shown as it is cut, `checking` while the gate looks at it,
  * `retaking` when the gate refused it and the next take films. A draft with no state passed (or is an action clip). */
 export const DRAFT_STATES = Object.freeze(['checking', 'retaking']);
+const DRAFT_EVENTS_READ = 5;
 const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
 // A join code (내 PC 붙이기): made by the site for a signed-in host, copied into his PC's terminal once; 160 bits, so nobody guesses one.
 export const JOIN_CODE = /^ohj_[a-f0-9]{40}$/;
@@ -195,9 +196,14 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
   /** @param {Job} row */
   async function draftsOf(row) {
     if (row.status !== 'motions') return [];
-    const { data, error } = await db.from('af_generation_events').select('data').eq('job_id', row.id).eq('kind', 'drafts')
-      .order('at', { ascending: false }).limit(1).maybeSingle();
+    const { data: rows, error } = await db.from('af_generation_events').select('data').eq('job_id', row.id).eq('kind', 'drafts')
+      .order('at', { ascending: false }).limit(DRAFT_EVENTS_READ);
     if (error) throw new Problem(503, 'database-unavailable');
+    // Of the latest few, the list the worker sent last (its `seq`, 2026-11-01): a send it timed out on may land after a later one.
+    // Lists without a `seq` (a worker before it) go by their time.
+    const seqOf = (/** @type {any} */ r) => Number.isSafeInteger(r?.data?.seq) ? r.data.seq : -1;
+    const latest = /** @type {any[]} */ (rows ?? []);
+    const data = latest.reduce((best, r) => seqOf(r) > seqOf(best) ? r : best, latest[0] ?? null);
     const round = `-${row.motion_revisions}`;
     return /** @type {any[]} */ (Array.isArray(data?.data?.clips) ? data.data.clips : []).filter(d => isObject(d) && MOTIONS.includes(d.clip)
       && ARTIFACT.test(d.name ?? '') && d.name.startsWith('draft-') && d.name.endsWith(round)).slice(0, MOTIONS.length);

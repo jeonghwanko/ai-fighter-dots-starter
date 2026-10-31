@@ -837,7 +837,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
   /** `change`: the creator's latest change to this gait ({ round, note }) — its takes film the change, quoted, and nothing else is tried.
    * `early()`: a loop to take instead of the retakes when the first take's beat broke (RUN_FROM_WALK_FIRST), or null. `range`: the server
    * takes this gait at its own frame count inside it (GAIT_OWN_FEATURE), or null for the standard GAIT_FRAMES. `showTake(take, strip)`:
-   * told of each take's first cut before its alignment, and with no strip when that take did not pass and another films. */
+   * told of each take's first cut before its alignment, and with no strip as soon as that take did not pass. */
   async function gaitLoop(gait, look, stills, character, m, change = null, early = null, range = null, showTake = null) {
     const tried = [];
     for (let take = 0; take <= GAIT_RETAKES; take++) {
@@ -963,13 +963,14 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         if (pass >= ALIGN_AGAIN) return { review: `${gait}-align`, tried };
         await pause(alignPauseMs);
       }
+      // This take did not pass: its preview says so now, not after the walk a run may wait for (below) or the last take's end.
+      await showTake?.(take, null);
       // RUN_FROM_WALK_FIRST: the first take's beat broke and no judge saw it: another take films the same kind of cycle again.
       const first = tried.slice(seen);
       if (!take && early && !change && first.length && first.every(t => t.reasons) && first.some(t => t.reasons.includes('broken-beat'))) {
         const made = await early();
         if (made) return { ...made, tried };
       }
-      if (take < GAIT_RETAKES) await showTake?.(take, null);
     }
     return { review: `${gait}-not-clean`, tried };
   }
@@ -1057,28 +1058,33 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     // took about 20 minutes). Each goes up as an artifact and the list as a progress event; the package's previews replace them at the end.
     // A preview is a courtesy: one that fails never stops the stage.
     const drafted = [], draftDir = path.join(m, `drafts-${job.motionRound}`);
-    // The server reads the latest `drafts` event only: the lists go up one after another, each as it stands when sent, so two sent at
-    // once (an action clip and a gait's take) never land older last.
-    let listed = Promise.resolve();
-    const postDrafts = () => listed = listed
-      .then(() => api.progress?.(job, undefined, { kind: 'drafts', clips: drafted.map(d => ({ ...d })) })).catch(() => {});
+    // The list goes up as a `drafts` event; the API shows the one with the highest `seq` (a send that timed out here and landed late never
+    // wins over a later list), and `seq` grows across this stage's runs (the clock). Sends go one after another, each with the list as it
+    // stands when it leaves; a list still waiting takes every change made before it leaves (one send, not one per change).
+    let sending = Promise.resolve(), waiting = null, seq = 0;
+    const postDrafts = () => waiting ??= (sending = sending.then(() => {
+      waiting = null; seq = Math.max(seq + 1, Date.now());
+      return api.progress?.(job, undefined, { kind: 'drafts', seq, clips: drafted.map(d => ({ ...d })) });
+    }).catch(() => {}));
     /** `<clip>.webp`, or a gait's take `<gait>-t<take>.webp` shown before its gate with a state ('checking', then 'retaking' — the API's
-     * DRAFT_STATES): a name of its own (a new take is a new picture), the clip's entry replaced. */
+     * DRAFT_STATES): a name of its own (a new take is a new picture). The clip's entry is replaced where it stands (the page keeps its order). */
     async function draft(files, state = null) {
       try {
         for (const file of files) {
           const shown = path.basename(file, '.webp'), clip = shown.replace(/-t\d+$/, ''), name = `draft-${shown.toLowerCase()}-${job.motionRound}`;
           await api.artifact(job, name, await readFile(file));
-          drafted.splice(0, drafted.length, ...drafted.filter(d => d.clip !== clip), { clip, name, ...(state ? { state } : {}) });
+          const entry = { clip, name, ...(state ? { state } : {}) }, at = drafted.findIndex(d => d.clip === clip);
+          if (at < 0) drafted.push(entry); else drafted[at] = entry;
         }
         if (files.length) await postDrafts();
       } catch { /* the stage goes on */ }
     }
-    /** A gait's take the gate refused while the next one films: its picture stays, marked (nothing uploaded). */
-    async function retaking(clip) {
-      const shown = drafted.find(d => d.clip === clip);
-      if (shown?.state !== 'checking') return;
-      shown.state = 'retaking';
+    /** A gait's take its gate refused (nothing uploaded): marked `retaking` while another take films or the walk may make the run, or, with
+     * `drop`, taken off — nothing will replace it (the stage stops for an operator or to try again). A passed picture is never touched. */
+    async function unshown(clip, drop = false) {
+      const at = drafted.findIndex(d => d.clip === clip);
+      if (at < 0 || !drafted[at].state || (!drop && drafted[at].state === 'retaking')) return;
+      if (drop) drafted.splice(at, 1); else drafted[at] = { ...drafted[at], state: 'retaking' };
       await postDrafts();
     }
     /**
@@ -1277,13 +1283,21 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       return input.retry ? input : { still, key: input.key };
     };
     const ranges = await gaitRanges(api);
+    // A run the gate refused (or could not align or cut) is made from the walk when the walk passes. Never for a creator who asked for the run
+    // again (2026-10-30): the walk's run ignores his words, and when it had been his run already (RUN_FROM_WALK, the same walk) he got back
+    // the very clip he asked to change. His takes passed or an operator looks.
+    const runChanged = changes.some(c => c.clip === 'run');
+    const runFallback = review => !runChanged && ['run-not-clean', 'run-align', 'run-cut'].includes(review);
     const gaitBranch = (gait, delayMs, early = null) => async () => {
       const input = await stillReady;
       if (input.retry) return input;
       if (delayMs) await pause(delayMs);
       const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null, early, ranges?.[gait] ?? null,
         showTake(gait));
+      await shownTakes[gait];
       if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip);
+      // Not passed: a run the walk may still make keeps its refused take marked; any other comes off.
+      else await unshown(gait, !(gait === 'run' && runFallback(loop.review)));
       await Promise.resolve(api.progress?.(job, undefined, gaitEvent(gait, loop))).catch(() => {});
       return loop;
     };
@@ -1293,14 +1307,17 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       if ((await motionsPy(['strip-preview', strip, file])).code === 0) await draft([file]);
     };
     // A gait's take as soon as it is cut (2026-11-01): the creator sees the walk and the run a minute after they film, while the alignment
-    // and the judge (minutes on the GPU) still run. The take that passes replaces it (gaitDraft); one refused is marked while the next films.
-    const showTake = gait => async (take, strip) => {
-      try {
-        if (!strip) return await retaking(gait);
+    // and the judge (minutes on the GPU) still run. The take that passes replaces it (gaitDraft); one refused is marked at once. A gait's
+    // previews go up on its own chain, which the filming never waits for (a slow API must not hold the alignment); its branch waits for the
+    // chain before the passed take's preview, so the order holds.
+    const shownTakes = { walk: Promise.resolve(), run: Promise.resolve() };
+    const showTake = gait => (take, strip) => {
+      shownTakes[gait] = shownTakes[gait].then(async () => {
+        if (!strip) return unshown(gait);
         const file = path.join(draftDir, `${gait}-t${take}.webp`);
         await mkdir(draftDir, { recursive: true });
         if ((await motionsPy(['strip-preview', strip, file])).code === 0) await draft([file], 'checking');
-      } catch { /* a preview never stops the stage */ }
+      }).catch(() => { /* a preview never stops the stage */ });
     };
     // The rows, the walk and the run need nothing of each other, so they run at once (2026-10-28 — one after another the stage took
     // about 8 to 15 minutes). The run films a few seconds after the walk (the xAI quota counts starts per second). The stage waits for
@@ -1317,12 +1334,10 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       return walked.strip && !walked.retry && !walked.review ? runFromWalk(walked, look, m) : null;
     } : null;
     const [actions, walk, filmed] = await Promise.all([settle(actionRows), walking, settle(gaitBranch('run', gaitStaggerMs, fromWalk))]);
-    // A run the gate refused (or could not align or cut) while the walk passed: the walk makes it (RUN_FROM_WALK); otherwise the stage stops
-    // as before. Never for a creator who asked for the run again (2026-10-30): the walk's run ignores his words, and when it had been his run
-    // already (RUN_FROM_WALK, the same walk) he got back the very clip he asked to change. His takes passed or an operator looks.
-    const runChanged = changes.some(c => c.clip === 'run');
+    // A run the gate refused (or could not align or cut) while the walk passed: the walk makes it (RUN_FROM_WALK, runFallback); otherwise the
+    // stage stops as before.
     let run = filmed;
-    if (!runChanged && ['run-not-clean', 'run-align', 'run-cut'].includes(filmed.review) && walk.strip && !actions.review && !actions.retry) {
+    if (runFallback(filmed.review) && walk.strip && !actions.review && !actions.retry) {
       const made = await runFromWalk(walk, look, m);
       if (made) {
         run = made; await gaitDraft('run', made.strip);
