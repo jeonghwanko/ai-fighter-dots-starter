@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudHandler, authenticateCloud, EXPIRED_TOKEN_GRACE_MS, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE } from '../mcp/cloud.mjs';
+import { createCloudHandler, authenticateCloud, EXPIRED_TOKEN_GRACE_MS, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE, PUBLIC_SIGN_IN_RESOURCE } from '../mcp/cloud.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { safeClientRedirect, authorizationId } from '../web/cloud-connect/connect.mjs';
 import { migratedDatabase } from './helpers/fighter-database.mjs';
@@ -499,8 +499,16 @@ test('the sign-in-first address asks every request for a sign-in; mcp.oddbout.co
   assert.equal((await createCloudHandler({ db: dbFor(claims(), false) })(new Request(SIGN_IN_RESOURCE, { method: 'POST',
     headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', authorization: `Bearer ${token}` },
     body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list', params: {} }) }))).status, 401);
+  // Through mcp.oddbout.com/signin (2026-11-01) the same address names itself, so a client that reads the metadata at that host's root finds it.
+  // Another named resource does not move it, and naming the sign-in resource does not turn the public address into a sign-in-first one.
+  const own = await post(SIGN_IN_RESOURCE, 'initialize', false, { 'x-oddbout-public-resource': PUBLIC_SIGN_IN_RESOURCE });
+  assert.equal(own.status, 401);
+  assert.equal(own.headers.get('www-authenticate'), `Bearer resource_metadata="${PUBLIC_SIGN_IN_RESOURCE}/.well-known/oauth-protected-resource", scope="openid email profile"`);
+  const metadataAs = async resource => (await (await handle(new Request(metadataUrl, { headers: { 'x-oddbout-public-resource': resource } }))).json()).resource;
+  assert.equal(await metadataAs(PUBLIC_SIGN_IN_RESOURCE), PUBLIC_SIGN_IN_RESOURCE);
+  assert.equal(await metadataAs(PUBLIC_RESOURCE), SIGN_IN_RESOURCE);
   // mcp.oddbout.com (and the function's own address) keep answering their public tools signed out.
-  for (const headers of [{ 'x-oddbout-public-resource': PUBLIC_RESOURCE }, {}]) {
+  for (const headers of [{ 'x-oddbout-public-resource': PUBLIC_RESOURCE }, {}, { 'x-oddbout-public-resource': PUBLIC_SIGN_IN_RESOURCE }]) {
     assert.equal((await post(CLOUD_RESOURCE, 'initialize', false, headers)).status, 200);
     assert.equal((await post(CLOUD_RESOURCE, 'tools/list', false, headers)).status, 200);
   }

@@ -34,6 +34,12 @@ export const PUBLIC_RESOURCE = 'https://mcp.oddbout.com/mcp';
  * out (ChatGPT relies on that), so Grok connected without an account and never offered the sign-in. Its tokens carry the same audience.
  */
 export const SIGN_IN_RESOURCE = `${CLOUD_RESOURCE}/signin`;
+/**
+ * The same sign-in-first address through mcp.oddbout.com (2026-11-01, worker/cloud-gateway.mjs). There the host root is ours, so a client that
+ * looks for the metadata at `/.well-known/oauth-protected-resource/signin` (RFC 9728, as Cursor's Grok Bot does) finds it; at the Supabase
+ * host it got a 401 and gave up its sign-in. The Supabase address keeps working for connectors already added with it.
+ */
+export const PUBLIC_SIGN_IN_RESOURCE = 'https://mcp.oddbout.com/signin';
 /** @param {unknown} aud */
 export function validCloudAudience(aud) {
   const current = [CLOUD_RESOURCE, LEGACY_PUBLIC_RESOURCE, PUBLIC_RESOURCE];
@@ -229,7 +235,7 @@ function routeOf(request) {
   const segments = new URL(request.url).pathname.split('/').filter(Boolean), prefix = segments.indexOf('ai-fighter-mcp');
   const path = prefix < 0 ? segments : segments.slice(prefix + 1), signInFirst = path[0] === 'signin';
   const requestedResource = request.headers.get('x-oddbout-public-resource') ?? '';
-  const resource = signInFirst ? SIGN_IN_RESOURCE
+  const resource = signInFirst ? (requestedResource === PUBLIC_SIGN_IN_RESOURCE ? PUBLIC_SIGN_IN_RESOURCE : SIGN_IN_RESOURCE)
     : [PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE].includes(requestedResource) ? requestedResource : CLOUD_RESOURCE;
   return { route: (signInFirst ? path.slice(1) : path).join('/'), signInFirst, resource };
 }

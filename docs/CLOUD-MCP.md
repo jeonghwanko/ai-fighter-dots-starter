@@ -19,8 +19,10 @@ Google로 한 번 로그인하면 끝이다. 아래 사용자 지정 MCP 서버�
 Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른다.
 공개 플러그인 디렉터리 등록은 별도의 OpenAI 심사 절차이며 서버 배포와 다르다.
 
-Grok 연결(2026-10-27, 주소 2026-10-28): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. 서버 URL은
-**로그인 먼저 주소** `https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin`이다(`SIGN_IN_RESOURCE`). Grok의 커스텀 커넥터에는
+Grok 연결(2026-10-27, 주소 2026-10-28·11-01): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. Cursor의 Grok Bot도 같다. 서버 URL은
+우리 도메인의 **로그인 먼저 주소** `https://mcp.oddbout.com/signin`이다(`PUBLIC_SIGN_IN_RESOURCE`). Claude·터미널 에이전트가 쓰는 Supabase 주소
+`https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin`(`SIGN_IN_RESOURCE`)과 같은 서버다. Grok에만 11-01에 주소를 옮긴 까닭은
+[우리 도메인의 로그인 먼저 주소](#우리-도메인의-로그인-먼저-주소-2026-11-01)에 있다. Grok의 커스텀 커넥터에는
 인증을 고르는 칸이 없고, 첫 요청의 답으로 로그인이 필요한지 정한다. 위 공개 주소는 공개 도구를 로그인 없이 답하므로 Grok이 계정 없이 붙어 버렸다(2026-10-28 실제 시도).
 로그인 먼저 주소는 같은 서버이고 모든 요청에 401과 `WWW-Authenticate`(`…/signin/.well-known/oauth-protected-resource`)로 로그인을 먼저 요구한다.
 이미 공개 주소로 추가했다면 지우고 이 주소로 다시 추가한다. 연결하면 oddbout.com 동의 화면에서 Google로 로그인해 승인한다.
@@ -134,9 +136,41 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 
 예전에는 확인 중 DB 오류도 401이었다. 그래서 클라이언트가 멀쩡한 로그인을 버리고 다시 로그인하러 갔다. 이제 이 경우는 503이다.
 형식이 깨진 토큰에서 auth-js가 예외를 던지면 503이 아니라 `invalid-token`이다. 테스트는 실제 auth-js와 로컬 JWKS로 이것을 확인한다.
-`mcp.oddbout.com` 게이트웨이(`worker/cloud-gateway.mjs`)는 아직 `Retry-After`를 넘기지 않는다. 그 경로의 503에는 이 헤더가 없고, 본문의 재시도 안내만 있다.
-일주일이 지나도 갱신하지 않는 클라이언트는 `token-expired`를 받는다. 그때는 다시 연결해야 한다. 근본 해결은 Grok Bot의 갱신 수정이나,
-루트 `.well-known`을 우리가 답하는 주소(예: `mcp.oddbout.com`의 로그인 먼저 주소)다. 둘 다 아직 하지 않았다.
+`mcp.oddbout.com` 게이트웨이(`worker/cloud-gateway.mjs`)도 2026-11-01부터 `Retry-After`를 넘긴다.
+일주일이 지나도 갱신하지 않는 클라이언트는 `token-expired`를 받는다. 그때는 다시 연결해야 한다. 갱신은 클라이언트가 고칠 일이다.
+루트 `.well-known`을 우리가 답하는 주소는 아래에서 만들었다.
+
+## 우리 도메인의 로그인 먼저 주소 (2026-11-01)
+
+10-31에 Grok Bot이 두 번(11:43Z·15:35Z) 스스로 토큰을 버렸다. 직전 호출은 200이었는데 토큰 없이 호출해 `authentication-required`를 받았고,
+새 클라이언트를 등록해 다시 로그인을 시작했다. 두 번 다 사용자가 Google 단계에서 멈췄다. 봇은 "로그인 서비스 일시 중단"이라고 안내했다.
+매번 그 직전에 봇의 `undici` 요청이 메타데이터를 Supabase 호스트 루트(RFC 9728 위치,
+`/.well-known/oauth-protected-resource/functions/v1/ai-fighter-mcp/signin`)에서 찾았고 401을 받았다. 그 루트는 Supabase 게이트웨이의 것이라 우리가 답할 수 없다.
+이 401이 토큰을 버린 원인이라는 것은 추정이다. 클라이언트 내부는 보지 못했다. 근거는 운영 로그의 요청 순서와 응답 크기다. 토큰 없는 401은 137바이트(gzip)이고,
+거절된 토큰의 401은 이유가 붙어 더 크다.
+
+그래서 같은 서버를 `https://mcp.oddbout.com/signin`(`PUBLIC_SIGN_IN_RESOURCE`)으로도 연다. 이 호스트는 루트도 우리 것이다.
+
+- 게이트웨이는 `mcp.oddbout.com` 호스트에서만 세 경로를 넘긴다. `/signin`(POST·GET·HEAD·OPTIONS)은 함수의 `/signin`으로 간다.
+  `/signin/.well-known/oauth-protected-resource`는 `WWW-Authenticate`가 가리키는 곳이다. `/.well-known/oauth-protected-resource/signin`은 RFC 9728의 루트 위치다.
+  둘 다 함수의 `/signin/.well-known/oauth-protected-resource`로 간다. 옛 Render 호스트(`ai-fighter-validator.onrender.com`)에는 이 경로가 없다.
+- 게이트웨이는 `x-oddbout-public-resource: https://mcp.oddbout.com/signin`을 붙인다. 함수는 로그인 먼저 경로에서 이 값일 때만 메타데이터의 `resource`와
+  `WWW-Authenticate`의 `resource_metadata`를 이 주소로 쓴다. 다른 값이거나 값이 없으면 `SIGN_IN_RESOURCE`다. 이 헤더는 광고하는 주소만 고르고, 인증과는 상관없다.
+- 인가 서버는 그대로 Supabase Auth다(`authorization_servers`, 메타데이터 `/.well-known/oauth-authorization-server/auth/v1`).
+  `mcp.oddbout.com`의 `/.well-known/oauth-authorization-server/signin`·`/.well-known/openid-configuration/signin`은 404다. 다른 issuer의 메타데이터를
+  우리 주소에서 답하면 RFC 8414의 issuer 검사에 걸린다. 보호 자원 메타데이터를 찾은 클라이언트는 거기 적힌 인가 서버로 간다.
+- 토큰 대상(`aud`)은 토큰 훅(`af_mcp_access_token_hook`)이 요청한 resource와 상관없이 세 값으로 정한다. 그래서 DB 변경이 없다.
+- Supabase 주소는 계속 받는다. 이미 그 주소로 추가한 커넥터는 그대로 동작한다. 새 주소의 효과를 보려면 커넥터를 지우고 새 주소로 다시 추가해야 한다.
+- 요청이 Render를 한 번 더 거친다. `mcp.oddbout.com`은 Render 무료 서버라 잠들 수 있다. 운영자 PC가 14분마다 깨운다. 본문 한도(64 KiB)는 함수와 같다.
+  게이트웨이는 응답 헤더를 30초, 스트림 전체를 160초까지 기다린다.
+- 사이트는 Grok 카드와 안내에서만 새 주소를 준다(게임 `ODDBOUT_MCP_GROK_SIGN_IN_URL`). grok.com과 Cursor의 Grok Bot이 이 카드를 쓴다. Claude·Codex·Gemini는
+  Supabase 주소 그대로다. MCP TS SDK(1.32의 `selectResourceURL`)와 Gemini CLI는 `WWW-Authenticate`의 `resource_metadata`를 따라서 루트 문제를 겪지 않는다.
+  그래서 Render 무료 서버를 거칠 까닭이 없다(적대적 리뷰 지적).
+- 배포 순서는 함수(`fighter:mcp`) → Render → 사이트다. Render가 먼저 올라가면 옛 함수가 헤더를 모른다. 그러면 Supabase 주소를 광고하고, SDK의 resource 검사와
+  Gemini의 출처 검사가 이를 거절한다. 사이트가 먼저면 `/signin`이 404다. 단계마다 운영에서 확인한 뒤 다음으로 간다.
+- 게이트웨이는 클라이언트의 `user-agent`도 넘긴다. 그래서 함수 로그에서 어느 클라이언트인지 보인다. 발신 IP는 Render의 것이 된다.
+- 새 주소로 실제 클라이언트가 연결한 것은 아직 확인하지 않았다. 처음 확인하는 대상은 Grok Bot이다. 이미 Supabase 주소로 추가한 Grok Bot은 커넥터를 지우고
+  이 주소로 다시 추가해야 한다.
 
 ## 사용 흐름
 
