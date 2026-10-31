@@ -174,7 +174,8 @@ MCP 점검(2026-10-27): 도구 목록 20 KB → 17 KB(UUID 칸의 짧은 패턴,
 
 ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만든다. 에이전트는 사용자의 답만 전한다. 그래서 Grok·ChatGPT처럼 작업 공간이
 없는 호스트도 선수를 만들 수 있고, Dots도 생성 단계를 하나하나 운전하지 않는다. 길은 제작자 페이지와 같은 API(`api/generations.mjs`)다.
-상태 기계·쿼터(계정 보유 토큰 — 가입 때 500,000, 공식 생성 PC가 그 계정 신청에 쓴 토큰을 결과와 상관없이 뺀다, 0 이하면 `generation-quota`; 하루 신청 셋, 대기열 상한)·운영 스위치는 DB가 정한다(`af_generation_balance`). 자기 PC·다른 사람 호스트가 쓴 토큰은 빼지 않는다. 운영자 계정은 막지 않는다.
+상태 기계·쿼터(계정 보유 토큰 — 가입 때 500,000, 공식 생성 PC가 ODDBOUT 신청(`oddbout`, 또는 공식 PC가 맡은 `any`)에 쓴 토큰을 결과와 상관없이 뺀다, 자기 PC가 아닌 신청은 0 이하면 `generation-quota`; 하루 신청 셋, 대기열 상한)·운영 스위치는 DB가 정한다(`af_generation_balance`, `af_generation_charged`). 자기 PC·다른 사람 호스트 신청은 빼지 않는다. 그 신청의 브리프(공식 PC의 안전 판정)도 빼지 않고 하루 예산에만 센다. 운영자 계정은 막지 않고 빼지 않는다.
+리스를 잃은 단계(그 사이 취소)나 결과가 거절된 단계의 토큰은 워커가 `POST /generation-worker/jobs/:id/usage`로 따로 보낸다. 단계가 돌던 리스 하나에 한 줄만 남는다.
 공식 호스트는 한국 시간 자정부터 쓴 codex 토큰이 하루 예산(`af_generation_settings.daily_token_budget`, 500,000) 아래일 때 새 ODDBOUT 신청을 시작한다
 (2026-10-31). 워커가 단계마다 그 단계 동안 쓰인 codex 세션의 토큰을 결과에 실어 보내고(`host/codex-usage.mjs`), 서버가 단계별로 `af_generation_usage`에 남긴다.
 예산을 다 쓰면 작업의 `queue.reason`이 `usage`이고 `resetsAt`(다음 한국 자정)에 다시 시작한다. 운영자 계정(`af_admins`)의 신청은 예산을 보지 않고 맨 앞이며

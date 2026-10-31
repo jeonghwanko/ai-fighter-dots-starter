@@ -20,7 +20,7 @@ import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile } from './common.m
  *   submission?: { stage: string, fighterId?: string | null } | null,
  *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown },
  *   queue?: { position: number, reason?: 'turn' | 'usage' | 'paused', usedPercent?: number, resetsAt?: string, dailyLimit: number, startedToday: number } | null,
- *   profileSetId?: string | null, tokens?: number }} HostedJob
+ *   profileSetId?: string | null, tokens?: number | null }} HostedJob
  */
 
 /**
@@ -139,9 +139,10 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'any or another person\'s host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: '
     + 'true. Pass his words (what the fighter is and looks like) and, if he gave them, '
     + 'up to two of his own pictures with his confirmation that he has the rights to them. '
-    + 'Each account holds tokens (500,000 at sign-up): ODDBOUT\'s making takes off every token it spends on his requests, whatever the '
-    + 'outcome, and a request is refused (generation-quota) once his balance is at or below zero; get_hosted_fighter without a job shows '
-    + 'his balance (tokens) and each job its tokens. A request on his own PC uses no tokens. '
+    + 'Each account holds tokens (500,000 at sign-up). What ODDBOUT\'s own worker makes for him (host oddbout, or any when ODDBOUT\'s worker '
+    + 'takes it) takes off every token it spends, whatever the outcome; a request his own PC or another person\'s host makes takes none. '
+    + 'Unless it is on his own PC, a request is refused (generation-quota) once his balance is at or below zero; get_hosted_fighter '
+    + 'without a job shows his balance (tokens) and each job the tokens it took. '
     + 'On a full day the request waits in line. Requires the user\'s request. '
     + 'Save the verified account id and idempotencyKey before calling, and the returned job.id. '
     + 'If the response is lost, recover with get_hosted_fighter using that key; '

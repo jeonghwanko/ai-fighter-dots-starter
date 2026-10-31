@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, utimes, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { codexTokensSince, codexUsage, recentRollouts } from './codex-usage.mjs';
+import { codexTokensSince, codexUsage, recentRollouts, rolloutsSince } from './codex-usage.mjs';
 
 // The `token_count` event as codex writes it into a rollout (2026-10-31, the shape of a real line — values made up).
 const NOW = Date.parse('2026-10-31T03:00:00Z');
@@ -47,15 +47,31 @@ test('a reading whose windows reset since, or no sessions at all, says nothing (
   assert.equal(await codexUsage(noLimits, NOW), null);
 });
 
+// The dated folder codex writes a session into (its local day), for a time: the stage tests run on any day.
+const dayOf = ms => { const d = new Date(ms); return `${d.getFullYear()}/${String(d.getMonth() + 1).padStart(2, '0')}/${String(d.getDate()).padStart(2, '0')}`; };
+
 test('a stage\'s tokens are the final totals of the sessions written since it began', async () => {
+  const today = dayOf(Date.now());
   const sessions = await sessionsWith({
-    '2026/10/31/rollout-1.jsonl': [tokenCount({ total: 500 })],
-    '2026/10/31/rollout-2.jsonl': [tokenCount({ total: 100 }), tokenCount({ total: 2500 })],
-    '2026/10/31/rollout-3.jsonl': [tokenCount({ total: 4000 })],
+    [`${today}/rollout-1.jsonl`]: [tokenCount({ total: 500 })],
+    [`${today}/rollout-2.jsonl`]: [tokenCount({ total: 100 }), tokenCount({ total: 2500 })],
+    [`${today}/rollout-3.jsonl`]: [tokenCount({ total: 4000 })],
   });
   const before = new Date(Date.now() - 3600_000);
-  await utimes(path.join(sessions, '2026/10/31/rollout-1.jsonl'), before, before);
+  await utimes(path.join(sessions, `${today}/rollout-1.jsonl`), before, before);
   // rollout-2's last count (2500) and rollout-3's (4000); input is total − 100 output in the fixture.
   assert.deepEqual(await codexTokensSince(sessions, Date.now() - 60_000), { total: 6500, input: 6300, cachedInput: 0, output: 200, reasoning: 0 });
   assert.deepEqual(await codexTokensSince(path.join(os.tmpdir(), 'no-such-codex-sessions'), 0), { total: 0, input: 0, cachedInput: 0, output: 0, reasoning: 0 });
+});
+
+// 리뷰 (2026-10-31): the 64 newest files could leave a long stage's sessions out. Every file in the folders from the day before the stage
+// on is read; a folder a week old is not, however fresh its files.
+test('a stage\'s tokens count every session it wrote, past 64 of them; folders before the day before are not read', async () => {
+  const now = Date.now(), files = {};
+  for (let i = 0; i < 70; i++) files[`${dayOf(now)}/rollout-${String(i).padStart(3, '0')}.jsonl`] = [tokenCount({ total: 100 })];
+  files[`${dayOf(now - 7 * 86_400_000)}/rollout-old.jsonl`] = [tokenCount({ total: 99_000 })];
+  const sessions = await sessionsWith(files);
+  assert.equal((await rolloutsSince(sessions, now - 60_000)).length, 70);
+  // Each fixture count is 100 tokens, all output (input is total − 100).
+  assert.deepEqual(await codexTokensSince(sessions, now - 60_000), { total: 7000, input: 0, cachedInput: 0, output: 7000, reasoning: 0 });
 });

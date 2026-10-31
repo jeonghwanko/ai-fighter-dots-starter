@@ -4,7 +4,7 @@ import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ASKS, GROK_LIMITED, createStages } from './generation-stages.mjs';
-import { STAGE_LIMIT_MS, createCooldowns, healthAfter, STAGE_STOPPED, TIMING, errorCode, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
+import { STAGE_LIMIT_MS, createApi, createCooldowns, healthAfter, reportStageTokens, STAGE_STOPPED, TIMING, errorCode, stageLimitMs, timedOutOutcome, unlessStopped } from './generation-worker.mjs';
 
 const brief = { profile: { name: 'Blue' }, look: { subject: 'A blue cat boxer', palette: ['blue'], prop: 'gloves', avoid: 'none' },
   motion: { temper: 'bold', attack: 'jab' } };
@@ -167,4 +167,26 @@ test('a provider a real stage found limited stays down past a health check that 
   assert.equal(cool.limit('grok'), TIMING.askedRecheckMs);
   cool.limit('codex');
   assert.deepEqual(cool.apply(up), { ok: false, codex: false, grok: false, at: 't' });
+});
+
+// 리뷰 (2026-10-31): a stage whose job was cancelled under it (lease lost) or whose finish was refused spent its tokens all the same. They
+// go on their own route with the lease the stage ran under; a refusal or a lost reply is logged, never dropped.
+test('a stage\'s tokens after its lease was lost go on the usage route, and what became of them is logged', async () => {
+  const sent = [], lines = [], say = async line => { lines.push(line); };
+  const api = createApi({ base: 'https://api.test/ai-fighter', key: 'afw_x', fetcher: async (url, init) => {
+    sent.push({ url, body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({ ok: true, kept: sent.length === 1 }), { status: 200 });
+  } });
+  const job = { id: 'job-1', status: 'motions', leaseToken: 'lease-1' }, tokens = { total: 900, input: 800, cachedInput: 0, output: 100, reasoning: 0 };
+  assert.deepEqual(await reportStageTokens(api, job, tokens, say), { status: 200, ok: true, kept: true });
+  await reportStageTokens(api, job, tokens, say);
+  assert.deepEqual(sent.map(s => s.url), Array(2).fill('https://api.test/ai-fighter/generation-worker/jobs/job-1/usage'));
+  assert.deepEqual(sent[0].body, { leaseToken: 'lease-1', stage: 'motions', tokens });
+  assert.deepEqual(lines, ['job job-1 motions 900 tokens reported', 'job job-1 motions 900 tokens reported before']);
+  // No tokens: nothing sent. A refusal and a lost reply are logged.
+  assert.equal(await reportStageTokens(api, job, null, say), null);
+  assert.equal(sent.length, 2);
+  await reportStageTokens({ usage: async () => ({ ok: false, status: 404, code: 'not-found' }) }, job, tokens, say);
+  await reportStageTokens({ usage: async () => { throw new Error('fetch failed'); } }, job, tokens, say);
+  assert.deepEqual(lines.slice(2), ['job job-1 motions 900 tokens not reported (not-found)', 'job job-1 motions 900 tokens not reported (fetch failed)']);
 });

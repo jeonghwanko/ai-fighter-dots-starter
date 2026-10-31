@@ -9,7 +9,8 @@ export const webp = (w, h) => { const b = new Uint8Array(64); b.set(new TextEnco
   b.set([(w - 1) & 255, (w - 1) >> 8 & 255, (w - 1) >> 16, (h - 1) & 255, (h - 1) >> 8 & 255, (h - 1) >> 16], 24); return b; };
 
 // One database, a creator with a token, another creator, the generation worker's key and a validation worker's key; Storage in memory.
-export async function generation({ decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null } = {}) {
+// `failing`: functions whose calls fail, as on a database the API is ahead of (2026-10-31, 보유 토큰).
+export async function generation({ decisionsReviewer = null, responsesReviewer = null, cascadeReviewer = null, failing = [] } = {}) {
   const sql = await migratedDatabase(), owner = crypto.randomUUID(), other = crypto.randomUUID();
   for (const user of [owner, other]) {
     await sql.query('insert into auth.users(id) values($1)', [user]);
@@ -19,6 +20,7 @@ export async function generation({ decisionsReviewer = null, responsesReviewer =
   await sql.query("insert into public.af_workers(token_hash,label,scope) values($1,'gen','generation'),($2,'val','validation')",
     [await sha256(new TextEncoder().encode(workerToken)), await sha256(new TextEncoder().encode(validatorToken))]);
   const rpc = async (name, args) => {
+    if (failing.includes(name)) return { error: { message: `function public.${name} does not exist` } };
     try { return { data: (await sql.query(`select to_jsonb(public.${name}(${Object.keys(args).map((key, i) => `${key} => $${i + 1}`).join(',')})) as value`, Object.values(args))).rows[0].value }; }
     catch (error) { return { error: { message: error.message } }; }
   };

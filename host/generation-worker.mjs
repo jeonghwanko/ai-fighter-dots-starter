@@ -107,6 +107,8 @@ export function createApi({ base, key, fetcher = fetch }) {
     ended: jobs => post('ended', { jobs }),
     progress: (job, progress, event) => post('progress', { jobId: job.id, leaseToken: job.leaseToken, progress, ...(event ? { event } : {}) }),
     finish: (job, outcome, result) => post('finish', { jobId: job.id, leaseToken: job.leaseToken, outcome, result }),
+    // A stage's tokens without the lease (리뷰 2026-10-31): the lease it ran under names the run, so a second report is ignored.
+    usage: (job, tokens) => post(`jobs/${job.id}/usage`, { leaseToken: job.leaseToken, stage: job.status, tokens }),
     decisions: (job, evidence) => fetcher(`${base}/generation-worker/jobs/${job.id}/decisions`, {
       method: 'POST', headers: leased(job, { 'content-type': 'application/json' }), body: JSON.stringify(evidence),
       signal: AbortSignal.timeout(140_000), redirect: 'error' }).then(json),
@@ -126,6 +128,22 @@ export function createApi({ base, key, fetcher = fetch }) {
     profileFront: (job, front) => fetcher(`${base}/generation-worker/jobs/${job.id}/profile-front`, { method: 'POST',
       headers: leased(job, { 'content-type': 'application/json' }), body: JSON.stringify(front), signal: AbortSignal.timeout(60_000) }).then(json),
   };
+}
+
+/**
+ * A stage's tokens sent on their own route (리뷰 2026-10-31): after the job was cancelled under the stage (lease lost) or its finish was
+ * refused, the tokens were spent all the same — the creator's balance and the day's budget count them. Never dropped silently: the reply,
+ * or why there is none, goes to the worker's log.
+ * @param {{ usage: (job: any, tokens: any) => Promise<any> }} api
+ * @param {{ id: string, status: string }} job
+ * @param {{ total: number } | null} tokens
+ * @param {(line: string) => Promise<unknown>} say
+ */
+export async function reportStageTokens(api, job, tokens, say) {
+  if (!tokens?.total) return null;
+  const reply = await api.usage(job, tokens).catch(error => ({ ok: false, code: error?.message ?? 'usage-failed' }));
+  await say(`job ${job.id} ${job.status} ${tokens.total} tokens ${reply.ok ? (reply.kept ? 'reported' : 'reported before') : `not reported (${reply.code ?? reply.status})`}`);
+  return reply;
 }
 
 /**
@@ -246,6 +264,11 @@ export async function main({ once = false } = {}) {
     await writeFile(path.join(dir, 'request.json'), JSON.stringify({ id: ogId, api: { jobId: job.id, owner: job.owner }, createdAt: new Date().toISOString() }, null, 2) + '\n');
     await api.progress(job, undefined, await versionsEvent(kit)).catch(() => {});
     const controller = new AbortController(), tally = createTally(), since = Date.now();
+    // The codex tokens of the sessions written since the stage began (codex-usage.mjs), or null: none, or unreadable (logged).
+    const spent = async () => {
+      try { const tokens = await codexTokensSince(sessions, since); return tokens.total ? tokens : null; }
+      catch (error) { await say(`job ${job.id} ${job.status} tokens unread: ${error?.message ?? error}`); return null; }
+    };
     let timedOut = false;
     const limit = setTimeout(() => { timedOut = true; controller.abort(); }, stageLimitMs(job.status));
     // The lease runs five minutes: renew it every minute; a job cancelled meanwhile (lease lost) stops the stage's child.
@@ -285,7 +308,11 @@ export async function main({ once = false } = {}) {
     if (timedOut) {
       await say(`job ${job.id} ${job.status} stopped after ${Math.round(stageLimitMs(job.status) / 60_000)} minutes`);
       outcome = timedOutOutcome(job.status, outcome);
-    } else if (controller.signal.aborted) { await say(`job ${job.id} ${job.status} stopped (lease lost)`); return; }
+    } else if (controller.signal.aborted) {
+      await say(`job ${job.id} ${job.status} stopped (lease lost)`);
+      await reportStageTokens(api, job, await spent(), say);
+      return;
+    }
     // codex cannot run here now (exit 75: signed out, usage used up): claim nothing until a health check passes again, soon.
     const down = healthAfter(health, outcome.result?.code), provider = limitedProvider(outcome.result?.code);
     if (down !== health) {
@@ -294,10 +321,13 @@ export async function main({ once = false } = {}) {
       checkedAt = Date.now() - TIMING.healthMs + wait;
       await say(`${provider} cannot run now: no claims until health passes (checked again in ${Math.round(wait / 60_000)} minutes)`);
     } else if (outcome.outcome === 'ok') cooldowns.worked(STAGE_PROVIDERS[job.status] ?? []);
-    // The stage's codex tokens beside its calls (2026-10-31): the server's daily budget counts them.
-    const tokens = await codexTokensSince(sessions, since).catch(() => null);
-    const reply = await api.finish(job, outcome.outcome, { ...outcome.result, ...(tally.size ? { calls: tally.value() } : {}), ...(tokens?.total ? { tokens } : {}) });
+    // The stage's codex tokens beside its calls (2026-10-31): the server's daily budget and the creator's balance count them. A finish
+    // refused (or lost) keeps none, so they go on their own route.
+    const tokens = await spent();
+    const reply = await api.finish(job, outcome.outcome, { ...outcome.result, ...(tally.size ? { calls: tally.value() } : {}), ...(tokens ? { tokens } : {}) })
+      .catch(error => ({ ok: false, code: error?.message ?? 'finish-failed' }));
     await say(`job ${job.id} ${job.status} → ${outcome.outcome}${outcome.result?.code ? ` (${outcome.result.code})` : ''} ${reply.ok ? reply.status : `finish refused ${reply.code}`}`);
+    if (!reply.ok) await reportStageTokens(api, job, tokens, say);
     if (['rejected', 'failed'].includes(outcome.outcome) || reply.status === 'submitted') await writeFile(path.join(dir, '.closed'), '').catch(() => {});
   }
 
