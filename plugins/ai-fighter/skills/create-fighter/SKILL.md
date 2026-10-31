@@ -29,7 +29,8 @@ ODDBOUT draws from the pick) and pass their approval or one motion change, regis
 If the user leaves the choices to ODDBOUT ("just make it"), pass `delegate: true`: ODDBOUT picks the look and the user answers once, at the motions.
 Wait with `get_hosted_fighter` `waitSeconds` rather than repeated reads. Do not generate locally for a hosted job.
 If the user runs a generation host on their own PC (`npm run host -- join` from the site), pass `host: mine`: their own subscription makes it, with no
-consent to give and without using their one free hosted fighter. Another person's host (`list_generation_hosts`) needs the user's consent first.
+consent to give and without using their tokens (each account starts with 500,000; ODDBOUT's own worker takes off what it spends).
+Another person's host (`list_generation_hosts`) takes none of their tokens and needs the user's consent first.
 
 ## Start or resume
 
