@@ -1,0 +1,1 @@
+import{r as e}from"./leagueContent-Ci9OFSAA.js";export{e as profiles};
