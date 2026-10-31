@@ -619,3 +619,28 @@ test('an account given more than one free fighter starts with as many times 500,
     assert.deepEqual([grants[two], grants[one], grants[none]], [1000000, 500000, 500000]);
   } finally { await db.close(); }
 });
+
+// 하루 세 건 (2026-10-31): a person whose requests failed on our side was refused for a day with his tokens untouched. Three requests a day
+// are his own now: one that failed on our side or that he cancelled while it waited for an operator is left out; a refused one counts.
+test('three requests a day count his own: not one that failed on our side or that he cancelled at an operator\'s stop; never an operator', async () => {
+  const { sql, owner, call, healthy } = await generation();
+  try {
+    await healthy();
+    const ask = () => call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() });
+    const end = async (status, code, refunded = false) => {
+      const made = await ask();
+      assert.equal(made.status, 200, JSON.stringify(made.body));
+      await sql.query(`update public.af_generation_jobs set status = $2, error_code = $3, refunded_at = ${refunded ? 'now()' : 'null'} where id = $1`,
+        [made.body.job.id, status, code]);
+    };
+    await end('failed', 'stage-attempts');            // our side
+    await end('cancelled', 'side-look', true);        // cancelled at an operator's stop
+    await end('rejected', 'real-person');             // refused: counts
+    await end('cancelled', null);                     // his own cancel: counts
+    await end('expired', null);                       // left unanswered: counts
+    const refused = await ask();
+    assert.deepEqual([refused.status, refused.body.code], [429, 'rate-limit']);
+    await sql.query('insert into public.af_admins(owner_id) values($1)', [owner]);
+    assert.equal((await ask()).status, 200);
+  } finally { await sql.close(); }
+});
