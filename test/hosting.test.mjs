@@ -133,6 +133,42 @@ test('live checks reject missing or wrong asset bytes even when entry HTML retur
   } finally { await rm(root, { recursive: true }); }
 });
 
+test('shared HTML entries verify emitted modules, styles and transitive assets without a per-page manifest key', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'fighter-shared-entry-test-'));
+  try {
+    for (const dir of ['.vite', 'assets', 'ai-fighter-creator']) await mkdir(join(root, dir));
+    const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js' }]));
+    delete manifest['service.html']; delete manifest['service.ko.html'];
+    manifest.service = { file: 'assets/service.js', dynamicImports: ['serviceLazy'] };
+    manifest.serviceLazy = { file: 'assets/service-lazy.js' };
+    await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(manifest));
+    const content = new Map([...siteEntries, ...policyFiles, ...discoveryFiles, 'index.html', 'assets/main.js',
+      'assets/service.js', 'assets/service-lazy.js', 'assets/service.css', ...(hosting.customDomain ? ['CNAME'] : [])]
+      .map(path => [path, `content for ${path}`]));
+    for (const page of ['service.html', 'service.ko.html']) content.set(page,
+      '<script crossorigin src="./assets/service.js" type="module"></script><link rel="stylesheet" href="/assets/service.css">');
+    for (const [path, value] of content) await writeFile(join(root, path), value);
+    let broken = '';
+    const request = async url => {
+      const path = url.pathname.slice(1);
+      const mime = path.endsWith('.html') ? 'text/html' : path.endsWith('.css') ? 'text/css'
+        : path.endsWith('.xml') ? 'application/xml' : path.endsWith('.txt') ? 'text/plain' : 'text/javascript';
+      return new Response(path === broken ? 'wrong bytes' : content.get(path), { headers: { 'content-type': mime } });
+    };
+    await verifyLiveSite(root, { siteUrl: 'https://example.com/', request });
+    for (broken of ['service.html', 'service.ko.html', 'assets/service.js', 'assets/service-lazy.js', 'assets/service.css']) {
+      await assert.rejects(verifyLiveSite(root, { siteUrl: 'https://example.com/', request }), /differs from build/);
+    }
+    broken = '';
+    await writeFile(join(root, 'service.html'), '<main>No entry module</main>');
+    await assert.rejects(verifyLiveSite(root), /Missing Vite entry: service.html/);
+    await writeFile(join(root, 'service.html'), '<script type="module" src="/assets/unknown.js"></script>');
+    await assert.rejects(verifyLiveSite(root), /Missing Vite module/);
+    await writeFile(join(root, 'service.html'), '<script type="module" src="https://other.example/foreign.js"></script>');
+    await assert.rejects(verifyLiveSite(root), /Unsafe emitted asset URL/);
+  } finally { await rm(root, { recursive: true }); }
+});
+
 test('a passing hiccup of the published site is retried; a missing file or wrong bytes are not (2026-10-30)', async () => {
   // A publish stopped at one font file's brief 503 after the build was live, and the creation context was never published.
   const root = await mkdtemp(join(tmpdir(), 'fighter-live-retry-test-'));

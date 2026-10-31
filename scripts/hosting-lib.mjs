@@ -144,7 +144,33 @@ export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request 
     for (const file of [entry.file, ...(entry.css ?? []), ...(entry.assets ?? [])]) files.add(file);
     for (const imported of [...(entry.imports ?? []), ...(entry.dynamicImports ?? [])]) visit(imported);
   }
-  for (const page of siteEntries) visit(page);
+  for (const page of siteEntries) {
+    if (manifest[page]) { visit(page); continue; }
+    // Vite can remove an HTML entry chunk when two documents share the same module (the service translations).
+    // Follow the emitted module tags instead, still requiring their manifest graph and checking both HTML documents.
+    const html = await readFile(join(root, page), 'utf8');
+    let modules = 0;
+    for (const [tag] of html.matchAll(/<(?:script|link)\b[^>]*>/gi)) {
+      const attributes = Object.fromEntries([...tag.matchAll(/([\w-]+)\s*=\s*["']([^"']*)["']/g)].map(match => [match[1], match[2]]));
+      const module = /^<script\b/i.test(tag) && attributes.type === 'module';
+      const stylesheet = /^<link\b/i.test(tag) && attributes.rel === 'stylesheet';
+      if (!module && !stylesheet) continue;
+      const reference = module ? attributes.src : attributes.href;
+      if (!reference) throw new Error(`Missing emitted asset URL: ${page}`);
+      const base = new URL('.', siteUrl), url = new URL(reference, new URL(page, base));
+      if (url.origin !== base.origin || !url.pathname.startsWith(base.pathname) || url.search || url.hash) {
+        throw new Error(`Unsafe emitted asset URL: ${page}`);
+      }
+      const file = url.pathname.slice(base.pathname.length);
+      files.add(file);
+      if (module) {
+        const key = Object.keys(manifest).find(key => manifest[key].file === file);
+        if (!key) throw new Error(`Missing Vite module: ${page}: ${file}`);
+        visit(key); modules++;
+      }
+    }
+    if (!modules) throw new Error(`Missing Vite entry: ${page}`);
+  }
   for (const file of files) {
     if (!file || /(^|\/)\.\.(\/|$)|[\\?#]/.test(file) || file.startsWith('/') || /^[a-z]+:/i.test(file)) {
       throw new Error('Unsafe manifest asset path');
