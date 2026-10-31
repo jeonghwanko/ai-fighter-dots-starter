@@ -37,6 +37,34 @@ export async function recentRollouts(sessions, limit = 12) {
 }
 
 /**
+ * Every rollout file in the dated folders from the day before `sinceMs` on (the folders' dates are codex's local day; a day's margin covers
+ * any time zone), with no cap on their number: a stage's sessions are all counted (리뷰 2026-10-31 — 64 newest could leave some out).
+ * @param {string} sessions
+ * @param {number} sinceMs
+ * @returns {Promise<string[]>}
+ */
+export async function rolloutsSince(sessions, sinceMs) {
+  const from = new Date(sinceMs - 86_400_000), floor = from.getUTCFullYear() * 10_000 + (from.getUTCMonth() + 1) * 100 + from.getUTCDate();
+  /** @type {string[]} */
+  const out = [];
+  /** @param {string} dir */
+  const dated = async dir => (await readdir(dir, { withFileTypes: true }).catch(() => []))
+    .filter(entry => entry.isDirectory() && /^\d+$/.test(entry.name)).map(entry => entry.name);
+  for (const year of await dated(sessions)) {
+    if (Number(year) * 10_000 + 1231 < floor) continue;
+    for (const month of await dated(path.join(sessions, year))) {
+      if (Number(year) * 10_000 + Number(month) * 100 + 31 < floor) continue;
+      for (const day of await dated(path.join(sessions, year, month))) {
+        if (Number(year) * 10_000 + Number(month) * 100 + Number(day) < floor) continue;
+        const folder = path.join(sessions, year, month, day);
+        for (const name of await readdir(folder).catch(() => [])) if (/^rollout-.*\.jsonl$/.test(name)) out.push(path.join(folder, name));
+      }
+    }
+  }
+  return out;
+}
+
+/**
  * A rollout's last `token_count` payload, or null (none yet, or the file cannot be read).
  * @param {string} file
  * @returns {Promise<any>}
@@ -107,7 +135,7 @@ export async function codexTokensSince(sessions, sinceMs) {
   const sum = { total: 0, input: 0, cachedInput: 0, output: 0, reasoning: 0 };
   /** @param {unknown} n */
   const whole = n => (typeof n === 'number' && Number.isFinite(n) && n > 0 ? Math.round(n) : 0);
-  for (const file of await recentRollouts(sessions, 64)) {
+  for (const file of await rolloutsSince(sessions, sinceMs)) {
     const written = await stat(file).catch(() => null);
     if (!written || written.mtimeMs < sinceMs) continue;
     const usage = (await lastTokenCount(file))?.info?.total_token_usage;

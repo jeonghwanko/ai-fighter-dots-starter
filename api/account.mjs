@@ -16,6 +16,18 @@ const ROUTES = { me: 'GET', 'access-requests': 'POST', 'creator-handoffs': 'POST
  * creatorLink(owner) mints a one-use sign-in token for the creator homepage; the browser redeems it with Supabase Auth.
  */
 /**
+ * An account's tokens as the database states them (`af_generation_balance`), whole numbers only; null otherwise.
+ * @param {unknown} value
+ * @returns {{ granted: number, spent: number, balance: number } | null}
+ */
+export function accountTokens(value) {
+  const row = /** @type {Record<string, unknown> | null} */ (value && typeof value === 'object' ? value : null);
+  const [granted, spent, balance] = ['granted', 'spent', 'balance'].map(key => Number(row?.[key]));
+  return Number.isSafeInteger(granted) && Number.isSafeInteger(spent) && Number.isSafeInteger(balance) && granted >= 0 && spent >= 0
+    ? { granted, spent, balance } : null;
+}
+
+/**
  * @param {{ db: any, creatorLink?: import('./http.mjs').CreatorLink | null }} options
  * @returns {import('./http.mjs').Route}
  */
@@ -29,6 +41,17 @@ export function createAccountHandler({ db, creatorLink = null }) {
       ...(data.accessMode === 'open' ? { accessMode: 'open', canSubmit: data.canSubmit === true } : {}),
       ...(Number.isInteger(data.fighterLimit) && data.fighterLimit > 0 ? { fighterLimit: data.fighterLimit } : {}) };
   }
+  /**
+   * His tokens (보유 토큰, 2026-10-31): granted, spent by the official host on his jobs, and the balance (below zero when a job outran it).
+   * Null when the database has no balance yet (a function deployed before its migration): the account still answers.
+   * @param {string} owner
+   */
+  async function tokensOf(owner) {
+    try {
+      const data = await rpc('af_generation_balance', { p_owner: owner });
+      return accountTokens(data);
+    } catch { return null; }
+  }
   return async (request, parts) => {
     try {
       const route = parts.join('/');
@@ -38,7 +61,10 @@ export function createAccountHandler({ db, creatorLink = null }) {
       if (!bearerToken(request)) throw new Problem(401, 'authentication-required');
       const owner = await verifiedUserId(db, request);
       if (!owner) throw new Problem(401, 'authentication-required');
-      if (route === 'me') return reply({ ok: true, account: await call('af_account', { p_owner: owner }) });
+      if (route === 'me') {
+        const [account, tokens] = await Promise.all([call('af_account', { p_owner: owner }), tokensOf(owner)]);
+        return reply({ ok: true, account: { ...account, ...(tokens ? { tokens } : {}) } });
+      }
       if (route === 'creator-handoffs') {
         if (!creatorLink) throw new Problem(503, 'handoff-unavailable');
         // Only the verified token names the account; the request body is never read.

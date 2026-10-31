@@ -20,7 +20,7 @@ import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile } from './common.m
  *   submission?: { stage: string, fighterId?: string | null } | null,
  *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown },
  *   queue?: { position: number, reason?: 'turn' | 'usage' | 'paused', usedPercent?: number, resetsAt?: string, dailyLimit: number, startedToday: number } | null,
- *   profileSetId?: string | null }} HostedJob
+ *   profileSetId?: string | null, tokens?: number | null }} HostedJob
  */
 
 /**
@@ -55,6 +55,11 @@ const hostedSettled = (status, submission) => !HOSTED_WORKING.has(status) && !(s
 // A run the gate refused, made from the walk (the worker's `run-from-walk` preview note, 2026-10-29): the creator hears it and may film it again.
 const RUN_FROM_WALK_NEXT = 'The run preview is the walk played faster: no filmed run passed the checks. Tell the user so; '
   + 'if he wants a real run, revise_hosted_motion with clip run and his words. ';
+/**
+ * The tokens a job took off the user's balance (보유 토큰, 2026-10-31: every token ODDBOUT's making spends, whatever the outcome).
+ * @param {HostedJob} job
+ */
+const spent = job => Number.isSafeInteger(job.tokens) && /** @type {number} */ (job.tokens) > 0 ? ` It used ${job.tokens} of the user's tokens.` : '';
 /** @param {HostedJob} job */
 export function hostedNext(job) {
   const left = job.revisionsLeft ?? {}, error = job.error ? ` (${job.error})` : '';
@@ -99,11 +104,11 @@ export function hostedNext(job) {
         + 'once he confirmed each of the eleven motions. '
         + (job.profileSetId ? `His chosen front went in as his profile set (${job.profileSetId}): the home shows him once an operator approves it.`
           : 'His profile set (front picture) did not go in with it: prepare_profile_set can upload one.');
-      if (job.submission?.stage === 'rejected') return 'The server check refused the package. A person at ODDBOUT will look at it; the user\'s free fighter is free again.';
+      if (job.submission?.stage === 'rejected') return `The server check refused the package. A person at ODDBOUT will look at it.${spent(job)}`;
       return 'The server is checking the package. Call get_hosted_fighter with waitSeconds.';
-    case 'needs_review': return 'A person at ODDBOUT is checking this step. Nothing to do now; check later. If he cancels while it waits, his free fighter comes back.';
-    case 'rejected': return `ODDBOUT declined this request${error}. It does not use the user's free fighter; a different request may be made.`;
-    case 'failed': return `This request failed${error}. The user's free fighter is free again; he may ask once more.`;
+    case 'needs_review': return `A person at ODDBOUT is checking this step. Nothing to do now; check later.${spent(job)}`;
+    case 'rejected': return `ODDBOUT declined this request${error}.${spent(job)} A different request may be made while his balance is above zero.`;
+    case 'failed': return `This request failed${error}.${spent(job)} He may ask again while his balance is above zero.`;
     default: return `This request is ${job.status}; it is over.`;
   }
 }
@@ -134,7 +139,10 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
     + 'any or another person\'s host sends his words and pictures to that host\'s PC, so ask him first and pass hostConsent: '
     + 'true. Pass his words (what the fighter is and looks like) and, if he gave them, '
     + 'up to two of his own pictures with his confirmation that he has the rights to them. '
-    + 'One hosted fighter per account is free; it is used once its looks are painted (a cancel after that keeps it used). '
+    + 'Each account holds tokens (500,000 at sign-up). What ODDBOUT\'s own worker makes for him (host oddbout, or any when ODDBOUT\'s worker '
+    + 'takes it) takes off every token it spends, whatever the outcome; a request his own PC or another person\'s host makes takes none. '
+    + 'Unless it is on his own PC, a request is refused (generation-quota) once his balance is at or below zero; get_hosted_fighter '
+    + 'without a job shows his balance (tokens) and each job the tokens it took. '
     + 'On a full day the request waits in line. Requires the user\'s request. '
     + 'Save the verified account id and idempotencyKey before calling, and the returned job.id. '
     + 'If the response is lost, recover with get_hosted_fighter using that key; '
@@ -240,7 +248,6 @@ export function registerHostedTools({ register, db, identity, invoke, fetcher, h
       return withNext(await post(`generations/${jobId}/register`, { profile: confirmed }));
     }, { write: true, publish: true, openWorld: true, idempotent: true });
   register('cancel_hosted_fighter', '맡긴 선수 취소', 'Cancel the connected user\'s hosted fighter request; '
-    + 'work in progress stops at its next step. His free fighter comes back only if no look was painted yet (job.charged false), '
-    + 'a person at ODDBOUT was checking it, or ODDBOUT\'s worker is offline. Only on his explicit request.',
+    + 'work in progress stops at its next step. Tokens it already spent stay spent. Only on his explicit request.',
     { jobId: JOB }, async ({ jobId }) => withNext(await invoke(`generations/${jobId}`, 'DELETE')), { write: true, publish: true, idempotent: true });
 }
