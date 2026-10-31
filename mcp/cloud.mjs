@@ -69,9 +69,10 @@ const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(
 
 /**
  * How long past its expiry a connector token is still taken from Cursor's web agents (2026-10-31). Cursor's Grok Bot signed in at 02:21Z
- * and never refreshed, though Supabase gave it a refresh token: from 03:21Z it sent that token with every call, got a bare 401 and told
- * its user ODDBOUT's login provider was down. af_mcp_expired_token_state decides: the connection live, the client one with only Cursor's
- * callbacks, and the session not refreshed since the token was issued. Every other client gets the plain expiry, as the MCP spec asks:
+ * and never refreshed, though it holds a refresh token (offline_access granted): from 03:21Z it sent that token with every call, got a
+ * bare 401 and told its user ODDBOUT's login provider was down. af_mcp_expired_token_state decides: the connection live, the client
+ * Cursor's (a cursor.com MCP callback, any other redirect a loopback one), and the session not refreshed since the token was issued.
+ * Every other client gets the plain expiry, as the MCP spec asks:
  * the MCP SDKs refresh only on a 401, so a grace for them would only lengthen their tokens. Supabase Auth itself refuses every expired
  * token, so the grace reaches nothing beyond this server. Seven days is Supabase's longest token lifetime.
  */

@@ -205,14 +205,18 @@ test('native OAuth hook isolates connector tokens and live-session checks enforc
     await db.query('insert into auth.oauth_consents(user_id,client_id,scopes) values($1,$2,$3)',[owner,client,'openid email profile']);
     const active=(o=owner)=>db.query('select public.af_mcp_session_active($1,$2,$3) value',[o,session,client]).then(r=>r.rows[0].value);
     assert.equal(await active(),true);assert.equal(await active(crypto.randomUUID()),false);
-    // The grace is Cursor's web agents' alone: every redirect URI of the client one of its callbacks.
-    const issued=1793413272, cursor='https://www.cursor.com/bot/mcp/oauth/callback,https://www.cursor.com/agents/mcp/oauth/callback';
+    // The grace is Cursor's web agents' alone: a cursor.com MCP callback, any other redirect URI a loopback one. Cursor's real
+    // registration (production, 2026-10-31) is the first of these.
+    const issued=1793413272, cursor='https://www.cursor.com/agents/mcp/oauth/callback,http://localhost:8787/callback';
     const state=(iat=issued,o=owner)=>db.query('select public.af_mcp_expired_token_state($1,$2,$3,$4) value',[o,session,client,iat]).then(r=>r.rows[0].value);
     const redirects=uris=>db.query('update auth.oauth_clients set redirect_uris=$1',[uris]);
     assert.equal(await state(),'strict');
     for(const uris of ['https://chatgpt.com/connector_platform_oauth_redirect','http://127.0.0.1:3118/callback',
-      `${cursor},https://evil.test/callback`,'https://www.cursor.com.evil.test/bot/mcp/oauth/callback'])
+      `${cursor},https://evil.test/callback`,'https://www.cursor.com.evil.test/bot/mcp/oauth/callback',
+      `${cursor},http://localhost.evil.test/callback`,`${cursor},http://localhost:8787@evil.test/callback`,`${cursor},https://localhost/callback`])
       {await redirects(uris);assert.equal(await state(),'strict',uris);}
+    for(const uris of ['https://www.cursor.com/bot/mcp/oauth/callback','https://www.cursor.com/agents/mcp/oauth/callback, http://[::1]:9/cb,http://127.0.0.1/x'])
+      {await redirects(uris);assert.equal(await state(),'usable',uris);}
     await redirects(cursor);assert.equal(await state(),'usable');assert.equal(await state(issued,crypto.randomUUID()),'ended');
     // A banned or deleted user's connection is over too.
     await db.query('insert into auth.users(id,banned_until) values($1,$2)',[owner,new Date(Date.now()+3600e3)]);assert.equal(await state(),'ended');

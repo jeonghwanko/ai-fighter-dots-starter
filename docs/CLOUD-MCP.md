@@ -98,6 +98,7 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 (토큰 iat·exp, UA, 발신 IP). 같은 시간 grok.com 커넥터(UA `Grok`)는 같은 서버에서 매시간 정상적으로 갱신했다.
 
 **refresh token은 이미 준다.** Supabase Auth의 OAuth 서버는 코드 교환마다 refresh token을 함께 준다(`offline_access` 범위와 상관없다).
+이 봇의 세션은 `offline_access`까지 받았고, 클라이언트의 `grant_types`는 `authorization_code,refresh_token`이다(운영 DB, 2026-10-31).
 동적 등록 클라이언트의 기본 `grant_types`에도 `refresh_token`이 들어 있다. 서버 메타데이터도 `refresh_token` 그랜트를 알린다(supabase/auth
 `internal/api/oauthserver`, 2026-10-31 확인). 로그에서 Grok Bot은 401을 받고 서버 메타데이터(`token_endpoint` 포함)를 읽었지만, 8시간 동안
 어떤 토큰 주소로도 갱신 요청을 보내지 않았다. 별도의 `undici` 요청은 메타데이터를 Supabase 호스트 루트
@@ -107,8 +108,9 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 - **Cursor 웹 에이전트(Grok Bot)에만 만료 유예**: 만료된 커넥터 토큰을 7일(`EXPIRED_TOKEN_GRACE_MS`, Supabase 토큰 수명 설정의 최댓값)까지 받는다.
   `getClaims(token, { allowExpired: true })`로 서명을 검증한다. 받는 조건은 `af_mcp_expired_token_state`(마이그레이션 `20261031150000`)가 `usable`이라고 답하는 경우다.
   - 연결이 살아 있고(`af_mcp_session_active`), 사용자가 정지·삭제되지 않았다. 아니면 `ended`.
-  - 클라이언트의 모든 redirect URI가 Cursor 콜백(`https://www.cursor.com/agents/mcp/oauth/callback`·`/bot/mcp/oauth/callback`)이다.
-    아니면 `strict`다. 다른 클라이언트는 MCP 명세대로 만료 토큰에 401을 받는다. MCP SDK는 401을 받아야만 갱신하므로, 유예를 주면
+  - 클라이언트가 Cursor의 것이다. Cursor MCP 콜백(`https://www.cursor.com/agents/mcp/oauth/callback`·`/bot/mcp/oauth/callback`)이 하나 이상 있고,
+    나머지 redirect URI는 모두 http loopback이어야 한다. 운영의 실제 등록은 `…/agents/mcp/oauth/callback,http://localhost:8787/callback`이었다.
+    그래서 처음 적용한 "모두 Cursor 콜백" 규칙(`20261031150000`)은 이 봇을 놓쳤고, `20261031151000`이 이를 바로잡았다. 아니면 `strict`다. 다른 클라이언트는 MCP 명세대로 만료 토큰에 401을 받는다. MCP SDK는 401을 받아야만 갱신하므로, 유예를 주면
     그 토큰들의 수명만 늘어난다(적대적 리뷰 지적).
   - 그 토큰을 발급한 뒤 세션이 갱신되지 않았다. 아니면 `refreshed`다. Auth는 갱신할 때마다 새 토큰에 서명한 직후 `auth.sessions.refreshed_at`(UTC,
     시간대 없는 timestamp)을 적는다. 발급 시각 + 5초 이후의 `refreshed_at`은 더 새 토큰이 있다는 뜻이다.
