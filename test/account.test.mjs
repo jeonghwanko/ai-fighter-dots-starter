@@ -15,7 +15,9 @@ test('verified accounts can submit without invitations, including prior declines
    rpc:async(name,args)=>{try{return {data:(await sql.query('select '+name+'($1) as result',[args.p_owner])).rows[0].result};}catch(error){return {error:{message:error.message}};}}};
   const handle=createHandler({db}),call=token=>handle(new Request('https://test/ai-fighter/me',{headers:token?{authorization:'Bearer '+token}:{}}));
   assert.equal((await call()).status,401);assert.equal((await call('fixture-anon-token')).status,401);
-  assert.deepEqual((await(await call('fixture-owner-token')).json()).account,{invited:true,expiresAt:null,request:null,accessMode:'open',canSubmit:true,fighterLimit:3});
+  // 보유 토큰 (2026-10-31): the account carries its tokens, 500,000 to start.
+  assert.deepEqual((await(await call('fixture-owner-token')).json()).account,{invited:true,expiresAt:null,request:null,accessMode:'open',canSubmit:true,fighterLimit:3,
+    tokens:{granted:500000,spent:0,balance:500000}});
   await sql.exec('set role service_role');
   assert.equal((await sql.query('select af_authorize($1) as ok',[owner])).rows[0].ok,true);
   await sql.query("update af_creators set expires_at=now()-interval '1 day' where owner_id=$1",[owner]);

@@ -15,6 +15,7 @@ import { benchmarkReview } from './decisions-benchmark.mjs';
 import { BENCHMARK_BODY_BYTES } from './sequence-benchmark.mjs';
 import { PROFILE_SET_LIMITS, PROFILE_SET_VERSION, parseProfileSet, profileSetKey, storeOnce } from './profile-sets.mjs';
 import { BUCKET } from './submissions.mjs';
+import { accountTokens } from './account.mjs';
 /**
  * A row of af_generation_jobs, as `select('*')` or a generation function returns it. Its jsonb columns are as the worker and the creator
  * wrote them: `candidates` and `preview` are checked where they are read, the others passed on.
@@ -225,6 +226,8 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     // 첫 선수 무료 (2026-10-30): a request to ODDBOUT on a full day waits for its looks; where it stands, for the page's line.
     const queue = row.host_choice === 'oddbout' && !row.started_at && ['queued', 'appearance'].includes(row.status)
       ? await call('af_generation_queue', { p_id: row.id }) : null;
+    // 보유 토큰 (2026-10-31): the official host's tokens on this job so far.
+    const tokens = Number(await call('af_generation_job_tokens', { p_job: row.id }));
     return { id: row.id, status: row.status, progress: row.progress, error: row.error_code ?? null, description: row.description, language: row.language,
       delegate: row.delegate === true, createdAt: row.created_at, updatedAt: row.updated_at, profile: row.profile ?? (isObject(row.brief?.profile) ? row.brief.profile : null),
       candidates: candidates.map((name, i) => ({ key: i === 0 ? 'a' : 'b', url: urls.get(artifactPath(row.id, name)) ?? null })), choice: row.choice ?? null,
@@ -240,6 +243,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       // 선수 프로필 세트 (2026-10-31): the candidates are fronts; the side still the motions are made from, and the set made at registration.
       side: side ? { url: urls.get(artifactPath(row.id, side)) ?? null } : null,
       profileSetId: row.profile_set_id ?? null,
+      tokens: Number.isSafeInteger(tokens) && tokens >= 0 ? tokens : 0,
       host: { choice: row.host_choice ?? 'oddbout', requested: hosts.get(row.requested_host) ?? null, assigned: hosts.get(row.assigned_host) ?? null } };
   }
   /** @param {string} owner @param {string} jobId @returns {Promise<Job>} */
@@ -357,12 +361,13 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const { data, error } = await db.from('af_generation_jobs').select('*').eq('owner_id', owner).order('created_at', { ascending: false }).limit(5);
       if (error) throw new Problem(503, 'database-unavailable');
       const jobs = await Promise.all((data ?? []).map(view));
-      // Whether his one free hosted fighter is used, by the request check's own rule over all his jobs: read from the newest five, it
+      // Whether he may still ask (the request check's own rule over all his jobs): read from the newest five, it
       // fell out of view past five fighters made on his own PC (API 점검 2026-10-29).
-      // His free fighters (첫 선수 무료, 2026-10-30): granted, used and left; `used` is none left, as before.
+      // His tokens (보유 토큰, 2026-10-31): granted, spent and the balance; `used` is a balance at or below zero (never for an operator), as the
+      // request check reads it (`af_generation_free_used`). `credits` (the free fighters before tokens) stays for a page from before.
       const credits = await call('af_generation_credits', { p_owner: owner });
       return { ok: true, jobs, used: await call('af_generation_free_used', { p_owner: owner }) === true, credits,
-        capabilities: await call('af_generation_capabilities', {}) };
+        tokens: accountTokens(await call('af_generation_balance', { p_owner: owner })), capabilities: await call('af_generation_capabilities', {}) };
     }
     if (method === 'POST' && route === 'generations/uploads') {
       const bytes = await readBody(request, GENERATION_LIMITS.refBytes), image = probeImage(bytes), [min, max] = GENERATION_LIMITS.refSide;

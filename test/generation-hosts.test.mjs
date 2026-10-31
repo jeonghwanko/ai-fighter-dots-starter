@@ -132,8 +132,8 @@ test('a join code becomes a worker key once, on a PC with no account session; a 
   } finally { await sql.close(); }
 });
 
-// His own PC pays for his own fighters, so they do not use up the one free hosted fighter; one request at a time still.
-test('fighters made on his own PC leave the one free hosted fighter alone; one open request at a time', async () => {
+// His own PC pays for his own fighters, so they need no tokens (보유 토큰, 2026-10-31); one request at a time still.
+test('fighters made on his own PC need no tokens: at zero ODDBOUT refuses, his PC does not; one open request at a time', async () => {
   const { sql, call, healthy } = await generation();
   const theirs = 'other-token-0123456789';
   try {
@@ -143,15 +143,17 @@ test('fighters made on his own PC leave the one free hosted fighter alone; one o
     await call('POST', 'generation-worker/heartbeat', { health: { ok: true } }, key);
     const ask = body => call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서', language: 'ko', ...body }, theirs, { 'idempotency-key': crypto.randomUUID() });
     const free = (await ask({})).body.job;
-    await sql.query("update public.af_generation_jobs set status = 'submitted' where id = $1", [free.id]); // his free one, made
-    assert.equal((await ask({})).body.code, 'generation-quota');
+    await sql.query("update public.af_generation_jobs set status = 'submitted' where id = $1", [free.id]); // made
+    await sql.query('update public.af_creators set token_grant = 0 where owner_id = (select owner_id from public.af_generation_jobs where id = $1)', [free.id]);
+    assert.equal((await ask({})).body.code, 'generation-quota'); // no tokens left for ODDBOUT's making
     const mine = (await ask({ host: 'mine' })).body.job;
     assert.equal(mine.host.choice, 'host');
     assert.equal((await ask({ host: 'mine' })).body.code, 'generation-quota'); // one at a time
     await sql.query("update public.af_generation_jobs set status = 'submitted' where id = $1", [mine.id]);
-    assert.equal((await call('GET', 'generations', undefined, theirs)).body.used, true); // the free one
-    await sql.query("update public.af_generation_jobs set status = 'cancelled' where id = $1", [free.id]);
-    assert.equal((await call('GET', 'generations', undefined, theirs)).body.used, false); // his own PC's fighter does not count
+    assert.equal((await call('GET', 'generations', undefined, theirs)).body.used, true); // no tokens left
+    await sql.query('update public.af_creators set token_grant = 500000 where owner_id = (select owner_id from public.af_generation_jobs where id = $1)', [free.id]);
+    const after = (await call('GET', 'generations', undefined, theirs)).body;
+    assert.equal(after.used, false); assert.equal(after.tokens.spent, 0); // his own PC's fighter takes no tokens
   } finally { await sql.close(); }
 });
 

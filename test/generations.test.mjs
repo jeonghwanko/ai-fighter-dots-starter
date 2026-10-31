@@ -190,7 +190,8 @@ test('cancel, leases that run out and creators who do not answer', async () => {
     await sql.query("update public.af_generation_jobs set waiting_since = now() - interval '8 days' where id = $1", [job.id]);
     await work('POST', 'claim', {});
     assert.equal((await call('GET', `generations/${job.id}`)).body.job.status, 'expired');
-    assert.equal((await call('GET', 'generations')).body.used, true);
+    // 보유 토큰 (2026-10-31): an expired job uses no free fighter any more; his balance decides, and these stages kept no tokens.
+    assert.equal((await call('GET', 'generations')).body.used, false);
   } finally { await sql.close(); }
 });
 
@@ -275,71 +276,75 @@ test('맡기기: the worker picks the look and the job goes on to the motions; w
   } finally { await sql.close(); }
 });
 
-test('the free hosted fighter reads as used however many own-PC jobs came after it, as the request check decides (API 점검 2026-10-29)', async () => {
-  // The overview counted only the newest five jobs: past five own-PC jobs the free one fell out of view, the page offered the form
-  // again, and the request was refused with generation-quota.
+// 보유 토큰 (2026-10-31): his own PC's and another person's host's tokens are their subscription's, not his balance's.
+test('his balance counts the official host\'s tokens on his jobs only, however many jobs he made elsewhere', async () => {
   const { sql, owner, call, healthy } = await generation();
   try {
     await healthy();
     const host = (await sql.query(`insert into public.af_generation_hosts(owner_id, name, billing, approved, terms_accepted_at)
       values ($1, '내 PC', 'subscription', true, now()) returning id`, [owner])).rows[0].id;
-    await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, status, created_at)
-      values ($1, $2, 'The free hosted fighter, registered', 'en', 'submitted', now() - interval '2 days')`, [owner, crypto.randomUUID()]);
-    for (let i = 0; i < 5; i++) await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, status,
-      host_choice, requested_host, host_consent) values ($1, $2, 'A fighter made on his own PC', 'en', 'submitted', 'host', $3, false)`, [owner, crypto.randomUUID(), host]);
+    const official = (await sql.query('select public.af_generation_official() as id')).rows[0].id;
+    const job = async (choice, requested) => (await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, status,
+      host_choice, requested_host, host_consent, created_at) values ($1, $2, 'A fighter', 'en', 'submitted', $3, $4, false, now() - interval '2 days') returning id`,
+      [owner, crypto.randomUUID(), choice, requested])).rows[0].id;
+    const used = async (hostId, jobId, tokens) => sql.query(`insert into public.af_generation_usage(host_id, job_id, stage, tokens) values ($1, $2, 'motions', $3)`,
+      [hostId, jobId, tokens]);
+    await used(official, await job('oddbout', null), 120000);
+    for (let i = 0; i < 5; i++) await used(host, await job('host', host), 200000);
     const overview = (await call('GET', 'generations')).body;
     assert.equal(overview.jobs.length, 5);
-    assert.equal(overview.used, true);
+    assert.deepEqual(overview.tokens, { granted: 500000, spent: 120000, balance: 380000 });
+    assert.equal(overview.used, false);
     const ask = await call('POST', 'generations', { description: '빨간 글러브를 낀 고양이 복서, 귀가 크다', language: 'ko' }, undefined, { 'idempotency-key': crypto.randomUUID() });
-    assert.equal(ask.body.code, 'generation-quota');
+    assert.equal(ask.status, 200);
   } finally { await sql.close(); }
 });
 
-// 첫 선수 무료 (2026-10-30): the free fighter is used once its looks are painted; our side's ends give it back; the operator grants more.
-test('the free fighter: used by painted looks even if cancelled, given back by our side\'s ends, more by the operator', async () => {
+// 보유 토큰 (2026-10-31, 사용자: "(회원가입하면) 50만 토큰을 보여주고, 차감 보유 토큰을 보여줘"): every account starts at 500,000; the
+// official host's tokens come off whatever the outcome; at or below zero a request is refused, a job under way goes on; the operator raises
+// an account's grant, and an operator's own request is never refused.
+test('tokens: 500,000 to start, every official token taken off, refused at zero, a job under way goes on, an operator never refused', async () => {
   const { sql, owner, call, work, healthy } = await generation();
   try {
     await healthy();
     const ask = () => call('POST', 'generations', { description: '이름: 냥잽\n빨간 글러브를 낀 고양이 복서', language: 'ko', delegate: true },
       undefined, { 'idempotency-key': crypto.randomUUID() });
     const step = async status => { const c = (await work('POST', 'claim', {})).body.job; assert.equal(c?.status, status); return c; };
+    const tokens = total => ({ total, input: total - 100, cachedInput: 50, output: 100, reasoning: 0 });
     const finish = (c, outcome, result) => work('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome, result });
-    const credits = async () => (await call('GET', 'generations')).body.credits;
-    assert.deepEqual(await credits(), { granted: 1, used: 0, left: 1 });
-    // Cancelled while it waits for its brief: nothing painted, nothing used.
-    let job = (await ask()).body.job;
-    assert.equal(job.charged, false);
-    assert.deepEqual(await credits(), { granted: 1, used: 1, left: 0 }); // an open request holds it
+    const overview = async () => (await call('GET', 'generations')).body;
+    assert.deepEqual((await overview()).tokens, { granted: 500000, spent: 0, balance: 500000 });
+    assert.deepEqual((await call('GET', 'me')).body.account.tokens, { granted: 500000, spent: 0, balance: 500000 });
+    // The brief and the looks take their tokens off, and the job says how many it used.
+    const job = (await ask()).body.job;
+    assert.equal(job.tokens, 0);
+    await finish(await step('queued'), 'ok', { brief: { profile: { name: '냥잽' } }, tokens: tokens(20000) });
+    assert.deepEqual((await overview()).tokens, { granted: 500000, spent: 20000, balance: 480000 });
+    // A grant smaller than what he spent: the job under way still goes on, and the balance goes below zero.
+    await sql.query('update public.af_creators set token_grant = 25000 where owner_id = $1', [owner]);
+    assert.equal((await finish(await step('appearance'), 'ok', { candidates: ['front-a-0', 'front-b-0'], choice: 'a', tokens: tokens(30000) })).body.status, 'motions');
+    assert.equal((await call('GET', `generations/${job.id}`)).body.job.tokens, 50000);
+    let now = await overview();
+    assert.deepEqual(now.tokens, { granted: 25000, spent: 50000, balance: -25000 });
+    assert.equal(now.used, true);
+    assert.deepEqual((await call('GET', 'me')).body.account.tokens, { granted: 25000, spent: 50000, balance: -25000 });
+    // Cancelled: the tokens stay spent, and at or below zero he is refused.
     await call('DELETE', `generations/${job.id}`);
-    assert.deepEqual(await credits(), { granted: 1, used: 0, left: 1 });
-    // Painted, then cancelled: used.
-    job = (await ask()).body.job;
-    await finish(await step('queued'), 'ok', { brief: { profile: { name: '냥잽' } } });
-    assert.equal((await finish(await step('appearance'), 'ok', { candidates: ['look-a-0', 'look-b-0'], choice: 'a' })).body.status, 'motions');
-    assert.equal((await call('GET', `generations/${job.id}`)).body.job.charged, true);
-    await call('DELETE', `generations/${job.id}`);
-    assert.deepEqual(await credits(), { granted: 1, used: 1, left: 0 });
-    assert.equal((await call('GET', 'generations')).body.used, true);
+    assert.equal((await overview()).tokens.spent, 50000);
     assert.equal((await ask()).body.code, 'generation-quota');
-    // The operator grants one more; a painted job that waited for the operator and was cancelled gives it back, as a failed one does.
-    await sql.query('update public.af_creators set hosted_credits = 2 where owner_id = $1', [owner]);
-    job = (await ask()).body.job;
-    await finish(await step('queued'), 'ok', { brief: { profile: {} } });
-    await finish(await step('appearance'), 'ok', { candidates: ['look-a-0', 'look-b-0'], choice: 'b' });
-    assert.equal((await finish(await step('motions'), 'review', { code: 'run-not-clean' })).body.status, 'needs_review');
-    assert.deepEqual(await credits(), { granted: 2, used: 2, left: 0 });
-    // A cancel here gives it back, so the job does not say it is charged.
-    assert.equal((await call('GET', `generations/${job.id}`)).body.job.charged, false);
-    await call('DELETE', `generations/${job.id}`);
-    assert.deepEqual(await credits(), { granted: 2, used: 1, left: 1 });
-    const cancelled = (await sql.query("select data from public.af_generation_events where job_id = $1 and kind = 'cancelled'", [job.id])).rows[0].data;
-    assert.deepEqual(cancelled, { charged: false });
-    await sql.query("update public.af_generation_jobs set created_at = now() - interval '2 days' where owner_id = $1", [owner]); // his three a day
-    job = (await ask()).body.job;
-    await finish(await step('queued'), 'ok', { brief: { profile: {} } });
-    await finish(await step('appearance'), 'ok', { candidates: ['look-a-0', 'look-b-0'], choice: 'a' });
-    assert.equal((await finish(await step('motions'), 'failed', { code: 'pack-failed' })).body.status, 'failed');
-    assert.deepEqual(await credits(), { granted: 2, used: 1, left: 1 });
+    // The operator raises his grant: he may ask again.
+    await sql.query('update public.af_creators set token_grant = 600000 where owner_id = $1', [owner]);
+    now = await overview();
+    assert.deepEqual([now.tokens.balance, now.used], [550000, false]);
+    const again = (await ask()).body.job;
+    assert.ok(again?.id);
+    await call('DELETE', `generations/${again.id}`);
+    // An operator is never refused, whatever his balance.
+    await sql.query('update public.af_creators set token_grant = 0 where owner_id = $1', [owner]);
+    assert.equal((await ask()).body.code, 'generation-quota');
+    await sql.query('insert into public.af_admins(owner_id) values($1)', [owner]);
+    assert.equal((await overview()).used, false);
+    assert.ok((await ask()).body.job?.id);
   } finally { await sql.close(); }
 });
 

@@ -60,7 +60,9 @@ test('an agent asks ODDBOUT for a fighter, passes the picks and registers it in 
     assert.equal((await g.sql.query('select count(*)::int as n from public.af_generation_uploads')).rows[0].n, 1);
     const jobId = made.job.id;
     const listed = await call('get_hosted_fighter', {});
-    assert.equal(listed.capabilities.hosted, true); assert.equal(listed.used, true); assert.equal(listed.jobs[0].next, made.next);
+    assert.equal(listed.capabilities.hosted, true); assert.equal(listed.jobs[0].next, made.next);
+    // 보유 토큰 (2026-10-31): an open request does not use his tokens up; the balance does, and nothing was spent yet.
+    assert.equal(listed.used, false); assert.deepEqual(listed.tokens, { granted: 500000, spent: 0, balance: 500000 });
 
     const claim = async status => { const held = (await g.work('POST', 'claim', {})).body.job; assert.equal(held.status, status); return held; };
     const finish = (held, result) => g.work('POST', 'finish', { jobId: held.id, leaseToken: held.leaseToken, outcome: 'ok', result });
