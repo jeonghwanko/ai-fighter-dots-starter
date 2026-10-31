@@ -1,7 +1,7 @@
 import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer,request} from 'node:http';
-import {cloudGateway,PUBLIC_RESOURCE,LEGACY_PUBLIC_RESOURCE,DOMAIN_CHALLENGE,BRANDED_DOMAIN_CHALLENGE} from '../worker/cloud-gateway.mjs';
+import {cloudGateway,PUBLIC_RESOURCE,PUBLIC_SIGN_IN_RESOURCE,LEGACY_PUBLIC_RESOURCE,DOMAIN_CHALLENGE,BRANDED_DOMAIN_CHALLENGE} from '../worker/cloud-gateway.mjs';
 async function serverFor(fetcher,run) {
   const server=createServer(async(req,res)=>{if(!await cloudGateway(req,res,fetcher)){res.writeHead(404);res.end();}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -31,6 +31,27 @@ test('public gateway forwards only the fixed MCP endpoint and bounded protocol h
     });
     assert.equal(brandedProof,BRANDED_DOMAIN_CHALLENGE);
     assert.equal(calls.length,2);
+  });
+});
+test('mcp.oddbout.com/signin is the sign-in-first address, its metadata also at the host root (RFC 9728, 2026-11-01)',async()=>{
+  const calls=[];
+  await serverFor(async(url,options)=>{calls.push({url,options});return new Response(options.method==='HEAD'?null:'{}',{status:401,headers:{'content-type':'application/json','www-authenticate':'Bearer x','retry-after':'30'}})},async base=>{
+    const at=(path,method='GET',host='mcp.oddbout.com')=>new Promise((resolve,reject)=>{
+      const req=request(base+path,{method,headers:{host}},res=>{res.resume();res.on('end',()=>resolve(res))});
+      req.on('error',reject);req.end();
+    });
+    const metadata='/signin/.well-known/oauth-protected-resource';
+    for (const [path,method,upstream] of [['/signin','POST','/signin'],['/signin','HEAD','/signin'],[metadata,'GET',metadata],['/.well-known/oauth-protected-resource/signin','GET',metadata]]) {
+      const response=await at(path,method);
+      assert.equal(response.statusCode,401,path);assert.equal(response.headers['www-authenticate'],'Bearer x');assert.equal(response.headers['retry-after'],'30');
+      assert.equal(calls.at(-1).url,'https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp'+upstream);assert.equal(calls.at(-1).options.method,method);
+      assert.equal(calls.at(-1).options.headers.get('x-oddbout-public-resource'),PUBLIC_SIGN_IN_RESOURCE);
+    }
+    // Only at our own host: the legacy Render host has no sign-in-first address, and no other path is forwarded.
+    assert.equal((await at('/signin','POST','ai-fighter-validator.onrender.com')).statusCode,404);
+    assert.equal((await at('/.well-known/oauth-protected-resource/signin','GET','ai-fighter-validator.onrender.com')).statusCode,404);
+    assert.equal((await at('/signin/elsewhere','POST')).statusCode,404);
+    assert.equal(calls.length,4);
   });
 });
 test('oversized requests and upstream failures do not leak OAuth tokens or return success',async()=>{
