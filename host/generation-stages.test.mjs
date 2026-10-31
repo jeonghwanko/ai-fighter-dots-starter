@@ -357,7 +357,9 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     `video-run-s1-${createHash('sha256').update(flag(videos[2], '--motion').slice('run='.length)).digest('hex').slice(0, 8)}`);
   const drawn = tools.filter(a => a.includes('gen'));
   assert.equal(drawn.length, 1);
-  assert.equal(flag(drawn[0], '--ref'), path.join(dir, 'looks', 'look-b-0.png'));
+  // The look its one reference, drawn from the side (a front's command once handed gen `--ref undefined`, 2026-10-31).
+  assert.deepEqual(drawn[0].flatMap((a, i) => a === '--ref' ? [drawn[0][i + 1]] : []), [path.join(dir, 'looks', 'look-b-0.png')]);
+  assert.deepEqual([flag(drawn[0], '--direction'), flag(drawn[0], '--facing')], ['side', 'right']);
   assert.match(await readFile(flag(drawn[0], '--prompt-file'), 'utf8'), /arms lowered.*\n.*\nDepth: shade the far arm and the far leg clearly darker/s);
   assert.ok(py.some(a => a[0] === 'video-still' && a[2] === path.join(m, 'gait-still.png')));
   // One alignment at a time (RIFE on the GPU), though the walk and the run run at once.
