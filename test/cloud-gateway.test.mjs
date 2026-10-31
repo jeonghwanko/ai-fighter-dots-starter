@@ -2,6 +2,7 @@ import {test} from 'node:test';
 import assert from 'node:assert/strict';
 import {createServer,request} from 'node:http';
 import {cloudGateway,PUBLIC_RESOURCE,PUBLIC_SIGN_IN_RESOURCE,LEGACY_PUBLIC_RESOURCE,DOMAIN_CHALLENGE,BRANDED_DOMAIN_CHALLENGE} from '../worker/cloud-gateway.mjs';
+import {createCloudHandler} from '../mcp/cloud.mjs';
 async function serverFor(fetcher,run) {
   const server=createServer(async(req,res)=>{if(!await cloudGateway(req,res,fetcher)){res.writeHead(404);res.end();}});
   await new Promise(resolve=>server.listen(0,'127.0.0.1',resolve));
@@ -52,6 +53,28 @@ test('mcp.oddbout.com/signin is the sign-in-first address, its metadata also at 
     assert.equal((await at('/.well-known/oauth-protected-resource/signin','GET','ai-fighter-validator.onrender.com')).statusCode,404);
     assert.equal((await at('/signin/elsewhere','POST')).statusCode,404);
     assert.equal(calls.length,4);
+  });
+});
+// The gateway and the function each name the address: run one into the other, so the two copies cannot drift apart unnoticed.
+test('through the gateway the function names mcp.oddbout.com/signin at both metadata addresses and in its sign-in challenge',async()=>{
+  const handle=createCloudHandler({db:{}}), agents=[];
+  await serverFor(async(url,options)=>{agents.push(options.headers.get('user-agent'));return handle(new Request(url,options));},async base=>{
+    const at=(path,method='GET',host='mcp.oddbout.com',body)=>new Promise((resolve,reject)=>{
+      const req=request(base+path,{method,headers:{host,'user-agent':'Cursor/1.0.0','content-type':'application/json',accept:'application/json, text/event-stream'}},
+        res=>{let text='';res.on('data',part=>text+=part);res.on('end',()=>resolve({status:res.statusCode,headers:res.headers,text}))});
+      req.on('error',reject);req.end(body);
+    });
+    for (const path of ['/.well-known/oauth-protected-resource/signin','/signin/.well-known/oauth-protected-resource']) {
+      const metadata=await at(path);
+      assert.equal(metadata.status,200,path);assert.equal(JSON.parse(metadata.text).resource,PUBLIC_SIGN_IN_RESOURCE,path);
+    }
+    const challenge=`Bearer resource_metadata="${PUBLIC_SIGN_IN_RESOURCE}/.well-known/oauth-protected-resource", scope="openid email profile"`;
+    for (const host of ['mcp.oddbout.com','MCP.oddbout.com:443']) {
+      const denied=await at('/signin','POST',host,JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}}));
+      assert.equal(denied.status,401,host);assert.equal(denied.headers['www-authenticate'],challenge,host);
+    }
+    // The client's user-agent reaches the function's logs, not the gateway's own.
+    assert.deepEqual([...new Set(agents)],['Cursor/1.0.0']);
   });
 });
 test('oversized requests and upstream failures do not leak OAuth tokens or return success',async()=>{

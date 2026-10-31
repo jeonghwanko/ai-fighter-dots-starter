@@ -19,9 +19,9 @@ Google로 한 번 로그인하면 끝이다. 아래 사용자 지정 MCP 서버�
 Google로 로그인한 뒤 `연결 승인하고 Dots로 돌아가기`를 누른다.
 공개 플러그인 디렉터리 등록은 별도의 OpenAI 심사 절차이며 서버 배포와 다르다.
 
-Grok 연결(2026-10-27, 주소 2026-10-28·11-01): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. 서버 URL은
-**로그인 먼저 주소** `https://mcp.oddbout.com/signin`이다(`PUBLIC_SIGN_IN_RESOURCE`). 같은 서버의 Supabase 주소
-`https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin`(`SIGN_IN_RESOURCE`)도 그대로 받는다. 11-01에 주소를 옮긴 까닭은
+Grok 연결(2026-10-27, 주소 2026-10-28·11-01): grok.com → 커넥터(`https://grok.com/connectors`) → New Connector → Custom. Cursor의 Grok Bot도 같다. 서버 URL은
+우리 도메인의 **로그인 먼저 주소** `https://mcp.oddbout.com/signin`이다(`PUBLIC_SIGN_IN_RESOURCE`). Claude·터미널 에이전트가 쓰는 Supabase 주소
+`https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin`(`SIGN_IN_RESOURCE`)과 같은 서버다. Grok에만 11-01에 주소를 옮긴 까닭은
 [우리 도메인의 로그인 먼저 주소](#우리-도메인의-로그인-먼저-주소-2026-11-01)에 있다. Grok의 커스텀 커넥터에는
 인증을 고르는 칸이 없고, 첫 요청의 답으로 로그인이 필요한지 정한다. 위 공개 주소는 공개 도구를 로그인 없이 답하므로 Grok이 계정 없이 붙어 버렸다(2026-10-28 실제 시도).
 로그인 먼저 주소는 같은 서버이고 모든 요청에 401과 `WWW-Authenticate`(`…/signin/.well-known/oauth-protected-resource`)로 로그인을 먼저 요구한다.
@@ -49,7 +49,7 @@ MCP 함수의 Origin 허용 목록에 `claude.ai`·`claude.com`이 있다. 2026-
 - 추가할 때 "서버를 확인할 수 없습니다"가 나오면 `mcp.oddbout.com`의 Render 무료 서버가 잠들어 있던 것일 수 있다. 잠시 뒤 다시 시도한다
   (운영자 PC가 14분마다 깨운다).
 
-사이트의 Claude 안내(2026-10-29)는 위 공개 주소 대신 로그인 먼저 주소(11-01부터 `PUBLIC_SIGN_IN_RESOURCE`)를 준다. 첫 요청이 401과 `WWW-Authenticate`를 받으므로
+사이트의 Claude 안내(2026-10-29)는 위 공개 주소 대신 로그인 먼저 주소(`SIGN_IN_RESOURCE`)를 준다. 첫 요청이 401과 `WWW-Authenticate`를 받으므로
 Claude가 인증을 OAuth로 감지한다. 그래서 "로그인 없음"을 "지금 로그인"으로 바꾸는 단계가 없어진다. Grok에서 같은 주소로 실제 연결을 확인했다(2026-10-29).
 Claude에서는 아직 실제로 확인하지 않았다. 게시 뒤 한 번 연결해 확인한다(게임 `8bf1ed8e7`). OAuth 클라이언트는 그대로 "자동으로 등록"을 고른다.
 
@@ -69,12 +69,12 @@ MCP 인가 명세(2025-11-25)는 redirect를 `localhost` 또는 https로 정하�
 
 ```bash
 # Claude Code: 추가한 뒤 Claude Code에서 /mcp → oddbout → Authenticate
-claude mcp add --transport http --scope user oddbout https://mcp.oddbout.com/signin
+claude mcp add --transport http --scope user oddbout https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin
 # Codex: 추가한 뒤 로그인(브라우저가 열린다)
-codex mcp add oddbout --url https://mcp.oddbout.com/signin
+codex mcp add oddbout --url https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin
 codex mcp login oddbout
 # Gemini CLI: 추가한 뒤 Gemini CLI에서 /mcp auth oddbout
-gemini mcp add --transport http --scope user oddbout https://mcp.oddbout.com/signin
+gemini mcp add --transport http --scope user oddbout https://ztfxxhtmtrvxvuxlqmgz.supabase.co/functions/v1/ai-fighter-mcp/signin
 ```
 
 로그인은 같은 PC의 브라우저가 loopback 콜백에 닿아야 한다. SSH로 접속한 원격 PC·컨테이너에서는 브라우저가 그 PC의 loopback에 닿지 않는다.
@@ -163,7 +163,14 @@ Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰�
 - Supabase 주소는 계속 받는다. 이미 그 주소로 추가한 커넥터는 그대로 동작한다. 새 주소의 효과를 보려면 커넥터를 지우고 새 주소로 다시 추가해야 한다.
 - 요청이 Render를 한 번 더 거친다. `mcp.oddbout.com`은 Render 무료 서버라 잠들 수 있다. 운영자 PC가 14분마다 깨운다. 본문 한도(64 KiB)는 함수와 같다.
   게이트웨이는 응답 헤더를 30초, 스트림 전체를 160초까지 기다린다.
-- 사이트의 내 에이전트 카드와 안내(게임 `ODDBOUT_MCP_SIGN_IN_URL`)도 새 주소를 준다.
+- 사이트는 Grok 카드와 안내에서만 새 주소를 준다(게임 `ODDBOUT_MCP_GROK_SIGN_IN_URL`). grok.com과 Cursor의 Grok Bot이 이 카드를 쓴다. Claude·Codex·Gemini는
+  Supabase 주소 그대로다. MCP TS SDK(1.32의 `selectResourceURL`)와 Gemini CLI는 `WWW-Authenticate`의 `resource_metadata`를 따라서 루트 문제를 겪지 않는다.
+  그래서 Render 무료 서버를 거칠 까닭이 없다(적대적 리뷰 지적).
+- 배포 순서는 함수(`fighter:mcp`) → Render → 사이트다. Render가 먼저 올라가면 옛 함수가 헤더를 모른다. 그러면 Supabase 주소를 광고하고, SDK의 resource 검사와
+  Gemini의 출처 검사가 이를 거절한다. 사이트가 먼저면 `/signin`이 404다. 단계마다 운영에서 확인한 뒤 다음으로 간다.
+- 게이트웨이는 클라이언트의 `user-agent`도 넘긴다. 그래서 함수 로그에서 어느 클라이언트인지 보인다. 발신 IP는 Render의 것이 된다.
+- 새 주소로 실제 클라이언트가 연결한 것은 아직 확인하지 않았다. 처음 확인하는 대상은 Grok Bot이다. 이미 Supabase 주소로 추가한 Grok Bot은 커넥터를 지우고
+  이 주소로 다시 추가해야 한다.
 
 ## 사용 흐름
 

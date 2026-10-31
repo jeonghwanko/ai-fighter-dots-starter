@@ -25,7 +25,8 @@ const HEADER_TIMEOUT_MS = 30_000, TOTAL_TIMEOUT_MS = 160_000;
  */
 export async function cloudGateway(req, res, fetcher = fetch, { headerTimeoutMs = HEADER_TIMEOUT_MS, totalTimeoutMs = TOTAL_TIMEOUT_MS } = {}) {
   const route = /** @type {string} */ (req.url); // always set on a request a server received
-  const branded = req.headers.host === 'mcp.oddbout.com', signIn = branded && SIGN_IN_ROUTES.has(route);
+  // Our host whatever its case or explicit default port: the sign-in-first routes exist only there.
+  const branded = (req.headers.host ?? '').toLowerCase().replace(/:443$/, '') === 'mcp.oddbout.com', signIn = branded && SIGN_IN_ROUTES.has(route);
   const path = signIn ? SIGN_IN_ROUTES.get(route) : ROUTES.get(route);
   if (path === undefined && route !== '/.well-known/openai-apps-challenge') return false;
   /** @type {(status: number, body: string, type?: string) => void} */
@@ -43,7 +44,8 @@ export async function cloudGateway(req, res, fetcher = fetch, { headerTimeoutMs 
   try {
     const resource = signIn ? PUBLIC_SIGN_IN_RESOURCE : branded ? PUBLIC_RESOURCE : LEGACY_PUBLIC_RESOURCE;
     const headers = new Headers({'x-oddbout-public-resource':resource});
-    for (const name of ['authorization','content-type','accept','mcp-protocol-version','origin']) if (typeof req.headers[name] === 'string') headers.set(name,req.headers[name]);
+    // The client's user-agent too: without it the function's logs show only this gateway's, and which client called is what a sign-in diagnosis needs.
+    for (const name of ['authorization','content-type','accept','mcp-protocol-version','origin','user-agent']) if (typeof req.headers[name] === 'string') headers.set(name,req.headers[name]);
     const chunks=[]; let bytes=0;
     for await (const part of req) { bytes += part.length; if (bytes > 65536) { reply(413,'{"error":"body_limit"}'); return true; } chunks.push(part); }
     const response = await fetcher(UPSTREAM+path,{method:req.method,headers,redirect:'error',signal:control.signal,...(req.method==='POST'?{body:Buffer.concat(chunks)}:{})});
