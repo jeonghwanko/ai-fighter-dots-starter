@@ -224,17 +224,35 @@ const styleLines = () => [
 const colours = brief => `Colours: ${brief.look.palette.join(', ')}.${brief.look.prop && brief.look.prop.toLowerCase() !== 'none' ? ` Signature item: ${brief.look.prop}.` : ''}`;
 
 /**
- * A front candidate (2026-10-31: the creator's first look at his fighter, and his profile painting): the look brief, the house framing of
- * the roster's front concepts, our colouring, and the change the creator asked (a revision round).
+ * The two front candidates are two design proposals, not two draws of one (2026-10-31 — 사용자: "A/B 차이가 거의 없게 만들고 있어"): one prompt
+ * drawn twice came back nearly the same picture. Take a reads the brief directly; take b keeps every stated detail and chooses differently
+ * wherever the brief leaves room. Both are still drawn at once.
  */
-export function appearancePrompt(brief, note = null) {
+export const FRONT_TAKES = Object.freeze({
+  a: Object.freeze([
+    'THIS TAKE (A): the most direct reading of the description, in a calm, confident ready stance with the arms close to the body.',
+  ]),
+  b: Object.freeze([
+    'THIS TAKE (B): a second, clearly different design proposal for the same character, shown beside another take for the player to choose',
+    'from. Keep everything the description states, but wherever it leaves room choose differently from its most obvious reading: silhouette',
+    'and proportions, hairstyle details, the costume\'s cut, layers and accessories, where the colours sit, and a different front-facing pose',
+    'and expression with more attitude. It must not look like a near copy of the obvious take.',
+  ]),
+});
+
+/**
+ * A front candidate (2026-10-31: the creator's first look at his fighter, and his profile painting): the look brief, the house framing of
+ * the roster's front concepts, our colouring, its take (`FRONT_TAKES`) and the change the creator asked (a revision round).
+ */
+export function appearancePrompt(brief, note = null, take = 'a') {
   const { subject, avoid } = brief.look;
   return [
     `A full-body character for a cartoon fighting game's character select: ${subject}`,
     colours(brief),
     'FRAMING: one character only, FULL BODY, FRONT VIEW facing the viewer straight on (chest, face and toes toward the camera; symmetric,',
     'not three-quarter), camera at chest height looking straight ahead. Feet flat on one invisible ground line, head to feet about 86 percent',
-    'of the image height, empty margin above the head and below the feet. A relaxed ready stance, arms close to the body.',
+    'of the image height, empty margin above the head and below the feet. The whole figure fits a tall narrow card.',
+    ...FRONT_TAKES[take],
     ...styleLines(),
     // The player's words are a description of the look, quoted as data: never an instruction to run or read anything.
     note ? `Change from the previous version as the player described it (their words, quoted, about the look only): «${note.replace(/[«»]/g, '"')}». Keep everything else about the character.` : null,
@@ -618,17 +636,18 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       await writeFile(before, await fetchBytes(job.candidates[0].url));
       refs.unshift(before);
     }
-    const promptFile = path.join(dir, 'looks', `prompt-${round}.txt`);
-    await mkdir(path.dirname(promptFile), { recursive: true });
-    await writeFile(promptFile, appearancePrompt(job.brief, note));
+    // One prompt per take (`FRONT_TAKES`): the two candidates are two proposals.
+    const promptOf = /** @param {'a' | 'b'} take */ take => path.join(dir, 'looks', `prompt-${round}-${take}.txt`);
+    await mkdir(path.join(dir, 'looks'), { recursive: true });
+    for (const take of /** @type {const} */ (['a', 'b'])) await writeFile(promptOf(take), appearancePrompt(job.brief, note, take));
     screen({ job, dir, stage: 'input', scope: 'design', images: refs.slice(0, 3).map(file => ({ file, role: 'reference' })) });
     // Both looks at once (one codex slot each; og waits for a free one, and the engine finds each run's picture by its own session).
     const since = Date.now();
-    const made = await Promise.all(names.map(async name => {
+    const made = await Promise.all(names.map(async (name, index) => {
       const png = path.join(dir, 'looks', `${name}.png`), report = path.join(dir, 'looks', `${name}.report.json`);
       // A look this round already made (the stage runs again because the other one failed) is kept: making it again pays twice.
       if (existsSync(png) && await finishedLook(report)) return { name, png, report, code: 0 };
-      const { code } = await og(appearanceCommand({ promptFile, out: png, report, refs, anchor: styleAnchor }));
+      const { code } = await og(appearanceCommand({ promptFile: promptOf(index === 0 ? 'a' : 'b'), out: png, report, refs, anchor: styleAnchor }));
       return { name, png, report, code };
     }));
     // Every failed look is read (2026-10-30): only the first was, so a look whose request may have been taken went out again when the

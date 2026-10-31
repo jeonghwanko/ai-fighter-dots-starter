@@ -107,7 +107,10 @@ test('the stages run their commands through og, upload what they made and report
   await stages.appearance({ ...job, brief, appearanceRound: 1, appearanceNote: 'smaller ears', candidates: [{ url: 'https://s/front-a-0' }] }, dir);
   const revision = calls.at(-1).args;
   assert.ok(refsOf(revision)[0].endsWith('previous-1.webp')); assert.equal(refsOf(revision).at(-1), '/kit/style-anchor-front.webp');
-  assert.match(await readFile(path.join(dir, 'looks', 'prompt-1.txt'), 'utf8'), /smaller ears/);
+  // Each candidate draws its own take (2026-10-31: one prompt drawn twice came back nearly the same picture).
+  const promptArgs = calls.slice(-2).map(c => c.args[c.args.indexOf('--prompt-file') + 1]).sort();
+  assert.deepEqual(promptArgs.map(file => path.basename(file)), ['prompt-1-a.txt', 'prompt-1-b.txt']);
+  for (const take of ['a', 'b']) assert.match(await readFile(path.join(dir, 'looks', `prompt-1-${take}.txt`), 'utf8'), /smaller ears/);
   // 맡기기: the judge sees both looks against the look brief and picks one that passed every check; a failed check, a revision round
   // (the creator wrote a change) or a job not left to us picks nothing.
   const pass = { whole: 'pass', front: 'pass', style: 'pass', match: 'pass', clean: 'pass' };
@@ -985,6 +988,11 @@ test('the house colouring is the one creators\' agents are given; a front look a
     assert.match(prompt, /young man in a black suit/);
   }
   assert.match(appearancePrompt(brief), /FRONT VIEW facing the viewer straight on/);
+  // Two takes, two proposals: the same brief and house rules, a different direction each.
+  const [takeA, takeB] = [appearancePrompt(brief, null, 'a'), appearancePrompt(brief, null, 'b')];
+  assert.notEqual(takeA, takeB); assert.equal(appearancePrompt(brief), takeA);
+  for (const prompt of [takeA, takeB]) { assert.match(prompt, /blue armoured cat/); assert.match(prompt, /FRONT VIEW/); for (const line of HOUSE_COLOURING) assert.ok(prompt.includes(line)); }
+  assert.match(takeA, /THIS TAKE \(A\)/); assert.match(takeB, /THIS TAKE \(B\): a second, clearly different design proposal/);
   assert.match(sidePrompt(brief), /seen from the SIDE, facing RIGHT/);
   assert.doesNotMatch(briefPrompt({ description: 'x', language: 'ko' }, 0), /seen from the side/);
   assert.deepEqual(LOOK_CHECKS, ['whole', 'front', 'style', 'match', 'clean']);
