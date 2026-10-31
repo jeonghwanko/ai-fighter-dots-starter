@@ -11,6 +11,7 @@ import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { ASKS, GROK_LIMITED, MODELS, createStages, ogJobId } from './generation-stages.mjs';
+import { codexTokensSince, codexUsage } from './codex-usage.mjs';
 
 // <root>/bin holds this file in both installs (/srv/oddbout-gen on ODDBOUT's PC, a host's own folder in user mode).
 const ROOT = process.env.OG_ROOT || path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -98,7 +99,8 @@ export function createApi({ base, key, fetcher = fetch }) {
     body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) }).then(json);
   const leased = (job, extra) => headers({ 'x-generation-lease': job.leaseToken, ...extra });
   return {
-    heartbeat: health => post('heartbeat', { health }),
+    // The subscription's rate-limit reading rides along (codex-usage.mjs, 2026-10-31), for the operator: it holds nothing back.
+    heartbeat: (health, usage = null) => post('heartbeat', { health, ...(usage ? { usage } : {}) }),
     // The server's public contract: its features say what a package may carry (a gait at its own frame count: gait-frames-1).
     spec: () => fetcher(`${base}/spec`, { signal: AbortSignal.timeout(30_000) }).then(json),
     claim: () => post('claim', {}),
@@ -200,6 +202,8 @@ export async function main({ once = false } = {}) {
   const api = createApi({ base: env.ODDBOUT_GENERATION_API.replace(/\/$/, ''), key: env.ODDBOUT_GENERATION_WORKER_KEY });
   const og = path.join(ROOT, 'bin', 'og'), kit = path.join(ROOT, 'kit'), python = path.join(kit, 'vendor', 'sprite-gen', '.venv', 'bin', 'python');
   const workerLog = path.join(ROOT, 'worker.log');
+  // The providers run with HOME=<root> (og), so codex keeps its sessions there.
+  const sessions = path.join(process.env.CODEX_HOME || path.join(ROOT, '.codex'), 'sessions');
   const say = line => appendFile(workerLog, `${new Date().toISOString()} ${line}\n`).catch(() => {});
 
   let health = { ok: false, codex: false, grok: false, at: null }, checkedAt = 0, beatAt = 0, prunedAt = 0;
@@ -230,7 +234,7 @@ export async function main({ once = false } = {}) {
       await say(`prune ${(await quiet(['prune', String(keepDays(env.ODDBOUT_GENERATION_KEEP_DAYS))], 600_000)).trim().split('\n').at(-1) ?? ''}`);
     }
     if (Date.now() - beatAt >= TIMING.heartbeatMs) {
-      const reply = await api.heartbeat(health).catch(error => ({ ok: false, code: error.message }));
+      const reply = await api.heartbeat(health, await codexUsage(sessions).catch(() => null)).catch(error => ({ ok: false, code: error.message }));
       if (reply.ok) beatAt = Date.now(); else await say(`heartbeat failed ${reply.code ?? reply.status}`);
     }
   }
@@ -241,7 +245,7 @@ export async function main({ once = false } = {}) {
     // og's job marker: `og run` refuses a folder without it. Who and what only; the description stays in the API.
     await writeFile(path.join(dir, 'request.json'), JSON.stringify({ id: ogId, api: { jobId: job.id, owner: job.owner }, createdAt: new Date().toISOString() }, null, 2) + '\n');
     await api.progress(job, undefined, await versionsEvent(kit)).catch(() => {});
-    const controller = new AbortController(), tally = createTally();
+    const controller = new AbortController(), tally = createTally(), since = Date.now();
     let timedOut = false;
     const limit = setTimeout(() => { timedOut = true; controller.abort(); }, stageLimitMs(job.status));
     // The lease runs five minutes: renew it every minute; a job cancelled meanwhile (lease lost) stops the stage's child.
@@ -290,7 +294,9 @@ export async function main({ once = false } = {}) {
       checkedAt = Date.now() - TIMING.healthMs + wait;
       await say(`${provider} cannot run now: no claims until health passes (checked again in ${Math.round(wait / 60_000)} minutes)`);
     } else if (outcome.outcome === 'ok') cooldowns.worked(STAGE_PROVIDERS[job.status] ?? []);
-    const reply = await api.finish(job, outcome.outcome, { ...outcome.result, ...(tally.size ? { calls: tally.value() } : {}) });
+    // The stage's codex tokens beside its calls (2026-10-31): the server's daily budget counts them.
+    const tokens = await codexTokensSince(sessions, since).catch(() => null);
+    const reply = await api.finish(job, outcome.outcome, { ...outcome.result, ...(tally.size ? { calls: tally.value() } : {}), ...(tokens?.total ? { tokens } : {}) });
     await say(`job ${job.id} ${job.status} → ${outcome.outcome}${outcome.result?.code ? ` (${outcome.result.code})` : ''} ${reply.ok ? reply.status : `finish refused ${reply.code}`}`);
     if (['rejected', 'failed'].includes(outcome.outcome) || reply.status === 'submitted') await writeFile(path.join(dir, '.closed'), '').catch(() => {});
   }

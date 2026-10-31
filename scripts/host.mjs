@@ -29,7 +29,8 @@ import { defaultSessionPath, login, startDeviceLogin, waitDeviceLogin } from './
 const KIT = fileURLToPath(new URL('../', import.meta.url));
 /** What a host's install runs; tests and the operator's installer stay in the checkout. */
 // style-anchor-front.webp (2026-10-31): the house front the looks take their colouring from (generation-stages.mjs STYLE_ANCHOR_FILE).
-export const HOST_FILES = Object.freeze(['og', 'generation-worker.mjs', 'generation-stages.mjs', 'sprite-outcome.mjs', 'ledger-report.mjs', 'motions.py',
+// codex-usage.mjs (2026-10-31): the subscription's meter the worker sends with its heartbeat.
+export const HOST_FILES = Object.freeze(['og', 'generation-worker.mjs', 'generation-stages.mjs', 'codex-usage.mjs', 'sprite-outcome.mjs', 'ledger-report.mjs', 'motions.py',
   'style-anchor-front.webp']);
 export const TERMS_DOC = 'docs/GENERATION-HOST.md#호스트-약속';
 const SYSTEM_DIRS = new Set(['/usr/local/bin', '/usr/bin', '/bin']);

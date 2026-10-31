@@ -19,7 +19,8 @@ import { FILE, LIBRARY_FILE_HOSTS, UUID_ARG, downloadHostFile } from './common.m
  *   revisionsLeft?: { appearance?: number, motions?: number }, preview?: { note?: string }[],
  *   submission?: { stage: string, fighterId?: string | null } | null,
  *   host?: { choice: string, requested?: { name?: string } | null, assigned?: unknown },
- *   queue?: { position: number, dailyLimit: number, startedToday: number } | null, profileSetId?: string | null }} HostedJob
+ *   queue?: { position: number, reason?: 'turn' | 'usage' | 'paused', usedPercent?: number, resetsAt?: string, dailyLimit: number, startedToday: number } | null,
+ *   profileSetId?: string | null }} HostedJob
  */
 
 /**
@@ -61,10 +62,17 @@ export function hostedNext(job) {
     case 'queued': case 'appearance':
       if (job.status === 'appearance' && job.host?.choice !== 'oddbout' && job.host && !job.host.assigned)
         return `Waiting for ${job.host.choice === 'host' ? `the host ${job.host.requested?.name ?? ''}` : 'a host'} to take it. Tell the user, and check later with get_hosted_fighter.`;
-      // 첫 선수 무료 (2026-10-30): on a full day a request to ODDBOUT waits its turn for its looks.
-      if (job.queue && job.queue.position > Math.max(job.queue.dailyLimit - job.queue.startedToday, 0))
-        return `ODDBOUT starts ${job.queue.dailyLimit} fighters a day and today's are started: this request is number ${job.queue.position} in line. `
-          + 'Tell the user it starts by itself when its turn comes (he may close the chat), and check later with get_hosted_fighter.';
+      // 사용량으로 시작 (2026-10-31): a request to ODDBOUT waits for the worker's turn (minutes), for the subscription to come back
+      // (`usage`, until `resetsAt`) or while ODDBOUT's making is paused.
+      if (job.queue?.reason === 'usage')
+        return `ODDBOUT's generation capacity is used up for now: this request is number ${job.queue.position} in line and starts by itself`
+          + `${job.queue.resetsAt ? ` after ${job.queue.resetsAt}` : ' when capacity comes back'}. Tell the user (he may close the chat), and check later with get_hosted_fighter.`;
+      if (job.queue?.reason === 'paused')
+        return `ODDBOUT's making is paused: this request is number ${job.queue.position} in line and starts by itself when it resumes. `
+          + 'Tell the user, and check later with get_hosted_fighter.';
+      if (job.queue && job.queue.position > 1)
+        return `This request is number ${job.queue.position} in line: ODDBOUT makes one stage at a time and starts it within minutes. `
+          + 'Tell the user, and check later with get_hosted_fighter.';
       return job.delegate
         ? 'ODDBOUT is writing the profile, painting two front-view looks and picking one itself, '
           + 'then it makes the eleven motions (about 15 to 30 minutes in all). '

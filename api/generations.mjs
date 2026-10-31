@@ -61,6 +61,28 @@ export const generationRoute = parts => parts[0] === 'generations' || parts[0] =
 const id = value => { if (!UUID.test(value ?? '')) throw new Problem(400, 'invalid-id'); return value.toLowerCase(); };
 /** @type {(value: unknown) => boolean} */
 const isObject = value => value !== null && typeof value === 'object' && !Array.isArray(value);
+/**
+ * A worker's subscription reading as the database takes it (2026-10-31): a percent 0–100, an optional window in minutes, an optional reset time.
+ * @param {unknown} value
+ */
+const usageReading = value => {
+  if (!isObject(value) || JSON.stringify(value).length > 300) return false;
+  const reading = /** @type {Record<string, unknown>} */ (value);
+  return Object.keys(reading).every(key => ['usedPercent', 'windowMinutes', 'resetsAt'].includes(key))
+    && typeof reading.usedPercent === 'number' && Number.isFinite(reading.usedPercent) && reading.usedPercent >= 0 && reading.usedPercent <= 100
+    && (reading.windowMinutes === undefined || (Number.isInteger(reading.windowMinutes) && Number(reading.windowMinutes) >= 1 && Number(reading.windowMinutes) <= 100000))
+    && (reading.resetsAt === undefined || (typeof reading.resetsAt === 'string' && Number.isFinite(Date.parse(reading.resetsAt))));
+};
+/**
+ * A stage's codex tokens as the worker reports them (2026-10-31): { total, input, cachedInput, output, reasoning }, whole numbers.
+ * @param {unknown} value
+ */
+const stageTokens = value => {
+  if (!isObject(value)) return false;
+  const tokens = /** @type {Record<string, unknown>} */ (value);
+  return Object.keys(tokens).every(key => ['total', 'input', 'cachedInput', 'output', 'reasoning'].includes(key))
+    && Object.values(tokens).every(n => Number.isSafeInteger(n) && Number(n) >= 0 && Number(n) <= 1e11) && Number(tokens.total) > 0;
+};
 /** @type {(body: any, allowed: string[]) => Record<string, any>} A JSON object with only the allowed keys, checked here. */
 const fields = (body, allowed) => {
   if (!isObject(body) || Object.keys(body).some(key => !allowed.includes(key))) throw new Problem(422, 'invalid-body');
@@ -460,8 +482,11 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     if (method !== 'POST') throw new Problem(404, 'route-not-found');
     const body = await readJson(request, GENERATION_LIMITS.result + 2000);
     if (route === 'generation-worker/heartbeat') {
-      const health = fields(body, ['health']).health;
+      const { health, usage } = fields(body, ['health', 'usage']);
       if (!isObject(health) || JSON.stringify(health).length > 2000) throw new Problem(422, 'invalid-health');
+      // The subscription's rate-limit reading (2026-10-31, host/codex-usage.mjs), kept for the operator: the budget is the day's tokens.
+      // A reading that does not parse is left out, never the heartbeat.
+      if (usageReading(usage)) await call('af_generation_host_usage', { p_host: host, p_usage: usage }).catch(() => null);
       return { ok: true, capabilities: await call('af_generation_host_heartbeat', { p_host: host, p_health: health }) };
     }
     // Which of this host's jobs are over for him (the worker closes their folders). A community host: his own jobs that ended. The official
@@ -512,6 +537,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       if (result.preview !== undefined && (!Array.isArray(result.preview)
         || result.preview.some(p => !isObject(p) || !MOTIONS.includes(p.clip) || !ARTIFACT.test(p.name ?? '')
           || (p.note !== undefined && !PREVIEW_NOTES.includes(p.note))))) throw new Problem(422, 'invalid-result');
+      // The stage's codex tokens (2026-10-31, host/codex-usage.mjs): kept per stage for the official host's daily budget
+      // (af_generation_official_wait). Spent whatever the outcome; a count that cannot be kept never holds the result back.
+      if (stageTokens(result.tokens)) await call('af_generation_record_usage', { ...at, p_tokens: result.tokens }).catch(() => null);
       const row = await call('af_generation_finish', { ...at, p_outcome: lease.outcome, p_result: result });
       return { ok: true, status: row.status };
     }
