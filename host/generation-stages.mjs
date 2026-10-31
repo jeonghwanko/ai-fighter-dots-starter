@@ -291,6 +291,12 @@ export const appearanceCommand = ({ promptFile, out, report, refs, anchor }) => 
 export const sideCommand = ({ promptFile, out, report, front, anchor }) => ['npm', 'run', 'sprite', '--', 'gen', '--provider', 'codex', '--model', MODELS.image,
   '--prompt-file', promptFile, '--out', out, '--transparent', '--direction', 'side', '--facing', 'right', '--layout-guide', '--report', report,
   '--ref', front, '--ref', anchor];
+/** The sprite-gen command of the gaits' relaxed still (`gaitStillPrompt`): the side look its one reference, drawn again from the side facing right.
+ * Not `appearanceCommand`: since the fronts came first (2026-10-31) that one draws a front and adds the style anchor, and called without an
+ * anchor it handed gen `--ref undefined`, which refused every walk or run retake (a hosted job failed three times, 2026-10-31). */
+export const gaitStillCommand = ({ promptFile, out, report, look }) => ['npm', 'run', 'sprite', '--', 'gen', '--provider', 'codex', '--model', MODELS.image,
+  '--prompt-file', promptFile, '--out', out, '--transparent', '--direction', 'side', '--facing', 'right', '--layout-guide', '--report', report,
+  '--ref', look];
 
 /**
  * 맡기기 (2026-10-28): a creator who left the look to us answers once, at the motions. codex with every tool off checks both candidates
@@ -1238,7 +1244,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         const promptFile = path.join(m, 'gait-still-prompt.txt');
         await writeFile(promptFile, gaitStillPrompt(job.brief));
         const since = Date.now(), report = path.join(m, 'gait-still-look.report.json');
-        const { code } = await og(appearanceCommand({ promptFile, out: relaxedLook, report, refs: [look] }));
+        const { code } = await og(gaitStillCommand({ promptFile, out: relaxedLook, report, look }));
         if (code === 75) return ASKED;
         if (code !== 0) return failedRun('gait-still', code, report, since);
         // gen said it finished and its picture is not there: a paid image may be somewhere — an operator looks, nothing is sent again.
