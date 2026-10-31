@@ -36,6 +36,9 @@ const ARTIFACT = /^[a-z0-9][a-z0-9-]{0,47}$/;
 const MOTIONS = Object.keys(spec.motions);
 /** What the worker may say about one preview clip: `run-from-walk`, a run the gate refused made from the walk (2026-10-29). */
 export const PREVIEW_NOTES = Object.freeze(['run-from-walk']);
+/** What the worker may say about one draft (2026-11-01): a walk or run take shown as it is cut, `checking` while the gate looks at it,
+ * `retaking` when the gate refused it and the next take films. A draft with no state passed (or is an action clip). */
+export const DRAFT_STATES = Object.freeze(['checking', 'retaking']);
 const CORS = { methods: 'GET, POST, PATCH, DELETE, OPTIONS', headers: 'Authorization, Content-Type, Idempotency-Key' };
 // A join code (내 PC 붙이기): made by the site for a signed-in host, copied into his PC's terminal once; 160 bits, so nobody guesses one.
 export const JOIN_CODE = /^ohj_[a-f0-9]{40}$/;
@@ -187,7 +190,8 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     return new Map((data ?? []).map(/** @param {{ id: string, name: string, official: boolean }} h */ h => [h.id, { id: h.id, name: h.name, official: h.official === true }]));
   }
   // A job as its creator reads it: no lease, no prompt, no brief beyond its profile draft; pictures as signed URLs.
-  // While the motions are made: the previews the worker put up as its branches passed (its latest `drafts` event, this round's).
+  // While the motions are made: the previews the worker put up as its branches passed, and each gait's take before its gate (its latest
+  // `drafts` event, this round's).
   /** @param {Job} row */
   async function draftsOf(row) {
     if (row.status !== 'motions') return [];
@@ -249,7 +253,7 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       queue: isObject(queue) ? queue : null,
       preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null, ...(PREVIEW_NOTES.includes(p.note) ? { note: p.note } : {}) })),
       submission,
-      drafts: drafts.map(d => ({ clip: d.clip, url: urls.get(artifactPath(row.id, d.name)) ?? null })),
+      drafts: drafts.map(d => ({ clip: d.clip, url: urls.get(artifactPath(row.id, d.name)) ?? null, ...(DRAFT_STATES.includes(d.state) ? { state: d.state } : {}) })),
       // 선수 프로필 세트 (2026-10-31): the candidates are fronts; the side still the motions are made from, and the set made at registration.
       side: side ? { url: urls.get(artifactPath(row.id, side)) ?? null } : null,
       profileSetId: row.profile_set_id ?? null,

@@ -836,8 +836,9 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
 
   /** `change`: the creator's latest change to this gait ({ round, note }) — its takes film the change, quoted, and nothing else is tried.
    * `early()`: a loop to take instead of the retakes when the first take's beat broke (RUN_FROM_WALK_FIRST), or null. `range`: the server
-   * takes this gait at its own frame count inside it (GAIT_OWN_FEATURE), or null for the standard GAIT_FRAMES. */
-  async function gaitLoop(gait, look, stills, character, m, change = null, early = null, range = null) {
+   * takes this gait at its own frame count inside it (GAIT_OWN_FEATURE), or null for the standard GAIT_FRAMES. `showTake(take, strip)`:
+   * told of each take's first cut before its alignment, and with no strip when that take did not pass and another films. */
+  async function gaitLoop(gait, look, stills, character, m, change = null, early = null, range = null, showTake = null) {
     const tried = [];
     for (let take = 0; take <= GAIT_RETAKES; take++) {
       // A retake films from the relaxed still and asks for an even beat. Its folder names its input (`-s<take>-<words' hash>`): a clip filmed
@@ -895,6 +896,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         await pause(alignPauseMs);
         cuts = await cutsOf();
       }
+      if (cuts.length) await showTake?.(take, path.join(cuts[0], `side-${gait}.strip.json`));
       for (let pass = 0; ; pass++) {
         let unaligned = 0;
         for (const cut of cuts) {
@@ -967,6 +969,7 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
         const made = await early();
         if (made) return { ...made, tried };
       }
+      if (take < GAIT_RETAKES) await showTake?.(take, null);
     }
     return { review: `${gait}-not-clean`, tried };
   }
@@ -1054,15 +1057,29 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
     // took about 20 minutes). Each goes up as an artifact and the list as a progress event; the package's previews replace them at the end.
     // A preview is a courtesy: one that fails never stops the stage.
     const drafted = [], draftDir = path.join(m, `drafts-${job.motionRound}`);
-    async function draft(files) {
+    // The server reads the latest `drafts` event only: the lists go up one after another, each as it stands when sent, so two sent at
+    // once (an action clip and a gait's take) never land older last.
+    let listed = Promise.resolve();
+    const postDrafts = () => listed = listed
+      .then(() => api.progress?.(job, undefined, { kind: 'drafts', clips: drafted.map(d => ({ ...d })) })).catch(() => {});
+    /** `<clip>.webp`, or a gait's take `<gait>-t<take>.webp` shown before its gate with a state ('checking', then 'retaking' — the API's
+     * DRAFT_STATES): a name of its own (a new take is a new picture), the clip's entry replaced. */
+    async function draft(files, state = null) {
       try {
         for (const file of files) {
-          const clip = path.basename(file, '.webp'), name = `draft-${clip.toLowerCase()}-${job.motionRound}`;
+          const shown = path.basename(file, '.webp'), clip = shown.replace(/-t\d+$/, ''), name = `draft-${shown.toLowerCase()}-${job.motionRound}`;
           await api.artifact(job, name, await readFile(file));
-          drafted.splice(0, drafted.length, ...drafted.filter(d => d.clip !== clip), { clip, name });
+          drafted.splice(0, drafted.length, ...drafted.filter(d => d.clip !== clip), { clip, name, ...(state ? { state } : {}) });
         }
-        if (files.length) await Promise.resolve(api.progress?.(job, undefined, { kind: 'drafts', clips: drafted })).catch(() => {});
+        if (files.length) await postDrafts();
       } catch { /* the stage goes on */ }
+    }
+    /** A gait's take the gate refused while the next one films: its picture stays, marked (nothing uploaded). */
+    async function retaking(clip) {
+      const shown = drafted.find(d => d.clip === clip);
+      if (shown?.state !== 'checking') return;
+      shown.state = 'retaking';
+      await postDrafts();
     }
     /**
      * 1a. Drafts while gen-set draws the rows (2026-10-30; EARLY_POLL_MS). The finished rows are extracted in a scratch run (`rows-early`: the
@@ -1264,7 +1281,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const input = await stillReady;
       if (input.retry) return input;
       if (delayMs) await pause(delayMs);
-      const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null, early, ranges?.[gait] ?? null);
+      const loop = await gaitLoop(gait, look, stills, character, m, changes.filter(c => c.clip === gait).at(-1) ?? null, early, ranges?.[gait] ?? null,
+        showTake(gait));
       if (loop.strip && !loop.retry && !loop.review) await gaitDraft(gait, loop.strip);
       await Promise.resolve(api.progress?.(job, undefined, gaitEvent(gait, loop))).catch(() => {});
       return loop;
@@ -1273,6 +1291,16 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
       const file = path.join(draftDir, `${gait}.webp`);
       await mkdir(draftDir, { recursive: true });
       if ((await motionsPy(['strip-preview', strip, file])).code === 0) await draft([file]);
+    };
+    // A gait's take as soon as it is cut (2026-11-01): the creator sees the walk and the run a minute after they film, while the alignment
+    // and the judge (minutes on the GPU) still run. The take that passes replaces it (gaitDraft); one refused is marked while the next films.
+    const showTake = gait => async (take, strip) => {
+      try {
+        if (!strip) return await retaking(gait);
+        const file = path.join(draftDir, `${gait}-t${take}.webp`);
+        await mkdir(draftDir, { recursive: true });
+        if ((await motionsPy(['strip-preview', strip, file])).code === 0) await draft([file], 'checking');
+      } catch { /* a preview never stops the stage */ }
     };
     // The rows, the walk and the run need nothing of each other, so they run at once (2026-10-28 — one after another the stage took
     // about 8 to 15 minutes). The run films a few seconds after the walk (the xAI quota counts starts per second). The stage waits for

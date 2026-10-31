@@ -231,7 +231,7 @@ test('the worker reads its env file and og health', () => {
 });
 
 test('the motions: GPT rows assembled, a clean walk and run cut the judge passed, the package and one preview per clip', async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'gen-motions-')), calls = [], uploads = [], py = [];
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-motions-')), calls = [], uploads = [], py = [], timeline = [];
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'look-b-0.png'), 'look');
   const flag = (args, name) => args[args.indexOf(name) + 1];
@@ -239,6 +239,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const og = async (args, { stdin } = {}) => {
     calls.push({ args, stdin });
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
+    if (tool === 'video-cycle-align') timeline.push(`align ${path.basename(flag(args, '--loop-dir'))}`);
     if (tool === 'video-cycle-align') mostAligning = Math.max(mostAligning, ++aligning);
     most = Math.max(most, ++live); await new Promise(done => setTimeout(done, 5)); live -= 1;
     if (tool === 'video-cycle-align') aligning -= 1;
@@ -305,7 +306,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     if (command === 'strip-preview') await writeFile(rest[1], 'loop');
     return { code: 0 };
   };
-  const api = { artifact: async (job, name) => { uploads.push(name); return { ok: true }; } };
+  const api = { artifact: async (job, name) => { uploads.push(name); timeline.push(`up ${name}`); return { ok: true }; } };
   const progress = [], events = [];
   api.progress = async (j, value, event) => { if (event) events.push(structuredClone(event)); else progress.push(value); return { ok: true }; };
   const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0 });
@@ -317,11 +318,20 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.deepEqual(progress.slice(0, 4), [5, 25, 45, 65]);
   assert.deepEqual(done.result.preview.map(p => p.clip), PREVIEW_CLIPS);
   assert.deepEqual(uploads.filter(name => name.startsWith('motion-')), PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-0`));
-  // Drafts went up as the branches passed (the action clips, then each gait), before the package's previews.
-  assert.deepEqual(uploads.filter(name => name.startsWith('draft-')).sort(), ['draft-combo-0', 'draft-fightidle-0', 'draft-run-0', 'draft-walk-0']);
+  // Drafts went up as the branches passed (the action clips, then each gait), before the package's previews; each gait's take went up as it
+  // was cut (2026-11-01), before its alignment, under a name of its own.
+  assert.deepEqual(uploads.filter(name => name.startsWith('draft-')).sort(),
+    ['draft-combo-0', 'draft-fightidle-0', 'draft-run-0', 'draft-run-t0-0', 'draft-run-t1-0', 'draft-walk-0', 'draft-walk-t0-0']);
   assert.ok(uploads.indexOf('draft-walk-0') < uploads.indexOf('motion-idle-0'));
+  for (const [shown, aligned] of [['walk-t0', 'loop-16'], ['run-t0', 'loop-12']])
+    assert.ok(timeline.includes(`up draft-${shown}-0`) && timeline.indexOf(`up draft-${shown}-0`) < timeline.indexOf(`align ${aligned}`), timeline.join(', '));
   const drafts = events.filter(e => e.kind === 'drafts');
   assert.deepEqual(drafts.at(-1).clips.map(d => d.clip).sort(), ['combo', 'fightIdle', 'run', 'walk']);
+  assert.ok(drafts.at(-1).clips.every(d => !d.state && !/-t\d+-/.test(d.name)));
+  // The run as the creator saw it: its first take checked, refused while the next filmed, the second checked, then the take that passed.
+  const runShown = drafts.map(e => e.clips.find(d => d.clip === 'run')).filter(Boolean).map(d => `${d.name} ${d.state ?? 'passed'}`);
+  assert.deepEqual(runShown.filter((d, i) => d !== runShown[i - 1]),
+    ['draft-run-t0-0 checking', 'draft-run-t0-0 retaking', 'draft-run-t1-0 checking', 'draft-run-0 passed']);
   assert.deepEqual(events.filter(e => e.kind !== 'drafts' && e.kind !== 'gait'), [{ kind: 'scale-check', corrected: 12, frames: 40, guessed: [] }]);
   // Each gait says how it ended and every cut tried: the walk's loop cut broke its beat, its auto cut passed the judge.
   const walkEvent = events.find(e => e.kind === 'gait' && e.gait === 'walk');
