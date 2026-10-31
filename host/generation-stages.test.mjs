@@ -175,10 +175,12 @@ test('a gait whose cuts never align stops for an operator without filming anothe
     if (command === 'request' || command === 'request-show') await writeFile(rest[1], JSON.stringify({ request: { states: {} }, description: 'a cat' }));
     if (command === 'assemble') await mkdir(rest[2], { recursive: true });
     if (command === 'video-still') await writeFile(rest[1].replace(/\.png$/, '.json'), '{"key":"green"}');
+    if (command === 'strip-preview') await writeFile(rest[1], 'loop');
     return { code: 0 };
   };
-  const stages = createStages({ og, api: { artifact: async () => ({ ok: true }), progress: async () => ({ ok: true }) }, motionsPy,
-    fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs: 0 });
+  const events = [];
+  const stages = createStages({ og, api: { artifact: async () => ({ ok: true }), progress: async (j, v, event) => { if (event) events.push(structuredClone(event)); return { ok: true }; } },
+    motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs: 0 });
   const job = { id: '0123abcd-0001', language: 'ko', brief, choice: 'b', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 };
   const done = await stages.motions(job, dir);
   assert.equal(done.outcome, 'review');
@@ -189,6 +191,11 @@ test('a gait whose cuts never align stops for an operator without filming anothe
   // Each gait's cut was aligned in two passes (each a try and a --multi-cycle warn try) before the stage stopped.
   const aligns = gait => calls.filter(a => a.includes('video-cycle-align') && flag(a, '--loop-dir').includes(`video-${gait}-0`)).length;
   assert.equal(aligns(done.result.code.split('-')[0]), 2 * (1 + ALIGN_AGAIN));
+  // Each take was shown as soon as it was cut (2026-11-01). Neither passed: the walk's comes off (nothing will replace it), the run's stays
+  // marked (a run the walk makes would).
+  const lists = events.filter(e => e.kind === 'drafts');
+  assert.ok(lists.some(e => e.clips.some(d => d.name === 'draft-walk-t0-0' && d.state === 'checking')));
+  assert.deepEqual(lists.at(-1).clips.filter(d => d.clip === 'walk' || d.clip === 'run'), [{ clip: 'run', name: 'draft-run-t0-0', state: 'retaking' }]);
 });
 
 test('a failed look is tried again only when its report says so; otherwise an operator looks', async () => {
@@ -231,7 +238,7 @@ test('the worker reads its env file and og health', () => {
 });
 
 test('the motions: GPT rows assembled, a clean walk and run cut the judge passed, the package and one preview per clip', async () => {
-  const dir = await mkdtemp(path.join(tmpdir(), 'gen-motions-')), calls = [], uploads = [], py = [];
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-motions-')), calls = [], uploads = [], py = [], timeline = [];
   await mkdir(path.join(dir, 'looks'), { recursive: true });
   await writeFile(path.join(dir, 'looks', 'look-b-0.png'), 'look');
   const flag = (args, name) => args[args.indexOf(name) + 1];
@@ -239,6 +246,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   const og = async (args, { stdin } = {}) => {
     calls.push({ args, stdin });
     const tool = args[0] === 'npm' ? (args[2] === 'sprite' ? args[4] : args[2]) : args[0];
+    if (tool === 'video-cycle-align') timeline.push(`align ${path.basename(flag(args, '--loop-dir'))}`);
     if (tool === 'video-cycle-align') mostAligning = Math.max(mostAligning, ++aligning);
     most = Math.max(most, ++live); await new Promise(done => setTimeout(done, 5)); live -= 1;
     if (tool === 'video-cycle-align') aligning -= 1;
@@ -305,7 +313,7 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
     if (command === 'strip-preview') await writeFile(rest[1], 'loop');
     return { code: 0 };
   };
-  const api = { artifact: async (job, name) => { uploads.push(name); return { ok: true }; } };
+  const api = { artifact: async (job, name) => { uploads.push(name); timeline.push(`up ${name}`); return { ok: true }; } };
   const progress = [], events = [];
   api.progress = async (j, value, event) => { if (event) events.push(structuredClone(event)); else progress.push(value); return { ok: true }; };
   const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0 });
@@ -317,11 +325,25 @@ test('the motions: GPT rows assembled, a clean walk and run cut the judge passed
   assert.deepEqual(progress.slice(0, 4), [5, 25, 45, 65]);
   assert.deepEqual(done.result.preview.map(p => p.clip), PREVIEW_CLIPS);
   assert.deepEqual(uploads.filter(name => name.startsWith('motion-')), PREVIEW_CLIPS.map(clip => `motion-${clip.toLowerCase()}-0`));
-  // Drafts went up as the branches passed (the action clips, then each gait), before the package's previews.
-  assert.deepEqual(uploads.filter(name => name.startsWith('draft-')).sort(), ['draft-combo-0', 'draft-fightidle-0', 'draft-run-0', 'draft-walk-0']);
+  // Drafts went up as the branches passed (the action clips, then each gait), before the package's previews; each gait's take went up as it
+  // was cut (2026-11-01), before its alignment, under a name of its own.
+  assert.deepEqual(uploads.filter(name => name.startsWith('draft-')).sort(),
+    ['draft-combo-0', 'draft-fightidle-0', 'draft-run-0', 'draft-run-t0-0', 'draft-run-t1-0', 'draft-walk-0', 'draft-walk-t0-0']);
   assert.ok(uploads.indexOf('draft-walk-0') < uploads.indexOf('motion-idle-0'));
+  for (const [shown, aligned] of [['walk-t0', 'loop-16'], ['run-t0', 'loop-12']])
+    assert.ok(timeline.includes(`up draft-${shown}-0`) && timeline.indexOf(`up draft-${shown}-0`) < timeline.indexOf(`align ${aligned}`), timeline.join(', '));
   const drafts = events.filter(e => e.kind === 'drafts');
   assert.deepEqual(drafts.at(-1).clips.map(d => d.clip).sort(), ['combo', 'fightIdle', 'run', 'walk']);
+  assert.ok(drafts.at(-1).clips.every(d => !d.state && !/-t\d+-/.test(d.name)));
+  // The run as the creator saw it: its first take checked, refused while the next filmed, the second checked, then the take that passed.
+  const runShown = drafts.map(e => e.clips.find(d => d.clip === 'run')).filter(Boolean).map(d => `${d.name} ${d.state ?? 'passed'}`);
+  assert.deepEqual(runShown.filter((d, i) => d !== runShown[i - 1]),
+    ['draft-run-t0-0 checking', 'draft-run-t0-0 retaking', 'draft-run-t1-0 checking', 'draft-run-0 passed']);
+  // Every list says it came later than the one before (the API shows the highest), and a clip keeps its place as its picture changes.
+  assert.ok(drafts.every((e, i) => Number.isSafeInteger(e.seq) && (i === 0 || e.seq > drafts[i - 1].seq)));
+  const order = [];
+  for (const e of drafts) for (const d of e.clips) if (!order.includes(d.clip)) order.push(d.clip);
+  for (const e of drafts) assert.deepEqual(e.clips.map(d => d.clip), order.filter(clip => e.clips.some(d => d.clip === clip)));
   assert.deepEqual(events.filter(e => e.kind !== 'drafts' && e.kind !== 'gait'), [{ kind: 'scale-check', corrected: 12, frames: 40, guessed: [] }]);
   // Each gait says how it ended and every cut tried: the walk's loop cut broke its beat, its auto cut passed the judge.
   const walkEvent = events.find(e => e.kind === 'gait' && e.gait === 'walk');
@@ -498,9 +520,11 @@ async function scaleStage({ scaleCheck = () => 0, scaleFit, brokenRun = false, a
     if (command === 'scale-fit') await writeFile(rest[1], JSON.stringify(scaleFit(fits++)));
     if (command === 'stride') await writeFile(rest[2], '{"stridePixels":300}');
     if (command === 'preview') { await mkdir(rest[1], { recursive: true }); for (const clip of PREVIEW_CLIPS) await writeFile(path.join(rest[1], `${clip}.webp`), clip); }
+    if (command === 'strip-preview') await writeFile(rest[1], 'loop');
     return { code: 0 };
   };
-  const api = { artifact: async (j, name) => { onArtifact?.(name); return { ok: true }; }, progress: async (j, value, event) => { if (event) events.push(event); return { ok: true }; },
+  const api = { artifact: async (j, name) => { onArtifact?.(name); return { ok: true }; },
+    progress: async (j, value, event) => { if (event) events.push(structuredClone(event)); return { ok: true }; },
     ...(spec || specDelayMs ? { spec: async () => { await new Promise(done => setTimeout(done, specDelayMs)); return spec; } } : {}) };
   const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {}, gaitStaggerMs: 0, alignPauseMs,
     ...(earlyPollMs ? { earlyPollMs } : {}), signal: stop?.signal ?? null });
@@ -591,8 +615,11 @@ test('an early draft that fails never stops the stage: the final drafts make eve
 });
 
 test('a run the gate refuses is made from the walk that passed, played faster, and its preview says so', async () => {
-  const { done, calls, dir } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), brokenRun: true });
+  const { done, calls, dir, events } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), brokenRun: true });
   assert.equal(done.outcome, 'ok', JSON.stringify(done));
+  // The run's take shown as it was cut, marked as soon as its beat broke (while it waited for the walk), then the walk's run in its place.
+  const runShown = events.filter(e => e.kind === 'drafts').map(e => e.clips.find(d => d.clip === 'run')).filter(Boolean).map(d => `${d.name} ${d.state ?? 'passed'}`);
+  assert.deepEqual(runShown.filter((d, i) => d !== runShown[i - 1]), ['draft-run-t0-0 checking', 'draft-run-t0-0 retaking', 'draft-run-0 passed']);
   assert.deepEqual(done.result.preview.filter(p => p.note).map(p => [p.clip, p.note]), [['run', RUN_FROM_WALK]]);
   // The first run take broke its beat: no retake was filmed (nor its relaxed still drawn); the walk's cut, copied, was aligned to the
   // run's twelve frames and judged as a run (RUN_FROM_WALK_FIRST).
@@ -660,9 +687,11 @@ test('the gait ranges are read off the server spec only where it lists the featu
 });
 
 test('a creator who asked for the run again gets his takes or an operator, never the run made from the walk', async () => {
-  const { done, calls } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), brokenRun: true,
+  const { done, calls, events } = await scaleStage({ scaleFit: () => ({ grown: {}, frames: 40, corrected: 0, guessed: [] }), brokenRun: true,
     job: { motionNote: { clip: 'run', note: 'faster' }, motionRound: 1 } });
   assert.deepEqual(done, { outcome: 'review', result: { code: 'run-not-clean' } });
+  // No walk will make his run: its last refused take comes off rather than stay "filming again".
+  assert.ok(!events.filter(e => e.kind === 'drafts').at(-1).clips.some(d => d.clip === 'run'));
   const flag = (args, name) => args[args.indexOf(name) + 1];
   assert.equal(calls.filter(a => a.includes('video-set') && flag(a, '--states') === 'run').length, 1 + GAIT_RETAKES);
   assert.ok(!calls.some(a => a.includes('video-cycle-align') && path.basename(flag(a, '--loop-dir')).startsWith('run-from-walk-')));

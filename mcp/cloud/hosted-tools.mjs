@@ -89,7 +89,8 @@ export function hostedNext(job) {
         + `Then choose_hosted_look with his pick, or with one sentence to change both (${left.appearance ?? 0} changes left).`;
     case 'motions':
       return `ODDBOUT is drawing ${job.delegate ? 'the look it picked' : 'the chosen look'} from the side (job.side once it is drawn) and making the eleven motions `
-        + 'from that side view (about 15 to 30 minutes). Tell the user, and check later with get_hosted_fighter.';
+        + 'from that side view (about 15 to 30 minutes). Each motion shows in job.drafts as soon as it is made; a walk or run with a state '
+        + 'is still being checked and may be filmed again. Tell the user, and check later with get_hosted_fighter.';
     case 'motion_ready':
       return `${job.preview?.some(p => p.note === 'run-from-walk') ? RUN_FROM_WALK_NEXT : ''}`
         + `Show the user ${job.delegate ? `the look ODDBOUT picked (candidate ${job.choice}), ` : ''}the motion previews as images, and the profile draft. `

@@ -306,6 +306,7 @@ test('a database failure reading the service switch is reported as one, not as t
 
 test('next names what the user is asked or how long ODDBOUT works', () => {
   assert.match(hostedNext({ status: 'motions' }), /15 to 30 minutes/);
+  assert.match(hostedNext({ status: 'motions' }), /job\.drafts as soon as it is made/);
   assert.match(hostedNext({ status: 'submitted', submission: { stage: 'registered', fighterId: 'f-1' } }), /Registered: fighter f-1/);
   assert.match(hostedNext({ status: 'submitted', submission: { stage: 'validating' } }), /waitSeconds/);
   assert.match(hostedNext({ status: 'rejected', error: 'real-person' }), /declined this request \(real-person\)/);
