@@ -1,0 +1,1 @@
+import{l as e,r as t}from"./siteChrome-Bl-z15fO.js";var n=document.documentElement.lang===`ko`?`ko`:`en`;t(n,`service`,{languagePaths:{en:e(`en`),ko:e(`ko`)}});
