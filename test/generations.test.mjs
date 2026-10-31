@@ -343,54 +343,84 @@ test('the free fighter: used by painted looks even if cancelled, given back by o
   } finally { await sql.close(); }
 });
 
-test('a full day queues requests to ODDBOUT: the brief runs, the looks wait their turn, a started job\'s stages do not', async () => {
+// 토큰 예산으로 시작 (2026-10-31): the official host starts requests to ODDBOUT while its tokens since midnight in Korea are under the day's
+// budget; each stage's tokens come with its result. An operator's request goes first and is not held back, nor counted.
+test('the day\'s token budget queues requests to ODDBOUT: the brief runs, the looks wait, a started job\'s stages and an operator\'s request do not', async () => {
   const { sql, other, call, work, healthy } = await generation();
   try {
     await healthy();
-    await sql.query('update public.af_generation_hosts set daily_limit = 1 where official');
+    await sql.query('update public.af_generation_settings set daily_token_budget = 1000');
     const ask = token => call('POST', 'generations', { description: '모자를 쓴 너구리 레슬러', language: 'ko' }, token, { 'idempotency-key': crypto.randomUUID() });
     const claim = async () => (await work('POST', 'claim', {})).body.job ?? null;
     const finish = (c, outcome, result) => work('POST', 'finish', { jobId: c.id, leaseToken: c.leaseToken, outcome, result });
+    const tokens = total => ({ total, input: total - 50, cachedInput: 10, output: 50, reasoning: 0 });
     const mine = (await ask()).body.job;
-    assert.equal(mine.queue.position, 1); assert.equal(mine.queue.startedToday, 0);
-    await finish(await claim(), 'ok', { brief: { profile: {} } });
+    assert.deepEqual(mine.queue, { position: 1, reason: 'turn', dailyLimit: 3, startedToday: 0 });
+    await finish(await claim(), 'ok', { brief: { profile: {} }, tokens: tokens(300) });
     const started = await claim();
     assert.equal(started.id, mine.id); assert.equal(started.status, 'appearance');
-    await finish(started, 'ok', { candidates: ['look-a-0', 'look-b-0'] });
+    await finish(started, 'ok', { candidates: ['look-a-0', 'look-b-0'], tokens: tokens(800) });
     assert.equal((await call('GET', `generations/${mine.id}`)).body.job.queue, null);
-    // Another creator's request is taken and briefed, then waits for tomorrow's start.
+    // Each stage's tokens are kept; a malformed count is left out, the result still lands.
+    const kept = (await sql.query('select stage, tokens, input, cached_input, output, admin from public.af_generation_usage order by id')).rows;
+    assert.deepEqual(kept.map(r => [r.stage, Number(r.tokens), Number(r.input), Number(r.cached_input), Number(r.output), r.admin]),
+      [['queued', 300, 250, 10, 50, false], ['appearance', 800, 750, 10, 50, false]]);
+    // 1,100 of 1,000 spent: another creator's request is briefed, then waits for midnight in Korea.
     const theirs = (await ask('other-token-0123456789')).body.job;
-    assert.equal(theirs.status, 'queued'); assert.deepEqual(theirs.queue, { position: 1, dailyLimit: 1, startedToday: 1 });
-    // Briefs waiting together keep the order they were asked in.
-    const later = crypto.randomUUID();
-    await sql.query('insert into auth.users(id) values($1)', [later]);
-    await sql.query('insert into public.af_creators(owner_id) values($1)', [later]);
-    const after = (await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, created_at)
-      values ($1, $2, '늦게 온 고양이 복서', 'ko', now() + interval '1 second') returning id`, [later, crypto.randomUUID()])).rows[0].id;
-    assert.equal((await sql.query('select (public.af_generation_queue($1)->>\'position\')::int as p', [after])).rows[0].p, 2);
-    await sql.query('delete from public.af_generation_jobs where id = $1', [after]);
-    await finish(await claim(), 'ok', { brief: { profile: {} } });
+    await finish(await claim(), 'ok', { brief: { profile: {} }, tokens: { total: -5 } });
+    assert.equal((await sql.query('select count(*)::int as n from public.af_generation_usage')).rows[0].n, 2);
     assert.equal(await claim(), null);
     const waiting = (await call('GET', `generations/${theirs.id}`, undefined, 'other-token-0123456789')).body.job;
-    assert.equal(waiting.status, 'appearance'); assert.equal(waiting.queue.position, 1);
+    const midnight = (await sql.query("select to_jsonb(public.af_generation_day_start() + interval '1 day') #>> '{}' as t")).rows[0].t;
+    assert.deepEqual(waiting.queue, { position: 1, reason: 'usage', resetsAt: midnight, dailyLimit: 3, startedToday: 3 });
     const caps = (await call('GET', 'generations/capabilities', undefined, null)).body.capabilities;
-    assert.equal(caps.today, 1); assert.equal(caps.waiting, 1); assert.equal(caps.queueLimit, 30);
+    assert.deepEqual(caps.usage, { tokensToday: 1100, dailyTokenBudget: 1000, resetsAt: midnight }); assert.equal(caps.waiting, 1);
     // His started job's change is not held back.
     await call('POST', `generations/${mine.id}/appearance`, { revise: 'smaller ears' });
     const again = await claim();
     assert.equal(again.id, mine.id);
-    await finish(again, 'ok', { candidates: ['look-a-1', 'look-b-1'] });
-    // A third creator is refused past the waiting limit; a day later the waiting one starts.
-    const third = crypto.randomUUID();
-    await sql.query('insert into auth.users(id) values($1)', [third]);
-    await sql.query('insert into public.af_creators(owner_id) values($1)', [third]);
-    await sql.query('update public.af_generation_settings set queue_limit = 1');
-    await assert.rejects(sql.query('select public.af_generation_check($1)', [third]), /generation-capacity/);
-    await sql.query("update public.af_generation_jobs set started_at = now() - interval '25 hours' where id = $1", [mine.id]);
+    await finish(again, 'ok', { candidates: ['look-a-1', 'look-b-1'], tokens: tokens(700) });
+    // An operator's request goes first and starts on a spent day; its tokens are kept and not counted.
+    const operator = crypto.randomUUID();
+    await sql.query('insert into auth.users(id) values($1)', [operator]);
+    await sql.query('insert into public.af_creators(owner_id) values($1)', [operator]);
+    await sql.query('insert into public.af_admins(owner_id) values($1)', [operator]);
+    const test = (await sql.query(`insert into public.af_generation_jobs(owner_id, idempotency_key, description, language, status, brief, created_at, updated_at)
+      values ($1, $2, '운영자 시험 선수', 'ko', 'appearance', '{"profile":{}}', now() + interval '1 minute', now() + interval '1 minute') returning id`, [operator, crypto.randomUUID()])).rows[0].id;
+    assert.equal((await sql.query('select (public.af_generation_queue($1)->>\'position\')::int as p', [test])).rows[0].p, 1);
+    assert.equal((await sql.query('select public.af_generation_queue($1)->>\'reason\' as r', [test])).rows[0].r, 'turn');
+    assert.equal((await sql.query('select (public.af_generation_queue($1)->>\'position\')::int as p', [theirs.id])).rows[0].p, 2);
+    const first = await claim();
+    assert.equal(first.id, test);
+    await finish(first, 'ok', { candidates: ['look-a-0', 'look-b-0'], tokens: tokens(5000) });
+    assert.equal((await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.usage.tokensToday, 1800);
+    assert.equal(await claim(), null);
+    // A new day (the spend before midnight in Korea), or no budget at all, starts the waiting one.
+    await sql.query("update public.af_generation_usage set at = public.af_generation_day_start() - interval '1 hour' where not admin");
     const next = await claim();
     assert.equal(next.id, theirs.id); assert.equal(next.status, 'appearance');
     assert.ok((await sql.query('select started_at from public.af_generation_jobs where id = $1', [theirs.id])).rows[0].started_at);
+    await sql.query('update public.af_generation_settings set daily_token_budget = null');
+    assert.equal((await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.usage.dailyTokenBudget, null);
     assert.equal(other.length, 36);
+  } finally { await sql.close(); }
+});
+
+// The heartbeat may carry the subscription's rate-limit reading (2026-10-31): kept for the operator, never holding back; a malformed one
+// is left out and the heartbeat still answers.
+test('the heartbeat keeps the subscription\'s rate-limit reading for the operator and leaves out a malformed one', async () => {
+  const { sql, work } = await generation();
+  try {
+    const health = { ok: true, codex: true, grok: true, at: new Date().toISOString() };
+    const reading = { usedPercent: 12.34, windowMinutes: 10080, resetsAt: '2026-11-03T00:00:00.000Z' };
+    assert.equal((await work('POST', 'heartbeat', { health, usage: reading })).body.ok, true);
+    const kept = async () => (await sql.query('select usage, usage_at is not null as seen from public.af_generation_hosts where official')).rows[0];
+    const { usedPercent, windowMinutes, resetsAt } = (await kept()).usage;
+    assert.deepEqual([usedPercent, windowMinutes, Date.parse(resetsAt)], [12.3, 10080, Date.parse(reading.resetsAt)]);
+    for (const bad of [{ usedPercent: 140 }, { usedPercent: 'x' }, { usedPercent: 5, extra: 1 }, { usedPercent: 5, resetsAt: 'tomorrow' }]) {
+      assert.equal((await work('POST', 'heartbeat', { health, usage: bad })).body.ok, true);
+      assert.equal((await kept()).usage.usedPercent, 12.3);
+    }
   } finally { await sql.close(); }
 });
 

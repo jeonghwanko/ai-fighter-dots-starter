@@ -307,10 +307,13 @@ test('next names what the user is asked or how long ODDBOUT works', () => {
   assert.match(hostedNext({ status: 'submitted', submission: { stage: 'registered', fighterId: 'f-1' } }), /Registered: fighter f-1/);
   assert.match(hostedNext({ status: 'submitted', submission: { stage: 'validating' } }), /waitSeconds/);
   assert.match(hostedNext({ status: 'rejected', error: 'real-person' }), /declined this request \(real-person\)/);
-  // A full day (2026-10-30): the request waits in line; with room today it is simply being made.
-  const line = { status: 'appearance', host: { choice: 'oddbout' }, queue: { position: 2, dailyLimit: 3, startedToday: 3 } };
-  assert.match(hostedNext(line), /number 2 in line/);
-  assert.match(hostedNext({ ...line, queue: { position: 1, dailyLimit: 3, startedToday: 1 } }), /painting two front-view looks/);
+  // 사용량으로 시작 (2026-10-31): the reason a request waits — the subscription (until its reset), a pause, or other requests ahead
+  // (minutes); first in line it is simply being made.
+  const line = { status: 'appearance', host: { choice: 'oddbout' }, queue: { position: 2, reason: 'usage', resetsAt: '2026-11-01T00:00:00+09:00', dailyLimit: 10, startedToday: 10 } };
+  assert.match(hostedNext(line), /capacity is used up for now: this request is number 2 in line and starts by itself after 2026-11-01T00:00:00\+09:00/);
+  assert.match(hostedNext({ ...line, queue: { ...line.queue, reason: 'paused' } }), /making is paused/);
+  assert.match(hostedNext({ ...line, queue: { ...line.queue, reason: 'turn', position: 3 } }), /number 3 in line: ODDBOUT makes one stage at a time/);
+  assert.match(hostedNext({ ...line, queue: { ...line.queue, reason: 'turn', position: 1 } }), /painting two front-view looks/);
 });
 
 test('a picture chosen from the ChatGPT Library reaches the request; other Azure tenants and the registration tools still refuse it (2026-10-30)', async () => {

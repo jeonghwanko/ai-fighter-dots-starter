@@ -17,8 +17,8 @@ test('the modules a host installs load from the flat bin folder they run in', as
   assert.deepEqual((await readdir(bin)).sort(), [...HOST_FILES].sort());
   // The style anchor is a picture: installed byte for byte (a text install would strip a \r before a \n in it).
   assert.deepEqual(await readFile(path.join(bin, 'style-anchor-front.webp')), await readFile(path.join(here, 'style-anchor-front.webp')));
-  // generation-worker.mjs starts the worker when loaded; it imports nothing of its own but generation-stages.mjs.
-  assert.deepEqual(localImports(await readFile(path.join(bin, 'generation-worker.mjs'), 'utf8')), ['./generation-stages.mjs']);
+  // generation-worker.mjs starts the worker when loaded; it imports nothing of its own but generation-stages.mjs and the usage meter.
+  assert.deepEqual(localImports(await readFile(path.join(bin, 'generation-worker.mjs'), 'utf8')), ['./generation-stages.mjs', './codex-usage.mjs']);
   for (const name of HOST_FILES.filter(name => name.endsWith('.mjs') && name !== 'generation-worker.mjs')) {
     await import(pathToFileURL(path.join(bin, name)).href);
   }

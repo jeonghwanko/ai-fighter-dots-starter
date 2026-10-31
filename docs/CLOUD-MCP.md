@@ -174,7 +174,11 @@ MCP 점검(2026-10-27): 도구 목록 20 KB → 17 KB(UUID 칸의 짧은 패턴,
 
 ODDBOUT의 생성 워커가 사용자의 말(과 그림 1~2장)로 선수를 만든다. 에이전트는 사용자의 답만 전한다. 그래서 Grok·ChatGPT처럼 작업 공간이
 없는 호스트도 선수를 만들 수 있고, Dots도 생성 단계를 하나하나 운전하지 않는다. 길은 제작자 페이지와 같은 API(`api/generations.mjs`)다.
-상태 기계·쿼터(계정당 무료 한 명 — 외형 그림이 나오면 쓴 것으로 센다, 하루 신청 셋, 공식 호스트가 하루에 시작하는 수와 대기열 상한)·운영 스위치는 DB가 정한다.
+상태 기계·쿼터(계정당 무료 한 명 — 외형 그림이 나오면 쓴 것으로 센다, 하루 신청 셋, 대기열 상한)·운영 스위치는 DB가 정한다.
+공식 호스트는 한국 시간 자정부터 쓴 codex 토큰이 하루 예산(`af_generation_settings.daily_token_budget`, 500,000) 아래일 때 새 ODDBOUT 신청을 시작한다
+(2026-10-31). 워커가 단계마다 그 단계 동안 쓰인 codex 세션의 토큰을 결과에 실어 보내고(`host/codex-usage.mjs`), 서버가 단계별로 `af_generation_usage`에 남긴다.
+예산을 다 쓰면 작업의 `queue.reason`이 `usage`이고 `resetsAt`(다음 한국 자정)에 다시 시작한다. 운영자 계정(`af_admins`)의 신청은 예산을 보지 않고 맨 앞이며
+그 토큰은 하루 합에서 뺀다. 공식 줄의 하루 한도 0은 ODDBOUT 신청을 멈춘다(`paused`). 커뮤니티 호스트는 하루 한도(건수) 그대로다.
 도구는 함수 비밀 `ODDBOUT_HOSTED_GENERATION_TOOLS`가 `1`일 때만 목록에 나온다. 이 코드만 올리면 도구 목록은 그대로다.
 목록에 있어도 운영 스위치가 꺼져 있거나 워커가 없으면 신청은 `generation-unavailable`(그 이유 `reason`)로 끝나고 그림을 받지 않는다.
 
@@ -243,7 +247,7 @@ URL 재발급과 신규 접수가 열린 상태에서 다른 계정의 키 조�
   `POST /generations/host`(이름·`billing` `subscription`|`api-key`·약관 동의) →
   운영자 승인(`af_generation_hosts.approved`) → `POST /generations/host/keys`(워커 열쇠, 한 번만 보인다, 90일, 둘까지) →
   `PATCH /generations/host`(켜짐·`any` 받기·하루 한도 0~50), `DELETE /generations/host/keys`(열쇠 모두 끄기). 공개 목록은 `GET /generations/hosts`.
-- 하루 한도와 심장 박동은 호스트마다 `af_generation_hosts`에 있다(공식 호스트도). `af_generation_settings`에는 서비스 스위치 `enabled`만 남는다.
+- 하루 한도와 심장 박동은 호스트마다 `af_generation_hosts`에 있다(공식 호스트는 한도 0 = 멈춤으로만 쓰고, 시작은 토큰 예산이 정한다). `af_generation_settings`에는 서비스 스위치 `enabled`·대기열 상한·하루 토큰 예산이 있다.
 
 ## 공방과 연대기 도구(4단계, 2026-10-27)
 
