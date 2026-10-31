@@ -208,6 +208,6 @@
       // A focused page link uses native keyboard activation, not the game's confirm key.
       for (const type of ["keydown", "keyup"]) homeLink.addEventListener(type, event => event.stopPropagation());
       if (bootParams.get("motion") === "reduce") document.documentElement.dataset.bootMotion = "reduce";
-    </script>
+    </script>
   </body>
 </html>
