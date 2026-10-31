@@ -444,21 +444,62 @@ SCALE_SLACK = 0.03                   # room beyond a correction's own: a measure
 SCALE_EDGE = 4                       # pixels kept past the scaled figure (the resample's spread)
 
 
-def scale_policy(record, per_state):
-    """A clip's corrections as hosted generation takes them (approved 2026-10-28): a measured frame (`head`, `agree`) its own; a frame
-    scale-check left for an eye check (`check`, a size on the edge of the range too) the median of the clip's measured frames, 1 when
-    none was measured — nobody looks at a hosted board. A gait takes its state's median for every frame. These are corrections against
-    the reference in source pixels, the terms game-pack's `fix` takes; game-pack multiplies a whole asset by one display ratio, so a
-    median of corrections is the median of what it packs. Returns (corrections, fix for game-pack, the guessed frames' labels)."""
+SCALE_ROW_MIN = 2                    # measured frames a GPT row needs before its median stands for the row's unmeasured cells
+CELL_ROWS = {cell: row for row, cells in ALL_ROWS.items() for cell in cells if cell != "ref"}
+
+
+def _measured(frame):
+    return frame["correction"] is not None and frame["how"] not in ("empty", "reference")
+
+
+def scale_priors(records):
+    """What an unmeasured frame takes (2026-11-01): the median correction of the measured frames drawn in its GPT row, and of every
+    measured action frame. GPT draws a row's poses at one size of their own, apart from the look (the row's `ref` pose sets the row's scale
+    and is not played): 빨간 파도's action rows came out 1.15-1.27x the look and were measured down to 0.80-0.85, but her groggy, KO and
+    victory, whose faces (spiral eyes, upside down, shut eyes) the head template cannot read, took 1 and stayed 1.1-1.23x her stance.
+    `records`: {clip: its scale-check record}; frames pair with the clip's steps (the report names them `-/<step>`). The look and the
+    gaits are not GPT rows. Returns ({row: median}, median of every action frame or None)."""
+    clips, by_row, every = _clips(), {}, []
+    for name, record in records.items():
+        steps = clips.get(name, {}).get("steps")
+        if not steps or name in SCALE_PER_STATE or len(steps) != len(record["frames"]):
+            continue
+        for (cell, *_), frame in zip(steps, record["frames"]):
+            if _measured(frame) and cell in CELL_ROWS:
+                by_row.setdefault(CELL_ROWS[cell], []).append(frame["correction"])
+                every.append(frame["correction"])
+    median = lambda values: round(float(np.median(values)), 4)
+    return {row: median(v) for row, v in by_row.items() if len(v) >= SCALE_ROW_MIN}, (median(every) if every else None)
+
+
+def scale_policy(record, per_state, steps=None, priors=({}, None)):
+    """A clip's corrections as hosted generation takes them (approved 2026-10-28, guesses 2026-11-01): a measured frame (`head`, `agree`)
+    its own; a frame scale-check left for an eye check (`check`, a size on the edge of the range too) the median of its GPT row's measured
+    frames (`scale_priors`), else of its clip's, else of every measured action frame, 1 only when nothing was measured — nobody looks at
+    a hosted board, and a whole clip of unreadable faces (a KO) taking 1 kept the row's drawn size. A gait takes its state's median for
+    every frame. These are corrections against the reference in source pixels, the terms game-pack's `fix` takes; game-pack multiplies a
+    whole asset by one display ratio, so a median of corrections is the median of what it packs. `steps`: the clip's (cell, ms, ...) steps,
+    one per frame. Returns (corrections, fix for game-pack, the guessed frames' labels)."""
     frames = record["frames"]
-    measured = [f["correction"] for f in frames if f["correction"] is not None and f["how"] != "empty"]
-    median = round(float(np.median(measured)), 4) if measured else 1.0
+    measured = [f["correction"] for f in frames if _measured(f)]
+    rows, every = priors
+    clip_median = round(float(np.median(measured)), 4) if measured else None
     guessed = [f["frame"] for f in frames if f["correction"] is None]
     if per_state:
-        value = record["state_correction"] if record["state_correction"] is not None else median
+        # a gait is filmed, not drawn in a GPT row: the rows' drift says nothing about it
+        value = record["state_correction"] if record["state_correction"] is not None else clip_median or 1.0
         state = guessed[0].rsplit("/", 1)[0] if guessed else None
         return [value] * len(frames), ({state: value} if state is not None else {}), guessed
-    return [f["correction"] if f["correction"] is not None else median for f in frames], {k: median for k in guessed}, guessed
+    cells = [s[0] for s in steps] if steps and len(steps) == len(frames) else [None] * len(frames)
+    corrections, fix = [], {}
+    for f, cell in zip(frames, cells):
+        if f["correction"] is not None:
+            corrections.append(f["correction"])
+            continue
+        value = rows.get(CELL_ROWS.get(cell)) or clip_median or every or 1.0
+        corrections.append(value)
+        fix[f["frame"]] = value
+    return corrections, fix, guessed
 
 
 def _sha256(image: Image.Image) -> str:
@@ -497,17 +538,19 @@ def scale_fit(out: Path, summary: Path, reports: list[Path]):
         shas = {name: _sha256(image) for name, image in images.items()}
         size = next(iter(images.values())).size
         clips_in[asset["id"]] = (asset, descriptor, images, [shas[f["file"]] for f in descriptor["frames"]], _display_scale(asset, size))
-    plans, rooms = {}, {}
+    plans, rooms, found = {}, {}, {}
     for name, (asset, descriptor, images, shas, scale) in clips_in.items():
-        found = next(((file, report, r) for file, report in records for r in report["assets"]
-                      if r["identity"].get("state") is None and [f["sha256"] for f in r["frames"]] == shas), None)
-        if found is None:
+        found[name] = next(((file, report, r) for file, report in records for r in report["assets"]
+                            if r["identity"].get("state") is None and [f["sha256"] for f in r["frames"]] == shas), None)
+        if found[name] is None:
             raise SystemExit(f"{name}: no scale-check report measured these frames")
-        report_file, report, record = found
+    priors = scale_priors({name: record for name, (_, _, record) in found.items()})
+    for name, (asset, descriptor, images, shas, scale) in clips_in.items():
+        report_file, report, record = found[name]
         reference = next((c[4] for c in clips_in.values() if report["reference"]["sha256"] in c[3]), None)
         if reference is None:
             raise SystemExit(f"{name}: the reference frame of {Path(report_file).name} is in no clip of the request")
-        corrections, fix, guessed = scale_policy(record, name in SCALE_PER_STATE)
+        corrections, fix, guessed = scale_policy(record, name in SCALE_PER_STATE, clips.get(name, {}).get("steps"), priors)
         # What game-pack scales the frame by on its cell: the correction times the reference's display scale over this clip's.
         applied = [round(c * reference / scale, 4) for c in corrections]
         plans[name] = (asset, report_file, applied, fix, guessed)
