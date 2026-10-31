@@ -46,7 +46,7 @@ For **creation in a saved Dots VM**, use [the Dots VM entry point](docs/DOTS-STA
 The intended flow is one repository URL plus your creation request, using your own Grok subscription.
 The environment preparer runs [the install recipe](deploy/dots-environment/README.md) once; Dots then runs
 `node dots.mjs --install` once and `node dots.mjs` to resume the same pinned workspace. The source and
-preview-delivery checks remain distinct from login. This **0.5.5 candidate** still requires actual saved-VM
+preview-delivery checks remain distinct from login. This **0.6.0 candidate** still requires actual saved-VM
 creation acceptance; unit tests or a parent-container run do not certify it.
 
 Connect the hosted **ODDBOUT** MCP, sign in with Google, then select `@ODDBOUT` in your Dots conversation.
