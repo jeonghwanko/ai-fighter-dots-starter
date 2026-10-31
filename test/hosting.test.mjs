@@ -37,11 +37,13 @@ test('published policies have effective dates and working local links, while pre
 test('public artifacts reject changed bytes, private inputs and dirty source metadata', async () => {
   const root = await mkdtemp(join(tmpdir(), 'fighter-artifact-test-'));
   try {
-    await mkdir(join(root, '.vite'));
+    await mkdir(join(root, '.vite')); await mkdir(join(root, 'assets'));
     await buildPluginPolicySite(join(root, 'ai-fighter-creator'), { publish: true });
-    for (const file of [...siteEntries, ...discoveryFiles, 'index.html', '.nojekyll', '.vite/manifest.json']) {
+    for (const file of [...siteEntries, ...discoveryFiles, 'index.html', '.nojekyll', 'assets/main.js']) {
       await writeFile(join(root, file), 'test');
     }
+    // Every page's entry, as Vite writes it: the artifact check walks the graph before anything is pushed (2026-10-31).
+    await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js' }]))));
     if (hosting.customDomain) await writeFile(join(root, 'CNAME'), hosting.customDomain + '\n');
     const release = { siteUrl: hosting.siteUrl, buildId: '11111111-1111-4111-8111-111111111111', builtAt: new Date().toISOString(),
       sourceCommit: 'a'.repeat(40), hostingCommit: 'b'.repeat(40), dirty: false, ...await fingerprint(root) };
@@ -57,7 +59,7 @@ test('public artifacts reject changed bytes, private inputs and dirty source met
     await writeFile(join(root, 'deployment.json'), JSON.stringify(release));
     const clone = join(root, 'copy');
     await mkdir(clone);
-    for (const file of [...siteEntries, ...discoveryFiles, 'ai-fighter-creator', 'index.html', '.nojekyll', '.vite', 'deployment.json', ...(hosting.customDomain ? ['CNAME'] : [])]) {
+    for (const file of [...siteEntries, ...discoveryFiles, 'ai-fighter-creator', 'assets', 'index.html', '.nojekyll', '.vite', 'deployment.json', ...(hosting.customDomain ? ['CNAME'] : [])]) {
       await cp(join(root, file), join(clone, file), { recursive: true });
     }
     await mkdir(join(clone, '.git'));
@@ -166,6 +168,37 @@ test('shared HTML entries verify emitted modules, styles and transitive assets w
     await assert.rejects(verifyLiveSite(root), /Missing Vite module/);
     await writeFile(join(root, 'service.html'), '<script type="module" src="https://other.example/foreign.js"></script>');
     await assert.rejects(verifyLiveSite(root), /Unsafe emitted asset URL/);
+  } finally { await rm(root, { recursive: true }); }
+});
+
+test('the artifact check walks the pages\' module graph before the push, shared entries included (2026-10-31)', async () => {
+  // The graph was first walked after the push: a page the live check could not follow (service.html) stopped the publication with the
+  // site already live, and the game's next step — its creation context — never ran. A build the graph cannot account for stops here now.
+  const root = await mkdtemp(join(tmpdir(), 'fighter-artifact-graph-test-'));
+  try {
+    for (const dir of ['.vite', 'assets']) await mkdir(join(root, dir));
+    await buildPluginPolicySite(join(root, 'ai-fighter-creator'), { publish: true });
+    const manifest = Object.fromEntries(siteEntries.map(page => [page, { file: 'assets/main.js' }]));
+    delete manifest['service.html']; delete manifest['service.ko.html'];
+    manifest.service = { file: 'assets/service.js', css: ['assets/service.css'], dynamicImports: ['serviceLazy'] };
+    manifest.serviceLazy = { file: 'assets/service-lazy.js' };
+    await writeFile(join(root, '.vite/manifest.json'), JSON.stringify(manifest));
+    for (const file of [...siteEntries, ...discoveryFiles, 'index.html', '.nojekyll', 'assets/main.js', 'assets/service.js', 'assets/service.css',
+      'assets/service-lazy.js']) await writeFile(join(root, file), `content for ${file}`);
+    for (const page of ['service.html', 'service.ko.html']) await writeFile(join(root, page), '<script type="module" src="./assets/service.js"></script>');
+    if (hosting.customDomain) await writeFile(join(root, 'CNAME'), hosting.customDomain + '\n');
+    const seal = async () => writeFile(join(root, 'deployment.json'), JSON.stringify({ siteUrl: hosting.siteUrl,
+      buildId: '11111111-1111-4111-8111-111111111111', builtAt: new Date().toISOString(), sourceCommit: 'a'.repeat(40), hostingCommit: 'b'.repeat(40),
+      dirty: false, ...await fingerprint(root) }));
+    await seal();
+    await verifyArtifact(root); // the shared entry is followed through its module tag
+    // A module the graph reaches but the build lacks.
+    await rm(join(root, 'assets/service-lazy.js')); await seal();
+    await assert.rejects(verifyArtifact(root), /Missing built asset: assets\/service-lazy\.js/);
+    await writeFile(join(root, 'assets/service-lazy.js'), 'content'); await seal();
+    // A page whose entry cannot be followed at all.
+    await writeFile(join(root, 'service.ko.html'), '<main>No entry module</main>'); await seal();
+    await assert.rejects(verifyArtifact(root), /Missing Vite entry: service\.ko\.html/);
   } finally { await rm(root, { recursive: true }); }
 });
 
