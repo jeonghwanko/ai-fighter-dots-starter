@@ -1002,8 +1002,8 @@ export function createStages({ og, api, fetchBytes, toWebp, fitImage, motionsPy 
 
   /**
    * Every clip of the assembly measured against the look (idle) and fitted: `{ fit }` once no canvas had to grow (the request's
-   * assets then carry `scale_check`), or `{ review }`. A frame scale-check left for an eye check takes its clip's median (motions.py
-   * scale_policy); `fit.guessed` names them.
+   * assets then carry `scale_check`), or `{ review }`. A frame scale-check left for an eye check takes a measured median (motions.py
+   * scale_priors, scale_policy: its GPT row's measured median, else its clip's, else every action frame's); `fit.guessed` names them.
    */
   async function scaleChecked(asm) {
     const ids = (await readJson(path.join(asm, 'game-request.json'))).assets.map(asset => asset.id);
