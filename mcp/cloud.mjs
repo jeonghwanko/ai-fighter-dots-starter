@@ -68,24 +68,73 @@ const json = (value, status = 200, headers = {}) => new Response(JSON.stringify(
   headers: { 'content-type': 'application/json', 'cache-control': 'no-store', 'x-content-type-options': 'nosniff', ...headers } });
 
 /**
- * A signed OAuth token is still insufficient without the dedicated audience, role and server-managed permission.
+ * How long past its expiry a connector token is still taken from Cursor's web agents (2026-10-31). Cursor's Grok Bot signed in at 02:21Z
+ * and never refreshed, though it holds a refresh token (offline_access granted): from 03:21Z it sent that token with every call, got a
+ * bare 401 and told its user ODDBOUT's login provider was down. af_mcp_expired_token_state decides: the connection live, the client
+ * Cursor's (a cursor.com MCP callback, any other redirect a loopback one), and the session not refreshed since the token was issued.
+ * Every other client gets the plain expiry, as the MCP spec asks:
+ * the MCP SDKs refresh only on a 401, so a grace for them would only lengthen their tokens. Supabase Auth itself refuses every expired
+ * token, so the grace reaches nothing beyond this server. Seven days is Supabase's longest token lifetime.
+ */
+export const EXPIRED_TOKEN_GRACE_MS = 7 * 24 * 60 * 60 * 1000;
+/**
+ * Why a call has no verified identity, as its 401 or 503 says (RFC 6750 error_description: ASCII without quotes, commas or semicolons,
+ * which naive challenge parsers split on). Agents relay it to their user: a refused sign-in needs a renewal or a reconnect, which no
+ * retry of the same call replaces; only the unavailable check is worth retrying.
+ */
+export const SIGN_IN_PROBLEMS = Object.freeze({
+  'authentication-required': 'Sign in to ODDBOUT through this connector.',
+  'token-expired': 'The ODDBOUT sign-in of this connector expired and must be renewed. '
+    + 'An agent that cannot renew it needs ODDBOUT reconnected in the connector settings. Retrying the same call later does not help.',
+  'token-superseded': 'This ODDBOUT sign-in was replaced by a newer one. Use the newer sign-in or reconnect ODDBOUT in the connector settings.',
+  'connection-ended': 'This ODDBOUT connection was signed out or disconnected (My agents). Reconnect ODDBOUT in the connector settings.',
+  'invalid-token': 'This is not an ODDBOUT connector sign-in. Reconnect ODDBOUT in the connector settings.',
+  'sign-in-check-unavailable': 'ODDBOUT could not check the sign-in just now (a temporary server problem). Retry in a minute.',
+});
+/** auth-js errors that mean the check could not run (network, a 5xx, a body that is not JSON), not that the token is bad. */
+const UNAVAILABLE_AUTH_ERRORS = new Set(['AuthRetryableFetchError', 'AuthUnknownError']);
+/** What af_mcp_expired_token_state's answers mean for the caller ('usable' lets the call through). */
+const EXPIRED_TOKEN_PROBLEMS = Object.freeze({ strict: 'token-expired', refreshed: 'token-superseded', ended: 'connection-ended' });
+/** @typedef {{ identity: Identity, problem?: undefined } | { identity: null, problem: keyof typeof SIGN_IN_PROBLEMS }} SignIn */
+
+/**
+ * The verified connector identity of a request, or why there is none. A signed OAuth token is still insufficient without the
+ * dedicated audience, role and server-managed permission.
  * @param {any} db @param {Request} request @param {() => number} [now]
- * @returns {Promise<Identity | null>}
+ * @returns {Promise<SignIn>}
  */
 export async function authenticateCloud(db, request, now = Date.now) {
   const token = bearerToken(request);
-  if (!token) return null;
-  const { data, error } = await db.auth.getClaims(token);
+  if (!token) return { identity: null, problem: 'authentication-required' };
+  // The signature is verified either way; the expiry, with its grace, is checked below. auth-js throws, rather than returns, for some
+  // malformed tokens (a payload that is not JSON, an algorithm the key does not have): those are bad tokens, not a server fault.
+  let checked;
+  try { checked = await db.auth.getClaims(token, { allowExpired: true }); }
+  catch { return { identity: null, problem: 'invalid-token' }; }
+  const { data, error } = checked;
+  if (error) {
+    const unavailable = UNAVAILABLE_AUTH_ERRORS.has(error.name) || error.status === 429 || (Number.isFinite(error.status) && error.status >= 500);
+    return { identity: null, problem: unavailable ? 'sign-in-check-unavailable' : 'invalid-token' };
+  }
   const c = data?.claims;
-  if (error || !c || c.iss !== CLOUD_ISSUER || !validCloudAudience(c.aud) || c.role !== 'af_mcp' ||
+  if (!c || c.iss !== CLOUD_ISSUER || !validCloudAudience(c.aud) || c.role !== 'af_mcp' ||
     !UUID.test(c.sub ?? '') || !UUID.test(c.client_id ?? '') || !UUID.test(c.session_id ?? '') ||
-    c.is_anonymous !== false || !Number.isFinite(c.exp) || c.exp * 1000 <= now() ||
-    (c.nbf !== undefined && (!Number.isFinite(c.nbf) || c.nbf * 1000 > now())) || c.af_mcp !== 'registration-v1') return null;
-  // Revoked OAuth grants and signed-out sessions stop writes immediately, not merely when the JWT expires.
-  const { data: active, error: activeError } = await db.rpc('af_mcp_session_active', {
-    p_owner: c.sub, p_session: c.session_id, p_client: c.client_id });
-  if (activeError || active !== true) return null;
-  return { owner: c.sub, email: c.email ?? '', claims: c };
+    c.is_anonymous !== false || !Number.isFinite(c.exp) ||
+    (c.nbf !== undefined && (!Number.isFinite(c.nbf) || c.nbf * 1000 > now())) || c.af_mcp !== 'registration-v1') {
+    return { identity: null, problem: 'invalid-token' };
+  }
+  const expired = c.exp * 1000 <= now();
+  if (expired && (c.exp * 1000 + EXPIRED_TOKEN_GRACE_MS <= now() || !Number.isFinite(c.iat))) return { identity: null, problem: 'token-expired' };
+  // Revoked OAuth grants and signed-out sessions stop writes immediately, not merely when the JWT expires. af_mcp_session_active answers
+  // true or false; for an expired token af_mcp_expired_token_state answers 'usable' or why not (EXPIRED_TOKEN_PROBLEMS).
+  const session = { p_owner: c.sub, p_session: c.session_id, p_client: c.client_id };
+  const { data: live, error: checkError } = expired
+    ? await db.rpc('af_mcp_expired_token_state', { ...session, p_issued_at: Math.floor(c.iat) })
+    : await db.rpc('af_mcp_session_active', session);
+  if (checkError) return { identity: null, problem: 'sign-in-check-unavailable' };
+  if (live === true || live === 'usable') return { identity: { owner: c.sub, email: c.email ?? '', claims: c } };
+  const problem = Object.hasOwn(EXPIRED_TOKEN_PROBLEMS, live) ? EXPIRED_TOKEN_PROBLEMS[/** @type {keyof typeof EXPIRED_TOKEN_PROBLEMS} */ (live)] : null;
+  return { identity: null, problem: problem ?? 'connection-ended' };
 }
 
 /**
@@ -107,6 +156,8 @@ export function cloudServer({ db, identity, fetcher = fetch, arena = null, hoste
       + 'size and SHA-256 before submission. Never substitute rendered previews or invent file IDs, URLs or hashes. '
       + 'A VM direct-network denial does not establish failure of the native connector; '
       + 'use the supported host file route without bypassing network policy. Never ask for tokens or callback URLs in chat. '
+      + 'A refused ODDBOUT sign-in (401 invalid_token) states its reason: tell the user that reason; it is not an outage, and when it asks '
+      + 'to reconnect ODDBOUT in the connector settings, scheduled retries cannot fix it. Only a 503 asks for a retry. '
       + 'A queued submission is not registered; inspect its status. Reuse one UUID for retries of identical bytes.' });
   // The existing API runs in-process with an identity bound to this verified request. The shim cannot be
   // selected from tool inputs and never receives/returns a privileged credential or another user's identity.
@@ -184,15 +235,24 @@ function routeOf(request) {
 }
 
 /**
- * The verified identity a call runs as: needed at the sign-in-first address and for account tools (false when there is none), tried for a
- * public tool whose budget is the caller's (a valid token counts it on its owner, anything else on every signed-out agent), else null.
+ * A request's sign-in; a check that throws is a server fault, not a refused token.
+ * @param {any} db @param {Request} request
+ * @returns {Promise<SignIn>}
+ */
+const signInOf = (db, request) => authenticateCloud(db, request).catch(() => ({ identity: null, problem: 'sign-in-check-unavailable' }));
+
+/**
+ * The verified identity a call runs as: needed at the sign-in-first address and for account tools (with the problem when there is none),
+ * tried for a public tool whose budget is the caller's (a valid token counts it on its owner, anything else on every signed-out agent),
+ * else none.
  * @param {any} db @param {Request} request @param {any} body @param {boolean} signInFirst
+ * @returns {Promise<SignIn | { identity: Identity | null, problem?: undefined }>}
  */
 async function identityFor(db, request, body, signInFirst) {
   const tool = body.method === 'tools/call' ? body.params?.name : null;
-  if (signInFirst || (tool !== null && !PUBLIC_TOOLS.has(tool))) return (await authenticateCloud(db, request).catch(() => null)) ?? false;
-  if (OWNER_BUDGET_TOOLS.has(tool) && request.headers.has('authorization')) return authenticateCloud(db, request).catch(() => null);
-  return null;
+  if (signInFirst || (tool !== null && !PUBLIC_TOOLS.has(tool))) return signInOf(db, request);
+  if (OWNER_BUDGET_TOOLS.has(tool) && request.headers.has('authorization')) return { identity: (await signInOf(db, request)).identity };
+  return { identity: null };
 }
 
 /**
@@ -241,19 +301,36 @@ export function createCloudHandler({ db, fetcher = fetch, arena = null, hosted =
       'access-control-allow-origin': origin ?? 'https://chatgpt.com',
       'access-control-allow-methods': 'POST, GET, OPTIONS', 'access-control-allow-headers': 'Authorization, Content-Type, MCP-Protocol-Version',
       'access-control-expose-headers': 'WWW-Authenticate' } });
-    const unauthorized = () => json({ error: 'invalid_token' }, 401,
-      { 'www-authenticate': `Bearer resource_metadata="${resource}/.well-known/oauth-protected-resource", scope="openid email profile"` });
+    /**
+     * A call without a sign-in says why (RFC 6750): a token it refused is named `invalid_token` with the reason, so the agent can tell its
+     * user instead of guessing at an outage (Grok Bot, 2026-10-31); a call with no token is only asked to sign in. The challenge keeps
+     * its earlier start for clients that read it by prefix. A check that could not run is a 503 to retry, never a 401 that sends the
+     * client back to its sign-in.
+     * @param {keyof typeof SIGN_IN_PROBLEMS} problem
+     */
+    const signInProblem = problem => {
+      const error_description = SIGN_IN_PROBLEMS[problem];
+      if (problem === 'sign-in-check-unavailable') {
+        return json({ error: 'temporarily_unavailable', code: problem, error_description }, 503, { 'retry-after': '30' });
+      }
+      const refused = problem === 'authentication-required' ? '' : `, error="invalid_token", error_description="${error_description}"`;
+      return json({ error: 'invalid_token', code: problem, error_description }, 401, { 'www-authenticate':
+        `Bearer resource_metadata="${resource}/.well-known/oauth-protected-resource", scope="openid email profile"${refused}` });
+    };
     if (request.method !== 'POST') {
       // A client that probes the sign-in-first address with GET, or HEAD as Gemini CLI does first (2026-10-29), learns there that it needs a sign-in.
-      if (signInFirst && ['GET', 'HEAD'].includes(request.method) && !(await authenticateCloud(db, request).catch(() => null))) return unauthorized();
+      if (signInFirst && ['GET', 'HEAD'].includes(request.method)) {
+        const { problem } = await signInOf(db, request);
+        if (problem) return signInProblem(problem);
+      }
       return json({ error: 'method_not_allowed' }, 405, { allow: 'POST, OPTIONS' });
     }
     let body;
     try { body = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(await readBody(request, 65536))); }
     catch { return json({ error: 'invalid_request' }, 400); }
     if (!body || Array.isArray(body) || typeof body.method !== 'string') return json({ error: 'invalid_request' }, 400);
-    const identity = await identityFor(db, request, body, signInFirst);
-    if (identity === false) return unauthorized();
+    const { identity, problem } = await identityFor(db, request, body, signInFirst);
+    if (problem) return signInProblem(problem);
     // A server per request on purpose: its tools close over this request's verified identity, so no state can carry one
     // user's identity into another's call. Measured 2026-10-28: building it with all tools and answering tools/list
     // takes about 1.8 ms, small beside the network hop, so sharing a server is not worth that guarantee.

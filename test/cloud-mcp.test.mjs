@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createCloudHandler, authenticateCloud, allowedFileUrl, downloadHostFile, compactText, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE } from '../mcp/cloud.mjs';
+import { createCloudHandler, authenticateCloud, EXPIRED_TOKEN_GRACE_MS, SIGN_IN_PROBLEMS, allowedFileUrl, downloadHostFile, compactText, CLOUD_RESOURCE, CLOUD_ISSUER, PUBLIC_RESOURCE, LEGACY_PUBLIC_RESOURCE, SIGN_IN_RESOURCE } from '../mcp/cloud.mjs';
 import { verifiedUserId } from '../api/http.mjs';
 import { safeClientRedirect, authorizationId } from '../web/cloud-connect/connect.mjs';
 import { migratedDatabase } from './helpers/fighter-database.mjs';
@@ -53,17 +53,108 @@ test('MCP discovery, file schemas, profile identity and HTTP auth challenge inte
 });
 test('normal user tokens, wrong audiences, expiry, future tokens, missing grants and spoofed identities are rejected',async()=>{
   const req=new Request(CLOUD_RESOURCE,{headers:{authorization:`Bearer ${token}`}});
-  assert.equal((await authenticateCloud(dbFor(),req)).owner,owner);
-  assert.equal((await authenticateCloud(dbFor({...claims(),aud:[CLOUD_RESOURCE,LEGACY_PUBLIC_RESOURCE]}),req)).owner,owner);
-  assert.equal((await authenticateCloud(dbFor({...claims(),aud:[CLOUD_RESOURCE,LEGACY_PUBLIC_RESOURCE,PUBLIC_RESOURCE]}),req)).owner,owner);
+  const refused=async(db,problem)=>assert.deepEqual(await authenticateCloud(db,req),{identity:null,problem});
+  assert.equal((await authenticateCloud(dbFor(),req)).identity.owner,owner);
+  assert.equal((await authenticateCloud(dbFor({...claims(),aud:[CLOUD_RESOURCE,LEGACY_PUBLIC_RESOURCE]}),req)).identity.owner,owner);
+  assert.equal((await authenticateCloud(dbFor({...claims(),aud:[CLOUD_RESOURCE,LEGACY_PUBLIC_RESOURCE,PUBLIC_RESOURCE]}),req)).identity.owner,owner);
   for(const aud of [[CLOUD_RESOURCE,'https://evil.test'],[CLOUD_RESOURCE,CLOUD_RESOURCE],[],['authenticated'],[CLOUD_RESOURCE,PUBLIC_RESOURCE,'authenticated']])
-    assert.equal(await authenticateCloud(dbFor({...claims(),aud}),req),null);
-  for(const delta of [{aud:'authenticated'},{role:'authenticated'},{iss:'https://evil.test'},{exp:0},{nbf:Date.now()/1000+100},{client_id:null},{session_id:null},{is_anonymous:true},{af_mcp:'admin'},{sub:'other'}])
-    assert.equal(await authenticateCloud(dbFor({...claims(),...delta}),req),null);
-  assert.equal(await authenticateCloud(dbFor(claims(),false),req),null);
+    await refused(dbFor({...claims(),aud}),'invalid-token');
+  for(const delta of [{aud:'authenticated'},{role:'authenticated'},{iss:'https://evil.test'},{exp:null},{nbf:Date.now()/1000+100},{client_id:null},{session_id:null},{is_anonymous:true},{af_mcp:'admin'},{sub:'other'}])
+    await refused(dbFor({...claims(),...delta}),'invalid-token');
+  await refused(dbFor({...claims(),exp:0}),'token-expired');
+  await refused(dbFor(claims(),false),'connection-ended');
+  await refused({auth:{getClaims:async()=>({data:null,error:{name:'AuthInvalidJwtError',status:400}})}},'invalid-token');
+  assert.deepEqual(await authenticateCloud(dbFor(),new Request(CLOUD_RESOURCE)),{identity:null,problem:'authentication-required'});
   assert.equal(await verifiedUserId(dbFor(),req),null);
   const encoded=`a.${Buffer.from(JSON.stringify(claims())).toString('base64url')}.c`;
   assert.equal(await verifiedUserId({auth:{getUser:async()=>({data:{user:{id:owner}}})}},new Request(CLOUD_RESOURCE,{headers:{authorization:`Bearer ${encoded}`}})),null);
+});
+// Cursor's Grok Bot (2026-10-31) sent its first sign-in's token for hours after it expired, never refreshing, and told its user ODDBOUT's
+// login provider was down. Such a token now keeps working for a while if its connection is live and was never refreshed after it; past
+// that, and when the check itself fails, the answer says why.
+test('an expired connector token works while it is its live session\'s newest, then is refused with its reason; a failed check is a 503',async()=>{
+  const hour=3600, now=Math.floor(Date.now()/1000), seen=[];
+  const dbAt=(exp,{state='usable',active=true,iat=exp-hour,rpc=null}={})=>({
+    auth:{getClaims:async(_,options)=>{seen.push(options);return{data:{claims:{...claims(),iat,exp}}}}},
+    rpc:async(name,args)=>{seen.push([name,args]);return rpc?rpc():{data:name==='af_mcp_expired_token_state'?state:active}}});
+  const req=new Request(SIGN_IN_RESOURCE,{headers:{authorization:`Bearer ${token}`}});
+  const expired=now-6*hour;
+  assert.equal((await authenticateCloud(dbAt(expired),req)).identity.owner,owner);
+  assert.deepEqual(seen,[{allowExpired:true},['af_mcp_expired_token_state',{p_owner:owner,p_session:session,p_client:client,p_issued_at:expired-hour}]]);
+  seen.length=0;
+  assert.equal((await authenticateCloud(dbAt(now+hour),req)).identity.owner,owner);
+  assert.deepEqual(seen,[{allowExpired:true},['af_mcp_session_active',{p_owner:owner,p_session:session,p_client:client}]]);
+  // Other clients keep the plain expiry; a client that refreshed holds a newer token; a revoked or signed-out connection ends every token.
+  for(const [state,problem] of [['strict','token-expired'],['refreshed','token-superseded'],['ended','connection-ended'],[null,'connection-ended']])
+    assert.deepEqual(await authenticateCloud(dbAt(expired,{state}),req),{identity:null,problem},state);
+  // Past the grace, or without an issue time to compare, the database is not asked.
+  for(const db of [dbAt(now-EXPIRED_TOKEN_GRACE_MS/1000),dbAt(expired,{iat:null})]){
+    seen.length=0;
+    assert.deepEqual(await authenticateCloud(db,req),{identity:null,problem:'token-expired'});
+    assert.deepEqual(seen,[{allowExpired:true}]);
+  }
+  assert.equal((await authenticateCloud(dbAt(now-EXPIRED_TOKEN_GRACE_MS/1000+60),req)).identity.owner,owner);
+
+  const post=db=>createCloudHandler({db})(new Request(SIGN_IN_RESOURCE,{method:'POST',headers:{'content-type':'application/json',
+    accept:'application/json, text/event-stream',authorization:`Bearer ${token}`},body:JSON.stringify({jsonrpc:'2.0',id:1,method:'tools/list',params:{}})}));
+  assert.equal((await post(dbAt(expired))).status,200);
+  // The challenge keeps its earlier start and adds the reason after it.
+  const metadata=`Bearer resource_metadata="${SIGN_IN_RESOURCE}/.well-known/oauth-protected-resource", scope="openid email profile"`;
+  for(const [db,problem] of [[dbAt(now-8*24*hour),'token-expired'],[dbAt(expired,{state:'strict'}),'token-expired'],[dbAt(expired,{state:'refreshed'}),'token-superseded'],
+    [dbAt(now+hour,{active:false}),'connection-ended'],[{auth:{getClaims:async()=>({data:null,error:{name:'AuthInvalidJwtError',status:400}})}},'invalid-token'],
+    [{auth:{getClaims:async()=>{throw new TypeError('Invalid UTF-8 sequence')}}},'invalid-token']]){
+    const refused=await post(db);
+    assert.equal(refused.status,401,problem);
+    assert.equal(refused.headers.get('www-authenticate'),`${metadata}, error="invalid_token", error_description="${SIGN_IN_PROBLEMS[problem]}"`);
+    assert.deepEqual(await refused.json(),{error:'invalid_token',code:problem,error_description:SIGN_IN_PROBLEMS[problem]});
+  }
+  assert.match(SIGN_IN_PROBLEMS['token-expired'],/ODDBOUT reconnected in the connector settings/);
+  // A quoted-string's characters, without the commas and semicolons a naive challenge parser splits on.
+  for(const text of Object.values(SIGN_IN_PROBLEMS)) assert.match(text,/^[\x20\x21\x23-\x2b\x2d-\x3a\x3c-\x5b\x5d-\x7e]+$/);
+  const probe=await createCloudHandler({db:dbAt(now-8*24*hour)})(new Request(SIGN_IN_RESOURCE,{headers:{authorization:`Bearer ${token}`}}));
+  assert.equal(probe.status,401); assert.equal(probe.headers.get('www-authenticate'),
+    `${metadata}, error="invalid_token", error_description="${SIGN_IN_PROBLEMS['token-expired']}"`);
+  // The database, the network or the Auth server failing is not a refused sign-in: the client is told to retry, not to sign in again.
+  for(const db of [dbAt(now+hour,{rpc:async()=>({data:null,error:{message:'timeout'}})}),dbAt(expired,{rpc:async()=>{throw Error('network')}}),
+    ...[{name:'AuthRetryableFetchError',status:0},{name:'AuthUnknownError'},{name:'AuthApiError',status:500},{name:'AuthApiError',status:429}]
+      .map(error=>({auth:{getClaims:async()=>({data:null,error})}}))]){
+    const unavailable=await post(db);
+    assert.equal(unavailable.status,503); assert.equal(unavailable.headers.get('retry-after'),'30');
+    assert.equal(unavailable.headers.get('www-authenticate'),null);
+    assert.deepEqual(await unavailable.json(),{error:'temporarily_unavailable',code:'sign-in-check-unavailable',
+      error_description:SIGN_IN_PROBLEMS['sign-in-check-unavailable']});
+  }
+});
+// The real auth-js, not a stand-in: an expired token is taken on its verified signature alone, and a malformed one is a bad token (401), not
+// a server fault (503) — auth-js throws for some of them instead of returning an error.
+test('with the real auth-js an expired token passes only with a valid signature, and malformed tokens are refused, not retried',async()=>{
+  const { createClient } = await import('@supabase/supabase-js');
+  const { privateKey, publicKey } = await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, ['sign', 'verify']);
+  const jwk = { ...(await crypto.subtle.exportKey('jwk', publicKey)), kid: 'k1', alg: 'ES256', use: 'sig' };
+  let jwks = () => new Response(JSON.stringify({ keys: [jwk] }), { headers: { 'content-type': 'application/json' } });
+  const fetcher = async url => String(url).endsWith('/.well-known/jwks.json') ? jwks()
+    : new Response('{"code":"bad_jwt","msg":"token is expired"}', { status: 403, headers: { 'content-type': 'application/json' } });
+  const b64 = value => Buffer.from(typeof value === 'string' ? value : JSON.stringify(value)).toString('base64url');
+  const sign = async (header, payload) => { const input = `${b64(header)}.${b64(payload)}`;
+    const signature = await crypto.subtle.sign({ name: 'ECDSA', hash: 'SHA-256' }, privateKey, new TextEncoder().encode(input));
+    return `${input}.${Buffer.from(signature).toString('base64url')}`; };
+  const now = Math.floor(Date.now() / 1000), header = { alg: 'ES256', kid: 'k1', typ: 'JWT' }, payload = { ...claims(), iat: now - 7200, exp: now - 3600 };
+  const check = async jwt => { const client = createClient('https://auth.test', 'service-key', { auth: { persistSession: false, autoRefreshToken: false }, global: { fetch: fetcher } });
+    const result = await authenticateCloud({ auth: client.auth, rpc: async () => ({ data: 'usable', error: null }) },
+      new Request(SIGN_IN_RESOURCE, { headers: { authorization: `Bearer ${jwt}` } }));
+    return result.problem ?? result.identity.owner; };
+  const valid = await sign(header, payload);
+  assert.equal(await check(valid), owner);
+  assert.equal(await check(`${valid.slice(0, -6)}${valid.slice(-6) === 'AAAAAA' ? 'BBBBBB' : 'AAAAAA'}`), 'invalid-token');
+  assert.equal(await check(await sign({ ...header, kid: 'unknown' }, payload)), 'invalid-token'); // falls back to Auth, which refuses it
+  for (const alg of ['RS256', 'PS256']) assert.equal(await check(await sign({ ...header, alg }, payload)), 'invalid-token', alg);
+  assert.equal(await check('aaaaaaaa.bbbbbbbb.cccccccc'), 'invalid-token');
+  // A key auth-js has not cached yet (its JWKS cache outlives a client) is fetched: a rate limit or a gateway error is a retry.
+  const uncached = await sign({ ...header, kid: 'k2' }, payload);
+  jwks = () => new Response('{"code":"over_request_rate_limit"}', { status: 429, headers: { 'content-type': 'application/json' } });
+  assert.equal(await check(uncached), 'sign-in-check-unavailable');
+  jwks = () => new Response('upstream', { status: 502 });
+  assert.equal(await check(uncached), 'sign-in-check-unavailable');
 });
 test('cloud readiness never turns account access into generation, display or package approval',async()=>{
   const db={...dbFor(),rpc:async name=>({data:name==='af_account'?{invited:true,accessMode:'open',canSubmit:true}:true})};
@@ -114,9 +205,34 @@ test('native OAuth hook isolates connector tokens and live-session checks enforc
     await db.query('insert into auth.oauth_consents(user_id,client_id,scopes) values($1,$2,$3)',[owner,client,'openid email profile']);
     const active=(o=owner)=>db.query('select public.af_mcp_session_active($1,$2,$3) value',[o,session,client]).then(r=>r.rows[0].value);
     assert.equal(await active(),true);assert.equal(await active(crypto.randomUUID()),false);
-    await db.exec("update auth.sessions set scopes='openid'");assert.equal(await active(),false);
+    // The grace is Cursor's web agents' alone: a cursor.com MCP callback, any other redirect URI a loopback one. Cursor's real
+    // registration (production, 2026-10-31) is the first of these.
+    const issued=1793413272, cursor='https://www.cursor.com/agents/mcp/oauth/callback,http://localhost:8787/callback';
+    const state=(iat=issued,o=owner)=>db.query('select public.af_mcp_expired_token_state($1,$2,$3,$4) value',[o,session,client,iat]).then(r=>r.rows[0].value);
+    const redirects=uris=>db.query('update auth.oauth_clients set redirect_uris=$1',[uris]);
+    assert.equal(await state(),'strict');
+    for(const uris of ['https://chatgpt.com/connector_platform_oauth_redirect','http://127.0.0.1:3118/callback',
+      `${cursor},https://evil.test/callback`,'https://www.cursor.com.evil.test/bot/mcp/oauth/callback',
+      `${cursor},http://localhost.evil.test/callback`,`${cursor},http://localhost:8787@evil.test/callback`,`${cursor},https://localhost/callback`])
+      {await redirects(uris);assert.equal(await state(),'strict',uris);}
+    for(const uris of ['https://www.cursor.com/bot/mcp/oauth/callback','https://www.cursor.com/agents/mcp/oauth/callback, http://[::1]:9/cb,http://127.0.0.1/x'])
+      {await redirects(uris);assert.equal(await state(),'usable',uris);}
+    await redirects(cursor);assert.equal(await state(),'usable');assert.equal(await state(issued,crypto.randomUUID()),'ended');
+    // A banned or deleted user's connection is over too.
+    await db.query('insert into auth.users(id,banned_until) values($1,$2)',[owner,new Date(Date.now()+3600e3)]);assert.equal(await state(),'ended');
+    await db.exec('update auth.users set banned_until=now()-interval \'1 hour\'');assert.equal(await state(),'usable');
+    await db.exec('update auth.users set deleted_at=now()');assert.equal(await state(),'ended');
+    await db.exec('update auth.users set deleted_at=null');
+    // An expired token is usable only while no refresh came after it. Auth records refreshed_at (UTC, no time zone) just after it signs.
+    const refreshedAt=at=>db.query("update auth.sessions set refreshed_at=to_timestamp($1::double precision) at time zone 'UTC'",[at]);
+    await refreshedAt(issued+2);assert.equal(await state(),'usable');
+    await refreshedAt(issued+5);assert.equal(await state(),'refreshed');
+    await refreshedAt(issued+3600);assert.equal(await state(),'refreshed');assert.equal(await state(issued+3600),'usable');
+    await db.exec("set timezone='Asia/Seoul'");assert.equal(await state(),'refreshed');assert.equal(await state(issued+3600),'usable');
+    await db.exec("update auth.sessions set scopes='openid'");assert.equal(await active(),false);assert.equal(await state(issued+3600),'ended');
     await db.exec("update auth.sessions set scopes='openid email profile';update auth.oauth_consents set revoked_at=now()");assert.equal(await active(),false);
-    await db.exec('set role authenticated');await assert.rejects(active(),/permission denied/);
+    assert.equal(await state(issued+3600),'ended');
+    await db.exec('set role authenticated');await assert.rejects(active(),/permission denied/);await assert.rejects(state(),/permission denied/);
   }finally{await db.close()}
 });
 test('consent never redirects to a supplied third-party origin and preserves only a valid authorization ID',()=>{
