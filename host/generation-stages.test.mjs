@@ -2,13 +2,20 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { existsSync } from 'node:fs';
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises';
+import { spawnSync } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
-  submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken } from './generation-stages.mjs';
+  submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS, SIDE_CHECKS, SIDE_TAKES,
+  lookJudgePrompt, sideJudgePrompt, sidePrompt } from './generation-stages.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
+
+const here = path.dirname(fileURLToPath(import.meta.url));
+/** motions.py's face-box needs Pillow and NumPy (the kit's sprite-gen venv has them; a bare CI runner may not). */
+const hasPillow = () => spawnSync('python3', ['-c', 'import PIL, numpy']).status === 0;
 
 const brief = { verdict: 'ok', rejectCode: 'none',
   profile: { name: '블루캣', names: { ko: '블루캣', en: 'Blue Cat' }, description: '파란 갑옷의 고양이 복서.', concept: '겁은 많지만 지는 건 더 싫다.',
@@ -75,7 +82,8 @@ test('the stages run their commands through og, upload what they made and report
   const api = { artifact: async (job, name, bytes) => { uploads.push(name); return { ok: true }; },
     submission: async (job, text) => { sent.manifest = JSON.parse(text); return { ok: true, submissionId: 'sub-1' }; },
     asset: async (job, id, bytes) => { (sent.assets ??= []).push(id); return { ok: true }; }, submit: async () => ({ ok: true }) };
-  const stages = createStages({ og, api, fetchBytes: async url => new TextEncoder().encode(`bytes of ${url}`), toWebp: async (png, webp) => writeFile(webp, 'webp') });
+  const stages = createStages({ og, api, fetchBytes: async url => new TextEncoder().encode(`bytes of ${url}`), toWebp: async (png, webp) => writeFile(webp, 'webp'),
+    styleAnchor: '/kit/style-anchor-front.webp' });
   const job = { id: 'j', description: '파란 고양이 복서', language: 'ko', refs: [{ url: 'https://s/ref', contentType: 'image/png' }], candidates: [],
     appearanceRound: 0, appearanceNote: null };
   // Brief: the picture downloaded and attached, the prompt on stdin, the brief returned.
@@ -86,31 +94,34 @@ test('the stages run their commands through og, upload what they made and report
   assert.deepEqual(await stages.queued(job, dir), { outcome: 'rejected', result: { code: 'hate' } });
   results.brief = { ...brief, profile: { ...brief.profile, name: 'afw_' + 'b'.repeat(64) } };
   assert.equal((await stages.queued(job, dir)).outcome, 'review');
-  // Looks: two stills from one prompt painted at once, as WebP artifacts in order; a revision starts from the look before.
+  // Looks: two front stills from one prompt painted at once, as WebP artifacts in order; a revision starts from the look before. The
+  // house style anchor is every look's last reference (선수 프로필 세트, 2026-10-31).
   most = 0;
   const looks = await stages.appearance({ ...job, brief }, dir);
-  assert.deepEqual(looks, { outcome: 'ok', result: { candidates: ['look-a-0', 'look-b-0'] } }); assert.deepEqual(uploads, ['look-a-0', 'look-b-0']);
+  assert.deepEqual(looks, { outcome: 'ok', result: { candidates: ['front-a-0', 'front-b-0'] } }); assert.deepEqual(uploads, ['front-a-0', 'front-b-0']);
   assert.equal(most, 2);
   const gen = calls.filter(c => c.args.includes('gen'));
-  assert.ok(gen.every(c => c.args.includes('--direction') && c.args.includes('side') && c.args.includes('--transparent') && c.args.includes('--ref')));
-  await stages.appearance({ ...job, brief, appearanceRound: 1, appearanceNote: 'smaller ears', candidates: [{ url: 'https://s/look-a-0' }] }, dir);
+  const refsOf = args => args.filter((a, i) => args[i - 1] === '--ref');
+  assert.ok(gen.every(c => c.args[c.args.indexOf('--direction') + 1] === 'front' && !c.args.includes('--facing') && c.args.includes('--transparent')
+    && refsOf(c.args).at(-1) === '/kit/style-anchor-front.webp' && refsOf(c.args).length === 2));
+  await stages.appearance({ ...job, brief, appearanceRound: 1, appearanceNote: 'smaller ears', candidates: [{ url: 'https://s/front-a-0' }] }, dir);
   const revision = calls.at(-1).args;
-  assert.ok(revision[revision.indexOf('--ref') + 1].endsWith('previous-1.webp'));
+  assert.ok(refsOf(revision)[0].endsWith('previous-1.webp')); assert.equal(refsOf(revision).at(-1), '/kit/style-anchor-front.webp');
   assert.match(await readFile(path.join(dir, 'looks', 'prompt-1.txt'), 'utf8'), /smaller ears/);
   // 맡기기: the judge sees both looks against the look brief and picks one that passed every check; a failed check, a revision round
   // (the creator wrote a change) or a job not left to us picks nothing.
-  const pass = { whole: 'pass', side: 'pass', match: 'pass', clean: 'pass' };
+  const pass = { whole: 'pass', front: 'pass', style: 'pass', match: 'pass', clean: 'pass' };
   results.judge = { a: pass, b: pass, pick: 'b', notes: 'B reads better: bigger gloves.' };
   let before = calls.length;
-  assert.deepEqual((await stages.appearance({ ...job, brief, delegate: true }, dir)).result, { candidates: ['look-a-0', 'look-b-0'], choice: 'b' });
+  assert.deepEqual((await stages.appearance({ ...job, brief, delegate: true }, dir)).result, { candidates: ['front-a-0', 'front-b-0'], choice: 'b' });
   const judged = calls.slice(before).find(c => c.args[0] === 'codex');
-  assert.deepEqual(judged.args.filter((a, i) => judged.args[i - 1] === '-i').map(f => path.basename(f)), ['look-a-0.png', 'look-b-0.png']);
-  assert.ok(judged.args.includes('read-only') && judged.stdin.includes(brief.look.subject));
-  results.judge = { a: pass, b: { ...pass, side: 'fail' }, pick: 'b', notes: 'B faces left, but it is better.' };
+  assert.deepEqual(judged.args.filter((a, i) => judged.args[i - 1] === '-i').map(f => path.basename(f)), ['front-a-0.png', 'front-b-0.png', 'style-anchor-front.webp']);
+  assert.ok(judged.args.includes('read-only') && judged.stdin.includes(brief.look.subject) && /Image 3 is the style anchor/.test(judged.stdin));
+  results.judge = { a: pass, b: { ...pass, style: 'fail' }, pick: 'b', notes: 'B is glossy and semi-realistic, but it is better.' };
   assert.equal((await stages.appearance({ ...job, brief, delegate: true }, dir)).result.choice, undefined);
   before = calls.length;
   results.judge = { a: pass, b: pass, pick: 'a', notes: 'A is fine as it is.' };
-  assert.equal((await stages.appearance({ ...job, brief, delegate: true, appearanceRound: 1, appearanceNote: 'longer scarf', candidates: [{ url: 'https://s/look-a-0' }] }, dir)).result.choice, undefined);
+  assert.equal((await stages.appearance({ ...job, brief, delegate: true, appearanceRound: 1, appearanceNote: 'longer scarf', candidates: [{ url: 'https://s/front-a-0' }] }, dir)).result.choice, undefined);
   assert.equal((await stages.appearance({ ...job, brief }, dir)).result.choice, undefined);
   assert.ok(!calls.slice(before).some(c => c.args[0] === 'codex'));
   // Server advisory failures/defects never replace the existing look judge or trigger extra generation.
@@ -961,4 +972,131 @@ test('the judge\'s loop alone gives way to a seam the engine measured inside its
   for (const key of ['identity', 'anatomy']) assert.equal(loopTaken({ ...pass, [key]: 'fail' }, seam(0.5)), false);
   // The loop review takes a cut on the same rule (tools/ai-fighter/gait.mjs, which the PC's bin cannot import).
   assert.equal(ENGINE_SEAM_MAX, REVIEW_SEAM_MAX);
+});
+
+// 선수 프로필 세트 (2026-10-31): the looks are fronts in the house colouring, the motions are made from a side still drawn from the chosen
+// front and judged against it, and the chosen front and its face square go to the job before the package.
+test('the house colouring is the one creators\' agents are given; a front look and its side still say it', async () => {
+  const { PROFILE_SET_STYLE } = await import('../api/profile-sets.mjs');
+  const agents = PROFILE_SET_STYLE.split('\n').map(line => line.replace('exactly like the LAST image', 'exactly like the STYLE ANCHOR'));
+  for (const line of HOUSE_COLOURING) assert.ok(agents.includes(line), `the agents' style text misses: ${line}`);
+  for (const prompt of [appearancePrompt(brief), sidePrompt(brief)]) {
+    for (const line of HOUSE_COLOURING) assert.ok(prompt.includes(line));
+    assert.match(prompt, /young man in a black suit/);
+  }
+  assert.match(appearancePrompt(brief), /FRONT VIEW facing the viewer straight on/);
+  assert.match(sidePrompt(brief), /seen from the SIDE, facing RIGHT/);
+  assert.doesNotMatch(briefPrompt({ description: 'x', language: 'ko' }, 0), /seen from the side/);
+  assert.deepEqual(LOOK_CHECKS, ['whole', 'front', 'style', 'match', 'clean']);
+  assert.match(lookJudgePrompt(brief), /front: the character faces the viewer/);
+  assert.match(sideJudgePrompt(brief), /same character as image 1/);
+});
+
+test('the motions start from a side still drawn from the chosen front: judged against it, drawn again, then an operator', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-side-')), calls = [], uploads = [], events = [];
+  await mkdir(path.join(dir, 'looks'), { recursive: true });
+  await writeFile(path.join(dir, 'looks', 'front-b-0.png'), 'front');
+  const verdicts = [];   // one per judge call, in order
+  const flag = (args, name) => args[args.indexOf(name) + 1];
+  const og = async (args, { stdin } = {}) => {
+    calls.push({ args, stdin });
+    if (args.includes('gen')) { await writeFile(flag(args, '--out'), 'side'); await writeFile(flag(args, '--report'), JSON.stringify({ ok: true })); return { code: 0 }; }
+    if (args[0] === 'codex') { await writeFile(flag(args, '-o'), JSON.stringify(verdicts.shift())); return { code: 0 }; }
+    return { code: 1 };   // the first motion command: enough to see which still it was given
+  };
+  const api = { artifact: async (job, name) => { uploads.push(name); return { ok: true }; }, progress: async (job, progress, event) => { events.push(event); return { ok: true }; } };
+  // motions.py commands are recorded with the og runs: the still the motions use reaches both.
+  const motionsPy = async args => { calls.push({ args: ['motions.py', ...args] }); return { code: 1 }; };
+  const stages = createStages({ og, api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async (png, webp) => writeFile(webp, 'webp'),
+    styleAnchor: '/kit/style-anchor-front.webp', gaitStaggerMs: 0, alignPauseMs: 0 });
+  const job = { id: '0123abcd-0002', language: 'ko', brief, choice: 'b', appearanceRound: 0, candidates: [], motionNote: null, motionRound: 0 };
+  const pass = Object.fromEntries(SIDE_CHECKS.map(check => [check, 'pass']));
+  verdicts.push({ checks: { ...pass, match: 'fail' }, notes: 'Different gloves from the front.' }, { checks: pass, notes: 'The same boxer, facing right.' });
+  await stages.motions(job, dir);
+  const sides = calls.filter(c => c.args.includes('gen'));
+  assert.equal(sides.length, 2);
+  for (const side of sides) {
+    assert.deepEqual([flag(side.args, '--direction'), flag(side.args, '--facing')], ['side', 'right']);
+    assert.deepEqual(side.args.filter((a, i) => side.args[i - 1] === '--ref'), [path.join(dir, 'looks', 'front-b-0.png'), '/kit/style-anchor-front.webp']);
+  }
+  const judged = calls.filter(c => c.args[0] === 'codex');
+  assert.deepEqual(judged[0].args.filter((a, i) => judged[0].args[i - 1] === '-i').map(f => path.basename(f)), ['front-b-0.png', 'take-0.png', 'style-anchor-front.webp']);
+  assert.match(judged[0].stdin, /same character as image 1/);
+  assert.deepEqual(uploads, ['side-0-b']);
+  assert.deepEqual(events.filter(e => e?.kind === 'side').map(e => e.outcome), ['fail', 'pass', 'chosen']);
+  // The motions were given the side still that passed, not the front.
+  const after = calls.slice(calls.indexOf(judged[1]) + 1);
+  assert.ok(after.some(c => c.args.includes(path.join(dir, 'looks', 'side-0-b', 'take-1.png'))), 'the motions take the side still');
+  assert.ok(!after.some(c => c.args.includes(path.join(dir, 'looks', 'front-b-0.png'))));
+  // A stage run again draws and judges nothing it has: the passing take is reused.
+  calls.length = 0;
+  await stages.motions(job, dir);
+  assert.ok(!calls.some(c => c.args.includes('gen') || c.args[0] === 'codex'));
+  // Three drawings that all fail go to an operator; a side look chosen before 2026-10-31 makes no side still.
+  const other = await mkdtemp(path.join(tmpdir(), 'gen-side-fail-'));
+  await mkdir(path.join(other, 'looks'), { recursive: true });
+  await writeFile(path.join(other, 'looks', 'front-a-0.png'), 'front');
+  verdicts.push(...Array.from({ length: SIDE_TAKES }, () => ({ checks: { ...pass, style: 'fail' }, notes: 'Glossy, not our colouring.' })));
+  calls.length = 0;
+  assert.deepEqual(await stages.motions({ ...job, choice: 'a' }, other), { outcome: 'review', result: { code: 'side-look' } });
+  assert.equal(calls.filter(c => c.args.includes('gen')).length, SIDE_TAKES);
+  const legacy = await mkdtemp(path.join(tmpdir(), 'gen-side-legacy-'));
+  await mkdir(path.join(legacy, 'looks'), { recursive: true });
+  await writeFile(path.join(legacy, 'looks', 'look-a-0.png'), 'side look');
+  calls.length = 0;
+  await stages.motions({ ...job, choice: 'a' }, legacy);
+  assert.ok(!calls.some(c => c.args.includes('gen')));
+});
+
+test('the chosen front and its face square go to the job before the package; a front that cannot be measured never stops it', async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'gen-front-'));
+  await mkdir(path.join(dir, 'looks'), { recursive: true });
+  await writeFile(path.join(dir, 'looks', 'front-a-0.png'), 'front');
+  await mkdir(path.join(dir, 'package', 'assets'), { recursive: true });
+  await writeFile(path.join(dir, 'package', 'assets', 'idle.webp'), 'idle-bytes');
+  await writeFile(path.join(dir, 'package', 'fighter.json'), JSON.stringify({ profile: { name: 'old', description: 'old' },
+    assets: [{ id: 'idle', path: 'assets/idle.webp', sha256: createHash('sha256').update('idle-bytes').digest('hex') }] }));
+  const order = [], fronts = [];
+  let measured = 0;
+  const api = { profileFront: async (job, front) => { order.push('front'); fronts.push(front); return { ok: true }; }, progress: async () => ({ ok: true }),
+    submission: async () => { order.push('submission'); return { ok: true, stage: 'uploading', submissionId: 'sub-1' }; },
+    asset: async () => ({ ok: true }), submit: async () => { order.push('submit'); return { ok: true }; } };
+  const motionsPy = async ([command, image, out]) => {
+    if (command !== 'face-box') return { code: 0 };
+    measured += 1;
+    assert.equal(image, path.join(dir, 'looks', 'front-a-0.png'));
+    await writeFile(out, JSON.stringify({ x: 400, y: 30, side: 250 }));
+    return { code: 0 };
+  };
+  const stages = createStages({ og: async () => ({ code: 0 }), api, motionsPy, fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
+  const job = { id: 'j', brief, choice: 'a', appearanceRound: 0, candidates: [], profile: { name: 'Blue', description: 'Boxer.' } };
+  assert.deepEqual(await stages.submitting(job, dir), { outcome: 'ok', result: { submissionId: 'sub-1' } });
+  assert.deepEqual(order, ['front', 'submission', 'submit']);
+  assert.deepEqual(fronts, [{ artifact: 'front-a-0', face: { x: 400, y: 30, side: 250 } }]);
+  // Measured once: a stage run again sends the same square.
+  await stages.submitting(job, dir);
+  assert.equal(measured, 1);
+  // Refused by the server, or not measurable: the package still goes in.
+  api.profileFront = async () => ({ ok: false, code: 'invalid-profile-set' });
+  assert.equal((await stages.submitting(job, dir)).outcome, 'ok');
+  const unmeasured = createStages({ og: async () => ({ code: 0 }), api, motionsPy: async () => ({ code: 1 }), fetchBytes: async () => new Uint8Array(), toWebp: async () => {} });
+  const other = await mkdtemp(path.join(tmpdir(), 'gen-front-'));
+  await mkdir(path.join(other, 'looks'), { recursive: true }); await writeFile(path.join(other, 'looks', 'front-a-0.png'), 'front');
+  await cp(path.join(dir, 'package'), path.join(other, 'package'), { recursive: true });
+  assert.equal((await unmeasured.submitting(job, other)).outcome, 'ok');
+});
+
+test('motions.py face-box measures a front as the game measures its own: the head\'s square at the top of the figure', { skip: !hasPillow() }, async () => {
+  const dir = await mkdtemp(path.join(tmpdir(), 'face-box-'));
+  const script = `from PIL import Image, ImageDraw
+im = Image.new("RGBA", (400, 1000), (0, 0, 0, 0)); d = ImageDraw.Draw(im)
+d.ellipse((150, 100, 250, 200), fill=(200, 150, 120, 255))      # the head, off-centre of the body below it
+d.rectangle((100, 200, 300, 900), fill=(30, 30, 90, 255))       # the body
+im.save("${path.join(dir, 'front.png')}")`;
+  assert.equal(spawnSync('python3', ['-c', script]).status, 0);
+  const run = spawnSync('python3', [path.join(here, 'motions.py'), 'face-box', path.join(dir, 'front.png'), path.join(dir, 'face.json')]);
+  assert.equal(run.status, 0, String(run.stderr));
+  const face = JSON.parse(await readFile(path.join(dir, 'face.json'), 'utf8'));
+  // The figure is 801 px tall from y 100: a 136 px square (17 %) at its top, centred on the head (x 150-250).
+  assert.deepEqual(face, { x: 132, y: 100, side: 136 });
 });

@@ -42,6 +42,11 @@ NumPy and Pillow only: it runs on the kit's sprite-gen venv (`<kit>/vendor/sprit
   early-drafts <rows-run> <look.png> <out-dir>
       The same previews, early (2026-10-30): for each clip whose every cell lies in a row <rows-run> has extracted so far, as the
       assembly would draw it (the same scale, canvas and beats), without writing the assembly. A clip already in <out-dir> is not drawn again.
+  face-box <front.png|webp> <out.json>
+      The face square of a front painting (선수 프로필 세트, 2026-10-31), measured as the game measures its own fronts
+      (kaito_web/tools/art/import-arena-concepts.mjs): the figure's box from its cleaned alpha, a square FACE_SIDE of its height at its
+      top, centred on the opaque columns of its top FACE_HEAD_SHARE (the head, off the middle where a pose leans), inside the figure.
+      {x, y, side} in the painting's pixels.
 
 Beats follow kaito_web/tools/art/fighter-gpt/template.py (the GPT guests' combo, slam, dash, block, hit, groggy and fall), with their
 jolt offsets drawn as shifted copies of the cell (the v1 package has no runtime jolt).
@@ -878,6 +883,26 @@ def strip_preview(strip: Path, out: Path):
     _animated([sheet.crop((i * w, 0, i * w + w, h)) for i in range(meta["frames"])], [seconds * 1000 / meta["frames"]] * meta["frames"], out)
 
 
+FACE_ALPHA = (48, 250)     # the game's front import: below 48 is clear (the image model's halo), from 250 solid
+FACE_SIDE = 0.17           # the face square's side, a share of the figure's height
+FACE_HEAD_SHARE = 0.12     # the figure's top rows that hold the head
+
+
+def face_box(path: Path) -> dict:
+    alpha = np.asarray(Image.open(path).convert("RGBA"))[:, :, 3]
+    solid = alpha >= FACE_ALPHA[0]
+    rows, cols = np.nonzero(solid)
+    if not rows.size:
+        raise SystemExit("face-box: no figure")
+    top, bottom, left, right = int(rows.min()), int(rows.max()), int(cols.min()), int(cols.max())
+    height, width = bottom - top + 1, right - left + 1
+    head = np.nonzero(solid[top:top + max(1, int(height * FACE_HEAD_SHARE)), :].any(axis=0))[0]
+    side = max(16, min(width, height, round(height * FACE_SIDE)))
+    centre = (int(head.min()) + int(head.max()) + 1) / 2
+    x = max(left, min(right + 1 - side, round(centre - side / 2)))
+    return {"x": int(x), "y": top, "side": int(side)}
+
+
 def main(argv):
     if not argv:
         print(__doc__); return 2
@@ -924,6 +949,8 @@ def main(argv):
         print(json.dumps(drafts(Path(rest[0]), Path(rest[1]), [c for c in (rest[2].split(",") if len(rest) == 3 else []) if c])))
     elif command == "early-drafts" and len(rest) == 3:
         print(json.dumps(early_drafts(Path(rest[0]), Path(rest[1]), Path(rest[2]))))
+    elif command == "face-box" and len(rest) == 2:
+        Path(rest[1]).write_text(json.dumps(face_box(Path(rest[0]))) + "\n")
     elif command == "strip-preview" and len(rest) == 2:
         strip_preview(Path(rest[0]), Path(rest[1]))
     else:

@@ -13,6 +13,8 @@ import { SUBMISSION_STATUS, checkedManifest, storeAsset } from './submissions.mj
 import { DECISIONS, reviewEvidence } from './decisions-review.mjs';
 import { benchmarkReview } from './decisions-benchmark.mjs';
 import { BENCHMARK_BODY_BYTES } from './sequence-benchmark.mjs';
+import { PROFILE_SET_LIMITS, PROFILE_SET_VERSION, parseProfileSet, profileSetKey, storeOnce } from './profile-sets.mjs';
+import { BUCKET } from './submissions.mjs';
 /**
  * A row of af_generation_jobs, as `select('*')` or a generation function returns it. Its jsonb columns are as the worker and the creator
  * wrote them: `candidates` and `preview` are checked where they are read, the others passed on.
@@ -21,7 +23,7 @@ import { BENCHMARK_BODY_BYTES } from './sequence-benchmark.mjs';
  *   preview: unknown, profile: any, submission_id: string | null, progress: number, error_code: string | null, lease_token: string | null,
  *   lease_expires_at: string | null, created_at: string, updated_at: string, delegate: boolean, host_choice: string,
  *   requested_host: string | null, assigned_host: string | null, started_at?: string | null, charged_at?: string | null,
- *   refunded_at?: string | null }} Job
+ *   refunded_at?: string | null, profile_front?: any, profile_set_id?: string | null }} Job
  * @typedef {{ id: string, path: string, content_type: string, width: number, height: number }} Upload  A job's reference picture (af_generation_uploads).
  */
 
@@ -71,6 +73,38 @@ async function readJson(request, limit) {
 }
 /** @type {(job: string, name: string) => string} */
 export const artifactPath = (job, name) => `jobs/${job}/${name}.webp`;
+
+/**
+ * 선수 프로필 세트 (2026-10-31): a hosted fighter's set, made the moment the validator registers his package. The job kept his chosen front
+ * and its face square (`profile-front`); they become a set under his owner (idempotency key: the job's id), its front copied from the job's
+ * artifact into the submissions bucket, submitted to the validator. Null when the submission is no hosted job's or carries no front; a
+ * failure never touches the registration (handler.mjs ignores it — the owner can upload a set himself).
+ * @param {any} db @param {{ id: string, status: string, fighter_id?: string | null }} submission
+ * @returns {Promise<string | null>} the set's id
+ */
+export async function attachJobProfileSet(db, submission) {
+  if (submission?.status !== 'registered' || !submission.fighter_id) return null;
+  const { data: job, error } = await db.from('af_generation_jobs').select('id,owner_id,profile_front,profile_set_id').eq('submission_id', submission.id).maybeSingle();
+  if (error) throw new Problem(503, 'database-unavailable');
+  if (!job?.profile_front || job.profile_set_id) return job?.profile_set_id ?? null;
+  const { artifact, face, ...front } = job.profile_front;
+  const text = JSON.stringify({ version: PROFILE_SET_VERSION, front, face });
+  const parsed = parseProfileSet(text);
+  if (!parsed.ok || typeof artifact !== 'string') return null;
+  const { data: download, error: downloadError } = await db.storage.from(GENERATION_BUCKET).download(artifactPath(job.id, artifact));
+  if (downloadError || !download) throw new Problem(503, 'storage-unavailable');
+  const bytes = new Uint8Array(await download.arrayBuffer());
+  if (bytes.length !== front.bytes || await sha256(bytes) !== front.sha256) return null;
+  /** @type {(name: string, args: Record<string, unknown>) => Promise<any>} */
+  const rpc = async (name, args) => { const { data, error: rpcError } = await db.rpc(name, args); if (rpcError) throw new Problem(409, rpcError.message); return data; };
+  const set = await rpc('af_profile_set_create', { p_owner: job.owner_id, p_fighter: submission.fighter_id, p_key: job.id, p_text: text,
+    p_sha: await sha256(new TextEncoder().encode(text)), p_bytes: front.bytes });
+  await storeOnce(db, BUCKET, profileSetKey(job.owner_id, set.id, 'front'), bytes, front.sha256);
+  await rpc('af_profile_set_submit', { p_owner: job.owner_id, p_id: set.id });
+  const { error: linkError } = await db.from('af_generation_jobs').update({ profile_set_id: set.id }).eq('id', job.id);
+  if (linkError) throw new Problem(503, 'database-unavailable');
+  return set.id;
+}
 
 /**
  * The profile the creator confirms before registering: name and description (required), his fighter's names, bout lines and stats — each
@@ -141,12 +175,25 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
     return /** @type {any[]} */ (Array.isArray(data?.data?.clips) ? data.data.clips : []).filter(d => isObject(d) && MOTIONS.includes(d.clip)
       && ARTIFACT.test(d.name ?? '') && d.name.startsWith('draft-') && d.name.endsWith(round)).slice(0, MOTIONS.length);
   }
+  /**
+   * The side still drawn from the chosen front (2026-10-31, the worker's latest `side` event naming it): its artifact, or null. Only the one
+   * of the current look round and choice: a new look makes a new one.
+   * @param {Job} row
+   */
+  async function sideOf(row) {
+    if (!row.choice || !['motions', 'motion_ready', 'submitting', 'submitted', 'needs_review'].includes(row.status)) return null;
+    const { data, error } = await db.from('af_generation_events').select('data').eq('job_id', row.id).eq('kind', 'side')
+      .order('at', { ascending: false }).limit(5);
+    if (error) throw new Problem(503, 'database-unavailable');
+    const name = `side-${row.appearance_revisions}-${row.choice}`;
+    return (data ?? []).some(/** @param {{ data: any }} event */ event => event.data?.outcome === 'chosen' && event.data?.artifact === name) ? name : null;
+  }
   /** @param {Job} row */
   async function view(row) {
-    const candidates = candidatesOf(row), preview = previewOf(row), drafts = await draftsOf(row);
+    const candidates = candidatesOf(row), preview = previewOf(row), drafts = await draftsOf(row), side = await sideOf(row);
     const hosts = await hostsOf([row.requested_host, row.assigned_host]);
     const urls = await signed([...candidates.map(name => artifactPath(row.id, name)), ...preview.map(p => artifactPath(row.id, p.name)),
-      ...drafts.map(d => artifactPath(row.id, d.name))]);
+      ...drafts.map(d => artifactPath(row.id, d.name)), ...(side ? [artifactPath(row.id, side)] : [])]);
     let submission = /** @type {{ id: any, stage: any, fighterId: any } | null} */ (null);
     if (row.submission_id) {
       const { data, error } = await db.from('af_submissions').select('id,status,fighter_id').eq('id', row.submission_id).maybeSingle();
@@ -168,6 +215,9 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       preview: preview.map(p => ({ clip: p.clip, url: urls.get(artifactPath(row.id, p.name)) ?? null, ...(PREVIEW_NOTES.includes(p.note) ? { note: p.note } : {}) })),
       submission,
       drafts: drafts.map(d => ({ clip: d.clip, url: urls.get(artifactPath(row.id, d.name)) ?? null })),
+      // 선수 프로필 세트 (2026-10-31): the candidates are fronts; the side still the motions are made from, and the set made at registration.
+      side: side ? { url: urls.get(artifactPath(row.id, side)) ?? null } : null,
+      profileSetId: row.profile_set_id ?? null,
       host: { choice: row.host_choice ?? 'oddbout', requested: hosts.get(row.requested_host) ?? null, assigned: hosts.get(row.assigned_host) ?? null } };
   }
   /** @param {string} owner @param {string} jobId @returns {Promise<Job>} */
@@ -374,6 +424,25 @@ export function createGenerationHandler({ db, authenticate, present, decisionsRe
       const { error } = await bucket().upload(artifactPath(row.id, parts[4]), bytes, { contentType: 'image/webp', upsert: true });
       if (error) throw new Problem(503, 'storage-unavailable');
       return { ok: true, artifact: parts[4], bytes: bytes.length };
+    }
+    // 선수 프로필 세트 (2026-10-31): the chosen front (the job's own candidate) and its face square, kept on the job until the validator
+    // registers his package; then attachJobProfileSet (profile-sets.mjs) makes them his set. Checked as any set file is.
+    if (method === 'POST' && parts[1] === 'jobs' && parts[3] === 'profile-front' && parts.length === 4) {
+      const row = await heldForSubmission(request, parts[2]);
+      const body = fields(await readJson(request, 1000), ['artifact', 'face']);
+      const chosen = candidatesOf(row)[row.choice === 'b' ? 1 : 0];
+      if (typeof body.artifact !== 'string' || !chosen || body.artifact !== chosen || !chosen.startsWith('front-')) throw new Problem(422, 'invalid-artifact');
+      const { data, error } = await bucket().download(artifactPath(row.id, chosen));
+      if (error || !data) throw new Problem(503, 'storage-unavailable');
+      const bytes = new Uint8Array(await data.arrayBuffer()), probed = probeImage(bytes);
+      if (probed?.type !== 'image/webp' || bytes.length > PROFILE_SET_LIMITS.frontBytes) throw new Problem(422, 'invalid-profile-set');
+      const front = { path: 'front.webp', bytes: bytes.length, sha256: await sha256(bytes), width: probed.width, height: probed.height };
+      const parsed = parseProfileSet(JSON.stringify({ version: PROFILE_SET_VERSION, front, face: body.face }));
+      if (!parsed.ok) throw new Problem(422, 'invalid-profile-set', parsed.errors);
+      const profileFront = { artifact: chosen, ...front, face: parsed.data.face };
+      const { error: saveError } = await db.from('af_generation_jobs').update({ profile_front: profileFront }).eq('id', row.id);
+      if (saveError) throw new Problem(503, 'database-unavailable');
+      return { ok: true, profileFront };
     }
     if (parts[1] === 'jobs' && parts[3] === 'submission') {
       const row = await heldForSubmission(request, parts[2]);

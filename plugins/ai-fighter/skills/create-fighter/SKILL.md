@@ -23,8 +23,9 @@ do not require a PC or leave the user's chosen VM scope. Packaging still uses th
 When the connected ODDBOUT tools list `request_hosted_fighter`, ODDBOUT can make the fighter on its own worker:
 no workspace, kit or generation account of the user's is needed. Offer it first when the user wants ODDBOUT to make
 the fighter or has no generation setup; the workspace route below stays the user's choice. Pass the user's words (and
-their own pictures with their confirmation of rights), then follow each result's `next`: show both looks and pass the
-user's pick or one change, show the motion previews and pass their approval or one motion change, register on their request.
+their own pictures with their confirmation of rights), then follow each result's `next`: show both looks (front views; the pick
+is also the fighter's profile picture) and pass the user's pick or one change, show the motion previews (made from a side view
+ODDBOUT draws from the pick) and pass their approval or one motion change, register on their request.
 If the user leaves the choices to ODDBOUT ("just make it"), pass `delegate: true`: ODDBOUT picks the look and the user answers once, at the motions.
 Wait with `get_hosted_fighter` `waitSeconds` rather than repeated reads. Do not generate locally for a hosted job.
 If the user runs a generation host on their own PC (`npm run host -- join` from the site), pass `host: mine`: their own subscription makes it, with no
@@ -69,6 +70,21 @@ consent to give and without using their one free hosted fighter. Another person'
    workspace setup, not repeated creator steps; the kit cannot perform those settings changes.
    Reuse pending device approval and preserved sessions/jobs after recovery. Do not claim a Dots-native button
    was installed: hosts may render the action as a button, choice or official link.
+
+## Front first
+
+The appearance group starts with the fighter's **front** (the profile set, `get_fighter_spec` → `profileSet`): one full-body front
+view, the user's approval of it, then the side view and the motions drawn from it. The front is his profile picture on the site and
+his face in the arena, and the home lists him only once his profile set is approved.
+
+1. Draw two front candidates with the user's account. Every generation of this fighter (fronts, the side view, later edits) carries
+   the spec's `profileSet.style.colouring` text and attaches `profileSet.style.anchor.url` (the house style anchor) as the LAST
+   reference image: our plain cel colouring, never the user's references' rendering. His pictures give the character, not the style.
+2. Show both and take the user's pick or change. Measure the face square on the pick (`profileSet.face`) and show it as a round crop.
+3. Draw the side view (facing right) from the approved front as the first reference, same colouring; check it is the same character.
+   Continue the appearance group (concept/idle) from that side view; the motions follow it.
+4. After registration, upload the approved front with `prepare_profile_set` (fighter id, its `profile-set.json`),
+   `upload_profile_set_asset` and `submit_profile_set`, and follow `get_profile_set`. The front is not part of the package.
 
 ## Work in review groups
 
@@ -151,6 +167,7 @@ paths on another machine. Materialize supported Library files with their origina
 Preserve the submission ID and idempotency key across identical retries; inspect status before retrying
 an unknown response. Changed package bytes need a new key. A metadata-only final edit followed by an
 explicit registration request requires fresh validation, not repeated approval of unchanged animations.
+Then upload the approved front as his profile set ([Front first](#front-first) step 4).
 Report registration only after the response confirms it. A registered fighter starts in production (제작 중): it stays out of
 other people's cups, ranked duels and lists. Tell the user to check each required motion on the fighter page's All motions and enter it there; call
 `enter_fighter` only on the user's request after showing every required motion and hearing each confirmed.
