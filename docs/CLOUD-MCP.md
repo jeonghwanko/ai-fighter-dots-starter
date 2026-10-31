@@ -90,6 +90,52 @@ gemini mcp add --transport http --scope user oddbout https://ztfxxhtmtrvxvuxlqmg
 공식 갱신 안내는 새 대화에서 재확인을 권장한다. 기존 대화는 최신 플러그인을 다시 선택해
 실제 도구 노출 여부를 확인하며, 목록 갱신을 위해 재로그인·권한 확대·PC 설치를 요구하지 않는다.
 
+## 로그인 만료와 오류 안내 (2026-10-31)
+
+Cursor의 Grok Bot이 02:21Z에 로그인 먼저 주소로 연결한 뒤 토큰을 한 번도 갱신하지 않았다. 토큰은 1시간 뒤(03:21Z) 만료됐다.
+그 뒤 모든 호출(06:45·07:47·09:02·10:17Z)이 같은 만료 토큰을 보냈고, 이유 없는 401을 받았다. 봇은 사용자에게 "ODDBOUT 로그인 서버가
+잠시 응답하지 않는다"고 안내하고 30분마다 재시도하는 루틴을 만들었다. 재시도로는 풀리지 않는 일이다. 근거는 운영 로그의 요청 기록이다
+(토큰 iat·exp, UA, 발신 IP). 같은 시간 grok.com 커넥터(UA `Grok`)는 같은 서버에서 매시간 정상적으로 갱신했다.
+
+**refresh token은 이미 준다.** Supabase Auth의 OAuth 서버는 코드 교환마다 refresh token을 함께 준다(`offline_access` 범위와 상관없다).
+동적 등록 클라이언트의 기본 `grant_types`에도 `refresh_token`이 들어 있다. 서버 메타데이터도 `refresh_token` 그랜트를 알린다(supabase/auth
+`internal/api/oauthserver`, 2026-10-31 확인). 로그에서 Grok Bot은 401을 받고 서버 메타데이터(`token_endpoint` 포함)를 읽었지만, 8시간 동안
+어떤 토큰 주소로도 갱신 요청을 보내지 않았다. 별도의 `undici` 요청은 메타데이터를 Supabase 호스트 루트
+(`/.well-known/oauth-protected-resource/functions/v1/ai-fighter-mcp/signin` 등)에서 찾았다. 그 주소는 Supabase 게이트웨이가 401로 답한다.
+이것이 갱신하지 못한 이유인지는 추정이다. 클라이언트 내부는 보지 못했다. 갱신은 클라이언트가 할 일이라 우리가 줄 것이 더 없다. 서버에서 할 수 있는 일은 아래 두 가지다.
+
+- **Cursor 웹 에이전트(Grok Bot)에만 만료 유예**: 만료된 커넥터 토큰을 7일(`EXPIRED_TOKEN_GRACE_MS`, Supabase 토큰 수명 설정의 최댓값)까지 받는다.
+  `getClaims(token, { allowExpired: true })`로 서명을 검증한다. 받는 조건은 `af_mcp_expired_token_state`(마이그레이션 `20261031150000`)가 `usable`이라고 답하는 경우다.
+  - 연결이 살아 있고(`af_mcp_session_active`), 사용자가 정지·삭제되지 않았다. 아니면 `ended`.
+  - 클라이언트의 모든 redirect URI가 Cursor 콜백(`https://www.cursor.com/agents/mcp/oauth/callback`·`/bot/mcp/oauth/callback`)이다.
+    아니면 `strict`다. 다른 클라이언트는 MCP 명세대로 만료 토큰에 401을 받는다. MCP SDK는 401을 받아야만 갱신하므로, 유예를 주면
+    그 토큰들의 수명만 늘어난다(적대적 리뷰 지적).
+  - 그 토큰을 발급한 뒤 세션이 갱신되지 않았다. 아니면 `refreshed`다. Auth는 갱신할 때마다 새 토큰에 서명한 직후 `auth.sessions.refreshed_at`(UTC,
+    시간대 없는 timestamp)을 적는다. 발급 시각 + 5초 이후의 `refreshed_at`은 더 새 토큰이 있다는 뜻이다.
+  로그아웃·내 에이전트에서 연결 해제·승인 취소는 즉시 막힌다. Supabase Auth 자신(`/auth/v1/user` 등)은 만료 토큰을 계속 거절한다.
+  토큰 훅으로 `exp` 자체를 늘리는 방법은 쓰지 않았다. Auth의 `/auth/v1/user`는 대상·역할을 보지 않아서, 그러면 그 토큰으로 이메일·비밀번호
+  변경까지 7일 동안 열린다. 확인하지 못한 경계도 있다. refresh token 재사용 탐지가 세션 행을 남기는지, 세션 시간 제한·비활성 제한을 쓰는지다.
+  둘 다 Cursor 클라이언트의 7일 안으로 한정된다.
+- **거절 이유**: 거절한 토큰의 401은 RFC 6750대로 이유를 말한다. 헤더는 `WWW-Authenticate: Bearer resource_metadata="…", scope="…", error="invalid_token",
+  error_description="…"`이고, 앞부분은 예전과 같다. 본문은 `{ error, code, error_description }`이다. 토큰 없이 온 요청에는 지금처럼 `error`를 붙이지 않는다.
+  설명문에는 따옴표·쉼표·세미콜론을 넣지 않는다. 헤더를 단순하게 자르는 클라이언트를 위해서다. 서버 지침에도 두 가지를 적었다.
+  이 이유를 사용자에게 그대로 전한다. 다시 연결하라는 이유면 재시도를 예약하지 않는다.
+
+| `code` | 상태 | 뜻 | 사용자 조치 |
+| --- | --- | --- | --- |
+| `authentication-required` | 401 | 토큰 없음 | 커넥터에서 ODDBOUT 로그인 |
+| `token-expired` | 401 | 만료(Cursor 외 클라이언트), 또는 Cursor에서 만료 뒤 7일이 지남 | 에이전트가 갱신. 못 하면 커넥터 설정에서 다시 연결 |
+| `token-superseded` | 401 | 더 새 토큰이 이미 발급된 옛 토큰 | 새 토큰 사용. 안 되면 다시 연결 |
+| `connection-ended` | 401 | 로그아웃, 연결 해제, 승인 취소, 사용자 정지·삭제 | 커넥터 설정에서 ODDBOUT 다시 연결 |
+| `invalid-token` | 401 | 서명·형식·발급자·대상·역할이 커넥터 토큰이 아님 | 커넥터 설정에서 ODDBOUT 다시 연결 |
+| `sign-in-check-unavailable` | 503, `Retry-After: 30` | DB·Auth·네트워크 오류(JWKS 429·5xx 포함)로 확인 자체를 못 함 | 잠시 뒤 재시도(다시 로그인할 일 아님) |
+
+예전에는 확인 중 DB 오류도 401이었다. 그래서 클라이언트가 멀쩡한 로그인을 버리고 다시 로그인하러 갔다. 이제 이 경우는 503이다.
+형식이 깨진 토큰에서 auth-js가 예외를 던지면 503이 아니라 `invalid-token`이다. 테스트는 실제 auth-js와 로컬 JWKS로 이것을 확인한다.
+`mcp.oddbout.com` 게이트웨이(`worker/cloud-gateway.mjs`)는 아직 `Retry-After`를 넘기지 않는다. 그 경로의 503에는 이 헤더가 없고, 본문의 재시도 안내만 있다.
+일주일이 지나도 갱신하지 않는 클라이언트는 `token-expired`를 받는다. 그때는 다시 연결해야 한다. 근본 해결은 Grok Bot의 갱신 수정이나,
+루트 `.well-known`을 우리가 답하는 주소(예: `mcp.oddbout.com`의 로그인 먼저 주소)다. 둘 다 아직 하지 않았다.
+
 ## 사용 흐름
 
 1. `get_fighter_spec`의 overview/schema/creation을 읽고 기존 제작·검토 규칙을 따른다.
