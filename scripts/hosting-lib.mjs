@@ -100,6 +100,12 @@ export async function verifyArtifact(root, options) {
       !/^[a-f0-9]{40}$/.test(release.sourceCommit) || !/^[a-f0-9]{40}$/.test(release.hostingCommit)) {
     throw new Error('Artifact requires clean, committed sources and the configured site');
   }
+  // The pages' module graph resolves and every file it names is in the build, before anything is pushed (2026-10-31: the graph was first
+  // walked by the live check, so a page it could not follow — service.html — stopped the publication after the site was already live and
+  // the game's later step, its creation context, did not run).
+  for (const file of await publishedFiles(root)) {
+    if (!(await stat(join(root, file)).catch(() => null))?.isFile()) throw new Error(`Missing built asset: ${file}`);
+  }
   const measured = await fingerprint(root, options);
   if (measured.digest !== release.digest || measured.files !== release.files || measured.bytes !== release.bytes) {
     throw new Error('Artifact changed after build; rebuild before publishing');
@@ -129,10 +135,13 @@ async function fetchPublished(url, file, request, wait) {
 }
 
 /**
- * Check the actual entry documents and manifest asset bytes, not just HTTP 200.
- * @param {string} root @param {{ siteUrl?: string, request?: typeof fetch, wait?: (ms: number) => Promise<unknown> }} [options]
+ * The files a published site serves from this build: the entry documents, policies and discovery files, and every module, style and asset
+ * the pages reach through the Vite manifest. A page whose entry chunk Vite dropped (two documents sharing one module — the service
+ * translations) is followed through the module tags it emitted. Both checks walk it: before the push every file must be in the build
+ * (`verifyArtifact`), after it every file must be served with the built bytes (`verifyLiveSite`).
+ * @param {string} root @param {string} [siteUrl]
  */
-export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)) } = {}) {
+export async function publishedFiles(root, siteUrl = hosting.siteUrl) {
   const manifest = JSON.parse(await readFile(join(root, '.vite/manifest.json'), 'utf8'));
   const files = new Set(['index.html', ...siteEntries, ...policyFiles, ...discoveryFiles, ...(hosting.customDomain ? ['CNAME'] : [])]), visited = new Set();
   /** @param {string} key */
@@ -175,6 +184,17 @@ export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request 
     if (!file || /(^|\/)\.\.(\/|$)|[\\?#]/.test(file) || file.startsWith('/') || /^[a-z]+:/i.test(file)) {
       throw new Error('Unsafe manifest asset path');
     }
+  }
+  return files;
+}
+
+/**
+ * Check the actual entry documents and manifest asset bytes, not just HTTP 200.
+ * @param {string} root @param {{ siteUrl?: string, request?: typeof fetch, wait?: (ms: number) => Promise<unknown> }} [options]
+ */
+export async function verifyLiveSite(root, { siteUrl = hosting.siteUrl, request = fetch, wait = ms => new Promise(done => setTimeout(done, ms)) } = {}) {
+  const files = await publishedFiles(root, siteUrl);
+  for (const file of files) {
     const url = new URL(file, siteUrl);
     const response = await fetchPublished(url, file, request, wait);
     const mime = file.endsWith('.html') ? 'text/html' : file.endsWith('.css') ? 'text/css'
