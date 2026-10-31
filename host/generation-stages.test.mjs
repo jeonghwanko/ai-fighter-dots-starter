@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { ALIGN_AGAIN, BEAT_LIMIT, GROK_LIMITED, BRIEF_SCHEMA, ONE_STRIDE_OF, GAIT_EVENT_BYTES, GAIT_OWN_FEATURE, gaitEvent, gaitRanges, GAIT_RETAKES, CODEX_TOOLS_OFF, EVEN_BEAT, PREVIEW_CLIPS, RUN_FROM_WALK, RUN_FROM_WALK_PACE, SCALE_ROUNDS, SCALE_WIDE, appearancePrompt, briefCommand, briefPrompt, characterPhrase, checkedBrief, checkedVerdict, createStages, lookPick, namedFeet, ogJobId, retakeReasons,
-  submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS, SIDE_CHECKS, SIDE_TAKES,
+  submissionOutcome, withProfile, EXTRACT_REDRAWS, extractFailedRows, ENGINE_SEAM_MAX, loopTaken, HOUSE_COLOURING, LOOK_CHECKS, SIDE_CHECKS, SIDE_COLOURING, SIDE_TAKES,
   lookJudgePrompt, sideJudgePrompt, sidePrompt } from './generation-stages.mjs';
 import { ENGINE_SEAM_MAX as REVIEW_SEAM_MAX } from '../tools/ai-fighter/gait.mjs';
 import { parseEnv, parseHealth } from './generation-worker.mjs';
@@ -107,7 +107,10 @@ test('the stages run their commands through og, upload what they made and report
   await stages.appearance({ ...job, brief, appearanceRound: 1, appearanceNote: 'smaller ears', candidates: [{ url: 'https://s/front-a-0' }] }, dir);
   const revision = calls.at(-1).args;
   assert.ok(refsOf(revision)[0].endsWith('previous-1.webp')); assert.equal(refsOf(revision).at(-1), '/kit/style-anchor-front.webp');
-  assert.match(await readFile(path.join(dir, 'looks', 'prompt-1.txt'), 'utf8'), /smaller ears/);
+  // Each candidate draws its own take (2026-10-31: one prompt drawn twice came back nearly the same picture).
+  const promptArgs = calls.slice(-2).map(c => c.args[c.args.indexOf('--prompt-file') + 1]).sort();
+  assert.deepEqual(promptArgs.map(file => path.basename(file)), ['prompt-1-a.txt', 'prompt-1-b.txt']);
+  for (const take of ['a', 'b']) assert.match(await readFile(path.join(dir, 'looks', `prompt-1-${take}.txt`), 'utf8'), /smaller ears/);
   // 맡기기: the judge sees both looks against the look brief and picks one that passed every check; a failed check, a revision round
   // (the creator wrote a change) or a job not left to us picks nothing.
   const pass = { whole: 'pass', front: 'pass', style: 'pass', match: 'pass', clean: 'pass' };
@@ -985,7 +988,15 @@ test('the house colouring is the one creators\' agents are given; a front look a
     assert.match(prompt, /young man in a black suit/);
   }
   assert.match(appearancePrompt(brief), /FRONT VIEW facing the viewer straight on/);
+  // Two takes, two proposals: the same brief and house rules, a different direction each.
+  const [takeA, takeB] = [appearancePrompt(brief, null, 'a'), appearancePrompt(brief, null, 'b')];
+  assert.notEqual(takeA, takeB); assert.equal(appearancePrompt(brief), takeA);
+  for (const prompt of [takeA, takeB]) { assert.match(prompt, /blue armoured cat/); assert.match(prompt, /FRONT VIEW/); for (const line of HOUSE_COLOURING) assert.ok(prompt.includes(line)); }
+  assert.match(takeA, /THIS TAKE \(A\)/); assert.match(takeB, /THIS TAKE \(B\): a second, clearly different design proposal/);
   assert.match(sidePrompt(brief), /seen from the SIDE, facing RIGHT/);
+  // The side still colours as the front it copies, and its style is judged against that front (2026-10-31).
+  for (const line of SIDE_COLOURING) assert.ok(sidePrompt(brief).includes(line));
+  assert.match(sideJudgePrompt(brief), /coloured as plainly as image 1 \(the approved front\)/);
   assert.doesNotMatch(briefPrompt({ description: 'x', language: 'ko' }, 0), /seen from the side/);
   assert.deepEqual(LOOK_CHECKS, ['whole', 'front', 'style', 'match', 'clean']);
   assert.match(lookJudgePrompt(brief), /front: the character faces the viewer/);
@@ -1032,11 +1043,23 @@ test('the motions start from a side still drawn from the chosen front: judged ag
   calls.length = 0;
   await stages.motions(job, dir);
   assert.ok(!calls.some(c => c.args.includes('gen') || c.args[0] === 'codex'));
-  // Three drawings that all fail go to an operator; a side look chosen before 2026-10-31 makes no side still.
+  // Three drawings that miss the colouring only (2026-10-31, the first live request: glossy hair and boots, three takes): the fighter goes
+  // on from the first of them and the event says the colouring was let go — not an operator's.
+  const styleOnly = await mkdtemp(path.join(tmpdir(), 'gen-side-style-'));
+  await mkdir(path.join(styleOnly, 'looks'), { recursive: true });
+  await writeFile(path.join(styleOnly, 'looks', 'front-a-0.png'), 'front');
+  verdicts.push(...Array.from({ length: SIDE_TAKES }, () => ({ checks: { ...pass, style: 'fail' }, notes: 'Glossy, not our colouring.' })));
+  calls.length = 0; events.length = 0;
+  const went = await stages.motions({ ...job, choice: 'a' }, styleOnly);
+  assert.notDeepEqual(went, { outcome: 'review', result: { code: 'side-look' } });
+  assert.equal(calls.filter(c => c.args.includes('gen') && c.args.includes('side')).length, SIDE_TAKES);
+  assert.deepEqual(events.filter(e => e?.kind === 'side' && e.outcome === 'chosen').map(e => [e.take, e.styleWaived]), [[0, true]]);
+  assert.ok(calls.some(c => c.args.includes(path.join(styleOnly, 'looks', 'side-0-a', 'take-0.png'))), 'the motions take the first style-only take');
+  // Three drawings that are not the same character go to an operator; a side look chosen before 2026-10-31 makes no side still.
   const other = await mkdtemp(path.join(tmpdir(), 'gen-side-fail-'));
   await mkdir(path.join(other, 'looks'), { recursive: true });
   await writeFile(path.join(other, 'looks', 'front-a-0.png'), 'front');
-  verdicts.push(...Array.from({ length: SIDE_TAKES }, () => ({ checks: { ...pass, style: 'fail' }, notes: 'Glossy, not our colouring.' })));
+  verdicts.push(...Array.from({ length: SIDE_TAKES }, () => ({ checks: { ...pass, match: 'fail', style: 'fail' }, notes: 'Another face.' })));
   calls.length = 0;
   assert.deepEqual(await stages.motions({ ...job, choice: 'a' }, other), { outcome: 'review', result: { code: 'side-look' } });
   assert.equal(calls.filter(c => c.args.includes('gen')).length, SIDE_TAKES);
