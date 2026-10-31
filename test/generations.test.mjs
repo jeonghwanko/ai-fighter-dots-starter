@@ -369,7 +369,7 @@ test('tokens: 500,000 to start, every official token taken off, refused at zero,
   } finally { await sql.close(); }
 });
 
-// 토큰 예산으로 시작 (2026-10-31): the official host starts requests to ODDBOUT while its tokens since midnight in Korea are under the day's
+// 토큰 예산으로 시작 (2026-10-31): the official host starts requests to ODDBOUT while its tokens since 00:00 UTC are under the day's
 // budget; each stage's tokens come with its result. An operator's request goes first and is not held back, nor counted.
 test('the day\'s token budget queues requests to ODDBOUT: the brief runs, the looks wait, a started job\'s stages and an operator\'s request do not', async () => {
   const { sql, other, call, work, healthy } = await generation();
@@ -391,13 +391,22 @@ test('the day\'s token budget queues requests to ODDBOUT: the brief runs, the lo
     const kept = (await sql.query('select stage, tokens, input, cached_input, output, admin from public.af_generation_usage order by id')).rows;
     assert.deepEqual(kept.map(r => [r.stage, Number(r.tokens), Number(r.input), Number(r.cached_input), Number(r.output), r.admin]),
       [['queued', 300, 250, 10, 50, false], ['appearance', 800, 750, 10, 50, false]]);
-    // 1,100 of 1,000 spent: another creator's request is briefed, then waits for midnight in Korea.
+    // 1,100 of 1,000 spent: another creator's request is briefed, then waits for 00:00 UTC (UTC로 통일, 2026-10-31).
     const theirs = (await ask('other-token-0123456789')).body.job;
     await finish(await claim(), 'ok', { brief: { profile: {} }, tokens: { total: -5 } });
     assert.equal((await sql.query('select count(*)::int as n from public.af_generation_usage')).rows[0].n, 2);
     assert.equal(await claim(), null);
     const waiting = (await call('GET', `generations/${theirs.id}`, undefined, 'other-token-0123456789')).body.job;
     const midnight = (await sql.query("select to_jsonb(public.af_generation_day_start() + interval '1 day') #>> '{}' as t")).rows[0].t;
+    // The day turns at 00:00 UTC whatever the session's time zone.
+    const utcMidnight = new Date(Date.UTC(new Date().getUTCFullYear(), new Date().getUTCMonth(), new Date().getUTCDate() + 1));
+    assert.equal(Date.parse(midnight), utcMidnight.getTime());
+    const zone = (await sql.query('select current_setting(\'TimeZone\') as z')).rows[0].z;
+    for (const tz of ['Asia/Seoul', 'America/Los_Angeles']) {
+      await sql.query('select set_config(\'TimeZone\', $1, false)', [tz]);
+      assert.equal(new Date((await sql.query('select public.af_generation_day_start() as t')).rows[0].t).getTime(), utcMidnight.getTime() - 86_400_000, tz);
+    }
+    await sql.query('select set_config(\'TimeZone\', $1, false)', [zone]);
     assert.deepEqual(waiting.queue, { position: 1, reason: 'usage', resetsAt: midnight, dailyLimit: 3, startedToday: 3 });
     const caps = (await call('GET', 'generations/capabilities', undefined, null)).body.capabilities;
     assert.deepEqual(caps.usage, { tokensToday: 1100, dailyTokenBudget: 1000, resetsAt: midnight }); assert.equal(caps.waiting, 1);
@@ -421,7 +430,7 @@ test('the day\'s token budget queues requests to ODDBOUT: the brief runs, the lo
     await finish(first, 'ok', { candidates: ['look-a-0', 'look-b-0'], tokens: tokens(5000) });
     assert.equal((await call('GET', 'generations/capabilities', undefined, null)).body.capabilities.usage.tokensToday, 1800);
     assert.equal(await claim(), null);
-    // A new day (the spend before midnight in Korea), or no budget at all, starts the waiting one.
+    // A new day (the spend before 00:00 UTC), or no budget at all, starts the waiting one.
     await sql.query("update public.af_generation_usage set at = public.af_generation_day_start() - interval '1 hour' where not admin");
     const next = await claim();
     assert.equal(next.id, theirs.id); assert.equal(next.status, 'appearance');

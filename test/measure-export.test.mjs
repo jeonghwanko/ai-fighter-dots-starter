@@ -49,7 +49,9 @@ const db = {
 const ledger = { jobs: [{ job: ogJobId({ id: A, createdAt: at(0) }), providers: { codex: { runs: 5 }, grok: { runs: 4 } } }] };
 
 test('the worker folder of a job is its UTC date and its id without dashes', () => {
-  assert.equal(ogJobId({ id: A, createdAt: '2026-10-29T23:30:00+09:00' }), `20261029-gen-${A.replaceAll('-', '')}`);
+  // 08:30 the next morning in Korea is still 2026-10-29 in UTC: the folder follows UTC, never a local day.
+  for (const createdAt of ['2026-10-29T23:30:00Z', '2026-10-30T08:30:00+09:00'])
+    assert.equal(ogJobId({ id: A, createdAt }), `20261029-gen-${A.replaceAll('-', '')}`, createdAt);
 });
 
 test('the numbers read what users answered, how long stages and waits took, and what it ran', () => {

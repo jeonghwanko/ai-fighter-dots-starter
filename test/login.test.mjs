@@ -236,7 +236,9 @@ test('device login keeps the secret here, prints only a public pairing link, and
   assert.ok(logs.some(line => line.includes('#device=BCDF-GHJK')) && !logs.some(line => line.includes(DEVICE)));
   assert.ok(logs.some(line => line.includes('본인이 시작하지 않은 요청이면 승인하지 마세요')));
   // Where to go when the approval screen does not come up, and until when the link lives.
-  assert.ok(logs.some(line => line.includes('같은 링크를 다시 여세요')) && logs.some(line => /\d\d:\d\d까지/.test(line)));
+  // The deadline is UTC (UTC로 통일, 2026-10-31), the link's own expiry minute.
+  const deadline = `${(await saved(pendingDeviceLoginPath(sessionPath))).expiresAt.slice(11, 16)} UTC까지`;
+  assert.ok(logs.some(line => line.includes('같은 링크를 다시 여세요')) && logs.some(line => line.includes(deadline)), deadline);
   assert.equal(logs.at(-1), '승인한 뒤에는 이 작업 공간에서 npm run login -- --device-wait 를 실행합니다.');
   const slow = Object.assign(new Error('slow-down'), { status: 429 }), slept = [], verified = [];
   const createAuthClient = () => ({ auth: { verifyOtp: async args => { verified.push(args);

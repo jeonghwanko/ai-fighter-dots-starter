@@ -276,7 +276,8 @@ export async function startDeviceLogin({ argv = [], log = console.error, post = 
   const verificationUrl = `${creatorPage(page).href}#device=${started.userCode}`;
   log('아래 링크를 휴대폰이나 PC 브라우저에서 열고, 홈페이지에서 쓸 Google 계정으로 로그인하세요.');
   log(verificationUrl);
-  const until = new Date(started.expiresAt).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', hour12: false });
+  // Times are UTC everywhere (사용자 결정 2026-10-31), so the deadline reads the same on every machine.
+  const until = `${new Date(started.expiresAt).toISOString().slice(11, 16)} UTC`;
   log(`화면에 표시된 코드가 ${started.userCode} 와 같은지 확인한 뒤 승인하세요. 10분 안(${until}까지)에 해야 합니다.`);
   // Signing in on the way could drop the code from the address on an older site (2026-10-28): the link itself brings the approval back.
   log('Google 로그인 뒤 승인 화면이 보이지 않으면 같은 링크를 다시 여세요.');
